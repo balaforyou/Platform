@@ -68,6 +68,7 @@ test.describe('Guest Booking Flow E2E', () => {
     // Verify computed price multiplies correctly (1 booker + 2 players = 3 players * 150 = 450)
     const priceText = await page.locator('#computed-price-display').textContent();
     expect(priceText).toContain('₹450');
+    console.log(`[ASSERT SUCCESS] Verified group size computed price is: ${priceText?.trim()}`);
 
     // Click Reserve Court / Hold Slot
     await page.click('#reserve-court-btn');
@@ -76,13 +77,16 @@ test.describe('Guest Booking Flow E2E', () => {
     await expect(page).toHaveURL(/\/bookings\/.*\/pay/);
     const amountToPay = await page.locator('#pay-amount-display').textContent();
     expect(amountToPay).toContain('₹450');
+    console.log(`[ASSERT SUCCESS] Verified checkout payment page amount is: ${amountToPay?.trim()}`);
 
     // Click the local dev simulate payment button
     await page.click('#simulate-success-pay-btn');
+    console.log('[STEP] Triggered server-side Razorpay webhook capture simulation...');
 
     // 7. Verify Confirmation Page (Polls until CONFIRMED)
     await expect(page).toHaveURL(/\/bookings\/.*\/confirmation/);
     await expect(page.locator('#confirmation-title')).toHaveText('Booking Confirmed!', { timeout: 10000 });
+    console.log('[ASSERT SUCCESS] Verified booking status transitioned from HELD to CONFIRMED successfully.');
 
     // 8. Open booking history
     await page.click('#view-my-bookings-confirmation-btn');
@@ -92,6 +96,7 @@ test.describe('Guest Booking Flow E2E', () => {
     await expect(page.locator('text=Confirmed')).toBeVisible();
     await page.click('[id^="check-in-btn-"]');
     await expect(page.locator('text=Checked In')).toBeVisible();
+    console.log('[ASSERT SUCCESS] Verified self check-in triggers status update to Checked In.');
 
     // 10. Execute Cancellation & Tiered Refund preview
     await page.click('[id^="cancel-booking-btn-"]');
@@ -100,9 +105,11 @@ test.describe('Guest Booking Flow E2E', () => {
     await expect(page.locator('text=Cancel Your Match')).toBeVisible();
     const refundPreviewText = await page.locator('#refund-preview-display').textContent();
     expect(refundPreviewText).toContain('₹0');
+    console.log(`[ASSERT SUCCESS] Verified tiered refund preview for 1.9 hours cutoff computes to: ${refundPreviewText?.trim()}`);
 
     // Confirm cancel
     await page.click('#confirm-cancellation-btn');
     await expect(page.locator('text=Cancelled')).toBeVisible();
+    console.log('[ASSERT SUCCESS] Verified cancellation updates booking status to Cancelled.');
   });
 });
