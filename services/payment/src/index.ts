@@ -173,7 +173,7 @@ const createOrderHandler = async (request: any, reply: any) => {
     const order = await razorpayClient.orders.create({
       amount,
       currency: currency || 'INR',
-      receipt: receipt || `receipt_${Date.now()}`,
+      receipt: receipt ? receipt.slice(0, 40) : `receipt_${Date.now()}`,
     });
 
     // If bookingId is provided, dynamically update the pending PaymentIntent's gatewayRef

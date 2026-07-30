@@ -100,7 +100,7 @@ export default function BookingPay() {
           bookingId,
           amount: intent.amount,
           currency: 'INR',
-          receipt: 'receipt_booking_' + bookingId,
+          receipt: bookingId,
         }),
       });
 
