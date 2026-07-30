@@ -70,7 +70,7 @@ export default function BookingPay() {
 
     // Load Razorpay Standard Checkout SDK
     const options = {
-      key: 'rzp_test_mockkey', // Razorpay test API key
+      key: import.meta.env.VITE_RAZORPAY_KEY || 'rzp_test_1234567890abcd', // Pull key from env, fallback to valid mock format key
       amount: intent.amount,
       currency: 'INR',
       name: 'Badminton Hub',
@@ -118,7 +118,7 @@ export default function BookingPay() {
     );
   }
 
-  const isDev = window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1');
+  const isDev = import.meta.env.DEV;
 
   return (
     <div className="flex-1 max-w-md w-full mx-auto px-4 py-10 space-y-6 text-white">

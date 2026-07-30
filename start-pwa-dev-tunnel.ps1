@@ -54,6 +54,7 @@ try {
     # 2. Boot Backend Services
     $Jobs += Start-Service-Job -Name "Slot-Engine" -Cwd "$PlatformDir\services\slot-engine" -Command "npx tsx src/index.ts" -EnvVars @{
         DATABASE_URL = $DbUrl
+        JWT_SECRET = $JwtSecret
         INTERNAL_SERVICE_KEY = $InternalKey
         PORT = "3001"
     }
