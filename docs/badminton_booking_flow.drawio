@@ -1,0 +1,133 @@
+<mxfile host="Electron" agent="Claude">
+  <diagram name="Badminton Booking Flow - Tiered" id="booking-flow-2">
+    <mxGraphModel dx="1288" dy="783" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="legend" parent="1" style="text;html=1;fontSize=12;align=left;verticalAlign=top;fontStyle=0" value="Legend:  Teal = Hard rule / automatic&#xa;Amber = Manual / admin decision&#xa;Purple dashed = Premium tier (not Basic)" vertex="1">
+          <mxGeometry height="60" width="380" x="1300" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="basicBox" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;verticalAlign=top;fontStyle=1;fontSize=15;align=left;spacingLeft=10;spacingTop=6;" value="" vertex="1">
+          <mxGeometry height="680" width="1010" x="30" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="basicLabel" parent="1" style="text;html=1;fontSize=15;fontStyle=1;align=left;verticalAlign=top;fontColor=#333333" value="BASIC TIER" vertex="1">
+          <mxGeometry height="24" width="200" x="45" y="76" as="geometry" />
+        </mxCell>
+        <mxCell id="premBox" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9673a6;dashed=1;" value="" vertex="1">
+          <mxGeometry height="380" width="600" x="1060" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="premLabel" parent="1" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=top;fontColor=#9673a6" value="PREMIUM #1: Full Member Mgmt + Auto-Release" vertex="1">
+          <mxGeometry height="24" width="500" x="1075" y="76" as="geometry" />
+        </mxCell>
+        <mxCell id="laneA" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;opacity=40;" value="" vertex="1">
+          <mxGeometry height="160" width="960" x="60" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="laneA_label" parent="1" style="text;html=1;fontSize=12;fontStyle=1;align=left;verticalAlign=top;fontColor=#3d5a99" value="MINIMAL MEMBER FLOW" vertex="1">
+          <mxGeometry height="18" width="300" x="70" y="116" as="geometry" />
+        </mxCell>
+        <mxCell id="laneB" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;opacity=40;" value="" vertex="1">
+          <mxGeometry height="130" width="960" x="60" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="laneB_label" parent="1" style="text;html=1;fontSize=12;fontStyle=1;align=left;verticalAlign=top;fontColor=#a68324" value="LOW-OCCUPANCY ALERT &amp; MANUAL RELEASE (Basic)" vertex="1">
+          <mxGeometry height="18" width="450" x="70" y="296" as="geometry" />
+        </mxCell>
+        <mxCell id="laneC" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;opacity=40;" value="" vertex="1">
+          <mxGeometry height="130" width="950" x="70" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="laneC_label" parent="1" style="text;html=1;fontSize=12;fontStyle=1;align=left;verticalAlign=top;fontColor=#4a7a3d" value="GUEST FLOW (predefined + freed seats + negotiated)" vertex="1">
+          <mxGeometry height="18" width="500" x="70" y="446" as="geometry" />
+        </mxCell>
+        <mxCell id="A1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Admin assigns member&#xa;to ONE recurring slot" vertex="1">
+          <mxGeometry height="60" width="170" x="80" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="A2" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Confirm attendance&#xa;before cutoff?" vertex="1">
+          <mxGeometry height="80" width="170" x="310" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="A3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" value="Checked in&#xa;(hard rule)" vertex="1">
+          <mxGeometry height="60" width="160" x="560" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="A4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" value="Cutoff reached: seat&#xa;auto-released (hard rule,&#xa;reuses existing sweep)" vertex="1">
+          <mxGeometry height="70" width="180" x="310" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="B1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Low-occupancy alert&#xa;(% of capacity, configurable)" vertex="1">
+          <mxGeometry height="60" width="190" x="80" y="335" as="geometry" />
+        </mxCell>
+        <mxCell id="B3" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Admin decides:&#xa;release to guest?" vertex="1">
+          <mxGeometry height="80" width="170" x="330" y="325" as="geometry" />
+        </mxCell>
+        <mxCell id="B4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Admin predefines guest&#xa;slots (proactive, independent&#xa;of member attendance)" vertex="1">
+          <mxGeometry height="70" width="200" x="580" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="B5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" value="Edge case: call-in,&#xa;admin negotiates + sends&#xa;Payment Link via WhatsApp" vertex="1">
+          <mxGeometry height="60" width="180" x="820" y="335" as="geometry" />
+        </mxCell>
+        <mxCell id="C1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" value="Freed seat opens&#xa;to guest booking" vertex="1">
+          <mxGeometry height="60" width="170" x="80" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="C2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" value="Guest browses &amp; pays&#xa;(self-service, hard rule)" vertex="1">
+          <mxGeometry height="60" width="190" x="310" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="C3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" value="Booking confirmed&#xa;(webhook, hard rule)" vertex="1">
+          <mxGeometry height="60" width="170" x="580" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="C4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" value="Guest pays via link;&#xa;same webhook confirms" vertex="1">
+          <mxGeometry height="60" width="180" x="820" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="P1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;dashed=1;" value="Live occupancy dashboard&#xa;(all groups, all branches)" vertex="1">
+          <mxGeometry height="60" width="220" x="1090" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="P2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;dashed=1;" value="Admin reallocates members&#xa;between courts on low occupancy" vertex="1">
+          <mxGeometry height="60" width="220" x="1090" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="P3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;dashed=1;" value="Multi-slot per member +&#xa;premium-slot fee surcharge" vertex="1">
+          <mxGeometry height="60" width="220" x="1090" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="P4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;dashed=1;" value="Fully automatic release,&#xa;per-court configurable cutoff,&#xa;guest waitlist" vertex="1">
+          <mxGeometry height="70" width="220" x="1370" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="A1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="A2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="A2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="A3" value="confirmed">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="A2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="A4" value="not confirmed">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="A4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="B1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="B1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="B3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="B3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="C1" value="release (manual)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="B4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="C2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="C1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="C2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="C2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="C3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="B5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" target="C4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="B3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#9673a6;" target="P1" value="upgrade path">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="P1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#9673a6;" target="P2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="A1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#9673a6;" target="P3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="B3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#9673a6;" target="P4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

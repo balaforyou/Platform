@@ -1,0 +1,23 @@
+# Tasks — Phase 4: Payment
+
+- [x] Database Schema Update
+  - [x] Add `basePrice` to `ResourcePool` model in `schema.prisma`
+  - [x] Add `PaymentIntent`, `Subscription`, `Refund`, and `WebhookEvent` models to `schema.prisma`
+  - [x] Run Prisma migration dev: `pnpm prisma:migrate -- --name phase4_payment`
+- [x] Reopen and Modify Slot Engine
+  - [x] Support `basePrice` in `POST /resource-pools` in `services/slot-engine/src/index.ts`
+  - [x] Query and apply `ResourcePool.basePrice` server-side in `POST /bookings`, ignoring client `price` input
+  - [x] Restrict `POST /bookings/:id/confirm` to `INTERNAL_SERVICE_KEY` authorization
+  - [x] Expose `GET /bookings/:id` protected by `INTERNAL_SERVICE_KEY`
+- [x] Implement Payment Service
+  - [x] Implement `POST /payments/intents` (create intent with validation and UPI link output)
+  - [x] Implement `POST /webhooks/razorpay` (webhook signature verification, idempotency, and confirm dispatch)
+  - [x] Implement `POST /refunds` (execute direct refund based on Slot Engine cancel record)
+- [x] Verification and Testing
+  - [x] Implement integration test script `services/payment/src/payment.test.ts`
+  - [x] Test 1: Server-side pricing enforcement & spoofing protection
+  - [x] Test 2: Webhook signature verification and invalid signature rejection
+  - [x] Test 3: Webhook idempotency duplicate event check
+  - [x] Test 4: E2E webhook booking confirmation (HELD -> CONFIRMED)
+  - [x] Test 5: E2E refund verification reading Slot-Engine-computed amount
+  - [x] Run typescript typechecks and eslint across all workspaces

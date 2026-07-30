@@ -1,0 +1,30 @@
+{
+  "name": "badminton-platform",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down",
+    "prisma:generate": "pnpm --filter @badminton/database run prisma:generate",
+    "prisma:migrate": "pnpm --filter @badminton/database run prisma:migrate",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "pnpm -r run typecheck",
+    "test:concurrency": "pnpm --filter @badminton/slot-engine run test:concurrency",
+    "test:auth": "pnpm --filter @badminton/identity-auth run test:auth",
+    "test:tenant": "pnpm --filter @badminton/tenant-management run test:tenant",
+    "test:payment": "pnpm --filter @badminton/payment run test:payment"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/parser": "^7.10.0",
+    "@typescript-eslint/eslint-plugin": "^7.10.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.5",
+    "prisma": "^5.14.0",
+    "dotenv-cli": "^7.4.2",
+    "@types/node": "^20.12.12"
+  }
+}

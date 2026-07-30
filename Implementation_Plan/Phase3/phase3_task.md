@@ -1,0 +1,22 @@
+# Tasks — Phase 3: Tenant / White-Label Management
+
+- [ ] Database Schema Update
+  - [ ] Add `Tenant` schema extensions, `Branch`, and `RoleAssignment` models to `schema.prisma`
+  - [ ] Run Prisma migration dev: `pnpm prisma:migrate -- --name phase3_tenant_management`
+- [ ] Implement Tenant Management Service
+  - [ ] Implement `POST /tenants` (create tenant)
+  - [ ] Implement `PATCH /tenants/:id` (update tenant)
+  - [ ] Implement `GET /tenants/by-subdomain/:subdomain` (resolve subdomain)
+  - [ ] Implement `GET /tenants/:id/manifest.json` (dynamic PWA manifest)
+  - [ ] Implement `POST /tenants/:id/branches` (create draft branch)
+  - [ ] Implement `PATCH /branches/:id` (activate branch)
+  - [ ] Implement `GET /tenants/:id/branches` (list branches with status filtering)
+  - [ ] Implement `POST /tenants/:id/roles` (assign roles)
+  - [ ] Implement `GET /users/:id/roles` (retrieve user roles)
+  - [ ] Implement `GET /users/:userId/branches/:branchId/check` (scoped verification check)
+- [ ] Verification and Testing
+  - [ ] Implement integration test script `services/tenant-management/src/tenant.test.ts`
+  - [ ] Test 1: Draft-to-active branch list selector gate
+  - [ ] Test 2: Role assignment scope checking (owner vs manager branch restriction)
+  - [ ] Test 3: End-to-end integration proving user roles are embedded in Identity JWT
+  - [ ] Run typescript typechecks and eslint across all workspaces

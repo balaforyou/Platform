@@ -1,0 +1,25 @@
+{
+  "name": "@badminton/slot-engine",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test:concurrency": "dotenv -e ../../.env -- node dist/concurrency.test.js"
+  },
+  "dependencies": {
+    "fastify": "^4.27.0",
+    "@badminton/shared-middleware": "workspace:*",
+    "@badminton/shared-types": "workspace:*",
+    "@badminton/database": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "tsx": "^4.10.5",
+    "dotenv-cli": "^7.4.2"
+  }
+}

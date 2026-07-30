@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+packages/database/src/generated/
+bin/
+*.exe
+*.zip
+*.log

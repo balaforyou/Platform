@@ -1,0 +1,22 @@
+# Tasks — Phase 2: Identity & Auth
+
+- [ ] Database Schema Update
+  - [ ] Add `User`, `AuthSession`, `PendingInvite`, and `OtpRequest` models to `schema.prisma`
+  - [ ] Run Prisma migration dev to apply schema changes to local Postgres: `pnpm prisma:migrate -- --name phase2_identity_auth`
+- [ ] Implement Identity & Auth Service
+  - [ ] Configure `@fastify/jwt` and `@fastify/cookie` in `services/identity-auth`
+  - [ ] Implement `POST /auth/otp/request` (OTP request with rate limits and cooldown verification)
+  - [ ] Implement `POST /auth/otp/verify` (OTP verify with invite resolution, user registration, and token issuance)
+  - [ ] Implement `POST /auth/google/verify` (Google OAuth verify and link/signup phone gate)
+  - [ ] Implement `POST /auth/refresh` (session refresh with token rotation)
+  - [ ] Implement `POST /auth/logout` (session invalidation and cookie clear)
+  - [ ] Implement `GET /users/:id` (fetch user details)
+  - [ ] Implement `POST /users/resolve-invite` (create pending invite)
+- [ ] Verification and Testing
+  - [ ] Implement integration test script `services/identity-auth/src/identity.test.ts`
+  - [ ] Test 1: OTP Rate-limits & cooldown (429 status codes)
+  - [ ] Test 2: OTP verification attempts and user creation (201 status code)
+  - [ ] Test 3: Invite resolution resolution (deleting PendingInvite table match)
+  - [ ] Test 4: Token refresh cookie and rotation check
+  - [ ] Test 5: Google verification signup phone gating flow
+  - [ ] Run typescript typechecks and eslint across all workspaces

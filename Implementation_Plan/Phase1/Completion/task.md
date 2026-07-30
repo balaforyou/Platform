@@ -1,0 +1,27 @@
+# Tasks — Phase 1: Slot / Resource Engine
+
+- [x] Database Schema Update
+  - [x] Add enums `AllocationMode` and `BookingStatus` to `schema.prisma`
+  - [x] Add `ResourcePool`, `Resource`, `AvailabilityWindow`, `BookingRule`, `BlockedWindow`, and `Booking` models to `schema.prisma`
+  - [x] Run Prisma migration dev to apply schema changes to local Postgres: `pnpm prisma:migrate -- --name phase1_slot_engine`
+- [x] Implement Slot Engine Service
+  - [x] Define shared types and validations for route parameters
+  - [x] Implement `POST /resource-pools` (create pool)
+  - [x] Implement `POST /booking-rules` (configure pool rules)
+  - [x] Implement `POST /blocked-windows` (configure blocked windows)
+  - [x] Implement `GET /resource-pools/:id/availability` (availability query with `date`, `from`, `to` params)
+  - [x] Implement `POST /bookings` (atomic hold reservation with row locking, idempotency check, and 409 error mapping)
+  - [x] Implement `POST /bookings/:id/confirm` (confirm booking)
+  - [x] Implement `POST /bookings/:id/check-in` (record check-in)
+  - [x] Implement `POST /bookings/:id/cancel` (cancel booking with tiered refund calculations)
+  - [x] Implement `POST /bookings/sweep` (ops-only sweep for holds and member grace periods)
+- [x] Verification and Testing
+  - [x] Setup local database environment
+  - [x] Implement integration test script `services/slot-engine/src/concurrency.test.ts`
+  - [x] Test 1: Concurrent holds on same slot (FIXED_INSTANCE) -> exactly one 201, other 409
+  - [x] Test 2: Concurrent holds on same slot (POOLED) -> exactly capacity limit succeeds, other 409
+  - [x] Test 3: Idempotency-Key retry -> returning original booking
+  - [x] Test 4: Idempotency-Key race condition -> database unique constraint catch returning existing booking
+  - [x] Test 5: Held-booking expiry sweep -> release capacity
+  - [x] Test 6: Member auto-release sweep -> release member, preserve guest
+  - [x] Run typescript typechecks and eslint across all workspaces

@@ -1,0 +1,390 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+enum AllocationMode {
+  FIXED_INSTANCE
+  POOLED
+}
+
+enum PricingMode {
+  FLAT
+  PER_PERSON
+}
+
+enum BookingStatus {
+  HELD
+  CONFIRMED
+  CHECKED_IN
+  RELEASED_NO_SHOW
+  CANCELLED
+}
+
+enum BranchStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum UserRole {
+  OWNER
+  BRANCH_MANAGER
+  FRONT_DESK
+}
+
+model Tenant {
+  id               String           @id @default(uuid())
+  name             String
+  subdomain        String           @unique
+  logo             String?
+  themeColor       String           @default("#000000")
+  appName          String?
+  plan             String           @default("basic")
+  status           String           @default("active")
+  contactInfo      String?
+  billingInfo      String?
+  // Facilities / About — tenant-level defaults; branches may override
+  aboutDescription String?
+  facilities       String[]         @default([])
+  photos           String[]         @default([])
+  branches         Branch[]
+  roleAssignments  RoleAssignment[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model Branch {
+  id                String           @id @default(uuid())
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String
+  address           String?
+  timezone          String           @default("UTC")
+  status            BranchStatus     @default(DRAFT)
+  // Operating schedule
+  workingDays       String[]         @default([])  // e.g. ["Monday", "Tuesday", ...]
+  workingHoursStart String?                        // e.g. "06:00" (HH:mm, branch local time)
+  workingHoursEnd   String?                        // e.g. "22:00"
+  // Facilities / About — overrides tenant-level defaults when non-empty
+  aboutDescription  String?
+  facilities        String[]         @default([])
+  photos            String[]         @default([])
+  roleAssignments   RoleAssignment[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@unique([tenantId, name])
+}
+
+model RoleAssignment {
+  id        String   @id @default(uuid())
+  userId    String
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  role      UserRole
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, tenantId])
+}
+
+model ResourcePool {
+  id                        String                  @id @default(uuid())
+  tenantId                  String                  // Scalar UUID, no DB relation yet
+  branchId                  String                  // Scalar UUID, no DB relation yet
+  name                      String
+  allocationMode            AllocationMode
+  capacity                  Int                     @default(1)         // Total capacity for POOLED mode
+  basePrice                 Decimal                 @default(100.00) @db.Decimal(10, 2) // Legacy; kept for compatibility
+  // Occupancy / duration constraints
+  minOccupancy              Int                     @default(1)         // Minimum players required to book
+  minBookingDurationMinutes Int                     @default(60)        // Minimum slot duration in minutes
+  // Pricing mode and rate (used when AvailabilityWindow has no override)
+  pricingMode               PricingMode             @default(FLAT)
+  defaultRate               Decimal                 @default(100.00) @db.Decimal(10, 2)
+  resources                 Resource[]
+  availabilityWindows       AvailabilityWindow[]
+  bookingRules              BookingRule[]
+  blockedWindows            BlockedWindow[]
+  bookings                  Booking[]
+  memberGroupAssignments    MemberGroupAssignment[]
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+}
+
+model Resource {
+  id                  String               @id @default(uuid())
+  resourcePoolId      String
+  resourcePool        ResourcePool         @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  name                String
+  availabilityWindows AvailabilityWindow[]
+  bookings            Booking[]
+  blockedWindows      BlockedWindow[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+}
+
+model AvailabilityWindow {
+  id             String       @id @default(uuid())
+  resourcePoolId String
+  resourcePool   ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  resourceId     String?
+  resource       Resource?    @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  startTime      DateTime
+  endTime        DateTime
+  capacity       Int          @default(1)  // Capacity count for POOLED mode (always 1 for FIXED_INSTANCE)
+  // Per-release pricing override; null means "use pool default".
+  // WHY: Both fields are always set together (both-or-neither rule enforced at API layer).
+  pricingMode    PricingMode?
+  price          Decimal?     @db.Decimal(10, 2)
+  bookings       Booking[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([startTime, endTime])
+}
+
+model BookingRule {
+  id                       String       @id @default(uuid())
+  resourcePoolId           String
+  resourcePool             ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  memberWindowDays         Int          @default(30)
+  guestOpenWindowDays      Int          @default(7)
+  // WHY: Two distinct time-based mechanisms — never conflate them.
+  // gracePeriodMinutes: governs individual member seat release deadline (member confirmed → RELEASED_NO_SHOW).
+  gracePeriodMinutes       Int          @default(30)
+  // guestAccessCutoffMinutes: governs when sweep fires low-occupancy alert + admin can release freed capacity to guests.
+  guestAccessCutoffMinutes Int          @default(120)
+  // lowOccupancyThresholdPct: admin-configurable percentage below which low-occupancy alert fires.
+  lowOccupancyThresholdPct Int          @default(50)
+  prepaymentRequired       Boolean      @default(true)
+  cancellationPolicyJson   Json         // Tiered policy mapping: { type: "tiered", tiers: [{ min_hours_before_slot, refund_percent }] }
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+}
+
+model BlockedWindow {
+  id             String        @id @default(uuid())
+  resourcePoolId String
+  resourcePool   ResourcePool  @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  resourceId     String?
+  resource       Resource?     @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  startTime      DateTime
+  endTime        DateTime
+  reason         String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// WHY: Represents a member's recurring slot assignment for a specific court/pool.
+// Enforces Basic-tier "one recurring slot per member" rule via:
+//   1. Standard @@unique([userId, resourcePoolId]) — prevents same-court double-assignment.
+//   2. A Postgres partial unique index on (userId) WHERE status = 'ACTIVE' (added as raw SQL
+//      in the migration file — Prisma schema syntax cannot express WHERE-clause indexes).
+//      This enforces the one-active-slot-per-member rule at DB level, making concurrent
+//      assignment requests fail with P2002 rather than relying on app-level pre-checks.
+model MemberGroupAssignment {
+  id             String       @id @default(uuid())
+  userId         String
+  resourcePoolId String
+  resourcePool   ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  // Schedule fields — explicit days+time rather than a full cron expression.
+  // WHY: The requirement is weekdays + one fixed start time; cron syntax adds parser complexity
+  // for no benefit when the constraint is this narrow.
+  daysOfWeek     String       // e.g. "1,2,3,4,5,6" (1=Mon … 7=Sun, ISO weekday)
+  startTime      String       // e.g. "10:00" (HH:mm, branch local time)
+  status         String       // ACTIVE | SUSPENDED
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, resourcePoolId])
+}
+
+model Booking {
+  id             String         @id @default(uuid())
+  tenantId       String         // Scalar UUID, no DB relation yet
+  branchId       String         // Scalar UUID, no DB relation yet
+  resourcePoolId String
+  resourcePool   ResourcePool   @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  resourceId     String?
+  resource       Resource?      @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  windowId       String
+  window         AvailabilityWindow @relation(fields: [windowId], references: [id], onDelete: Cascade)
+  userId         String
+  status         BookingStatus
+  heldAt         DateTime       @default(now())
+  heldUntil      DateTime
+  idempotencyKey String?        @unique // unique check for API requests
+  isMemberBooking Boolean       @default(false)
+  price          Decimal?       @db.Decimal(10, 2)
+  refundAmount   Decimal?       @db.Decimal(10, 2)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  players        BookingPlayer[]
+
+  @@index([status, heldUntil])
+}
+
+enum UserType {
+  GUEST
+  MEMBER
+  STAFF
+}
+
+model User {
+  id              String        @id @default(uuid())
+  tenantId        String        // Scalar UUID, namespaced per tenant
+  phone           String?
+  email           String?
+  googleId        String?
+  isPhoneVerified Boolean       @default(false)
+  isEmailVerified Boolean       @default(false)
+  userType        UserType      @default(GUEST)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  sessions        AuthSession[]
+
+  @@unique([phone, tenantId])
+  @@unique([email, tenantId])
+  @@unique([googleId, tenantId])
+}
+
+model AuthSession {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique
+  expiresAt    DateTime
+  revoked      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PendingInvite {
+  id        String   @id @default(uuid())
+  tenantId  String
+  phone     String
+  createdAt DateTime @default(now())
+
+  @@unique([phone, tenantId])
+}
+
+model OtpRequest {
+  id        String   @id @default(uuid())
+  phone     String
+  tenantId  String
+  code      String
+  ip        String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone, createdAt])
+  @@index([ip, createdAt])
+}
+
+model BookingPlayer {
+  id        String   @id @default(uuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId    String?  // Resolved once they register/login
+  phone     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bookingId, phone])
+  @@index([phone, userId])
+}
+
+model PaymentIntent {
+  id          String   @id @default(uuid())
+  tenantId    String
+  userId      String
+  amount      Int      // in paise/cents
+  purpose     String   // guest_booking | tournament_entry | subscription_billing
+  referenceId String   // bookingId or subscriptionId
+  status      String   // pending | captured | failed | expired
+  gatewayRef  String   @unique
+  refunds     Refund[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Subscription {
+  id        String   @id @default(uuid())
+  userId    String
+  tenantId  String
+  mandateId String   @unique
+  amount    Int      // in paise/cents
+  frequency String   // monthly
+  status    String   // active | suspended | cancelled
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Refund {
+  id              String        @id @default(uuid())
+  paymentIntentId String
+  paymentIntent   PaymentIntent @relation(fields: [paymentIntentId], references: [id], onDelete: Cascade)
+  amount          Int           // in paise/cents
+  reason          String
+  status          String        // pending | processed | failed
+  // Override audit trail — populated only when isOverride = true.
+  // WHY: overriddenBy is always derived from the verified JWT at the API layer, never from request body.
+  isOverride      Boolean       @default(false)
+  overriddenBy    String?       // userId from JWT
+  overrideReason  String?
+  overrideAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model WebhookEvent {
+  id             String   @id @default(uuid())
+  gatewayEventId String   @unique
+  createdAt      DateTime @default(now())
+}
+
+model NotificationTemplate {
+  id           String   @id @default(uuid())
+  tenantId     String   @default("platform")
+  channel      String   // sms | push | email
+  eventType    String
+  templateBody String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, channel, eventType])
+}
+
+model NotificationRequest {
+  id           String    @id @default(uuid())
+  tenantId     String
+  recipient    String    // userId, or raw mobile/email
+  channel      String    // sms | push | email
+  eventType    String
+  variables    Json
+  status       String    // queued | sent | failed | dead_letter
+  attempts     Int       @default(0)
+  retryAfter   DateTime?
+  providerRef  String?
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
