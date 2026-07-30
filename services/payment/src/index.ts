@@ -669,6 +669,78 @@ server.post('/refunds/override', async (request, reply) => {
   return refund;
 });
 
+// POST /payments/test/simulate-capture
+// WHY: Test-only simulation endpoint gated strictly to non-production to keep secrets secure.
+// Computes signature over simulated payload using the local RAZORPAY_WEBHOOK_SECRET and calls
+// /webhooks/razorpay internally.
+server.post('/payments/test/simulate-capture', async (request, reply) => {
+  if (process.env.NODE_ENV === 'production') {
+    reply.status(404);
+    throw new Error('Not Found');
+  }
+
+  const { bookingId } = request.body as any;
+  if (!bookingId) {
+    reply.status(400);
+    throw new Error('bookingId is required');
+  }
+
+  // 1. Fetch pending intent
+  const intent = await prisma.paymentIntent.findFirst({
+    where: { referenceId: bookingId },
+  });
+
+  if (!intent) {
+    reply.status(404);
+    throw new Error('Payment intent not found for this booking');
+  }
+
+  if (intent.status === 'captured') {
+    return { success: true, message: 'Already captured' };
+  }
+
+  // 2. Build mock Razorpay webhook payload
+  const webhookPayload = {
+    id: `evt_sim_${crypto.randomBytes(8).toString('hex')}`,
+    event: 'payment.captured',
+    payload: {
+      payment: {
+        entity: {
+          id: intent.gatewayRef,
+          amount: intent.amount
+        }
+      }
+    }
+  };
+
+  const rawBody = JSON.stringify(webhookPayload);
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || 'test-webhook-secret';
+  
+  // Calculate signature
+  const hmac = crypto.createHmac('sha256', secret);
+  hmac.update(rawBody);
+  const signature = hmac.digest('hex');
+
+  const port = process.env.PORT || 3004;
+
+  // Make internal HTTP post request to our own webhook
+  const webhookRes = await fetch(`http://localhost:${port}/webhooks/razorpay`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-razorpay-signature': signature
+    },
+    body: rawBody
+  });
+
+  if (!webhookRes.ok) {
+    reply.status(500);
+    throw new Error(`Webhook simulation failed with status ${webhookRes.status}`);
+  }
+
+  return { success: true };
+});
+
 const start = async () => {
   try {
     const port = Number(process.env.PORT) || 3004;

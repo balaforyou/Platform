@@ -830,8 +830,23 @@ server.post('/bookings/:id/check-in', async (request, reply) => {
   });
 });
 
-// Cancel (HELD | CONFIRMED → CANCELLED) with tiered refund calculation.
+// Cancel (HELD | CONFIRMED → CANCELLED) with tiered refund calculation and IDOR check.
 server.post('/bookings/:id/cancel', async (request, reply) => {
+  let isInternal = false;
+  let decodedUser: any = null;
+
+  try {
+    requireInternalKey(request, reply);
+    isInternal = true;
+  } catch (e) {
+    try {
+      decodedUser = await request.jwtVerify();
+    } catch (jwtErr) {
+      reply.status(401);
+      throw new Error('Unauthorized');
+    }
+  }
+
   const { id } = request.params as any;
 
   const booking = await prisma.booking.findUnique({
@@ -841,6 +856,19 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
   if (!booking) {
     reply.status(404);
     throw new Error('Booking not found');
+  }
+
+  // IDOR Guard: Verify ownership or admin privileges if not internal service
+  if (!isInternal && decodedUser) {
+    const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
+    const roles = decodedUser.roles || [];
+    const isOwner = booking.userId === userId;
+    const isAdmin = roles.includes('owner') || roles.includes('branch_manager');
+
+    if (!isOwner && !isAdmin) {
+      reply.status(403);
+      throw new Error('Forbidden');
+    }
   }
 
   if (booking.status === BookingStatus.CANCELLED) return booking; // idempotent
@@ -1202,15 +1230,36 @@ server.post('/bookings/resolve-invites', async (request, reply) => {
   return { resolvedCount: updatedPlayers.count };
 });
 
-// Retrieve a booking by ID (internal lookup for other services).
+// Retrieve a booking by ID (dual-path auth: internal key OR owner JWT or admin JWT with IDOR check).
 server.get('/bookings/:id', async (request, reply) => {
-  requireInternalKey(request, reply);
+  let isInternal = false;
+  let decodedUser: any = null;
+
+  try {
+    requireInternalKey(request, reply);
+    isInternal = true;
+  } catch (e) {
+    try {
+      decodedUser = await request.jwtVerify();
+    } catch (jwtErr) {
+      reply.status(401);
+      throw new Error('Unauthorized');
+    }
+  }
 
   const { id } = request.params as any;
   const booking = await prisma.booking.findUnique({
     where: { id },
-    include: { window: true },
+    include: {
+      window: {
+        include: {
+          resourcePool: true,
+        }
+      },
+      players: true,
+    },
   });
+
   if (!booking) {
     reply.status(404);
     const err = new Error('Booking not found');
@@ -1218,7 +1267,135 @@ server.get('/bookings/:id', async (request, reply) => {
     (err as any).code = 'BOOKING_NOT_FOUND';
     throw err;
   }
+
+  // IDOR Guard: Verify ownership or admin privileges if not internal service
+  if (!isInternal && decodedUser) {
+    const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
+    const roles = decodedUser.roles || [];
+    const isOwner = booking.userId === userId;
+    const isAdmin = roles.includes('owner') || roles.includes('branch_manager');
+
+    if (!isOwner && !isAdmin) {
+      reply.status(403);
+      throw new Error('Forbidden');
+    }
+  }
+
   return booking;
+});
+
+// GET /bookings/my (requires JWT)
+// WHY: Allow logged-in guests or members to retrieve their own booking history.
+server.get('/bookings/my', async (request, reply) => {
+  let decodedUser: any = null;
+  try {
+    decodedUser = await request.jwtVerify();
+  } catch (jwtErr) {
+    reply.status(401);
+    throw new Error('Unauthorized');
+  }
+
+  const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
+  if (!userId) {
+    reply.status(401);
+    throw new Error('Unauthorized');
+  }
+
+  const bookings = await prisma.booking.findMany({
+    where: { userId },
+    include: {
+      window: {
+        include: {
+          resourcePool: true,
+        }
+      },
+      players: true,
+    },
+    orderBy: { heldAt: 'desc' },
+  });
+
+  return bookings;
+});
+
+// GET /bookings/:id/cancel-preview (requires JWT / internal)
+// WHY: Preview the computed refund amount based on current date/time and cancellation policy.
+server.get('/bookings/:id/cancel-preview', async (request, reply) => {
+  let isInternal = false;
+  let decodedUser: any = null;
+
+  try {
+    requireInternalKey(request, reply);
+    isInternal = true;
+  } catch (e) {
+    try {
+      decodedUser = await request.jwtVerify();
+    } catch (jwtErr) {
+      reply.status(401);
+      throw new Error('Unauthorized');
+    }
+  }
+
+  const { id } = request.params as any;
+
+  const booking = await prisma.booking.findUnique({
+    where: { id },
+    include: { window: true },
+  });
+  if (!booking) {
+    reply.status(404);
+    throw new Error('Booking not found');
+  }
+
+  // IDOR Guard: Verify ownership or admin privileges if not internal service
+  if (!isInternal && decodedUser) {
+    const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
+    const roles = decodedUser.roles || [];
+    const isOwner = booking.userId === userId;
+    const isAdmin = roles.includes('owner') || roles.includes('branch_manager');
+
+    if (!isOwner && !isAdmin) {
+      reply.status(403);
+      throw new Error('Forbidden');
+    }
+  }
+
+  if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD) {
+    reply.status(400);
+    throw new Error('Only held or confirmed bookings can be cancelled');
+  }
+
+  let refundAmount = 0;
+  let refundPercent = 0;
+
+  if (booking.status === BookingStatus.CONFIRMED) {
+    const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId } });
+    const now = new Date();
+    const startTime = new Date(booking.window.startTime);
+    const hoursBeforeSlot = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    if (hoursBeforeSlot > 0 && rule?.cancellationPolicyJson) {
+      const policy = rule.cancellationPolicyJson as any;
+      if (policy.type === 'tiered' && Array.isArray(policy.tiers)) {
+        const sortedTiers = [...policy.tiers].sort((a, b) => b.min_hours_before_slot - a.min_hours_before_slot);
+        const matchedTier = sortedTiers.find((tier) => hoursBeforeSlot >= tier.min_hours_before_slot);
+        if (matchedTier && booking.price) {
+          refundPercent = matchedTier.refund_percent;
+          refundAmount = (Number(booking.price) * matchedTier.refund_percent) / 100;
+        }
+      }
+    }
+  } else {
+    // HELD bookings get 100% refund since they aren't paid yet (or are in process)
+    refundPercent = 100;
+    refundAmount = Number(booking.price || 0);
+  }
+
+  return {
+    bookingId: booking.id,
+    originalPrice: Number(booking.price || 0),
+    refundAmount,
+    refundPercent,
+  };
 });
 
 // ---------------------------------------------------------------------------

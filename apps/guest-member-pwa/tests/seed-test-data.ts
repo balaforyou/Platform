@@ -1,0 +1,190 @@
+import { PrismaClient } from '@badminton/database';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log('--- Playwright E2E Test Seeding ---');
+
+  const tenantId = '11111111-1111-1111-1111-111111111111';
+  const branchId = '22222222-2222-2222-2222-222222222222';
+  const poolId = 'courtpool-e2e-001';
+  const resourceId = 'court-e2e-001';
+  const windowId = 'window-e2e-001';
+  const userId = '33333333-3333-3333-3333-333333333333';
+
+  // 1. Clean up old E2E-related bookings/data
+  console.log('Cleaning up old test data...');
+  await prisma.booking.deleteMany({
+    where: {
+      OR: [
+        { windowId },
+        { resourcePoolId: poolId },
+        { userId }
+      ]
+    }
+  });
+
+  await prisma.availabilityWindow.deleteMany({ where: { id: windowId } });
+  await prisma.blockedWindow.deleteMany({ where: { resourcePoolId: poolId } });
+  await prisma.bookingRule.deleteMany({ where: { resourcePoolId: poolId } });
+  await prisma.resource.deleteMany({ where: { id: resourceId } });
+  await prisma.resourcePool.deleteMany({ where: { id: poolId } });
+
+  // 2. Ensure Tenant exists
+  console.log('Seeding Tenant...');
+  await prisma.tenant.upsert({
+    where: { id: tenantId },
+    update: {
+      name: 'Elite Court Rentals',
+      subdomain: 'courtowner1',
+      appName: 'Elite Courts',
+      themeColor: '#e11d48',
+      logo: '/logo.png',
+      plan: 'basic',
+      status: 'active',
+    },
+    create: {
+      id: tenantId,
+      name: 'Elite Court Rentals',
+      subdomain: 'courtowner1',
+      appName: 'Elite Courts',
+      themeColor: '#e11d48',
+      logo: '/logo.png',
+      plan: 'basic',
+      status: 'active',
+    },
+  });
+
+  // 3. Ensure Branch exists
+  console.log('Seeding Branch...');
+  await prisma.branch.upsert({
+    where: { id: branchId },
+    update: {
+      name: 'Coimbatore Main Arena',
+      address: 'Coimbatore, India',
+      status: 'ACTIVE',
+      workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      workingHoursStart: '06:00',
+      workingHoursEnd: '22:00',
+      aboutDescription: 'Coimbatore\'s premium arena with professional standard courts.',
+      facilities: ['Locker Rooms', 'Cafeteria', 'Showers', 'Parking'],
+    },
+    create: {
+      id: branchId,
+      tenantId,
+      name: 'Coimbatore Main Arena',
+      address: 'Coimbatore, India',
+      status: 'ACTIVE',
+      workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      workingHoursStart: '06:00',
+      workingHoursEnd: '22:00',
+      aboutDescription: 'Coimbatore\'s premium arena with professional standard courts.',
+      facilities: ['Locker Rooms', 'Cafeteria', 'Showers', 'Parking'],
+    },
+  });
+
+  // 4. Seed User
+  console.log('Seeding User...');
+  await prisma.user.upsert({
+    where: { id: userId },
+    update: {
+      phone: '+919999999999',
+      email: 'member@example.com',
+      isPhoneVerified: true,
+      userType: 'MEMBER',
+    },
+    create: {
+      id: userId,
+      tenantId,
+      phone: '+919999999999',
+      email: 'member@example.com',
+      isPhoneVerified: true,
+      userType: 'MEMBER',
+    },
+  });
+
+  // Role Assignment
+  await prisma.roleAssignment.upsert({
+    where: { id: 'assignment-id-e2e-001' },
+    update: { userId, tenantId, role: 'OWNER' },
+    create: { id: 'assignment-id-e2e-001', userId, tenantId, role: 'OWNER' },
+  });
+
+  // 5. Seed ResourcePool
+  console.log('Seeding Resource Pool...');
+  await prisma.resourcePool.create({
+    data: {
+      id: poolId,
+      tenantId,
+      branchId,
+      name: 'E2E Test Court A',
+      allocationMode: 'FIXED_INSTANCE',
+      pricingMode: 'PER_PERSON',
+      defaultRate: 150.00,
+      capacity: 4,
+      minOccupancy: 1,
+      minBookingDurationMinutes: 60,
+    },
+  });
+
+  // 6. Seed Resource
+  console.log('Seeding Resource...');
+  await prisma.resource.create({
+    data: {
+      id: resourceId,
+      resourcePoolId: poolId,
+      name: 'Court 1',
+    },
+  });
+
+  // 7. Seed Booking Rule
+  console.log('Seeding Booking Rule...');
+  await prisma.bookingRule.create({
+    data: {
+      resourcePoolId: poolId,
+      memberWindowDays: 30,
+      guestOpenWindowDays: 7,
+      gracePeriodMinutes: 30,
+      guestAccessCutoffMinutes: 120,
+      lowOccupancyThresholdPct: 50,
+      prepaymentRequired: true,
+      cancellationPolicyJson: {
+        type: 'tiered',
+        tiers: [
+          { min_hours_before_slot: 24, refund_percent: 100 },
+          { min_hours_before_slot: 6, refund_percent: 50 },
+          { min_hours_before_slot: 0, refund_percent: 0 },
+        ],
+      },
+    },
+  });
+
+  // 8. Seed Availability Window
+  // Set slot to start in 2 hours and end in 3.5 hours relative to now,
+  // making sure it is today, active, and check-in is open (within 2 hours window).
+  console.log('Seeding Availability Window...');
+  const now = new Date();
+  const startTime = new Date(now.getTime() + 1.9 * 60 * 60 * 1000); // 1.9 hours from now (starts today, check-in open)
+  const endTime = new Date(startTime.getTime() + 1.5 * 60 * 60 * 1000); // 1.5 hours duration
+
+  await prisma.availabilityWindow.create({
+    data: {
+      id: windowId,
+      resourcePoolId: poolId,
+      resourceId,
+      startTime,
+      endTime,
+      capacity: 1,
+    },
+  });
+
+  console.log('Seeding completed successfully!');
+}
+
+main()
+  .then(() => prisma.$disconnect())
+  .catch((e) => {
+    console.error('Seeding error:', e);
+    prisma.$disconnect();
+    process.exit(1);
+  });

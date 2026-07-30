@@ -1,0 +1,180 @@
+import { useEffect, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { apiRequest } from '@badminton/ui-shared';
+import { useAuth } from '@badminton/ui-shared';
+import { CheckCircle, AlertCircle, Activity, ArrowRight, Calendar, Clock, MapPin, Users } from 'lucide-react';
+
+export default function BookingConfirmation() {
+  const { bookingId } = useParams();
+  const { accessToken } = useAuth();
+
+  const [booking, setBooking] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Poll for CONFIRMED status (since webhook capture is asynchronous in background)
+  useEffect(() => {
+    if (!bookingId) return;
+
+    let isMounted = true;
+    let pollInterval: any;
+
+    const checkStatus = async () => {
+      try {
+        const res = await apiRequest<any>(`/slot-engine/bookings/${bookingId}`, {
+          token: accessToken,
+        });
+        
+        if (isMounted) {
+          setBooking(res);
+          setLoading(false);
+          
+          // Stop polling once confirmed or cancelled
+          if (res.status === 'CONFIRMED' || res.status === 'CHECKED_IN' || res.status === 'CANCELLED') {
+            clearInterval(pollInterval);
+          }
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err.message || 'Failed to verify booking status.');
+          setLoading(false);
+          clearInterval(pollInterval);
+        }
+      }
+    };
+
+    checkStatus();
+    // Poll every 1.5 seconds for up to 30 seconds
+    let attempts = 0;
+    pollInterval = setInterval(() => {
+      attempts++;
+      if (attempts > 20) {
+        clearInterval(pollInterval);
+        return;
+      }
+      checkStatus();
+    }, 1500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
+  }, [bookingId, accessToken]);
+
+  if (loading && !booking) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white">
+        <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
+        <p className="text-gray-400 text-sm font-medium">Verifying payment confirmation...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white p-4">
+        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+        <h3 className="text-lg font-bold">Verification Error</h3>
+        <p className="text-gray-400 text-sm mt-1 text-center max-w-md">{error}</p>
+        <Link to="/bookings/my" className="mt-4 py-2.5 px-6 bg-white/5 border border-white/10 rounded-xl text-xs hover:bg-white/10">
+          Check My Bookings
+        </Link>
+      </div>
+    );
+  }
+
+  const isConfirmed = booking?.status === 'CONFIRMED' || booking?.status === 'CHECKED_IN';
+  const st = booking?.window ? new Date(booking.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  const et = booking?.window ? new Date(booking.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  const sDate = booking?.window ? new Date(booking.window.startTime).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '';
+
+  return (
+    <div className="flex-1 max-w-md w-full mx-auto px-4 py-10 space-y-8 text-white">
+      {/* Visual Indicator */}
+      <div className="flex flex-col items-center justify-center text-center space-y-4">
+        {isConfirmed ? (
+          <>
+            <div className="h-20 w-20 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/10">
+              <CheckCircle className="h-10 w-10 animate-pulse" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-3xl font-extrabold tracking-tight font-outfit" id="confirmation-title">
+                Booking Confirmed!
+              </h2>
+              <p className="text-gray-400 text-xs font-semibold leading-relaxed">
+                Payment captured successfully. Your court slot is reserved and ready.
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="h-20 w-20 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/10">
+              <Activity className="h-10 w-10 animate-spin" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-3xl font-extrabold tracking-tight font-outfit" id="confirmation-title">
+                Confirming Payment...
+              </h2>
+              <p className="text-gray-400 text-xs font-semibold leading-relaxed">
+                We are validating the signature with the bank. Please hold on.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Booking Summary */}
+      {booking && (
+        <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-4">
+          <h3 className="text-xs font-bold font-outfit text-gray-300 uppercase tracking-wider">
+            Match Details
+          </h3>
+          
+          <div className="space-y-3 font-mono text-xs text-gray-400 pt-1">
+            <div className="flex items-start space-x-2.5">
+              <Calendar className="h-4 w-4 text-[var(--brand-primary)] shrink-0 mt-0.5" />
+              <span>{sDate}</span>
+            </div>
+            <div className="flex items-start space-x-2.5">
+              <Clock className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+              <span>{st} - {et}</span>
+            </div>
+            <div className="flex items-start space-x-2.5">
+              <MapPin className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+              <span>Coimbatore Badminton Hub</span>
+            </div>
+            <div className="flex items-start space-x-2.5">
+              <Users className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+              <span>{1 + (booking.players?.length || 0)} Players ({booking.isMemberBooking ? 'Member' : 'Guest'})</span>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-white/5 flex justify-between items-end">
+            <span className="text-xs font-bold text-gray-300 font-outfit">Total Price:</span>
+            <span className="text-xl font-extrabold text-[var(--brand-primary)] font-mono">
+              ₹{Number(booking.price)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Next Actions */}
+      <div className="flex flex-col space-y-3">
+        <Link
+          to="/bookings/my"
+          className="w-full py-3 rounded-2xl bg-[var(--brand-primary)] hover:opacity-95 text-white font-semibold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-[var(--brand-primary)]/20"
+          id="view-my-bookings-confirmation-btn"
+        >
+          <span>View My Bookings</span>
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+        <Link
+          to="/"
+          className="w-full py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-gray-200 border border-white/10 font-semibold text-center transition-all text-xs"
+        >
+          Go to Dashboard
+        </Link>
+      </div>
+    </div>
+  );
+}

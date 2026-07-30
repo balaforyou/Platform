@@ -15,6 +15,7 @@ These apply to every phase below, not just the first one:
 3. **Stop at open questions** — if the agent hits something the spec doesn't answer, it stops and asks rather than assuming a reasonable default. The specs are detailed specifically so this should be rare, but rare isn't zero.
 4. **Any deviation from spec requires confirmation first** — if implementation reveals the spec should change (a real possibility — specs are plans, not prophecy), that's a conversation before a code change, not a code change with a note after.
 5. **Implementation plan required before code, every phase** — use Antigravity's **Plan Mode**, not Fast Mode, for all 6 phases below. Review and explicitly approve the plan artifact before letting it proceed to implementation.
+6. **Scoped git commit at the end of every approved phase** — added 30 Jul 2026, after discovering nine backend phases plus frontend work had accumulated with zero git history. Once a phase is approved and its walkthrough confirmed, commit the changes with a message identifying the phase and what it covers (e.g. "Phase 9: pricing modes, member group assignments, negotiated bookings, refund override"). Confirm the working tree is clean (nothing untracked or modified left hanging) before moving to the next phase. This isn't optional cleanup — it's the durable record of what actually happened, and the only real rollback point if a future phase needs to be reverted.
 
 ## 2. Antigravity-specific setup
 

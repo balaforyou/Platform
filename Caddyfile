@@ -1,36 +1,37 @@
 http://:8080 {
     # Reverse proxy routing to API backend services
+    # Force 127.0.0.1 instead of localhost to prevent IPv6/IPv4 dual-stack binding issues on Windows
 
     # Slot Engine (Port 3001)
     route /api/slot-engine/* {
         uri strip_prefix /api/slot-engine
-        reverse_proxy http://localhost:3001
+        reverse_proxy http://127.0.0.1:3001
     }
 
     # Identity Auth (Port 3002)
     route /api/identity/* {
         uri strip_prefix /api/identity
-        reverse_proxy http://localhost:3002
+        reverse_proxy http://127.0.0.1:3002
     }
 
     # Tenant Management (Port 3003)
     route /api/tenant/* {
         uri strip_prefix /api/tenant
-        reverse_proxy http://localhost:3003
+        reverse_proxy http://127.0.0.1:3003
     }
 
     # Payment Service (Port 3004)
     route /api/payment/* {
         uri strip_prefix /api/payment
-        reverse_proxy http://localhost:3004
+        reverse_proxy http://127.0.0.1:3004
     }
 
     # Notification Service (Port 3005)
     route /api/notification/* {
         uri strip_prefix /api/notification
-        reverse_proxy http://localhost:3005
+        reverse_proxy http://127.0.0.1:3005
     }
 
     # Fallback all other frontend assets and paths to Vite dev server (Port 5173)
-    reverse_proxy http://localhost:5173
+    reverse_proxy http://127.0.0.1:5173
 }

@@ -6,3 +6,6 @@ bin/
 *.exe
 *.zip
 *.log
+test-results/
+playwright-report/
+.playwright/
