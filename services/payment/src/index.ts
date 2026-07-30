@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import crypto from 'crypto';
