@@ -18,13 +18,18 @@ async function main() {
     where: {
       OR: [
         { windowId },
+        { windowId: 'window-e2e-002' },
         { resourcePoolId: poolId },
         { userId }
       ]
     }
   });
 
-  await prisma.availabilityWindow.deleteMany({ where: { id: windowId } });
+  await prisma.availabilityWindow.deleteMany({
+    where: {
+      id: { in: [windowId, 'window-e2e-002'] }
+    }
+  });
   await prisma.blockedWindow.deleteMany({ where: { resourcePoolId: poolId } });
   await prisma.bookingRule.deleteMany({ where: { resourcePoolId: poolId } });
   await prisma.resource.deleteMany({ where: { id: resourceId } });
@@ -159,13 +164,11 @@ async function main() {
     },
   });
 
-  // 8. Seed Availability Window
-  // Set slot to start in 2 hours and end in 3.5 hours relative to now,
-  // making sure it is today, active, and check-in is open (within 2 hours window).
-  console.log('Seeding Availability Window...');
+  // 8. Seed Availability Windows
+  console.log('Seeding Availability Windows...');
   const now = new Date();
-  const startTime = new Date(now.getTime() + 1.9 * 60 * 60 * 1000); // 1.9 hours from now (starts today, check-in open)
-  const endTime = new Date(startTime.getTime() + 1.5 * 60 * 60 * 1000); // 1.5 hours duration
+  const startTime = new Date(now.getTime() + 1.9 * 60 * 60 * 1000); // 1.9 hours from now
+  const endTime = new Date(startTime.getTime() + 1.5 * 60 * 60 * 1000);
 
   await prisma.availabilityWindow.create({
     data: {
@@ -174,6 +177,20 @@ async function main() {
       resourceId,
       startTime,
       endTime,
+      capacity: 1,
+    },
+  });
+
+  const startTime2 = new Date(now.getTime() + 1.2 * 60 * 60 * 1000); // 1.2 hours from now (check-in open)
+  const endTime2 = new Date(startTime2.getTime() + 1.5 * 60 * 60 * 1000);
+
+  await prisma.availabilityWindow.create({
+    data: {
+      id: 'window-e2e-002',
+      resourcePoolId: poolId,
+      resourceId,
+      startTime: startTime2,
+      endTime: endTime2,
       capacity: 1,
     },
   });

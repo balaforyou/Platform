@@ -28,7 +28,6 @@ const notificationUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhos
 const requireInternalKey = (request: any, reply: any) => {
   const authHeader = request.headers['authorization'];
   if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
-    reply.status(401);
     const err = new Error('Unauthorized internal service access');
     (err as any).statusCode = 401;
     (err as any).code = 'UNAUTHORIZED';
@@ -1242,6 +1241,7 @@ server.get('/bookings/:id', async (request, reply) => {
     try {
       decodedUser = await request.jwtVerify();
     } catch (jwtErr) {
+      console.error('JWT VERIFY ERROR:', jwtErr);
       reply.status(401);
       throw new Error('Unauthorized');
     }

@@ -48,7 +48,7 @@ server.get('/health', async () => {
 
 // Create Payment Intent (with duplicate prevention checks)
 // WHY: Ensures only one intent is created per booking, returning the pending one if retried.
-server.post('/payments/intents', async (request, reply) => {
+const createIntentHandler = async (request: any, reply: any) => {
   const { bookingId } = request.body as any;
   if (!bookingId) {
     reply.status(400);
@@ -94,14 +94,14 @@ server.post('/payments/intents', async (request, reply) => {
       throw err;
     }
     const body = await res.json() as any;
-    booking = body.data;
+    booking = body.data || body;
   } catch (e: any) {
     if (e.statusCode) throw e;
     reply.status(500);
     throw new Error('Slot Engine communication failure: ' + e.message);
   }
 
-  if (booking.status !== 'HELD') {
+  if (!booking || booking.status !== 'HELD') {
     reply.status(400);
     const err = new Error('Only held bookings can have payment intents created');
     (err as any).statusCode = 400;
@@ -125,7 +125,10 @@ server.post('/payments/intents', async (request, reply) => {
   });
 
   return intent;
-});
+};
+
+server.post('/payments/intents', createIntentHandler);
+server.post('/intents', createIntentHandler);
 
 // Create/Register subscription mandate (Bookkeeping only)
 // WHY: Pure bookkeeping. Mandate creation is initiated and authorized client-side using Razorpay's SDK.
