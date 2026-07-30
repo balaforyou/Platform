@@ -4,6 +4,13 @@ import crypto from 'crypto';
 import { Readable } from 'stream';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
 import { PrismaClient, Prisma } from '@badminton/database';
+// @ts-ignore
+import Razorpay from 'razorpay';
+
+const razorpayClient = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_TJllXnaezST7MV',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || '2rZ1iVD0uYAJ7bw0CAFKsPC6',
+});
 
 const server = fastify({ logger: true });
 
@@ -129,6 +136,146 @@ const createIntentHandler = async (request: any, reply: any) => {
 
 server.post('/payments/intents', createIntentHandler);
 server.post('/intents', createIntentHandler);
+
+const createOrderHandler = async (request: any, reply: any) => {
+  // Authentication verification
+  try {
+    await request.jwtVerify();
+  } catch (err: any) {
+    reply.status(401);
+    const authErr = new Error('Unauthorized: Invalid or missing token');
+    (authErr as any).statusCode = 401;
+    (authErr as any).code = 'UNAUTHORIZED';
+    throw authErr;
+  }
+
+  const { amount, currency, receipt, bookingId } = request.body as any;
+
+  // Validate amount >= 100 paise
+  if (amount === undefined || amount === null || typeof amount !== 'number') {
+    reply.status(400);
+    const err = new Error('amount is required and must be a number');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  if (amount < 100) {
+    reply.status(400);
+    const err = new Error('Amount must be at least 100 paise');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  try {
+    const order = await razorpayClient.orders.create({
+      amount,
+      currency: currency || 'INR',
+      receipt: receipt || `receipt_${Date.now()}`,
+    });
+
+    // If bookingId is provided, dynamically update the pending PaymentIntent's gatewayRef
+    if (bookingId) {
+      const intent = await prisma.paymentIntent.findFirst({
+        where: { referenceId: bookingId },
+      });
+      if (intent) {
+        await prisma.paymentIntent.update({
+          where: { id: intent.id },
+          data: { gatewayRef: order.id },
+        });
+      }
+    }
+
+    return {
+      order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+    };
+  } catch (err: any) {
+    server.log.error('Razorpay Order Creation Error:', err);
+    reply.status(500);
+    throw new Error('Razorpay API error: ' + (err.message || err.description || 'Internal server error'));
+  }
+};
+
+const verifyPaymentHandler = async (request: any, reply: any) => {
+  // Authentication verification
+  try {
+    await request.jwtVerify();
+  } catch (err: any) {
+    reply.status(401);
+    const authErr = new Error('Unauthorized: Invalid or missing token');
+    (authErr as any).statusCode = 401;
+    (authErr as any).code = 'UNAUTHORIZED';
+    throw authErr;
+  }
+
+  const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = request.body as any;
+
+  if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+    reply.status(400);
+    const err = new Error('Missing required fields: razorpay_payment_id, razorpay_order_id, and razorpay_signature are required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  // Algorithm: HMAC-SHA256(order_id + "|" + payment_id, KEY_SECRET)
+  const keySecret = process.env.RAZORPAY_KEY_SECRET || '2rZ1iVD0uYAJ7bw0CAFKsPC6';
+  const expectedSignature = crypto
+    .createHmac('sha256', keySecret)
+    .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+    .digest('hex');
+
+  if (expectedSignature !== razorpay_signature) {
+    reply.status(400);
+    const err = new Error('Signature verification failed: Mismatched signature');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  // Update intent status to captured and confirm booking in slot-engine
+  const intent = await prisma.paymentIntent.findFirst({
+    where: { gatewayRef: razorpay_order_id },
+  });
+
+  if (intent && intent.status === 'pending') {
+    await prisma.paymentIntent.update({
+      where: { id: intent.id },
+      data: { status: 'captured' },
+    });
+
+    const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+    const slotEngineUrl = process.env.SLOT_ENGINE_URL || 'http://localhost:3001';
+    
+    const confirmRes = await fetch(`${slotEngineUrl}/bookings/${intent.referenceId}/confirm`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${internalKey}`,
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!confirmRes.ok) {
+      const errText = await confirmRes.text();
+      server.log.error(`Confirm booking error response: ${errText}`);
+      reply.status(500);
+      throw new Error(`Failed to confirm booking on Slot Engine: Status ${confirmRes.status}`);
+    }
+  }
+
+  return { success: true };
+};
+
+server.post('/payments/create-order', createOrderHandler);
+server.post('/create-order', createOrderHandler);
+
+server.post('/payments/verify-payment', verifyPaymentHandler);
+server.post('/verify-payment', verifyPaymentHandler);
 
 // Create/Register subscription mandate (Bookkeeping only)
 // WHY: Pure bookkeeping. Mandate creation is initiated and authorized client-side using Razorpay's SDK.

@@ -65,32 +65,101 @@ export default function BookingPay() {
     }
   };
 
-  const handleRazorpayCheckout = () => {
-    if (!intent || !booking) return;
-
-    // Load Razorpay Standard Checkout SDK
-    const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY || 'rzp_test_1234567890abcd', // Pull key from env, fallback to valid mock format key
-      amount: intent.amount,
-      currency: 'INR',
-      name: 'Badminton Hub',
-      description: 'Court Booking Payment',
-      order_id: intent.gatewayRef.startsWith('pay_') ? undefined : intent.gatewayRef,
-      handler: function (response: any) {
-        console.log('Razorpay success:', response);
-        // Redirect client-side for optimistic feedback
-        navigate(`/bookings/${bookingId}/confirmation`);
-      },
-      prefill: {
-        contact: booking.phone || '',
-      },
-      theme: {
-        color: '#e11d48',
+  const loadRazorpayScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if ((window as any).Razorpay) {
+        resolve(true);
+        return;
       }
-    };
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
 
-    const rzp = new (window as any).Razorpay(options);
-    rzp.open();
+  const handleRazorpayCheckout = async () => {
+    if (!intent || !booking) return;
+    setPaying(true);
+    setError(null);
+
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded) {
+      setError('Failed to load Razorpay SDK. Please check your internet connection.');
+      setPaying(false);
+      return;
+    }
+
+    try {
+      // 1. Call create-order backend API to create a real Razorpay Order
+      const orderRes = await apiRequest<any>('/payment/create-order', {
+        method: 'POST',
+        token: accessToken,
+        body: JSON.stringify({
+          bookingId,
+          amount: intent.amount,
+          currency: 'INR',
+          receipt: 'receipt_booking_' + bookingId,
+        }),
+      });
+
+      const orderId = orderRes.order_id;
+
+      // 2. Open standard checkout overlay with order_id
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY || 'rzp_test_TJllXnaezST7MV',
+        amount: orderRes.amount,
+        currency: orderRes.currency,
+        name: 'Badminton Hub',
+        description: 'Court Booking Payment',
+        order_id: orderId,
+        handler: async function (response: any) {
+          try {
+            setPaying(true);
+            // 3. Send all three validation fields to verify endpoint
+            await apiRequest('/payment/verify-payment', {
+              method: 'POST',
+              token: accessToken,
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            // Navigate to confirmation page
+            navigate(`/bookings/${bookingId}/confirmation`);
+          } catch (err: any) {
+            setError(err.message || 'Signature verification failed.');
+          } finally {
+            setPaying(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setPaying(false);
+            console.log('Payment modal dismissed by user');
+          }
+        },
+        prefill: {
+          contact: booking.phone || '',
+        },
+        theme: {
+          color: '#e11d48',
+        }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (resp: any) {
+        setError(resp.error?.description || 'Payment failed. Please try again.');
+        setPaying(false);
+      });
+      rzp.open();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create payment order.');
+      setPaying(false);
+    }
   };
 
   if (loading) {

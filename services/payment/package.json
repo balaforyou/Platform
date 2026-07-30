@@ -12,13 +12,14 @@
     "test:payment": "dotenv -e ../../.env -- node dist/payment.test.js"
   },
   "dependencies": {
-    "fastify": "^4.27.0",
+    "@badminton/database": "workspace:*",
     "@badminton/shared-middleware": "workspace:*",
     "@badminton/shared-types": "workspace:*",
-    "@badminton/database": "workspace:*"
+    "fastify": "^4.27.0",
+    "razorpay": "^2.9.8"
   },
   "devDependencies": {
-    "typescript": "^5.4.5",
-    "tsx": "^4.10.5"
+    "tsx": "^4.10.5",
+    "typescript": "^5.4.5"
   }
 }

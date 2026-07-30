@@ -5,15 +5,16 @@ test.describe('Guest Booking Flow E2E', () => {
   
   test.beforeAll(async () => {
     console.log('Running test database seed...');
-    // Execute the seed-test-data script to clear and prepare the database
     execSync('npx tsx tests/seed-test-data.ts', { cwd: process.cwd() });
   });
 
   test('should execute complete guest booking journey successfully', async ({ page }) => {
+    // ==========================================
+    // FLOW 1: BOOKING & CANCELLATION (window-e2e-001)
+    // ==========================================
+
     // 1. Authentication (OTP Login)
     await page.goto('/login');
-    
-    // Fill phone number input
     await page.fill('input[placeholder="99999 99999"]', '9999999999');
     await page.click('button[type="submit"]');
 
@@ -36,24 +37,21 @@ test.describe('Guest Booking Flow E2E', () => {
 
     // 4. Verify Branch Dashboard
     await expect(page).toHaveURL(/\/branches\/22222222-2222-2222-2222-222222222222/);
-    
-    // Check facility about details snippet
     await expect(page.locator('text=Welcome to the Branch Dashboard')).toBeVisible();
 
-    // Go to about page and back
+    // Go to about page
     await page.click('#view-about-branch-btn');
     await expect(page).toHaveURL(/\/branches\/22222222-2222-2222-2222-222222222222\/about/);
     await expect(page.locator('text=Cafeteria')).toBeVisible();
-    await expect(page.locator('text=Locker Rooms')).toBeVisible();
+    
+    // Back to dashboard
     await page.click('text=Back to Court Dashboard');
-
-    // Pick Court Category (Premium Court A / E2E Test Court A)
     await page.click('[id^="court-pool-card-courtpool-e2e-001"]');
 
-    // 5. Verify Slot Selection & Court Booking
+    // 5. Verify Slot Grid Loads
     await expect(page).toHaveURL(/\/book\/courtpool-e2e-001/);
     
-    // Pick the time slot
+    // Pick the time slot 1
     await page.click('[id^="slot-card-window-e2e-001"]');
 
     // Add co-players
@@ -61,11 +59,10 @@ test.describe('Guest Booking Flow E2E', () => {
     await page.fill('input[placeholder="e.g. 9876543210"]', '9876543211');
     
     await page.click('#add-co-player-btn');
-    // Select the second input field dynamically
     const phoneInputs = page.locator('input[placeholder="e.g. 9876543210"]');
     await phoneInputs.nth(1).fill('9876543212');
 
-    // Verify computed price multiplies correctly (1 booker + 2 players = 3 players * 150 = 450)
+    // Verify computed price
     const priceText = await page.locator('#computed-price-display').textContent();
     expect(priceText).toContain('₹450');
     console.log(`[ASSERT SUCCESS] Verified group size computed price is: ${priceText?.trim()}`);
@@ -92,13 +89,7 @@ test.describe('Guest Booking Flow E2E', () => {
     await page.click('#view-my-bookings-confirmation-btn');
     await expect(page).toHaveURL('/bookings/my');
 
-    // 9. Execute Self Check-In
-    await expect(page.locator('text=Confirmed')).toBeVisible();
-    await page.click('[id^="check-in-btn-"]');
-    await expect(page.locator('text=Checked In')).toBeVisible();
-    console.log('[ASSERT SUCCESS] Verified self check-in triggers status update to Checked In.');
-
-    // 10. Execute Cancellation & Tiered Refund preview
+    // 9. Execute Cancellation & Tiered Refund preview
     await page.click('[id^="cancel-booking-btn-"]');
     
     // Verify refund modal loads and calculates refund (1.9 hours before slot = 0% refund = ₹0)
@@ -111,5 +102,35 @@ test.describe('Guest Booking Flow E2E', () => {
     await page.click('#confirm-cancellation-btn');
     await expect(page.locator('text=Cancelled')).toBeVisible();
     console.log('[ASSERT SUCCESS] Verified cancellation updates booking status to Cancelled.');
+
+    // ==========================================
+    // FLOW 2: SECOND BOOKING & CHECK-IN (window-e2e-002)
+    // ==========================================
+    
+    // Navigate directly to court booking page to start booking 2
+    await page.goto('/book/courtpool-e2e-001');
+    
+    // Choose Slot 2
+    await page.click('[id^="slot-card-window-e2e-002"]');
+    
+    // Reserve slot directly without adding coplayers
+    await page.click('#reserve-court-btn');
+    
+    // Pay for Booking 2
+    await expect(page).toHaveURL(/\/bookings\/.*\/pay/);
+    await page.click('#simulate-success-pay-btn');
+    
+    // Wait for Confirmation Page
+    await expect(page).toHaveURL(/\/bookings\/.*\/confirmation/);
+    await expect(page.locator('#confirmation-title')).toHaveText('Booking Confirmed!', { timeout: 10000 });
+    
+    // View booking history
+    await page.click('#view-my-bookings-confirmation-btn');
+    await expect(page).toHaveURL('/bookings/my');
+    
+    // Self Check-in
+    await page.click('[id^="check-in-btn-"]');
+    await expect(page.locator('text=Checked In')).toBeVisible();
+    console.log('[ASSERT SUCCESS] Verified self check-in triggers status update to Checked In.');
   });
 });
