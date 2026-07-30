@@ -107,8 +107,13 @@ test.describe('Guest Booking Flow E2E', () => {
     // FLOW 2: SECOND BOOKING & CHECK-IN (window-e2e-002)
     // ==========================================
     
-    // Navigate directly to court booking page to start booking 2
-    await page.goto('/book/courtpool-e2e-001');
+    // Return to Dashboard to start booking 2 by clicking the logo
+    await page.click('a[href="/"]');
+    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible();
+    await page.click('#book-court-dashboard-btn');
+    
+    // Coimbatore Branch is cached, so we land on Coimbatore Branch Dashboard. Select the court pool card:
+    await page.click('[id^="court-pool-card-courtpool-e2e-001"]');
     
     // Choose Slot 2
     await page.click('[id^="slot-card-window-e2e-002"]');
