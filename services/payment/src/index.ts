@@ -8,8 +8,8 @@ import { PrismaClient, Prisma } from '@badminton/database';
 import Razorpay from 'razorpay';
 
 const razorpayClient = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_TJllXnaezST7MV',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || '2rZ1iVD0uYAJ7bw0CAFKsPC6',
+  key_id: (process.env.RAZORPAY_KEY_ID || 'rzp_test_TJllXnaezST7MV').trim(),
+  key_secret: (process.env.RAZORPAY_KEY_SECRET || '2rZ1iVD0uYAJ7bw0CAFKsPC6').trim(),
 });
 
 const server = fastify({ logger: true });
@@ -194,7 +194,8 @@ const createOrderHandler = async (request: any, reply: any) => {
       currency: order.currency,
     };
   } catch (err: any) {
-    server.log.error('Razorpay Order Creation Error:', err);
+    console.error('Razorpay Order Creation Error details:', err);
+    server.log.error(err, 'Razorpay Order Creation Error');
     reply.status(500);
     throw new Error('Razorpay API error: ' + (err.message || err.description || 'Internal server error'));
   }
@@ -223,7 +224,7 @@ const verifyPaymentHandler = async (request: any, reply: any) => {
   }
 
   // Algorithm: HMAC-SHA256(order_id + "|" + payment_id, KEY_SECRET)
-  const keySecret = process.env.RAZORPAY_KEY_SECRET || '2rZ1iVD0uYAJ7bw0CAFKsPC6';
+  const keySecret = (process.env.RAZORPAY_KEY_SECRET || '2rZ1iVD0uYAJ7bw0CAFKsPC6').trim();
   const expectedSignature = crypto
     .createHmac('sha256', keySecret)
     .update(`${razorpay_order_id}|${razorpay_payment_id}`)
