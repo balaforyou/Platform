@@ -22,9 +22,6 @@ test.describe('PWA Install Prompt Dismissal Expiry (F-002)', () => {
     // Wait for the app to finish silent refresh loading and mount layout (with safe timeout)
     await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible({ timeout: 15000 });
 
-    // Wait 500ms to guarantee React useEffect mounts the window event listener
-    await page.waitForTimeout(500);
-
     // 3. Dispatch the simulated beforeinstallprompt event inside the page
     await page.evaluate(() => {
       const event = new Event('beforeinstallprompt') as any;
@@ -54,9 +51,6 @@ test.describe('PWA Install Prompt Dismissal Expiry (F-002)', () => {
     await page.reload();
     await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible({ timeout: 15000 });
     
-    // Wait 500ms to guarantee React useEffect mounts the window event listener
-    await page.waitForTimeout(500);
-
     await page.evaluate(() => {
       const event = new Event('beforeinstallprompt') as any;
       event.preventDefault = () => {};
@@ -75,9 +69,6 @@ test.describe('PWA Install Prompt Dismissal Expiry (F-002)', () => {
     await page.reload();
     await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible({ timeout: 15000 });
     
-    // Wait 500ms to guarantee React useEffect mounts the window event listener
-    await page.waitForTimeout(500);
-
     await page.evaluate(() => {
       const event = new Event('beforeinstallprompt') as any;
       event.preventDefault = () => {};

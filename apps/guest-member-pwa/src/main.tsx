@@ -15,6 +15,17 @@ import BookingConfirmation from './components/BookingConfirmation';
 import { Calendar, User, LogOut, ArrowRight, Activity, MapPin, Phone, RefreshCw } from 'lucide-react';
 import './index.css';
 
+// Capture beforeinstallprompt event globally to avoid React component mounting race conditions
+(window as any).__deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  console.log('[GLOBAL] beforeinstallprompt event captured.');
+  (window as any).__deferredPrompt = e;
+  if ((window as any).__onBeforeInstallPrompt) {
+    (window as any).__onBeforeInstallPrompt(e);
+  }
+});
+
 // Register custom minimal Service Worker for PWA installability
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

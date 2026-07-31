@@ -49,6 +49,14 @@ export default function PwaInstallPrompt() {
     // 3. Detect iOS platform
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 
+    // Helper to start the 3-second trigger delay
+    function triggerShowBanner() {
+      const timer = setTimeout(() => {
+        setShowBanner(true);
+      }, 3000);
+      return timer;
+    }
+
     // 4. Set up beforeinstallprompt listener for Android/Chrome
     const handleBeforeInstallPrompt = (e: Event) => {
       // CRITICAL: Call preventDefault() synchronously to suppress Chrome's default install banner
@@ -60,6 +68,21 @@ export default function PwaInstallPrompt() {
       setDeviceType('android');
       
       // Trigger showing the banner after a 3-second delay on dashboard load
+      triggerShowBanner();
+    };
+
+    // If the event was already captured globally before this component mounted:
+    if ((window as any).__deferredPrompt) {
+      console.log('Using globally captured beforeinstallprompt event.');
+      setDeferredPrompt((window as any).__deferredPrompt);
+      setDeviceType('android');
+      triggerShowBanner();
+    }
+
+    // Register callback for future events
+    (window as any).__onBeforeInstallPrompt = (e: any) => {
+      setDeferredPrompt(e);
+      setDeviceType('android');
       triggerShowBanner();
     };
 
@@ -80,17 +103,10 @@ export default function PwaInstallPrompt() {
       triggerShowBanner();
     }
 
-    // Helper to start the 3-second trigger delay
-    function triggerShowBanner() {
-      const timer = setTimeout(() => {
-        setShowBanner(true);
-      }, 3000);
-      return timer;
-    }
-
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      (window as any).__onBeforeInstallPrompt = null;
     };
   }, []);
 
