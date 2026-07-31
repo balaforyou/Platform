@@ -88,8 +88,9 @@ try {
         PORT = "3005"
     }
 
-    # 3. Boot PWA Vite Dev Server
-    $Jobs += Start-Service-Job -Name "PWA-Vite-Dev" -Cwd "$PlatformDir\apps\guest-member-pwa" -Command "pnpm run dev" -EnvVars @{}
+    # 3. Boot frontend Vite dev servers
+    $Jobs += Start-Service-Job -Name "PWA-Vite-Dev" -Cwd "$PlatformDir\apps\guest-member-pwa" -Command "pnpm.cmd run dev" -EnvVars @{}
+    $Jobs += Start-Service-Job -Name "Admin-Web-Vite-Dev" -Cwd "$PlatformDir\apps\admin-web" -Command "pnpm.cmd run dev" -EnvVars @{}
 
     # 4. Boot Caddy Reverse Proxy
     # Look for Caddy binary in bin directory

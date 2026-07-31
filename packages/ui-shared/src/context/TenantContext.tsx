@@ -18,6 +18,55 @@ interface TenantContextType {
 
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
 
+const fullScreenCenter: React.CSSProperties = {
+  alignItems: 'center',
+  background: '#f9fafb',
+  display: 'flex',
+  minHeight: '100vh',
+  justifyContent: 'center',
+  padding: '16px',
+  width: '100vw',
+};
+
+const loadingStack: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '16px',
+};
+
+const loadingSpinner: React.CSSProperties = {
+  animation: 'tenant-spin 1s linear infinite',
+  border: '4px solid #d1d5db',
+  borderTopColor: '#e11d48',
+  borderRadius: '9999px',
+  height: '40px',
+  width: '40px',
+};
+
+const errorCard: React.CSSProperties = {
+  background: '#ffffff',
+  border: '1px solid #f3f4f6',
+  borderRadius: '16px',
+  boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+  maxWidth: '448px',
+  padding: '32px',
+  textAlign: 'center',
+  width: '100%',
+};
+
+const errorIconWrap: React.CSSProperties = {
+  alignItems: 'center',
+  background: '#fff1f2',
+  borderRadius: '9999px',
+  color: '#e11d48',
+  display: 'flex',
+  height: '56px',
+  justifyContent: 'center',
+  margin: '0 auto 24px',
+  width: '56px',
+};
+
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [tenant, setTenant] = useState<TenantBranding | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,10 +144,11 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-300 border-t-rose-600"></div>
-          <p className="text-sm font-medium text-gray-600 animate-pulse">Resolving court brand...</p>
+      <div style={fullScreenCenter}>
+        <style>{'@keyframes tenant-spin { to { transform: rotate(360deg); } }'}</style>
+        <div style={loadingStack}>
+          <div style={loadingSpinner}></div>
+          <p style={{ color: '#4b5563', fontSize: '14px', fontWeight: 500, margin: 0 }}>Resolving court brand...</p>
         </div>
       </div>
     );
@@ -106,21 +156,31 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   if (error || !tenant) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl border border-gray-100 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600 mb-6">
-            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div style={fullScreenCenter}>
+        <div style={errorCard}>
+          <div style={errorIconWrap}>
+            <svg style={{ height: '32px', width: '32px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Tenant Not Found</h1>
-          <p className="text-gray-600 mb-6 text-sm">
+          <h1 style={{ color: '#111827', fontSize: '24px', fontWeight: 700, margin: '0 0 8px' }}>Tenant Not Found</h1>
+          <p style={{ color: '#4b5563', fontSize: '14px', lineHeight: 1.5, margin: '0 0 24px' }}>
             We couldn't resolve the whitelabel branding details for this subdomain. 
-            If you are in development mode, please verify your tunnel setup or try appending <code className="bg-gray-100 px-1 py-0.5 rounded text-rose-600 font-mono">?tenant=courtowner1</code> to the URL.
+            If you are in development mode, verify that Tenant Management is running locally and try appending <code style={{ background: '#f3f4f6', borderRadius: '4px', color: '#e11d48', fontFamily: 'monospace', padding: '2px 4px' }}>?tenant=courtowner1</code> to the URL.
           </p>
           <a 
             href="?tenant=courtowner1" 
-            className="inline-block w-full py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-medium transition-colors shadow-lg shadow-rose-600/20"
+            style={{
+              background: '#e11d48',
+              borderRadius: '12px',
+              boxShadow: '0 10px 15px -3px rgb(225 29 72 / 0.2)',
+              color: '#ffffff',
+              display: 'inline-block',
+              fontWeight: 500,
+              padding: '12px 16px',
+              textDecoration: 'none',
+              width: '100%',
+            }}
           >
             Load Courtowner1 (Default)
           </a>

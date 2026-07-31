@@ -592,6 +592,153 @@ server.post('/refunds', async (request, reply) => {
 // The gatewayRef stored is the plink_ ID so the webhook matcher can resolve it when
 // payment.captured fires with payment_link_id in the payload.
 // ---------------------------------------------------------------------------
+const requirePaymentLinkAdmin = async (request: any, reply: any): Promise<any | null> => {
+  const authHeader = request.headers['authorization'];
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+
+  if (authHeader === `Bearer ${internalKey}`) {
+    return null;
+  }
+  if (!authHeader) {
+    reply.status(401);
+    const err = new Error('Missing authorization header');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+
+  try {
+    const decoded = await request.jwtVerify() as any;
+    const roles: string[] = decoded.roles ?? [];
+    const isAdmin = roles.some((r: string) =>
+      r === 'owner' || r.startsWith('branch_manager:')
+    );
+    if (!isAdmin) {
+      reply.status(403);
+      const err = new Error('Forbidden: Owner or Branch Manager role required');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+    return decoded;
+  } catch (e: any) {
+    if (e.statusCode) throw e;
+    reply.status(401);
+    const err = new Error('Invalid or expired token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+};
+
+const getBookingFromSlotEngine = async (bookingId: string, reply: any) => {
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+  const slotEngineUrl = process.env.SLOT_ENGINE_URL || 'http://localhost:3001';
+  try {
+    const res = await fetch(`${slotEngineUrl}/bookings/${bookingId}`, {
+      headers: { 'Authorization': `Bearer ${internalKey}` },
+    });
+    if (!res.ok) {
+      reply.status(400);
+      const err = new Error('Booking not found in Slot Engine');
+      (err as any).statusCode = 400;
+      (err as any).code = 'BOOKING_NOT_FOUND';
+      throw err;
+    }
+    const body = await res.json() as any;
+    return body.data ?? body;
+  } catch (e: any) {
+    if (e.statusCode) throw e;
+    reply.status(500);
+    throw new Error('Slot Engine communication failure: ' + e.message);
+  }
+};
+
+// WHY: Payment Link creation is reused by both the legacy bookingId-based endpoint
+// and the negotiated-booking orchestration endpoint. It checks for an existing intent
+// first so retries return the same link rather than creating duplicates.
+const createPaymentLinkForHeldBooking = async ({
+  bookingId,
+  tenantId,
+  userId,
+  amount,
+  idempotencyKey,
+  reply,
+}: {
+  bookingId: string;
+  tenantId: string;
+  userId: string;
+  amount: number;
+  idempotencyKey?: string;
+  reply: any;
+}) => {
+  const existingIntent = await prisma.paymentIntent.findFirst({
+    where: { referenceId: bookingId },
+  });
+  if (existingIntent) {
+    if (existingIntent.status === 'captured') {
+      reply.status(400);
+      const err = new Error('Payment has already been captured for this booking');
+      (err as any).statusCode = 400;
+      (err as any).code = 'PAYMENT_ALREADY_CAPTURED';
+      throw err;
+    }
+    return {
+      paymentLinkId: existingIntent.gatewayRef,
+      shortUrl: `https://rzp.io/l/mock-${existingIntent.gatewayRef.slice(-8)}`,
+      amount: existingIntent.amount,
+      intentId: existingIntent.id,
+      reused: true,
+    };
+  }
+
+  const booking = await getBookingFromSlotEngine(bookingId, reply);
+  if (booking.status !== 'HELD') {
+    reply.status(400);
+    const err = new Error('Only held bookings can have a payment link created');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_BOOKING_STATUS';
+    throw err;
+  }
+
+  const deterministicSuffix = idempotencyKey
+    ? crypto.createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 16)
+    : crypto.randomBytes(8).toString('hex');
+  const paymentLinkId = `plink_mock_${deterministicSuffix}`;
+  const shortUrl = `https://rzp.io/l/mock-${paymentLinkId.slice(-8)}`;
+  const amountPaise = Math.round(Number(amount) * 100);
+
+  try {
+    const intent = await prisma.paymentIntent.create({
+      data: {
+        tenantId,
+        userId,
+        amount: amountPaise,
+        purpose: 'guest_booking',
+        referenceId: bookingId,
+        status: 'pending',
+        gatewayRef: paymentLinkId,
+      },
+    });
+
+    return { paymentLinkId, shortUrl, amount: amountPaise, intentId: intent.id };
+  } catch (err: any) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const existingByGateway = await prisma.paymentIntent.findUnique({ where: { gatewayRef: paymentLinkId } });
+      if (existingByGateway) {
+        return {
+          paymentLinkId: existingByGateway.gatewayRef,
+          shortUrl: `https://rzp.io/l/mock-${existingByGateway.gatewayRef.slice(-8)}`,
+          amount: existingByGateway.amount,
+          intentId: existingByGateway.id,
+          reused: true,
+        };
+      }
+    }
+    throw err;
+  }
+};
+
 server.post('/payment-links', async (request, reply) => {
   const authHeader = request.headers['authorization'];
   const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
@@ -692,6 +839,107 @@ server.post('/payment-links', async (request, reply) => {
 
   reply.status(201);
   return { paymentLinkId, shortUrl, amount: amountPaise, intentId: intent.id };
+});
+
+// POST /payment-links/negotiated — create held negotiated booking and link atomically for Admin Web.
+// WHY: Keeps the legacy /payment-links contract stable while giving browsers one JWT-gated
+// operation that performs the internal Slot Engine negotiated booking call without exposing
+// INTERNAL_SERVICE_KEY to the client.
+server.post('/payment-links/negotiated', async (request, reply) => {
+  const decoded = await requirePaymentLinkAdmin(request, reply);
+
+  const idempotencyKey = request.headers['idempotency-key'] as string | undefined;
+  if (!idempotencyKey) {
+    reply.status(400);
+    const err = new Error('Idempotency-Key header is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const {
+    tenantId,
+    branchId,
+    resourcePoolId,
+    resourceId,
+    windowId,
+    userId,
+    negotiatedPrice,
+    coPlayers,
+    description,
+  } = request.body as any;
+
+  if (!tenantId || !branchId || !resourcePoolId || !windowId || !userId || negotiatedPrice == null) {
+    reply.status(400);
+    const err = new Error('tenantId, branchId, resourcePoolId, windowId, userId, and negotiatedPrice are required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  if (decoded) {
+    const roles: string[] = decoded.roles ?? [];
+    const isOwner = roles.includes('owner');
+    const isScopedManager = roles.includes(`branch_manager:${branchId}`);
+    if (!isOwner && !isScopedManager) {
+      reply.status(403);
+      const err = new Error('Forbidden: Not authorized for this branch');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  }
+
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+  const slotEngineUrl = process.env.SLOT_ENGINE_URL || 'http://localhost:3001';
+
+  let booking: any;
+  try {
+    const bookingRes = await fetch(`${slotEngineUrl}/bookings/negotiated`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${internalKey}`,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        tenantId,
+        branchId,
+        resourcePoolId,
+        resourceId,
+        windowId,
+        userId,
+        negotiatedPrice,
+        coPlayers,
+      }),
+    });
+
+    const bookingBody = await bookingRes.json() as any;
+    if (!bookingRes.ok) {
+      reply.status(bookingRes.status);
+      const err = new Error(bookingBody.error?.message || 'Negotiated booking creation failed');
+      (err as any).statusCode = bookingRes.status;
+      (err as any).code = bookingBody.error?.code || 'NEGOTIATED_BOOKING_FAILED';
+      throw err;
+    }
+    booking = bookingBody.data ?? bookingBody;
+  } catch (e: any) {
+    if (e.statusCode) throw e;
+    reply.status(500);
+    throw new Error('Slot Engine communication failure: ' + e.message);
+  }
+
+  const paymentLink = await createPaymentLinkForHeldBooking({
+    bookingId: booking.id,
+    tenantId: booking.tenantId ?? tenantId,
+    userId: booking.userId ?? userId,
+    amount: Number(negotiatedPrice),
+    idempotencyKey,
+    reply,
+  });
+
+  reply.status(paymentLink.reused ? 200 : 201);
+  return { booking, paymentLink, description };
 });
 
 // ---------------------------------------------------------------------------

@@ -1,9 +1,12 @@
 import { spawn } from 'child_process';
 import path from 'path';
+import crypto from 'crypto';
 import { PrismaClient, BookingStatus } from '@badminton/database';
 
 const db = new PrismaClient();
 const baseUrl = 'http://localhost:3001';
+const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+const jwtSecret = process.env.JWT_SECRET || 'test-jwt-secret-key-123-abcdefg';
 
 /**
  * Helper to wait for the local Fastify server to start listening.
@@ -29,12 +32,26 @@ async function waitForServer(url: string, retries = 15): Promise<boolean> {
  */
 async function cleanDatabase() {
   await db.booking.deleteMany();
+  await db.memberGroupAssignment.deleteMany();
   await db.availabilityWindow.deleteMany();
   await db.resource.deleteMany();
   await db.blockedWindow.deleteMany();
   await db.bookingRule.deleteMany();
   await db.resourcePool.deleteMany();
   console.log('Database cleaned successfully.');
+}
+
+function nextAlignedHour(hoursFromNow: number): Date {
+  const date = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
+  date.setMinutes(0, 0, 0);
+  return date;
+}
+
+function signJwt(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+  const signature = crypto.createHmac('sha256', jwtSecret).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${signature}`;
 }
 
 async function runTests() {
@@ -90,7 +107,7 @@ async function runTests() {
   const resource = (await resourceRes.json() as any).data;
 
   // Add a bookable availability window starting 2 hours from now
-  const startTime = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const startTime = nextAlignedHour(2);
   const endTime = new Date(startTime.getTime() + 1 * 60 * 60 * 1000);
   
   const windowRes = await fetch(`${baseUrl}/resource-pools/${fixedPool.id}/availability-windows`, {
@@ -131,6 +148,107 @@ async function runTests() {
   const pooledWindow = (await pooledWindowRes.json() as any).data;
 
   console.log('Seeded database entries successfully. Beginning tests...');
+
+  // ==========================================
+  // TEST 0: ADMIN CONFIG ENDPOINTS & SCOPING
+  // ==========================================
+  console.log('\n--- Test 0: Admin Config Endpoints & Scoping ---');
+  const ownerJwt = signJwt({ userId: 'owner-user', roles: ['owner'] });
+  const branchManagerJwt = signJwt({ userId: 'manager-user', roles: [`branch_manager:${branchId}`] });
+  const otherBranchManagerJwt = signJwt({ userId: 'other-manager', roles: ['branch_manager:other-branch'] });
+  const adminPoolRes = await fetch(`${baseUrl}/resource-pools`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tenantId,
+      branchId,
+      name: 'Admin Config Pool',
+      allocationMode: 'POOLED',
+      capacity: 3,
+    }),
+  });
+  const adminPool = (await adminPoolRes.json() as any).data;
+
+  const patchPoolRes = await fetch(`${baseUrl}/resource-pools/${adminPool.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ownerJwt}` },
+    body: JSON.stringify({
+      capacity: 4,
+      minOccupancy: 2,
+      minBookingDurationMinutes: 60,
+      pricingMode: 'PER_PERSON',
+      defaultRate: 150,
+    }),
+  });
+  if (patchPoolRes.status !== 200) {
+    throw new Error(`Test 0 failed: Expected pool update 200, got ${patchPoolRes.status}`);
+  }
+  const updatedPool = (await patchPoolRes.json() as any).data;
+  if (updatedPool.capacity !== 4 || updatedPool.minOccupancy !== 2 || updatedPool.pricingMode !== 'PER_PERSON') {
+    throw new Error('Test 0 failed: Pool update did not persist expected fields.');
+  }
+
+  const immutableRes = await fetch(`${baseUrl}/resource-pools/${adminPool.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ownerJwt}` },
+    body: JSON.stringify({ branchId: 'forged-branch' }),
+  });
+  if (immutableRes.status !== 400) {
+    throw new Error(`Test 0 failed: Expected immutable branchId update to return 400, got ${immutableRes.status}`);
+  }
+
+  const ruleRes = await fetch(`${baseUrl}/resource-pools/${adminPool.id}/booking-rule`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${branchManagerJwt}` },
+    body: JSON.stringify({ lowOccupancyThresholdPct: 45, guestAccessCutoffMinutes: 90 }),
+  });
+  if (ruleRes.status !== 200) {
+    throw new Error(`Test 0 failed: Expected rule upsert 200, got ${ruleRes.status}`);
+  }
+  const updatedRule = (await ruleRes.json() as any).data;
+  if (updatedRule.lowOccupancyThresholdPct !== 45 || updatedRule.guestAccessCutoffMinutes !== 90) {
+    throw new Error('Test 0 failed: Rule upsert did not persist expected fields.');
+  }
+
+  const assignmentRes = await fetch(`${baseUrl}/member-group-assignments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${branchManagerJwt}` },
+    body: JSON.stringify({
+      userId: 'assigned-member',
+      resourcePoolId: adminPool.id,
+      daysOfWeek: '1,2,3',
+      startTime: '10:00',
+    }),
+  });
+  if (assignmentRes.status !== 201) {
+    throw new Error(`Test 0 failed: Expected assignment create 201, got ${assignmentRes.status}`);
+  }
+
+  const listRes = await fetch(`${baseUrl}/member-group-assignments?resourcePoolId=${adminPool.id}`, {
+    headers: { 'Authorization': `Bearer ${branchManagerJwt}` },
+  });
+  if (listRes.status !== 200) {
+    throw new Error(`Test 0 failed: Expected scoped assignment list 200, got ${listRes.status}`);
+  }
+  const listedAssignments = (await listRes.json() as any).data;
+  if (!Array.isArray(listedAssignments) || listedAssignments.length !== 1) {
+    throw new Error('Test 0 failed: Expected scoped listing to return the created assignment.');
+  }
+
+  const forbiddenListRes = await fetch(`${baseUrl}/member-group-assignments?resourcePoolId=${adminPool.id}`, {
+    headers: { 'Authorization': `Bearer ${otherBranchManagerJwt}` },
+  });
+  if (forbiddenListRes.status !== 403) {
+    throw new Error(`Test 0 failed: Expected other branch manager listing to return 403, got ${forbiddenListRes.status}`);
+  }
+
+  const internalListRes = await fetch(`${baseUrl}/member-group-assignments`, {
+    headers: { 'Authorization': `Bearer ${internalKey}` },
+  });
+  if (internalListRes.status !== 200) {
+    throw new Error(`Test 0 failed: Expected internal assignment listing to still return 200, got ${internalListRes.status}`);
+  }
+  console.log('Test 0 passed successfully!');
 
   // ==========================================
   // TEST 1: CONCURRENT HOLDS ON SAME SLOT (FIXED_INSTANCE)
@@ -405,7 +523,7 @@ async function runTests() {
   //   must NOT be auto-released (guests paid and should not lose their slot).
 
   // Create a pool and window starting 15 minutes from now
-  const windowStartT6 = new Date(Date.now() + 15 * 60 * 1000);
+  const windowStartT6 = nextAlignedHour(1);
   const windowEndT6 = new Date(windowStartT6.getTime() + 1 * 60 * 60 * 1000);
 
   const windowT6 = await db.availabilityWindow.create({

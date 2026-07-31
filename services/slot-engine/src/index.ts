@@ -106,10 +106,16 @@ const requireInternalKey = (request: any, reply: any) => {
   }
 };
 
-// WHY: Guards admin-only endpoints (member assignment, manual release) using the same
-// dual-path pattern established in tenant-management (Phase 3).
-// Accepts INTERNAL_SERVICE_KEY OR a JWT with role OWNER or BRANCH_MANAGER.
-const requireInternalOrAdmin = async (request: any, reply: any) => {
+type AdminAuthContext = {
+  isInternal: boolean;
+  userId: string | null;
+  roles: string[];
+};
+
+// WHY: Guards admin-only endpoints using the same dual-path pattern established in
+// tenant-management, while returning claims so branch-scoped admin routes can enforce
+// authorization beyond "has some admin role".
+const getInternalOrAdminAuth = async (request: any, reply: any): Promise<AdminAuthContext> => {
   const authHeader = request.headers['authorization'];
   if (!authHeader) {
     reply.status(401);
@@ -121,7 +127,7 @@ const requireInternalOrAdmin = async (request: any, reply: any) => {
 
   // Path 1: internal service key
   if (authHeader === `Bearer ${internalKey}`) {
-    return;
+    return { isInternal: true, userId: null, roles: [] };
   }
 
   // Path 2: admin JWT with owner or branch_manager role
@@ -138,6 +144,11 @@ const requireInternalOrAdmin = async (request: any, reply: any) => {
       (err as any).code = 'FORBIDDEN';
       throw err;
     }
+    return {
+      isInternal: false,
+      userId: decoded.userId || decoded.sub || decoded.id || null,
+      roles,
+    };
   } catch (e: any) {
     if (e.statusCode) throw e;
     reply.status(401);
@@ -146,6 +157,40 @@ const requireInternalOrAdmin = async (request: any, reply: any) => {
     (err as any).code = 'UNAUTHORIZED';
     throw err;
   }
+};
+
+const requireInternalOrAdmin = async (request: any, reply: any) => {
+  await getInternalOrAdminAuth(request, reply);
+};
+
+const isAuthorizedForBranch = (auth: AdminAuthContext, branchId: string): boolean => (
+  auth.isInternal ||
+  auth.roles.includes('owner') ||
+  auth.roles.includes(`branch_manager:${branchId}`)
+);
+
+// WHY: A branch-manager role is scoped to one branch. Resource-pool admin routes
+// must check the pool's branchId server-side instead of trusting client filters.
+const requirePoolScope = async (auth: AdminAuthContext, resourcePoolId: string, reply: any) => {
+  const pool = await prisma.resourcePool.findUnique({
+    where: { id: resourcePoolId },
+    include: { resources: true, bookingRules: true },
+  });
+  if (!pool) {
+    reply.status(404);
+    const err = new Error('Resource pool not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+  if (!isAuthorizedForBranch(auth, pool.branchId)) {
+    reply.status(403);
+    const err = new Error('Forbidden: Not authorized for this branch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+  return pool;
 };
 
 // ---------------------------------------------------------------------------
@@ -209,6 +254,90 @@ server.post('/resource-pools', async (request) => {
     },
   });
   return pool;
+});
+
+// Update Resource Pool configuration (admin-only).
+// WHY: Admin Web edits operational settings after initial setup. Tenant/branch ownership
+// is intentionally immutable here so a client cannot move a pool across authorization scopes.
+server.patch('/resource-pools/:id', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  const existing = await requirePoolScope(auth, id, reply);
+  const body = request.body as any;
+
+  if ('tenantId' in body || 'branchId' in body || 'allocationMode' in body) {
+    reply.status(400);
+    const err = new Error('tenantId, branchId, and allocationMode cannot be changed through this endpoint');
+    (err as any).statusCode = 400;
+    (err as any).code = 'IMMUTABLE_FIELD';
+    throw err;
+  }
+
+  const data: any = {};
+  if (body.name !== undefined) {
+    if (!String(body.name).trim()) {
+      reply.status(400);
+      const err = new Error('name cannot be empty');
+      (err as any).statusCode = 400;
+      (err as any).code = 'BAD_REQUEST';
+      throw err;
+    }
+    data.name = String(body.name).trim();
+  }
+
+  const capacity = body.capacity !== undefined ? Number(body.capacity) : existing.capacity;
+  const minOccupancy = body.minOccupancy !== undefined ? Number(body.minOccupancy) : existing.minOccupancy;
+  if (!Number.isInteger(capacity) || capacity < 1 || !Number.isInteger(minOccupancy) || minOccupancy < 1 || capacity < minOccupancy) {
+    reply.status(400);
+    const err = new Error('capacity must be >= minOccupancy and both must be positive integers');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_OCCUPANCY';
+    throw err;
+  }
+  if (body.capacity !== undefined) data.capacity = capacity;
+  if (body.minOccupancy !== undefined) data.minOccupancy = minOccupancy;
+
+  if (body.minBookingDurationMinutes !== undefined) {
+    const duration = Number(body.minBookingDurationMinutes);
+    if (!Number.isInteger(duration) || duration <= 0 || 1440 % duration !== 0) {
+      reply.status(400);
+      const err = new Error('minBookingDurationMinutes must be a positive slot increment that divides one day');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_DURATION';
+      throw err;
+    }
+    data.minBookingDurationMinutes = duration;
+  }
+
+  if (body.pricingMode !== undefined) {
+    if (!Object.values(PricingMode).includes(body.pricingMode)) {
+      reply.status(400);
+      const err = new Error('Invalid pricingMode');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PRICING_MODE';
+      throw err;
+    }
+    data.pricingMode = body.pricingMode as PricingMode;
+  }
+
+  if (body.defaultRate !== undefined) {
+    const rate = Number(body.defaultRate);
+    if (Number.isNaN(rate) || rate < 0) {
+      reply.status(400);
+      const err = new Error('defaultRate must be a non-negative number');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_RATE';
+      throw err;
+    }
+    data.defaultRate = new Prisma.Decimal(rate);
+    data.basePrice = new Prisma.Decimal(rate);
+  }
+
+  return await prisma.resourcePool.update({
+    where: { id },
+    data,
+    include: { resources: true, bookingRules: true },
+  });
 });
 
 // Helper endpoint to add Resources to a pool.
@@ -436,6 +565,91 @@ server.post('/booking-rules', async (request) => {
     },
   });
   return rule;
+});
+
+// Upsert Booking Rule for a Resource Pool (admin-only).
+// WHY: Admin Web config should be recoverable for pools that were created before a
+// rule existed; upsert avoids stranding those pools while keeping the rule pool-scoped.
+server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+  const body = request.body as any;
+
+  const existing = await prisma.bookingRule.findFirst({ where: { resourcePoolId: id } });
+  const data: any = {};
+
+  const integerFields = [
+    'memberWindowDays',
+    'guestOpenWindowDays',
+    'gracePeriodMinutes',
+    'guestAccessCutoffMinutes',
+  ];
+  for (const field of integerFields) {
+    if (body[field] !== undefined) {
+      const value = Number(body[field]);
+      if (!Number.isInteger(value) || value < 0) {
+        reply.status(400);
+        const err = new Error(`${field} must be a non-negative integer`);
+        (err as any).statusCode = 400;
+        (err as any).code = 'INVALID_RULE_VALUE';
+        throw err;
+      }
+      data[field] = value;
+    }
+  }
+
+  if (body.lowOccupancyThresholdPct !== undefined) {
+    const threshold = Number(body.lowOccupancyThresholdPct);
+    if (!Number.isInteger(threshold) || threshold < 0 || threshold > 100) {
+      reply.status(400);
+      const err = new Error('lowOccupancyThresholdPct must be an integer from 0 to 100');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_THRESHOLD';
+      throw err;
+    }
+    data.lowOccupancyThresholdPct = threshold;
+  }
+
+  if (body.prepaymentRequired !== undefined) {
+    data.prepaymentRequired = Boolean(body.prepaymentRequired);
+  }
+
+  if (body.cancellationPolicyJson !== undefined) {
+    data.cancellationPolicyJson = body.cancellationPolicyJson;
+  }
+
+  const defaultPolicy = existing?.cancellationPolicyJson || {
+    type: 'tiered',
+    tiers: [
+      { min_hours_before_slot: 24, refund_percent: 100 },
+      { min_hours_before_slot: 6, refund_percent: 50 },
+      { min_hours_before_slot: 0, refund_percent: 0 },
+    ],
+  };
+
+  if (!existing && data.lowOccupancyThresholdPct === undefined) {
+    reply.status(400);
+    const err = new Error('lowOccupancyThresholdPct is required when creating a booking rule');
+    (err as any).statusCode = 400;
+    (err as any).code = 'THRESHOLD_REQUIRED';
+    throw err;
+  }
+
+  return await prisma.bookingRule.upsert({
+    where: { id: existing?.id ?? '__missing__' },
+    update: data,
+    create: {
+      resourcePoolId: id,
+      memberWindowDays: data.memberWindowDays ?? 30,
+      guestOpenWindowDays: data.guestOpenWindowDays ?? 7,
+      gracePeriodMinutes: data.gracePeriodMinutes ?? 30,
+      guestAccessCutoffMinutes: data.guestAccessCutoffMinutes ?? 120,
+      lowOccupancyThresholdPct: data.lowOccupancyThresholdPct ?? 50,
+      prepaymentRequired: data.prepaymentRequired ?? true,
+      cancellationPolicyJson: data.cancellationPolicyJson ?? defaultPolicy,
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1063,7 +1277,7 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
 // The partial unique index on (userId) WHERE status = 'ACTIVE' enforces the
 // one-active-slot-per-member Basic-tier rule at DB level; P2002 is the enforcement signal.
 server.post('/member-group-assignments', async (request, reply) => {
-  await requireInternalOrAdmin(request, reply);
+  const auth = await getInternalOrAdminAuth(request, reply);
 
   const { userId, resourcePoolId, daysOfWeek, startTime } = request.body as any;
 
@@ -1075,14 +1289,7 @@ server.post('/member-group-assignments', async (request, reply) => {
     throw err;
   }
 
-  const pool = await prisma.resourcePool.findUnique({ where: { id: resourcePoolId } });
-  if (!pool) {
-    reply.status(404);
-    const err = new Error('Resource pool not found');
-    (err as any).statusCode = 404;
-    (err as any).code = 'NOT_FOUND';
-    throw err;
-  }
+  await requirePoolScope(auth, resourcePoolId, reply);
 
   try {
     const assignment = await prisma.memberGroupAssignment.create({
@@ -1107,14 +1314,48 @@ server.post('/member-group-assignments', async (request, reply) => {
 
 // List assignments (internal only — admin tooling).
 server.get('/member-group-assignments', async (request, reply) => {
-  requireInternalKey(request, reply);
+  const auth = await getInternalOrAdminAuth(request, reply);
   const { resourcePoolId, userId } = request.query as any;
+  let scopedPoolIds: string[] | undefined;
+
+  // WHY: Branch managers are scoped to branch-specific role claims. Listing without
+  // filtering would leak assignments from other branches in the same tenant.
+  if (!auth.isInternal && !auth.roles.includes('owner')) {
+    const branchIds = auth.roles
+      .filter((role) => role.startsWith('branch_manager:'))
+      .map((role) => role.split(':')[1])
+      .filter(Boolean);
+    if (branchIds.length === 0) {
+      reply.status(403);
+      const err = new Error('Forbidden: Branch scope required');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+
+    const pools = await prisma.resourcePool.findMany({
+      where: {
+        branchId: { in: branchIds },
+        ...(resourcePoolId ? { id: resourcePoolId } : {}),
+      },
+      select: { id: true },
+    });
+    scopedPoolIds = pools.map((pool: any) => pool.id);
+    if (resourcePoolId && scopedPoolIds.length === 0) {
+      reply.status(403);
+      const err = new Error('Forbidden: Not authorized for this resource pool');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  }
 
   const assignments = await prisma.memberGroupAssignment.findMany({
     where: {
-      ...(resourcePoolId ? { resourcePoolId } : {}),
+      ...(scopedPoolIds ? { resourcePoolId: { in: scopedPoolIds } } : resourcePoolId ? { resourcePoolId } : {}),
       ...(userId ? { userId } : {}),
     },
+    include: { resourcePool: true },
     orderBy: { createdAt: 'desc' },
   });
   return assignments;
@@ -1122,7 +1363,7 @@ server.get('/member-group-assignments', async (request, reply) => {
 
 // Update assignment status (ACTIVE ↔ SUSPENDED). Internal or owner only.
 server.patch('/member-group-assignments/:id', async (request, reply) => {
-  await requireInternalOrAdmin(request, reply);
+  const auth = await getInternalOrAdminAuth(request, reply);
 
   const { id } = request.params as any;
   const { status } = request.body as any;
@@ -1140,6 +1381,7 @@ server.patch('/member-group-assignments/:id', async (request, reply) => {
     reply.status(404);
     throw new Error('Assignment not found');
   }
+  await requirePoolScope(auth, existing.resourcePoolId, reply);
 
   try {
     return await prisma.memberGroupAssignment.update({

@@ -33,6 +33,14 @@ function generateRazorpaySignature(payloadStr: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(payloadStr).digest('hex');
 }
 
+function signJwt(payload: Record<string, unknown>): string {
+  const secret = process.env.JWT_SECRET || 'test-jwt-secret-key-123-abcdefg';
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${signature}`;
+}
+
 /**
  * Wipes the database tables to ensure clean test runs.
  */
@@ -50,6 +58,12 @@ async function cleanDatabase() {
   await db.bookingRule.deleteMany();
   await db.resourcePool.deleteMany();
   console.log('Database cleaned successfully.');
+}
+
+function futureAlignedHour(hoursFromNow: number): Date {
+  const date = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
+  date.setMinutes(0, 0, 0);
+  return date;
 }
 
 async function runTests() {
@@ -74,6 +88,7 @@ async function runTests() {
       name: 'Priced Pool',
       allocationMode: 'POOLED',
       basePrice: 125.00,
+      defaultRate: 125.00,
     }),
   });
   const pool = (await poolRes.json() as any).data;
@@ -103,8 +118,8 @@ async function runTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      startTime: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), // 48h from now
-      endTime: new Date(Date.now() + 49 * 60 * 60 * 1000).toISOString(),
+      startTime: futureAlignedHour(48).toISOString(),
+      endTime: futureAlignedHour(49).toISOString(),
       capacity: 5,
     }),
   });
@@ -409,6 +424,86 @@ async function runTests() {
   console.log('Test 6 passed successfully!');
 
   // ==========================================
+  // TEST 6B: NEGOTIATED PAYMENT LINK ORCHESTRATION IDEMPOTENCY
+  // ==========================================
+  console.log('\n--- Test 6B: Negotiated Payment Link Orchestration Idempotency ---');
+  const negotiatedWindowRes = await fetch(`${slotEngineUrl}/resource-pools/${pool.id}/availability-windows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      startTime: futureAlignedHour(72).toISOString(),
+      endTime: futureAlignedHour(73).toISOString(),
+      capacity: 5,
+    }),
+  });
+  const negotiatedWindow = (await negotiatedWindowRes.json() as any).data;
+  const ownerJwt = signJwt({ userId: 'admin-owner', roles: ['owner'] });
+  const negotiatedKey = 'negotiated-payment-link-key';
+  const negotiatedBody = {
+    tenantId,
+    branchId,
+    resourcePoolId: pool.id,
+    windowId: negotiatedWindow.id,
+    userId,
+    negotiatedPrice: 222,
+    coPlayers: ['9876543210'],
+    description: 'Admin negotiated test booking',
+  };
+
+  const negotiatedRes1 = await fetch(`${paymentUrl}/payment-links/negotiated`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ownerJwt}`,
+      'Idempotency-Key': negotiatedKey,
+    },
+    body: JSON.stringify(negotiatedBody),
+  });
+  if (negotiatedRes1.status !== 201) {
+    throw new Error(`Test 6B failed: Expected negotiated orchestration 201, got ${negotiatedRes1.status}`);
+  }
+  const negotiated1 = (await negotiatedRes1.json() as any).data;
+
+  const negotiatedRes2 = await fetch(`${paymentUrl}/payment-links/negotiated`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ownerJwt}`,
+      'Idempotency-Key': negotiatedKey,
+    },
+    body: JSON.stringify(negotiatedBody),
+  });
+  if (negotiatedRes2.status !== 200) {
+    throw new Error(`Test 6B failed: Expected negotiated retry 200, got ${negotiatedRes2.status}`);
+  }
+  const negotiated2 = (await negotiatedRes2.json() as any).data;
+
+  if (negotiated1.booking.id !== negotiated2.booking.id || negotiated1.paymentLink.intentId !== negotiated2.paymentLink.intentId) {
+    throw new Error('Test 6B failed: Retry did not return the same booking and payment intent.');
+  }
+  const duplicateBookingCount = await db.booking.count({ where: { idempotencyKey: negotiatedKey } });
+  const duplicateIntentCount = await db.paymentIntent.count({ where: { referenceId: negotiated1.booking.id } });
+  if (duplicateBookingCount !== 1 || duplicateIntentCount !== 1) {
+    throw new Error(`Test 6B failed: Expected one booking and one intent, got ${duplicateBookingCount} bookings and ${duplicateIntentCount} intents.`);
+  }
+
+  const memberJwt = signJwt({ userId: 'member-user', roles: ['member'] });
+  const forbiddenNegotiatedRes = await fetch(`${paymentUrl}/payment-links/negotiated`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${memberJwt}`,
+      'Idempotency-Key': 'negotiated-member-forbidden',
+    },
+    body: JSON.stringify(negotiatedBody),
+  });
+  if (forbiddenNegotiatedRes.status !== 403) {
+    throw new Error(`Test 6B failed: Expected member JWT to return 403, got ${forbiddenNegotiatedRes.status}`);
+  }
+  console.log('Negotiated orchestration returned one booking/payment link across retry and rejected member JWT.');
+  console.log('Test 6B passed successfully!');
+
+  // ==========================================
   // TEST 7: DIRECT REFUND EXECUTION (SLOT-ENGINE COMPUTED)
   // ==========================================
   console.log('\n--- Test 7: Direct Refund Execution ---');
@@ -418,6 +513,7 @@ async function runTests() {
   // 2. Cancel the confirmed booking in Slot Engine
   const cancelRes = await fetch(`${slotEngineUrl}/bookings/${bookingConfirmed.id}/cancel`, {
     method: 'POST',
+    headers: { 'Authorization': `Bearer ${internalKey}` },
   });
   const cancelledBooking = (await cancelRes.json() as any).data;
   if (cancelledBooking.status !== 'CANCELLED' || Number(cancelledBooking.refundAmount) !== 125.00) {
