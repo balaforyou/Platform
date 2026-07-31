@@ -14,6 +14,11 @@ body {
   margin: 0;
 }
 
+#root {
+  min-width: 0;
+  width: 100%;
+}
+
 button,
 input,
 select {
@@ -167,6 +172,7 @@ button:disabled {
 }
 
 .app-shell {
+  width: 100%;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
@@ -431,7 +437,69 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .app-shell,
+  .workspace {
+    width: 100%;
+  }
+
   .sidebar {
     position: static;
+    width: 100%;
+  }
+
+  .page-grid,
+  .content-grid {
+    padding: 16px;
+  }
+
+  .panel {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .form-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .lookup-box {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .lookup-box label,
+  .lookup-box button,
+  .primary-btn,
+  .secondary-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .check-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    align-items: stretch;
+  }
+
+  .check-group label,
+  .check-row {
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .check-row {
+    width: 100%;
+  }
+
+  .topbar {
+    padding: 16px;
+  }
+
+  .topbar h1 {
+    font-size: 32px;
+  }
+
+  .panel h2 {
+    font-size: 26px;
+    overflow-wrap: anywhere;
   }
 }
