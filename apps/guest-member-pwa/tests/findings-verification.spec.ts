@@ -98,7 +98,7 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
     
     // Add co-player input
     await page.click('#add-co-player-btn');
-    await page.fill('input[placeholder="Enter co-player phone number"]', '123456');
+    await page.fill('input[placeholder="e.g. 9876543210"]', '123456');
 
     // Try to reserve
     await page.click('#reserve-slot-btn');
@@ -109,7 +109,7 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
     await expect(errorAlert).toContainText('is not a valid Indian mobile number');
 
     // Change to valid phone format
-    await page.fill('input[placeholder="Enter co-player phone number"]', '9876543210');
+    await page.fill('input[placeholder="e.g. 9876543210"]', '9876543210');
     await page.click('#reserve-slot-btn');
 
     // Verify redirection to payment checkout overlay, which means reservation passed
