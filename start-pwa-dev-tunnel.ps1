@@ -75,6 +75,7 @@ try {
 
     $Jobs += Start-Service-Job -Name "Payment-Service" -Cwd "$PlatformDir\services\payment" -Command "npx tsx src/index.ts" -EnvVars @{
         DATABASE_URL = $DbUrl
+        JWT_SECRET = $JwtSecret
         INTERNAL_SERVICE_KEY = $InternalKey
         RAZORPAY_WEBHOOK_SECRET = "test-webhook-secret"
         NOTIFICATION_SERVICE_URL = "http://localhost:3005"

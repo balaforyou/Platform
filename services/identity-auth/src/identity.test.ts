@@ -1,11 +1,37 @@
 import { spawn } from 'child_process';
 import path from 'path';
+import crypto from 'crypto';
 import { PrismaClient } from '@badminton/database';
 
 const db = new PrismaClient();
 const identityUrl = 'http://localhost:3002';
 const slotEngineUrl = 'http://localhost:3001';
 const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+const jwtSecret = process.env.JWT_SECRET || 'test-jwt-secret-key-123-abcdefg';
+
+function base64url(input: unknown): string {
+  return Buffer.from(JSON.stringify(input)).toString('base64url');
+}
+
+function signJwt(payload: Record<string, unknown>): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const body = { ...payload, iat: now, exp: now + 900 };
+  const data = `${base64url(header)}.${base64url(body)}`;
+  const sig = crypto.createHmac('sha256', jwtSecret).update(data).digest('base64url');
+  return `${data}.${sig}`;
+}
+
+async function captureJsonResponse(res: Response) {
+  const body = await res.json() as any;
+  return { status: res.status, body };
+}
+
+function futureAlignedHour(hoursFromNow: number) {
+  const date = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
+  date.setMinutes(0, 0, 0);
+  return date;
+}
 
 /**
  * Helper to wait for a service to start listening.
@@ -49,6 +75,7 @@ async function runTests() {
   const tenantId = '11111111-1111-1111-1111-111111111111';
   const branchId = '22222222-2222-2222-2222-222222222222';
   const phone = '9999999999';
+  const normalizedPhone = '+919999999999';
 
   // Seed Slot Engine Pool & Window for resolve-invites check
   const poolRes = await fetch(`${slotEngineUrl}/resource-pools`, {
@@ -64,12 +91,14 @@ async function runTests() {
   });
   const pool = (await poolRes.json() as any).data;
 
+  const start = futureAlignedHour(2);
+  const end = futureAlignedHour(3);
   const windowRes = await fetch(`${slotEngineUrl}/resource-pools/${pool.id}/availability-windows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-      endTime: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
       capacity: 5,
     }),
   });
@@ -132,7 +161,7 @@ async function runTests() {
 
   // Shift OTP requests timestamps back in DB to bypass cooldown and test rate limits
   await db.otpRequest.updateMany({
-    where: { phone },
+    where: { phone: normalizedPhone },
     data: { createdAt: new Date(Date.now() - 2 * 60 * 1000) }, // 2 minutes ago
   });
 
@@ -145,7 +174,7 @@ async function runTests() {
 
   // Shift again
   await db.otpRequest.updateMany({
-    where: { phone },
+    where: { phone: normalizedPhone },
     data: { createdAt: new Date(Date.now() - 2 * 60 * 1000) },
   });
 
@@ -158,7 +187,7 @@ async function runTests() {
 
   // Shift again
   await db.otpRequest.updateMany({
-    where: { phone },
+    where: { phone: normalizedPhone },
     data: { createdAt: new Date(Date.now() - 2 * 60 * 1000) },
   });
 
@@ -232,7 +261,7 @@ async function runTests() {
   console.log('\n--- Test 3: Invite Resolution & Booking Linking ---');
   // Verify PendingInvite was deleted
   const invite = await db.pendingInvite.findUnique({
-    where: { phone_tenantId: { phone, tenantId } },
+    where: { phone_tenantId: { phone: normalizedPhone, tenantId } },
   });
   if (invite) {
     throw new Error('Test 3 failed: Expected PendingInvite to be deleted upon registration.');
@@ -240,7 +269,7 @@ async function runTests() {
 
   // Verify Slot Engine resolved the co-player booking
   const dbPlayer = await db.bookingPlayer.findFirst({
-    where: { phone, bookingId: booking.id },
+    where: { phone: normalizedPhone, bookingId: booking.id },
   });
   if (dbPlayer?.userId !== user.id) {
     throw new Error(`Test 3 failed: Expected BookingPlayer.userId to be linked to ${user.id}, got ${dbPlayer?.userId}`);
@@ -387,6 +416,77 @@ async function runTests() {
   }
   console.log('Member Google login authenticated successfully (Happy Path).');
   console.log('Test 5 passed successfully!');
+
+  // ==========================================
+  // TEST 6: ADMIN PHONE LOOKUP TRUST BOUNDARY
+  // ==========================================
+  console.log('\n--- Test 6: Admin Phone Lookup Trust Boundary ---');
+  const tenant2Id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const localPhone = '+919888888888';
+  const crossTenantPhone = '+919777777777';
+  const localLookupUser = await db.user.create({
+    data: { id: '44444444-4444-4444-4444-444444444444', phone: localPhone, tenantId, userType: 'MEMBER', isPhoneVerified: true },
+  });
+  await db.user.create({
+    data: { id: '55555555-5555-5555-5555-555555555555', phone: crossTenantPhone, tenantId: tenant2Id, userType: 'MEMBER', isPhoneVerified: true },
+  });
+  const ownerToken = signJwt({ userId: 'owner-user', tenantId, roles: ['owner'], userType: 'MEMBER' });
+  const branchManagerToken = signJwt({ userId: 'manager-user', tenantId, roles: [`branch_manager:${branchId}`], userType: 'MEMBER' });
+  const memberToken = signJwt({ userId: localLookupUser.id, tenantId, roles: [], userType: 'MEMBER' });
+  const otherTenantToken = signJwt({ userId: 'other-owner', tenantId: tenant2Id, roles: ['owner'], userType: 'MEMBER' });
+
+  const lookupSuccessRes = await fetch(`${identityUrl}/users/lookup?tenantId=${tenantId}&phone=9888888888`, {
+    headers: { Authorization: `Bearer ${ownerToken}` },
+  });
+  const lookupSuccess = await captureJsonResponse(lookupSuccessRes);
+  console.log('LOOKUP_EVIDENCE authorized_success', JSON.stringify(lookupSuccess));
+  if (lookupSuccess.status !== 200 || lookupSuccess.body.data.id !== localLookupUser.id || lookupSuccess.body.data.email) {
+    throw new Error(`Test 6 failed: Expected tenant-local safe lookup without email, got ${JSON.stringify(lookupSuccess)}`);
+  }
+
+  const branchManagerLookupRes = await fetch(`${identityUrl}/users/lookup?tenantId=${tenantId}&phone=9888888888`, {
+    headers: { Authorization: `Bearer ${branchManagerToken}` },
+  });
+  if (branchManagerLookupRes.status !== 200) {
+    throw new Error(`Test 6 failed: Expected branch manager lookup to return 200, got ${branchManagerLookupRes.status}`);
+  }
+
+  const nonAdminRes = await fetch(`${identityUrl}/users/lookup?tenantId=${tenantId}&phone=9888888888`, {
+    headers: { Authorization: `Bearer ${memberToken}` },
+  });
+  const nonAdmin = await captureJsonResponse(nonAdminRes);
+  console.log('LOOKUP_EVIDENCE non_admin_rejection', JSON.stringify(nonAdmin));
+  if (nonAdmin.status !== 403 || nonAdmin.body.error?.code !== 'FORBIDDEN') {
+    throw new Error(`Test 6 failed: Expected non-admin 403, got ${JSON.stringify(nonAdmin)}`);
+  }
+
+  const mismatchRes = await fetch(`${identityUrl}/users/lookup?tenantId=${tenantId}&phone=9888888888`, {
+    headers: { Authorization: `Bearer ${otherTenantToken}` },
+  });
+  const mismatch = await captureJsonResponse(mismatchRes);
+  console.log('LOOKUP_EVIDENCE tenant_mismatch', JSON.stringify(mismatch));
+  if (mismatch.status !== 403 || mismatch.body.error?.code !== 'FORBIDDEN') {
+    throw new Error(`Test 6 failed: Expected tenant mismatch 403, got ${JSON.stringify(mismatch)}`);
+  }
+
+  const crossTenantRes = await fetch(`${identityUrl}/users/lookup?tenantId=${tenantId}&phone=9777777777`, {
+    headers: { Authorization: `Bearer ${ownerToken}` },
+  });
+  const crossTenant = await captureJsonResponse(crossTenantRes);
+  console.log('LOOKUP_EVIDENCE cross_tenant_non_leak', JSON.stringify(crossTenant));
+  if (crossTenant.status !== 404 || crossTenant.body.error?.code !== 'USER_NOT_FOUND') {
+    throw new Error(`Test 6 failed: Expected cross-tenant lookup to return 404, got ${JSON.stringify(crossTenant)}`);
+  }
+
+  const invalidPhoneRes = await fetch(`${identityUrl}/users/lookup?tenantId=${tenantId}&phone=12345`, {
+    headers: { Authorization: `Bearer ${ownerToken}` },
+  });
+  const invalidPhone = await captureJsonResponse(invalidPhoneRes);
+  console.log('LOOKUP_EVIDENCE invalid_phone', JSON.stringify(invalidPhone));
+  if (invalidPhone.status !== 400 || invalidPhone.body.error?.code !== 'INVALID_PHONE') {
+    throw new Error(`Test 6 failed: Expected invalid phone 400, got ${JSON.stringify(invalidPhone)}`);
+  }
+  console.log('Test 6 passed successfully!');
 
   console.log('\nAll Phase 2 Identity & Auth Tests Passed Successfully!');
 }

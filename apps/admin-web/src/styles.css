@@ -322,6 +322,19 @@ button:disabled {
   width: auto;
 }
 
+.check-group,
+.lookup-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.lookup-box label {
+  min-width: 220px;
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }

@@ -41,6 +41,69 @@ server.get('/health', async () => {
   return { status: 'ok', service: 'identity-auth' };
 });
 
+server.get('/users/lookup', async (request, reply) => {
+  const { tenantId, phone: rawPhone } = request.query as any;
+  if (!tenantId || !rawPhone) {
+    reply.status(400);
+    const err = new Error('tenantId and phone are required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  let decoded: any;
+  try {
+    decoded = await request.jwtVerify();
+  } catch {
+    reply.status(401);
+    const err = new Error('Invalid or expired token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+
+  if (decoded.tenantId !== tenantId) {
+    reply.status(403);
+    const err = new Error('Forbidden: Tenant mismatch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+
+  const roles = decoded.roles || [];
+  const isAdmin = roles.includes('owner') || roles.some((role: string) => role.startsWith('branch_manager:'));
+  if (!isAdmin) {
+    reply.status(403);
+    const err = new Error('Forbidden: Admin role required');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+
+  const phone = normalizePhone(rawPhone);
+  if (!/^\+91[6-9]\d{9}$/.test(phone)) {
+    reply.status(400);
+    const err = new Error('Phone must normalize to a valid 10-digit Indian mobile number');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_PHONE';
+    throw err;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { phone_tenantId: { phone, tenantId } },
+    select: { id: true, phone: true, userType: true },
+  });
+  if (!user) {
+    reply.status(404);
+    const err = new Error('User not found for this tenant');
+    (err as any).statusCode = 404;
+    (err as any).code = 'USER_NOT_FOUND';
+    throw err;
+  }
+
+  return user;
+});
+
 // Endpoint to request an OTP (Creates an OtpRequest record and rate-limits requests)
 server.post('/auth/otp/request', async (request, reply) => {
   const { phone: rawPhone, tenantId } = request.body as any;

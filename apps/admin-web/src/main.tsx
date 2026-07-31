@@ -50,6 +50,23 @@ type ResourcePool = {
   bookingRules?: BookingRule[];
 };
 
+type AvailabilitySlot = {
+  window: {
+    id: string;
+    startTime: string;
+    endTime: string;
+    resourceId?: string | null;
+    capacity: number;
+  };
+  remainingCapacity: number;
+};
+
+type UserLookupResult = {
+  id: string;
+  phone: string;
+  userType: string;
+};
+
 type MemberAssignment = {
   id: string;
   userId: string;
@@ -96,6 +113,18 @@ const branchScopes = (roles: string[] = []) => roles
   .filter((role) => role.startsWith('branch_manager:'))
   .map((role) => role.split(':')[1])
   .filter(Boolean);
+
+const todayIsoDate = () => new Date().toISOString().slice(0, 10);
+
+const weekdayOptions = [
+  { value: '1', label: 'Mon' },
+  { value: '2', label: 'Tue' },
+  { value: '3', label: 'Wed' },
+  { value: '4', label: 'Thu' },
+  { value: '5', label: 'Fri' },
+  { value: '6', label: 'Sat' },
+  { value: '0', label: 'Sun' },
+];
 
 function useAdminApi() {
   const { accessToken } = useAuth();
@@ -294,6 +323,50 @@ function usePools(branchId?: string) {
   });
 }
 
+function useAvailability(poolId?: string, date?: string) {
+  const api = useAdminApi();
+  return useQuery({
+    queryKey: ['availability', poolId, date],
+    enabled: !!poolId && !!date,
+    queryFn: () => api.get<AvailabilitySlot[]>(`/slot-engine/resource-pools/${poolId}/availability?date=${date}`),
+  });
+}
+
+function formatWindow(slot: AvailabilitySlot) {
+  const start = new Date(slot.window.startTime);
+  const end = new Date(slot.window.endTime);
+  return `${start.toLocaleString()} - ${end.toLocaleTimeString()} (${slot.remainingCapacity} open)`;
+}
+
+function UserLookup({
+  value,
+  onResolved,
+}: {
+  value: UserLookupResult | null;
+  onResolved: (user: UserLookupResult | null) => void;
+}) {
+  const api = useAdminApi();
+  const { tenant } = useTenant();
+  const [phone, setPhone] = useState('');
+  const lookup = useMutation({
+    mutationFn: () => api.get<UserLookupResult>(`/identity/users/lookup?tenantId=${tenant?.id}&phone=${encodeURIComponent(phone)}`),
+    onSuccess: onResolved,
+    onError: () => onResolved(null),
+  });
+
+  return (
+    <div className="lookup-box">
+      <label>Member phone<input value={phone} onChange={(event) => setPhone(event.target.value.replace(/[^\d+]/g, '').slice(0, 13))} placeholder="9999999999" /></label>
+      <button className="secondary-btn" disabled={!phone || lookup.isPending} onClick={() => lookup.mutate()}>
+        {lookup.isPending ? <RefreshCw className="spin" size={16} /> : <Users size={16} />}
+        {lookup.isPending ? 'Looking up...' : 'Lookup member'}
+      </button>
+      {value ? <div className="success-box">Using {value.phone} ({value.userType})</div> : null}
+      <MutationFeedback error={lookup.error} />
+    </div>
+  );
+}
+
 function ErrorBanner({ error }: { error: unknown }) {
   if (!error) return null;
   const err = error as ApiError;
@@ -448,14 +521,37 @@ function ResourcesPage() {
 function AssignmentsPage() {
   const api = useAdminApi();
   const qc = useQueryClient();
+  const branches = useBranches();
+  const [branchId, setBranchId] = useState('');
   const [resourcePoolId, setResourcePoolId] = useState('');
-  const [form, setForm] = useState({ userId: '', daysOfWeek: '1,2,3,4,5', startTime: '10:00' });
+  const pools = usePools(branchId);
+  const [selectedUser, setSelectedUser] = useState<UserLookupResult | null>(null);
+  const [form, setForm] = useState({ daysOfWeek: ['1', '2', '3', '4', '5'], startTime: '10:00' });
+
+  React.useEffect(() => {
+    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
+  }, [branchId, branches.data]);
+
+  React.useEffect(() => {
+    if (!resourcePoolId && pools.data?.[0]) setResourcePoolId(pools.data[0].id);
+  }, [resourcePoolId, pools.data]);
+
   const assignments = useQuery({
     queryKey: ['assignments', resourcePoolId],
+    enabled: !!resourcePoolId,
     queryFn: () => api.get<MemberAssignment[]>(`/slot-engine/member-group-assignments${resourcePoolId ? `?resourcePoolId=${resourcePoolId}` : ''}`),
   });
   const create = useMutation({
-    mutationFn: () => api.post<MemberAssignment>('/slot-engine/member-group-assignments', { ...form, resourcePoolId }),
+    mutationFn: () => {
+      if (!selectedUser) throw new Error('Lookup a member phone first');
+      if (!resourcePoolId) throw new Error('Select a resource pool');
+      return api.post<MemberAssignment>('/slot-engine/member-group-assignments', {
+        resourcePoolId,
+        userId: selectedUser.id,
+        daysOfWeek: form.daysOfWeek.join(','),
+        startTime: form.startTime,
+      });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['assignments'] }),
   });
   const update = useMutation({
@@ -467,12 +563,36 @@ function AssignmentsPage() {
       <section className="panel">
         <h2>Create Assignment</h2>
         <div className="form-grid compact">
-          <label>Resource pool ID<input value={resourcePoolId} onChange={(event) => setResourcePoolId(event.target.value)} /></label>
-          <label>User ID<input value={form.userId} onChange={(event) => setForm((draft) => ({ ...draft, userId: event.target.value }))} /></label>
-          <label>Days<input value={form.daysOfWeek} onChange={(event) => setForm((draft) => ({ ...draft, daysOfWeek: event.target.value }))} /></label>
-          <label>Start<input value={form.startTime} onChange={(event) => setForm((draft) => ({ ...draft, startTime: event.target.value }))} /></label>
-          <button className="primary-btn" disabled={create.isPending} onClick={() => create.mutate()}><Users size={16} />Assign member</button>
-          <ErrorBanner error={create.error || assignments.error} />
+          <label>Branch<select value={branchId} onChange={(event) => { setBranchId(event.target.value); setResourcePoolId(''); }}>
+            <option value="">Select branch</option>
+            {(branches.data || []).map((branch) => <option value={branch.id} key={branch.id}>{branch.name}</option>)}
+          </select></label>
+          <label>Resource pool<select value={resourcePoolId} onChange={(event) => setResourcePoolId(event.target.value)}>
+            <option value="">Select pool</option>
+            {(pools.data || []).map((pool) => <option value={pool.id} key={pool.id}>{pool.name}</option>)}
+          </select></label>
+          <UserLookup value={selectedUser} onResolved={setSelectedUser} />
+          <div className="check-group">
+            {weekdayOptions.map((day) => (
+              <label className="check-row" key={day.value}>
+                <input
+                  type="checkbox"
+                  checked={form.daysOfWeek.includes(day.value)}
+                  onChange={(event) => setForm((draft) => ({
+                    ...draft,
+                    daysOfWeek: event.target.checked ? [...draft.daysOfWeek, day.value] : draft.daysOfWeek.filter((value) => value !== day.value),
+                  }))}
+                />
+                {day.label}
+              </label>
+            ))}
+          </div>
+          <label>Start time<input type="time" value={form.startTime} onChange={(event) => setForm((draft) => ({ ...draft, startTime: event.target.value }))} /></label>
+          <button className="primary-btn" disabled={create.isPending || !selectedUser || !resourcePoolId || form.daysOfWeek.length === 0} onClick={() => create.mutate()}>
+            {create.isPending ? <RefreshCw className="spin" size={16} /> : <Users size={16} />}
+            {create.isPending ? 'Assigning...' : 'Assign member'}
+          </button>
+          <MutationFeedback error={create.error || assignments.error} successMessage={create.isSuccess ? 'Member assignment created.' : undefined} />
         </div>
       </section>
       <section className="panel">
@@ -528,26 +648,44 @@ function OccupancyPage() {
 
 function NegotiatedPage() {
   const api = useAdminApi();
+  const { tenant } = useTenant();
+  const branches = useBranches();
+  const [branchId, setBranchId] = useState('');
+  const pools = usePools(branchId);
+  const [resourcePoolId, setResourcePoolId] = useState('');
+  const [bookingDate, setBookingDate] = useState(todayIsoDate());
+  const availability = useAvailability(resourcePoolId, bookingDate);
   const [form, setForm] = useState({
-    tenantId: '',
-    branchId: '',
-    resourcePoolId: '',
-    resourceId: '',
     windowId: '',
-    userId: '',
     negotiatedPrice: '',
     coPlayers: '',
     description: '',
   });
+  const [selectedUser, setSelectedUser] = useState<UserLookupResult | null>(null);
   const [result, setResult] = useState<any>(null);
+
+  React.useEffect(() => {
+    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
+  }, [branchId, branches.data]);
+
+  React.useEffect(() => {
+    if (!resourcePoolId && pools.data?.[0]) setResourcePoolId(pools.data[0].id);
+  }, [resourcePoolId, pools.data]);
+
   const submit = useMutation({
     mutationFn: () => {
+      if (!tenant?.id) throw new Error('Tenant context is required');
+      if (!selectedUser) throw new Error('Lookup a member phone first');
+      if (!branchId || !resourcePoolId || !form.windowId) throw new Error('Select branch, pool, and window');
       const idempotencyKey = crypto.randomUUID();
       return api.post('/payment/payment-links/negotiated', {
+        tenantId: tenant.id,
+        branchId,
+        resourcePoolId,
         ...form,
+        userId: selectedUser.id,
         negotiatedPrice: Number(form.negotiatedPrice),
         coPlayers: form.coPlayers.split(',').map((phone) => phone.trim()).filter(Boolean),
-        resourceId: form.resourceId || undefined,
       }, { 'Idempotency-Key': idempotencyKey });
     },
     onSuccess: setResult,
@@ -557,9 +695,29 @@ function NegotiatedPage() {
       <section className="panel">
         <h2>Negotiated Booking</h2>
         <div className="form-grid compact">
-          {Object.keys(form).map((field) => <label key={field}>{field}<input value={form[field as keyof typeof form]} onChange={(event) => setForm((draft) => ({ ...draft, [field]: event.target.value }))} /></label>)}
-          <button className="primary-btn" disabled={submit.isPending} onClick={() => submit.mutate()}><LinkIcon size={16} />Create payment link</button>
-          <ErrorBanner error={submit.error} />
+          <label>Branch<select value={branchId} onChange={(event) => { setBranchId(event.target.value); setResourcePoolId(''); setForm((draft) => ({ ...draft, windowId: '' })); }}>
+            <option value="">Select branch</option>
+            {(branches.data || []).map((branch) => <option value={branch.id} key={branch.id}>{branch.name}</option>)}
+          </select></label>
+          <label>Resource pool<select value={resourcePoolId} onChange={(event) => { setResourcePoolId(event.target.value); setForm((draft) => ({ ...draft, windowId: '' })); }}>
+            <option value="">Select pool</option>
+            {(pools.data || []).map((pool) => <option value={pool.id} key={pool.id}>{pool.name}</option>)}
+          </select></label>
+          <label>Date<input type="date" value={bookingDate} onChange={(event) => { setBookingDate(event.target.value); setForm((draft) => ({ ...draft, windowId: '' })); }} /></label>
+          <label>Availability window<select value={form.windowId} onChange={(event) => setForm((draft) => ({ ...draft, windowId: event.target.value }))}>
+            <option value="">Select window</option>
+            {(availability.data || []).map((slot) => <option value={slot.window.id} key={slot.window.id}>{formatWindow(slot)}</option>)}
+          </select></label>
+          <UserLookup value={selectedUser} onResolved={setSelectedUser} />
+          <label>Negotiated price<input value={form.negotiatedPrice} onChange={(event) => setForm((draft) => ({ ...draft, negotiatedPrice: event.target.value }))} /></label>
+          <label>Co-player phones<input value={form.coPlayers} onChange={(event) => setForm((draft) => ({ ...draft, coPlayers: event.target.value }))} /></label>
+          <label>Description<input value={form.description} onChange={(event) => setForm((draft) => ({ ...draft, description: event.target.value }))} /></label>
+          {availability.isSuccess && availability.data.length === 0 ? <div className="inline-error">No available windows for this pool/date.</div> : null}
+          <button className="primary-btn" disabled={submit.isPending || !selectedUser || !form.windowId || !form.negotiatedPrice} onClick={() => submit.mutate()}>
+            {submit.isPending ? <RefreshCw className="spin" size={16} /> : <LinkIcon size={16} />}
+            {submit.isPending ? 'Creating...' : 'Create payment link'}
+          </button>
+          <MutationFeedback error={submit.error || availability.error} successMessage={submit.isSuccess ? 'Negotiated booking and payment link created.' : undefined} />
         </div>
       </section>
       <section className="panel">
