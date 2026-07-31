@@ -3,6 +3,11 @@ http://:8080 {
 	# Force 127.0.0.1 instead of localhost to prevent IPv6/IPv4 dual-stack binding issues on Windows
 
 	# Admin Web Console (Port 5174)
+	@adminRoot {
+		path /admin
+	}
+	rewrite @adminRoot /admin/
+
 	handle /admin* {
 		reverse_proxy http://127.0.0.1:5174
 	}
