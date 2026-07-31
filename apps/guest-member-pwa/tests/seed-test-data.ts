@@ -166,9 +166,20 @@ async function main() {
 
   // 8. Seed Availability Windows
   console.log('Seeding Availability Windows...');
+  
+  function alignTimeToBoundary(date: Date, durationMinutes: number): Date {
+    const result = new Date(date);
+    result.setSeconds(0);
+    result.setMilliseconds(0);
+    const totalMinutes = result.getHours() * 60 + result.getMinutes();
+    const snappedMinutes = Math.round(totalMinutes / durationMinutes) * durationMinutes;
+    result.setHours(0, snappedMinutes, 0, 0);
+    return result;
+  }
+
   const now = new Date();
-  const startTime = new Date(now.getTime() + 1.9 * 60 * 60 * 1000); // 1.9 hours from now
-  const endTime = new Date(startTime.getTime() + 1.5 * 60 * 60 * 1000);
+  const startTime = alignTimeToBoundary(new Date(now.getTime() + 2 * 60 * 60 * 1000), 60);
+  const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
   await prisma.availabilityWindow.create({
     data: {
@@ -181,8 +192,11 @@ async function main() {
     },
   });
 
-  const startTime2 = new Date(now.getTime() + 1.2 * 60 * 60 * 1000); // 1.2 hours from now (check-in open)
-  const endTime2 = new Date(startTime2.getTime() + 1.5 * 60 * 60 * 1000);
+  let startTime2 = alignTimeToBoundary(new Date(now.getTime() + 1 * 60 * 60 * 1000), 60);
+  if (startTime2.getTime() <= now.getTime()) {
+    startTime2 = new Date(startTime2.getTime() + 60 * 60 * 1000);
+  }
+  const endTime2 = new Date(startTime2.getTime() + 2 * 60 * 60 * 1000);
 
   await prisma.availabilityWindow.create({
     data: {

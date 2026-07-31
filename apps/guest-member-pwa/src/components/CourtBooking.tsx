@@ -96,9 +96,29 @@ export default function CourtBooking() {
     setBookingError(null);
   };
 
+  const normalizePhone = (phone: string): string => {
+    const cleaned = phone.replace(/[\s\-\(\)]/g, '');
+    if (cleaned.startsWith('+')) {
+      return '+' + cleaned.replace(/\D/g, '');
+    }
+    let digits = cleaned.replace(/\D/g, '');
+    if (digits.startsWith('0')) {
+      digits = digits.slice(1);
+    }
+    if (digits.length === 10) {
+      return '+91' + digits;
+    }
+    return '+' + digits;
+  };
+
+  const isValidIndianPhone = (phone: string): boolean => {
+    const normalized = normalizePhone(phone);
+    return /^\+91[6-9]\d{9}$/.test(normalized);
+  };
+
   const handlePlayerPhoneChange = (idx: number, val: string) => {
     const next = [...coPlayers];
-    next[idx] = val;
+    next[idx] = val.replace(/[^\d\+\-\(\)\s]/g, '');
     setCoPlayers(next);
   };
 
@@ -119,12 +139,15 @@ export default function CourtBooking() {
   const handleReserve = async () => {
     if (!tenant || !branchId || !poolId || !selectedSlot || !user) return;
     
-    // Simple validation of player phone numbers
+    // Real validation of player phone numbers matching Indian mobile format
     const cleanPlayers = coPlayers.filter(p => p.trim() !== '');
-    if (cleanPlayers.some(p => p.length < 10)) {
-      setBookingError('Please enter valid 10-digit mobile numbers for all co-players.');
-      return;
+    for (const phone of cleanPlayers) {
+      if (!isValidIndianPhone(phone)) {
+        setBookingError(`"${phone}" is not a valid Indian mobile number. Must be a 10-digit number starting with 6-9.`);
+        return;
+      }
     }
+    const normalizedPlayers = cleanPlayers.map(normalizePhone);
 
     try {
       setSubmitting(true);
@@ -146,7 +169,7 @@ export default function CourtBooking() {
           resourceId: selectedSlot.window.resourceId || null,
           windowId: selectedSlot.window.id,
           userId: user.userId || user.id,
-          coPlayers: cleanPlayers,
+          coPlayers: normalizedPlayers,
         }),
       });
 

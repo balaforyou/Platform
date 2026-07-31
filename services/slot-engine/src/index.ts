@@ -20,6 +20,77 @@ const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
 const notificationUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3005';
 
 // ---------------------------------------------------------------------------
+// Helpers: F-009 Phone Validation & Normalization
+// ---------------------------------------------------------------------------
+function normalizePhone(phone: string): string {
+  const cleaned = phone.replace(/[\s\-\(\)]/g, '');
+  if (cleaned.startsWith('+')) {
+    return '+' + cleaned.replace(/\D/g, '');
+  }
+  let digits = cleaned.replace(/\D/g, '');
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  if (digits.length === 10) {
+    return '+91' + digits;
+  }
+  return '+' + digits;
+}
+
+function isValidIndianPhone(phone: string): boolean {
+  const normalized = normalizePhone(phone);
+  return /^\+91[6-9]\d{9}$/.test(normalized);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers: F-010 Time Boundary Alignment Snapping
+// ---------------------------------------------------------------------------
+function isAlignedToBoundary(date: Date, durationMinutes: number): boolean {
+  const totalMinutes = date.getHours() * 60 + date.getMinutes();
+  return totalMinutes % durationMinutes === 0 && date.getSeconds() === 0 && date.getMilliseconds() === 0;
+}
+
+function floorTimeToBoundary(date: Date, durationMinutes: number): Date {
+  const result = new Date(date);
+  result.setSeconds(0);
+  result.setMilliseconds(0);
+  const totalMinutes = result.getHours() * 60 + result.getMinutes();
+  const snappedMinutes = Math.floor(totalMinutes / durationMinutes) * durationMinutes;
+  result.setHours(0, snappedMinutes, 0, 0);
+  return result;
+}
+
+function ceilTimeToBoundary(date: Date, durationMinutes: number): Date {
+  const result = new Date(date);
+  result.setSeconds(0);
+  result.setMilliseconds(0);
+  const totalMinutes = result.getHours() * 60 + result.getMinutes();
+  const snappedMinutes = Math.ceil(totalMinutes / durationMinutes) * durationMinutes;
+  result.setHours(0, snappedMinutes, 0, 0);
+  return result;
+}
+
+function alignTimeToBoundary(date: Date, durationMinutes: number): Date {
+  const result = new Date(date);
+  result.setSeconds(0);
+  result.setMilliseconds(0);
+  const totalMinutes = result.getHours() * 60 + result.getMinutes();
+  const snappedMinutes = Math.round(totalMinutes / durationMinutes) * durationMinutes;
+  
+  // NOTE: Passing minutes > 59 to setHours is a standard JS Date behavior.
+  // The Date engine automatically handles minute overflows, cleanly rolling over
+  // hours and days without introducing timezone shift side-effects.
+  result.setHours(0, snappedMinutes, 0, 0);
+  return result;
+}
+
+function formatHHMM(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+// ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------
 
@@ -173,12 +244,58 @@ server.post('/resource-pools/:id/availability-windows', async (request, reply) =
     throw err;
   }
 
+  const pool = await prisma.resourcePool.findUnique({
+    where: { id },
+  });
+  if (!pool) {
+    reply.status(404);
+    const err = new Error('Resource pool not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+
+  const duration = pool.minBookingDurationMinutes || 60;
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+
+  if (!isAlignedToBoundary(start, duration)) {
+    const enteredStr = formatHHMM(start);
+    const lowerStr = formatHHMM(floorTimeToBoundary(start, duration));
+    const upperStr = formatHHMM(ceilTimeToBoundary(start, duration));
+    reply.status(400);
+    const err = new Error(`Start time must align to ${duration}-minute slots for this court. You entered ${enteredStr} — did you mean ${lowerStr} or ${upperStr}?`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'UNALIGNED_TIME_BOUNDARY';
+    throw err;
+  }
+
+  if (!isAlignedToBoundary(end, duration)) {
+    const enteredStr = formatHHMM(end);
+    const lowerStr = formatHHMM(floorTimeToBoundary(end, duration));
+    const upperStr = formatHHMM(ceilTimeToBoundary(end, duration));
+    reply.status(400);
+    const err = new Error(`End time must align to ${duration}-minute slots for this court. You entered ${enteredStr} — did you mean ${lowerStr} or ${upperStr}?`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'UNALIGNED_TIME_BOUNDARY';
+    throw err;
+  }
+
+  // Ensure window is at least one duration block long
+  if (end.getTime() - start.getTime() < duration * 60 * 1000) {
+    reply.status(400);
+    const err = new Error(`Availability window duration must be at least ${duration} minutes.`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_WINDOW_DURATION';
+    throw err;
+  }
+
   const window = await prisma.availabilityWindow.create({
     data: {
       resourcePoolId: id,
       resourceId,
-      startTime: new Date(startTime),
-      endTime: new Date(endTime),
+      startTime: start,
+      endTime: end,
       capacity: capacity ? Number(capacity) : 1,
       pricingMode: pricingMode ? (pricingMode as PricingMode) : null,
       price: price != null ? new Prisma.Decimal(price) : null,
@@ -462,6 +579,22 @@ server.post('/bookings', async (request, reply) => {
   } = request.body as any;
   void rest; // suppresses unused-var lint for the spread remainder
 
+  if (coPlayers && Array.isArray(coPlayers)) {
+    for (const phone of coPlayers) {
+      if (!isValidIndianPhone(phone)) {
+        reply.status(400);
+        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
+        (err as any).statusCode = 400;
+        (err as any).code = 'INVALID_PHONE_FORMAT';
+        throw err;
+      }
+    }
+  }
+
+  const normalizedCoPlayers = coPlayers && Array.isArray(coPlayers)
+    ? coPlayers.map(normalizePhone)
+    : [];
+
   try {
     const booking = await prisma.$transaction(async (tx: any) => {
       // 1. Lock the AvailabilityWindow row FOR UPDATE.
@@ -593,8 +726,8 @@ server.post('/bookings', async (request, reply) => {
           isMemberBooking: !!isMemberBooking,
           refundAmount: null,
           price: resolvedPrice,
-          players: coPlayers && Array.isArray(coPlayers) ? {
-            create: coPlayers.map((phone: string) => ({ phone })),
+          players: normalizedCoPlayers.length > 0 ? {
+            create: normalizedCoPlayers.map((phone: string) => ({ phone })),
           } : undefined,
         },
       });
@@ -659,6 +792,22 @@ server.post('/bookings/negotiated', async (request, reply) => {
     (err as any).code = 'BAD_REQUEST';
     throw err;
   }
+
+  if (coPlayers && Array.isArray(coPlayers)) {
+    for (const phone of coPlayers) {
+      if (!isValidIndianPhone(phone)) {
+        reply.status(400);
+        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
+        (err as any).statusCode = 400;
+        (err as any).code = 'INVALID_PHONE_FORMAT';
+        throw err;
+      }
+    }
+  }
+
+  const normalizedCoPlayersNegotiated = coPlayers && Array.isArray(coPlayers)
+    ? coPlayers.map(normalizePhone)
+    : [];
 
   try {
     const booking = await prisma.$transaction(async (tx: any) => {
@@ -756,8 +905,8 @@ server.post('/bookings/negotiated', async (request, reply) => {
           // WHY: negotiatedPrice is accepted here because this endpoint is gated behind
           // INTERNAL_SERVICE_KEY — only verified internal callers (Payment service) can set it.
           price: new Prisma.Decimal(negotiatedPrice),
-          players: coPlayers && Array.isArray(coPlayers) ? {
-            create: coPlayers.map((phone: string) => ({ phone })),
+          players: normalizedCoPlayersNegotiated.length > 0 ? {
+            create: normalizedCoPlayersNegotiated.map((phone: string) => ({ phone })),
           } : undefined,
         },
       });

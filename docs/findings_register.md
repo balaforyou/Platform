@@ -21,6 +21,8 @@
 
 | ID | Found | Resolved | Context | Description | Resolution |
 |---|---|---|---|---|---|
+| F-009 | 30 Jul 2026 | 31 Jul 2026 | Phase 10 feedback | Co-player phone number input accepts any string without validation on client or server. | Replicated normalization and valid format checks (+91 starting with 6-9) on both client input/submission and backend bookings endpoints. |
+| F-010 | 30 Jul 2026 | 31 Jul 2026 | Phase 10 feedback | Availability windows generated do not align to clean slot boundaries matching the pool's duration. | Snapped seed script times, and strictly validate / reject unaligned API inputs with computed suggestion recommendations. |
 | F-000 | 30 Jul 2026 | 30 Jul 2026 | Phase 9 revision | Manual refund override audit trail — needed design (who/when/reason) | `adminId` sourced from JWT (not request body), full audit fields on `Refund` model, tested in Checkpoint 3 |
 | F-001 | 30 Jul 2026 | 30 Jul 2026 | Phase 9 delivery (2nd pass) | `GET /branches/:id/resource-pools` never existed — guest booking's browse step depends on it | Endpoint added, public/no-auth, verified in Checkpoint 1 with a real assertion ("returns correct array of pools"), not just present in the route list |
 | F-006 | 30 Jul 2026 | 30 Jul 2026 | Phase 9 verification (2nd pass) | Concurrency claim on `MemberGroupAssignment`'s partial unique index was only tested sequentially, not proving the DB-level race protection | Both sequential AND genuinely concurrent test cases now present as distinct assertions — concurrent case fires simultaneous requests and confirms exactly one 201 / one 409, proving the database constraint itself resolves the race |
