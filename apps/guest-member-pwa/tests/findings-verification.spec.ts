@@ -16,16 +16,25 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
     
     // First, login to get a JWT token
     await page.goto('/login');
+    // Clear localStorage to prevent any cached selected_branch_id redirect loops
+    await page.evaluate(() => localStorage.clear());
+
     await page.fill('input[placeholder="99999 99999"]', '9999999999');
     await page.click('button[type="submit"]');
     await page.waitForSelector('input[placeholder="Enter 4 or 6 digit OTP"]');
+    
+    // Start listening for verification response to capture the accessToken in memory
+    const responsePromise = page.waitForResponse(response => 
+      response.url().includes('/auth/otp/verify') && response.status() === 200
+    );
+
     await page.fill('input[placeholder="Enter 4 or 6 digit OTP"]', '123456');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
 
-    // Wait for access_token to be set in localStorage to avoid race conditions
-    await page.waitForFunction(() => localStorage.getItem('access_token') !== null);
-    const accessToken = await page.evaluate(() => localStorage.getItem('access_token'));
+    const response = await responsePromise;
+    const json = await response.json();
+    const accessToken = json.data?.accessToken || json.accessToken;
     expect(accessToken).toBeTruthy();
 
     // Call POST /bookings with bad phone numbers
