@@ -29,10 +29,15 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
     );
 
     await page.fill('input[placeholder="Enter 4 or 6 digit OTP"]', '123456');
-    await page.click('button[type="submit"]');
+    
+    // Concurrently trigger click and await response to avoid page navigation race conditions
+    const [response] = await Promise.all([
+      responsePromise,
+      page.click('button[type="submit"]'),
+    ]);
+
     await expect(page).toHaveURL('/');
 
-    const response = await responsePromise;
     const json = await response.json();
     const accessToken = json.data?.accessToken || json.accessToken;
     expect(accessToken).toBeTruthy();

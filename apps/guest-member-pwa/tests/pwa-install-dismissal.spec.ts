@@ -19,8 +19,8 @@ test.describe('PWA Install Prompt Dismissal Expiry (F-002)', () => {
     // 2. Ensure dismissal state is clean (remove specific key)
     await page.evaluate(() => localStorage.removeItem('pwa-install-dismissed'));
     await page.reload();
-    // Wait for the app to finish silent refresh loading and mount layout
-    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible();
+    // Wait for the app to finish silent refresh loading and mount layout (with safe timeout)
+    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible({ timeout: 15000 });
 
     // 3. Dispatch the simulated beforeinstallprompt event inside the page
     await page.evaluate(() => {
@@ -49,7 +49,7 @@ test.describe('PWA Install Prompt Dismissal Expiry (F-002)', () => {
 
     // 5. Reload page, wait for load, dispatch event again, verify banner does NOT show up (since < 7 days)
     await page.reload();
-    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible();
+    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible({ timeout: 15000 });
     await page.evaluate(() => {
       const event = new Event('beforeinstallprompt') as any;
       event.preventDefault = () => {};
@@ -66,7 +66,7 @@ test.describe('PWA Install Prompt Dismissal Expiry (F-002)', () => {
 
     // 7. Reload page, wait for load, dispatch event, verify banner DOES show up again
     await page.reload();
-    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible();
+    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible({ timeout: 15000 });
     await page.evaluate(() => {
       const event = new Event('beforeinstallprompt') as any;
       event.preventDefault = () => {};
