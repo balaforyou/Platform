@@ -136,6 +136,17 @@ const branchScheduleSchema = z.object({
   workingHoursEnd: z.string().regex(/^\d{2}:\d{2}$/),
 });
 
+const resourcePoolFieldLabels: Record<string, string> = {
+  name: 'Pool Name',
+  capacity: 'Capacity',
+  minOccupancy: 'Min. Occupancy',
+  minBookingDurationMinutes: 'Min. Booking Duration (minutes)',
+  defaultRate: 'Default Rate (\u20b9)',
+  pricingMode: 'Pricing Mode',
+  guestAccessCutoffMinutes: 'Guest Access Cutoff (minutes)',
+  lowOccupancyThresholdPct: 'Low-Occupancy Threshold (%)',
+};
+
 const roleCanAdmin = (roles: string[] = []) => roles.includes('owner') || roles.some((role) => role.startsWith('branch_manager:'));
 
 const branchScopes = (roles: string[] = []) => roles
@@ -532,16 +543,16 @@ function ResourcesPage() {
         {selectedPool && (
           <div className="form-grid compact">
             {['name', 'capacity', 'minOccupancy', 'minBookingDurationMinutes', 'defaultRate'].map((field) => (
-              <label key={field}>{field}<input value={poolDraft[field] || ''} onChange={(event) => setPoolDraft((draft) => ({ ...draft, [field]: event.target.value }))} /></label>
+              <label key={field}>{resourcePoolFieldLabels[field]}<input value={poolDraft[field] || ''} onChange={(event) => setPoolDraft((draft) => ({ ...draft, [field]: event.target.value }))} /></label>
             ))}
-            <label>pricingMode<select value={poolDraft.pricingMode || 'FLAT'} onChange={(event) => setPoolDraft((draft) => ({ ...draft, pricingMode: event.target.value }))}><option>FLAT</option><option>PER_PERSON</option></select></label>
+            <label>{resourcePoolFieldLabels.pricingMode}<select value={poolDraft.pricingMode || 'FLAT'} onChange={(event) => setPoolDraft((draft) => ({ ...draft, pricingMode: event.target.value }))}><option>FLAT</option><option>PER_PERSON</option></select></label>
             <button className="primary-btn" disabled={savePool.isPending} onClick={() => savePool.mutate()}>
               {savePool.isPending ? <RefreshCw className="spin" size={16} /> : <Save size={16} />}
               {savePool.isPending ? 'Saving...' : 'Save pool'}
             </button>
             <MutationFeedback error={savePool.error} successMessage={savePool.isSuccess ? 'Resource pool saved.' : undefined} />
-            <label>guestAccessCutoffMinutes<input value={ruleDraft.guestAccessCutoffMinutes || ''} onChange={(event) => setRuleDraft((draft) => ({ ...draft, guestAccessCutoffMinutes: event.target.value }))} /></label>
-            <label>lowOccupancyThresholdPct<input value={ruleDraft.lowOccupancyThresholdPct || ''} onChange={(event) => setRuleDraft((draft) => ({ ...draft, lowOccupancyThresholdPct: event.target.value }))} /></label>
+            <label>{resourcePoolFieldLabels.guestAccessCutoffMinutes}<input value={ruleDraft.guestAccessCutoffMinutes || ''} onChange={(event) => setRuleDraft((draft) => ({ ...draft, guestAccessCutoffMinutes: event.target.value }))} /></label>
+            <label>{resourcePoolFieldLabels.lowOccupancyThresholdPct}<input value={ruleDraft.lowOccupancyThresholdPct || ''} onChange={(event) => setRuleDraft((draft) => ({ ...draft, lowOccupancyThresholdPct: event.target.value }))} /></label>
             <button className="secondary-btn" disabled={saveRule.isPending} onClick={() => saveRule.mutate()}>
               {saveRule.isPending ? <RefreshCw className="spin" size={16} /> : <Save size={16} />}
               {saveRule.isPending ? 'Saving...' : 'Save rule'}
