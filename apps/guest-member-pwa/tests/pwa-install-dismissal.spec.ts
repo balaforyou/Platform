@@ -4,6 +4,7 @@ test.describe('PWA Install Prompt Dismissal Expiry (F-002)', () => {
   
   test('should verify 7-day dismissal window logic for custom Android install prompt', async ({ page }) => {
     // 1. Authenticate first (OTP Login) so that the user lands on the dashboard inside the Layout component
+    await page.context().clearCookies();
     await page.goto('/login');
     // Clear localStorage to prevent any cached selected_branch_id redirect loops
     await page.evaluate(() => localStorage.clear());

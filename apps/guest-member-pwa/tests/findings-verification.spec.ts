@@ -14,9 +14,9 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
     // ==========================================
     console.log('Verifying backend F-009 validation...');
     
-    // First, login to get a JWT token
+    // Clear cookies and localStorage to ensure clean login state
+    await page.context().clearCookies();
     await page.goto('/login');
-    // Clear localStorage to prevent any cached selected_branch_id redirect loops
     await page.evaluate(() => localStorage.clear());
 
     await page.fill('input[placeholder="99999 99999"]', '9999999999');
