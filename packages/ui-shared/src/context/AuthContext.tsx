@@ -15,6 +15,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Module-scoped tracker to deduplicate concurrent refresh requests (e.g. from React 18 StrictMode double-mounting)
+let activeRefreshPromise: Promise<any> | null = null;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<any | null>(null);
@@ -40,27 +43,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshSession = async () => {
-    try {
-      // POST /auth/refresh exchanges the httpOnly cookie for a new access token
-      const res = await apiRequest<{ accessToken: string }>('/identity/auth/refresh', {
-        method: 'POST',
-      });
-      if (res && res.accessToken) {
-        setAccessToken(res.accessToken);
-        const decoded = parseJwt(res.accessToken);
-        setUser(decoded);
-        console.log('Authentication session silently refreshed.');
-      } else {
+    if (activeRefreshPromise) {
+      console.log('Authentication refresh already in progress. Reusing in-flight promise.');
+      return activeRefreshPromise;
+    }
+
+    activeRefreshPromise = (async () => {
+      try {
+        // POST /auth/refresh exchanges the httpOnly cookie for a new access token
+        const res = await apiRequest<{ accessToken: string }>('/identity/auth/refresh', {
+          method: 'POST',
+        });
+        if (res && res.accessToken) {
+          setAccessToken(res.accessToken);
+          const decoded = parseJwt(res.accessToken);
+          setUser(decoded);
+          console.log('Authentication session silently refreshed.');
+        } else {
+          setAccessToken(null);
+          setUser(null);
+        }
+      } catch {
+        // Token expired or invalid, clear state quietly on silent refresh
         setAccessToken(null);
         setUser(null);
+      } finally {
+        setLoading(false);
+        activeRefreshPromise = null;
       }
-    } catch {
-      // Token expired or invalid, clear state quietly on silent refresh
-      setAccessToken(null);
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
+    })();
+
+    return activeRefreshPromise;
   };
 
   // 1. Silent refresh on boot
