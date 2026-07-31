@@ -3,6 +3,9 @@ import { test, expect } from '@playwright/test';
 test.describe('PWA Install Prompt Dismissal Expiry (F-002)', () => {
   
   test('should verify 7-day dismissal window logic for custom Android install prompt', async ({ page }) => {
+    // Forward browser console logs to E2E test stdout for debugging
+    page.on('console', msg => console.log('BROWSER LOG:', msg.text()));
+
     // 1. Authenticate first (OTP Login) so that the user lands on the dashboard inside the Layout component
     await page.context().clearCookies();
     await page.goto('/login');

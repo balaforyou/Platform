@@ -104,7 +104,7 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
     await page.click('#reserve-court-btn');
 
     // Verify visual error message
-    const errorAlert = page.locator('.bg-red-950');
+    const errorAlert = page.locator('[class*="bg-red-950"]');
     await expect(errorAlert).toBeVisible();
     await expect(errorAlert).toContainText('is not a valid Indian mobile number');
 
