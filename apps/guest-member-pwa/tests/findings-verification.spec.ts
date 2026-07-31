@@ -47,6 +47,7 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        'Idempotency-Key': 'bad-phone-test-1',
       },
       data: {
         tenantId: '11111111-1111-1111-1111-111111111111',
@@ -66,6 +67,7 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        'Idempotency-Key': 'bad-phone-test-2',
       },
       data: {
         tenantId: '11111111-1111-1111-1111-111111111111',
