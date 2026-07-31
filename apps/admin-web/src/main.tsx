@@ -426,7 +426,7 @@ function UserLookup({
 
   return (
     <div className="lookup-box">
-      <label>Member phone<input value={phone} onChange={(event) => setPhone(event.target.value.replace(/[^\d+]/g, '').slice(0, 13))} placeholder="9999999999" /></label>
+      <label>Member phone<input value={phone} maxLength={13} onChange={(event) => setPhone(event.target.value.replace(/[^\d+]/g, '').slice(0, 13))} placeholder="9999999999" /></label>
       <button className="secondary-btn" disabled={!phone || lookup.isPending} onClick={() => lookup.mutate()}>
         {lookup.isPending ? <RefreshCw className="spin" size={16} /> : <Users size={16} />}
         {lookup.isPending ? 'Looking up...' : 'Lookup member'}
@@ -906,7 +906,7 @@ function RefundsPage() {
         <h2>Manual Refund Override</h2>
         <div className="form-grid compact">
           <UserLookup value={selectedUser} onResolved={(user) => { setSelectedUser(user); setSelectedBookingId(''); }} />
-          {bookings.isLoading ? <span className="muted">Loading cancelled bookings...</span> : null}
+          {bookings.isLoading ? <span className="muted full-row">Loading cancelled bookings...</span> : null}
           {bookings.data?.length === 0 ? <div className="inline-error">No cancelled refundable bookings found for this member.</div> : null}
           {(bookings.data || []).map((booking) => (
             <button
@@ -927,13 +927,17 @@ function RefundsPage() {
               <span>Booking price ₹{preview.data.originalPrice}</span>
             </div>
           ) : null}
-          <label>Override amount<input value={form.overrideAmount} onChange={(event) => setForm((draft) => ({ ...draft, overrideAmount: event.target.value }))} /></label>
-          <label>Reason<input value={form.reason} onChange={(event) => setForm((draft) => ({ ...draft, reason: event.target.value }))} /></label>
-          <label className="check-row"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />Confirm this bypasses tiered calculation</label>
-          <button className="primary-btn danger" disabled={!confirmed || !selectedBookingId || refund.isPending} onClick={() => refund.mutate()}>
-            {refund.isPending ? <RefreshCw className="spin" size={16} /> : <Banknote size={16} />}
-            {refund.isPending ? 'Issuing...' : 'Issue override'}
-          </button>
+          {selectedBooking ? (
+            <>
+              <label>Override amount<input value={form.overrideAmount} onChange={(event) => setForm((draft) => ({ ...draft, overrideAmount: event.target.value }))} /></label>
+              <label>Reason<input value={form.reason} onChange={(event) => setForm((draft) => ({ ...draft, reason: event.target.value }))} /></label>
+              <label className="check-row"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />Confirm this bypasses tiered calculation</label>
+              <button className="primary-btn danger" disabled={!confirmed || refund.isPending} onClick={() => refund.mutate()}>
+                {refund.isPending ? <RefreshCw className="spin" size={16} /> : <Banknote size={16} />}
+                {refund.isPending ? 'Issuing...' : 'Issue override'}
+              </button>
+            </>
+          ) : null}
           <MutationFeedback error={refund.error || bookings.error || preview.error} successMessage={refund.isSuccess ? 'Refund override recorded.' : undefined} />
           {refund.data ? <pre className="evidence-box">{JSON.stringify(refund.data, null, 2)}</pre> : null}
         </div>
