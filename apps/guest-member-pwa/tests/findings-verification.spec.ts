@@ -25,7 +25,7 @@ test.describe('Findings Verification (F-009 & F-010)', () => {
     
     // Start listening for verification response to capture the accessToken in memory
     const responsePromise = page.waitForResponse(response => 
-      response.url().includes('/auth/otp/verify') && response.status() === 200
+      response.url().includes('/auth/otp/verify') && response.ok()
     );
 
     await page.fill('input[placeholder="Enter 4 or 6 digit OTP"]', '123456');
