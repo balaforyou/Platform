@@ -6,6 +6,8 @@ const tenantId = '11111111-1111-1111-1111-111111111111';
 const ownerUserId = 'admin-seed-owner-001';
 const memberUserId = 'admin-seed-member-001';
 const secondMemberUserId = 'admin-seed-member-002';
+const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+const slotEngineUrl = process.env.SLOT_ENGINE_URL || 'http://localhost:3001';
 
 const branches = [
   { id: 'admin-seed-branch-coimbatore', name: 'Coimbatore Main Arena', address: 'Avinashi Road, Coimbatore', workingHoursStart: '05:00', workingHoursEnd: '23:00' },
@@ -35,6 +37,7 @@ async function cleanSeededData() {
   const branchNames = branches.map((branch) => branch.name);
   const userIds = [ownerUserId, memberUserId, secondMemberUserId];
 
+  await prisma.refund.deleteMany({ where: { paymentIntent: { referenceId: { startsWith: 'admin-seed-' } } } });
   await prisma.paymentIntent.deleteMany({ where: { referenceId: { startsWith: 'admin-seed-' } } });
   await prisma.bookingPlayer.deleteMany({ where: { booking: { resourcePoolId: { in: poolIds } } } });
   await prisma.booking.deleteMany({ where: { resourcePoolId: { in: poolIds } } });
@@ -151,6 +154,91 @@ async function main() {
     });
   }
 
+  const refundableWindowStart = alignedLocalHour(3, 10);
+  await prisma.availabilityWindow.create({
+    data: {
+      id: 'admin-seed-window-refundable-cancelled',
+      resourcePoolId: negotiatedPoolId,
+      startTime: refundableWindowStart,
+      endTime: new Date(refundableWindowStart.getTime() + 60 * 60 * 1000),
+      capacity: 6,
+    },
+  });
+
+  await prisma.booking.create({
+    data: {
+      id: 'admin-seed-booking-refundable-cancelled',
+      tenantId,
+      branchId: branches[0].id,
+      resourcePoolId: negotiatedPoolId,
+      windowId: 'admin-seed-window-refundable-cancelled',
+      userId: memberUserId,
+      status: 'HELD',
+      heldAt: new Date(),
+      heldUntil: new Date(Date.now() + 10 * 60 * 1000),
+      idempotencyKey: 'admin-seed-refundable-booking-key',
+      isMemberBooking: false,
+      price: 500,
+      refundAmount: null,
+    },
+  });
+
+  await prisma.paymentIntent.create({
+    data: {
+      id: 'admin-seed-payment-intent-refundable-captured',
+      tenantId,
+      userId: memberUserId,
+      amount: 50000,
+      purpose: 'guest_booking',
+      referenceId: 'admin-seed-booking-refundable-cancelled',
+      status: 'captured',
+      gatewayRef: 'admin-seed-gateway-refundable-captured',
+    },
+  });
+
+  await fetch(`${slotEngineUrl}/bookings/admin-seed-booking-refundable-cancelled/confirm`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${internalKey}` },
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`Confirm refundable booking failed: ${response.status} ${await response.text()}`);
+  });
+
+  await fetch(`${slotEngineUrl}/bookings/admin-seed-booking-refundable-cancelled/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${internalKey}` },
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`Cancel refundable booking failed: ${response.status} ${await response.text()}`);
+  });
+
+  const lowOccupancyStart = alignedLocalHour(0, 20);
+  await prisma.availabilityWindow.create({
+    data: {
+      id: 'admin-seed-window-low-occupancy',
+      resourcePoolId: 'admin-seed-pool-peelamedu-courts',
+      startTime: lowOccupancyStart,
+      endTime: new Date(lowOccupancyStart.getTime() + 60 * 60 * 1000),
+      capacity: 8,
+    },
+  });
+
+  await prisma.booking.create({
+    data: {
+      id: 'admin-seed-booking-low-occupancy-confirmed',
+      tenantId,
+      branchId: branches[1].id,
+      resourcePoolId: 'admin-seed-pool-peelamedu-courts',
+      windowId: 'admin-seed-window-low-occupancy',
+      userId: secondMemberUserId,
+      status: 'CONFIRMED',
+      heldAt: new Date(),
+      heldUntil: new Date(Date.now() + 10 * 60 * 1000),
+      idempotencyKey: 'admin-seed-low-occupancy-booking-key',
+      isMemberBooking: true,
+      price: 140,
+      refundAmount: null,
+    },
+  });
+
   await prisma.memberGroupAssignment.create({
     data: {
       id: 'admin-seed-existing-assignment',
@@ -168,6 +256,8 @@ async function main() {
   console.log('Branches:', branches.map((branch) => branch.name).join(', '));
   console.log('Pools:', pools.map((pool) => pool.name).join(', '));
   console.log('Negotiated windows seeded on Main Arena Premium Courts for tomorrow at 16:00-20:00 local time.');
+  console.log('Refund test booking: admin-seed-booking-refundable-cancelled, calculated refund: ₹500, override test amount: ₹275.');
+  console.log('Low occupancy window: admin-seed-window-low-occupancy on Peelamedu Evening Courts today at 20:00, occupancy: 1 of 8 (13%), threshold: 40%.');
 }
 
 main()

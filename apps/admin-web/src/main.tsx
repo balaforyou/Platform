@@ -57,6 +57,9 @@ type AvailabilitySlot = {
     endTime: string;
     resourceId?: string | null;
     capacity: number;
+    updatedAt?: string;
+    pricingMode?: 'FLAT' | 'PER_PERSON' | null;
+    price?: string | null;
   };
   remainingCapacity: number;
 };
@@ -75,6 +78,32 @@ type MemberAssignment = {
   startTime: string;
   status: string;
   resourcePool?: ResourcePool;
+};
+
+type AdminBooking = {
+  id: string;
+  tenantId: string;
+  branchId: string;
+  resourcePoolId: string;
+  windowId: string;
+  userId: string;
+  status: string;
+  price?: string | null;
+  refundAmount?: string | null;
+  window?: AvailabilitySlot['window'] & { resourcePool?: ResourcePool };
+};
+
+type RefundPreview = {
+  bookingId: string;
+  originalPrice: number;
+  refundAmount: number;
+  refundPercent: number;
+};
+
+type OccupancySummary = {
+  totalCapacity: number;
+  confirmedSeats: number;
+  occupancyPercentage: number;
 };
 
 type ApiError = Error & { code?: string; statusCode?: number };
@@ -336,6 +365,13 @@ function formatWindow(slot: AvailabilitySlot) {
   const start = new Date(slot.window.startTime);
   const end = new Date(slot.window.endTime);
   return `${start.toLocaleString()} - ${end.toLocaleTimeString()} (${slot.remainingCapacity} open)`;
+}
+
+function formatBookingWindow(booking: AdminBooking) {
+  if (!booking.window) return booking.id;
+  const start = new Date(booking.window.startTime);
+  const end = new Date(booking.window.endTime);
+  return `${start.toLocaleString()} - ${end.toLocaleTimeString()}`;
 }
 
 function UserLookup({
@@ -613,34 +649,83 @@ function AssignmentsPage() {
 function OccupancyPage() {
   const api = useAdminApi();
   const qc = useQueryClient();
+  const branches = useBranches();
+  const [branchId, setBranchId] = useState('');
+  const pools = usePools(branchId);
   const [poolId, setPoolId] = useState('');
+  const selectedPool = pools.data?.find((pool) => pool.id === poolId);
+  const selectedRule = selectedPool?.bookingRules?.[0];
+  const [date, setDate] = useState(todayIsoDate());
+  const availability = useAvailability(poolId, date);
   const [windowId, setWindowId] = useState('');
+  const selectedWindow = availability.data?.find((slot) => slot.window.id === windowId)?.window;
+
+  React.useEffect(() => {
+    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
+  }, [branchId, branches.data]);
+
+  React.useEffect(() => {
+    if (!poolId && pools.data?.[0]) setPoolId(pools.data[0].id);
+  }, [poolId, pools.data]);
+
   const occupancy = useQuery({
-    queryKey: ['occupancy', poolId],
+    queryKey: ['occupancy', poolId, date],
     enabled: !!poolId,
-    queryFn: () => api.get<{ totalCapacity: number; confirmedSeats: number; occupancyPercentage: number }>(`/slot-engine/resource-pools/${poolId}/occupancy`),
+    queryFn: () => api.get<OccupancySummary>(`/slot-engine/resource-pools/${poolId}/occupancy?date=${date}`),
   });
   const release = useMutation({
-    mutationFn: () => api.post(`/slot-engine/resource-pools/${poolId}/windows/${windowId}/release`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['occupancy', poolId] }),
+    mutationFn: () => {
+      if (!selectedWindow?.updatedAt) throw new Error('Select a fresh availability window before release');
+      return api.post(`/slot-engine/resource-pools/${poolId}/windows/${windowId}/release`, {
+        expectedUpdatedAt: selectedWindow.updatedAt,
+        pricingMode: selectedPool?.pricingMode,
+        price: Number(selectedPool?.defaultRate || 0),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['occupancy', poolId, date] });
+      qc.invalidateQueries({ queryKey: ['availability', poolId, date] });
+    },
   });
   return (
     <main className="content-grid two">
       <section className="panel">
         <h2>Low Occupancy</h2>
-        <label>Resource pool ID<input value={poolId} onChange={(event) => setPoolId(event.target.value)} /></label>
+        <div className="form-grid compact">
+          <label>Branch<select value={branchId} onChange={(event) => { setBranchId(event.target.value); setPoolId(''); setWindowId(''); }}>
+            <option value="">Select branch</option>
+            {(branches.data || []).map((branch) => <option value={branch.id} key={branch.id}>{branch.name}</option>)}
+          </select></label>
+          <label>Resource pool<select value={poolId} onChange={(event) => { setPoolId(event.target.value); setWindowId(''); }}>
+            <option value="">Select pool</option>
+            {(pools.data || []).map((pool) => <option value={pool.id} key={pool.id}>{pool.name}</option>)}
+          </select></label>
+          <label>Date<input type="date" value={date} onChange={(event) => { setDate(event.target.value); setWindowId(''); }} /></label>
+        </div>
         {occupancy.data && (
           <div className="metric-card alert">
             <span>{occupancy.data.confirmedSeats} of {occupancy.data.totalCapacity} confirmed</span>
             <strong>{occupancy.data.occupancyPercentage}%</strong>
+            <span>Threshold {selectedRule?.lowOccupancyThresholdPct ?? 'not set'}%</span>
+            <span>Guest cutoff {selectedRule?.guestAccessCutoffMinutes ?? 120} min</span>
           </div>
         )}
+        <MutationFeedback error={occupancy.error || availability.error} />
       </section>
       <section className="panel">
         <h2>Manual Release</h2>
-        <label>Window ID<input value={windowId} onChange={(event) => setWindowId(event.target.value)} /></label>
-        <button className="primary-btn" disabled={!poolId || !windowId || release.isPending} onClick={() => release.mutate()}><CalendarClock size={16} />Release to guests</button>
-        <ErrorBanner error={release.error} />
+        <div className="form-grid compact">
+          <label>Availability window<select value={windowId} onChange={(event) => setWindowId(event.target.value)}>
+            <option value="">Select window</option>
+            {(availability.data || []).map((slot) => <option value={slot.window.id} key={slot.window.id}>{formatWindow(slot)}</option>)}
+          </select></label>
+          {selectedWindow ? <div className="muted">Last fetched {new Date(selectedWindow.updatedAt || '').toLocaleString()}</div> : null}
+          <button className="primary-btn" disabled={!poolId || !windowId || release.isPending} onClick={() => release.mutate()}>
+            {release.isPending ? <RefreshCw className="spin" size={16} /> : <CalendarClock size={16} />}
+            {release.isPending ? 'Releasing...' : 'Release to guests'}
+          </button>
+          <MutationFeedback error={release.error} successMessage={release.isSuccess ? 'Window released to guests.' : undefined} />
+        </div>
       </section>
     </main>
   );
@@ -736,11 +821,24 @@ function NegotiatedPage() {
 
 function RefundsPage() {
   const api = useAdminApi();
-  const [form, setForm] = useState({ bookingId: '', overrideAmount: '', reason: '' });
+  const [selectedUser, setSelectedUser] = useState<UserLookupResult | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState('');
+  const [form, setForm] = useState({ overrideAmount: '275', reason: 'Admin goodwill override' });
   const [confirmed, setConfirmed] = useState(false);
+  const bookings = useQuery({
+    queryKey: ['refund-bookings', selectedUser?.id],
+    enabled: !!selectedUser,
+    queryFn: () => api.get<AdminBooking[]>(`/slot-engine/bookings/admin?userId=${selectedUser?.id}&status=CANCELLED`),
+  });
+  const selectedBooking = bookings.data?.find((booking) => booking.id === selectedBookingId);
+  const preview = useQuery({
+    queryKey: ['refund-preview', selectedBookingId],
+    enabled: !!selectedBookingId,
+    queryFn: () => api.get<RefundPreview>(`/slot-engine/bookings/${selectedBookingId}/cancel-preview`),
+  });
   const refund = useMutation({
     mutationFn: () => api.post('/payment/refunds/override', {
-      bookingId: form.bookingId,
+      bookingId: selectedBookingId,
       overrideAmount: Number(form.overrideAmount),
       reason: form.reason,
     }),
@@ -750,13 +848,37 @@ function RefundsPage() {
       <section className="panel">
         <h2>Manual Refund Override</h2>
         <div className="form-grid compact">
-          <label>Booking ID<input value={form.bookingId} onChange={(event) => setForm((draft) => ({ ...draft, bookingId: event.target.value }))} /></label>
+          <UserLookup value={selectedUser} onResolved={(user) => { setSelectedUser(user); setSelectedBookingId(''); }} />
+          {bookings.isLoading ? <span className="muted">Loading cancelled bookings...</span> : null}
+          {bookings.data?.length === 0 ? <div className="inline-error">No cancelled refundable bookings found for this member.</div> : null}
+          {(bookings.data || []).map((booking) => (
+            <button
+              type="button"
+              className={`select-row ${selectedBookingId === booking.id ? 'active' : ''}`}
+              key={booking.id}
+              onClick={() => setSelectedBookingId(booking.id)}
+            >
+              <strong>{booking.window?.resourcePool?.name || booking.resourcePoolId}</strong>
+              <span>{formatBookingWindow(booking)} | Paid ₹{Number(booking.price || 0)}</span>
+              <code>{booking.id}</code>
+            </button>
+          ))}
+          {selectedBooking && preview.data ? (
+            <div className="result-box">
+              <span>Calculated tiered refund</span>
+              <strong>₹{preview.data.refundAmount} ({preview.data.refundPercent}%)</strong>
+              <span>Booking price ₹{preview.data.originalPrice}</span>
+            </div>
+          ) : null}
           <label>Override amount<input value={form.overrideAmount} onChange={(event) => setForm((draft) => ({ ...draft, overrideAmount: event.target.value }))} /></label>
           <label>Reason<input value={form.reason} onChange={(event) => setForm((draft) => ({ ...draft, reason: event.target.value }))} /></label>
           <label className="check-row"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />Confirm this bypasses tiered calculation</label>
-          <button className="primary-btn danger" disabled={!confirmed || refund.isPending} onClick={() => refund.mutate()}><Banknote size={16} />Issue override</button>
-          <ErrorBanner error={refund.error} />
-          {refund.data ? <div className="success-box">Refund override recorded.</div> : null}
+          <button className="primary-btn danger" disabled={!confirmed || !selectedBookingId || refund.isPending} onClick={() => refund.mutate()}>
+            {refund.isPending ? <RefreshCw className="spin" size={16} /> : <Banknote size={16} />}
+            {refund.isPending ? 'Issuing...' : 'Issue override'}
+          </button>
+          <MutationFeedback error={refund.error || bookings.error || preview.error} successMessage={refund.isSuccess ? 'Refund override recorded.' : undefined} />
+          {refund.data ? <pre className="evidence-box">{JSON.stringify(refund.data, null, 2)}</pre> : null}
         </div>
       </section>
     </main>

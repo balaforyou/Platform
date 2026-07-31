@@ -495,10 +495,11 @@ server.get('/branches/:id/resource-pools', async (request) => {
 // WHY: Dual-path auth — internal service key OR owner/branch-manager JWT.
 // Both-or-neither validation on pricing override (same rule as window creation).
 server.post('/resource-pools/:id/windows/:windowId/release', async (request, reply) => {
-  await requireInternalOrAdmin(request, reply);
+  const auth = await getInternalOrAdminAuth(request, reply);
 
-  const { windowId } = request.params as any;
-  const { pricingMode, price } = request.body as any;
+  const { id, windowId } = request.params as any;
+  const { pricingMode, price, expectedUpdatedAt } = request.body as any;
+  await requirePoolScope(auth, id, reply);
 
   const hasMode = pricingMode != null;
   const hasPrice = price != null;
@@ -507,22 +508,67 @@ server.post('/resource-pools/:id/windows/:windowId/release', async (request, rep
     const err = new Error('pricingMode and price must both be provided or both omitted');
     (err as any).statusCode = 400;
     (err as any).code = 'PARTIAL_PRICING_OVERRIDE';
+      throw err;
+  }
+
+  if (!expectedUpdatedAt) {
+    reply.status(400);
+    const err = new Error('expectedUpdatedAt is required for release concurrency control');
+    (err as any).statusCode = 400;
+    (err as any).code = 'EXPECTED_UPDATED_AT_REQUIRED';
     throw err;
   }
 
-  const existing = await prisma.availabilityWindow.findUnique({ where: { id: windowId } });
+  const existing = await prisma.availabilityWindow.findFirst({ where: { id: windowId, resourcePoolId: id } });
   if (!existing) {
     reply.status(404);
     throw new Error('Availability window not found');
   }
 
-  const updated = await prisma.availabilityWindow.update({
-    where: { id: windowId },
+  const alreadyReleased = existing.pricingMode != null || existing.price != null;
+  if (alreadyReleased) {
+    reply.status(409);
+    const err = new Error('This window has already been released to guests');
+    (err as any).statusCode = 409;
+    (err as any).code = 'WINDOW_ALREADY_RELEASED';
+    throw err;
+  }
+
+  const updateResult = await prisma.availabilityWindow.updateMany({
+    where: {
+      id: windowId,
+      resourcePoolId: id,
+      updatedAt: new Date(expectedUpdatedAt),
+      pricingMode: null,
+      price: null,
+    },
     data: {
       pricingMode: pricingMode ? (pricingMode as PricingMode) : null,
       price: price != null ? new Prisma.Decimal(price) : null,
     },
   });
+
+  if (updateResult.count === 0) {
+    const current = await prisma.availabilityWindow.findFirst({ where: { id: windowId, resourcePoolId: id } });
+    if (!current) {
+      reply.status(404);
+      throw new Error('Availability window not found');
+    }
+    if (current.pricingMode != null || current.price != null) {
+      reply.status(409);
+      const err = new Error('This window was already released by another admin');
+      (err as any).statusCode = 409;
+      (err as any).code = 'WINDOW_ALREADY_RELEASED';
+      throw err;
+    }
+    reply.status(409);
+    const err = new Error('This window changed after it was loaded. Refresh and try again.');
+    (err as any).statusCode = 409;
+    (err as any).code = 'STALE_WINDOW';
+    throw err;
+  }
+
+  const updated = await prisma.availabilityWindow.findUnique({ where: { id: windowId } });
   return updated;
 });
 
@@ -1622,6 +1668,40 @@ server.post('/bookings/resolve-invites', async (request, reply) => {
   return { resolvedCount: updatedPlayers.count };
 });
 
+// GET /bookings/admin (admin-only)
+// WHY: Admin Web refund override needs a phone-first booking picker. This listing
+// keeps raw booking UUIDs out of the primary UI while enforcing branch scope server-side.
+server.get('/bookings/admin', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { userId, status } = request.query as any;
+
+  if (!userId) {
+    reply.status(400);
+    const err = new Error('userId is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const bookings = await prisma.booking.findMany({
+    where: {
+      userId,
+      ...(status ? { status: status as BookingStatus } : {}),
+    },
+    include: {
+      window: {
+        include: {
+          resourcePool: true,
+        },
+      },
+      players: true,
+    },
+    orderBy: { heldAt: 'desc' },
+  });
+
+  return bookings.filter((booking: any) => isAuthorizedForBranch(auth, booking.branchId));
+});
+
 // Retrieve a booking by ID (dual-path auth: internal key OR owner JWT or admin JWT with IDOR check).
 server.get('/bookings/:id', async (request, reply) => {
   let isInternal = false;
@@ -1752,15 +1832,19 @@ server.get('/bookings/:id/cancel-preview', async (request, reply) => {
     }
   }
 
-  if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD) {
+  if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD && booking.status !== BookingStatus.CANCELLED) {
     reply.status(400);
-    throw new Error('Only held or confirmed bookings can be cancelled');
+    throw new Error('Only held, confirmed, or cancelled bookings can be previewed');
   }
 
   let refundAmount = 0;
   let refundPercent = 0;
 
-  if (booking.status === BookingStatus.CONFIRMED) {
+  if (booking.status === BookingStatus.CANCELLED) {
+    refundAmount = Number(booking.refundAmount || 0);
+    const originalPrice = Number(booking.price || 0);
+    refundPercent = originalPrice > 0 ? Math.round((refundAmount / originalPrice) * 100) : 0;
+  } else if (booking.status === BookingStatus.CONFIRMED) {
     const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId } });
     const now = new Date();
     const startTime = new Date(booking.window.startTime);

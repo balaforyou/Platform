@@ -335,6 +335,48 @@ button:disabled {
   min-width: 220px;
 }
 
+.select-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #0f172a;
+  padding: 12px;
+  border-radius: 8px;
+  grid-column: 1 / -1;
+}
+
+.select-row span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.select-row code {
+  color: #64748b;
+  font-size: 11px;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.select-row.active {
+  border-color: #e11d48;
+  box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.12);
+}
+
+.evidence-box {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid #1e293b;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  grid-column: 1 / -1;
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }
