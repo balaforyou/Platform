@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "fastify": "^4.27.0",
+    "@fastify/jwt": "^8.0.1",
     "@badminton/shared-middleware": "workspace:*",
     "@badminton/shared-types": "workspace:*",
     "@badminton/database": "workspace:*"
