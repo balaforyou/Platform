@@ -551,6 +551,7 @@ server.post('/bookings', async (request, reply) => {
   if (!idempotencyKey) {
     reply.status(400);
     const err = new Error('Idempotency-Key header is required');
+    (err as any).statusCode = 400;
     (err as any).code = 'BAD_REQUEST';
     throw err;
   }
@@ -764,6 +765,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
   if (!idempotencyKey) {
     reply.status(400);
     const err = new Error('Idempotency-Key header is required');
+    (err as any).statusCode = 400;
     (err as any).code = 'BAD_REQUEST';
     throw err;
   }
