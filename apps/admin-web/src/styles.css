@@ -102,6 +102,12 @@ label {
   font-weight: 700;
 }
 
+.field-label {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 input,
 select {
   width: 100%;
@@ -363,6 +369,34 @@ button:disabled {
 .select-row.active {
   border-color: #e11d48;
   box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.12);
+}
+
+.time-slot-section {
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.time-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: 8px;
+}
+
+.time-slot {
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.time-slot.active {
+  border-color: var(--brand-primary);
+  background: #ecfdf5;
+  color: #0f766e;
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
 }
 
 .evidence-box {

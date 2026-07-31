@@ -166,6 +166,29 @@ const weekdayOptions = [
   { value: '0', label: 'Sun' },
 ];
 
+function timeToMinutes(value?: string | null) {
+  const [hours = '0', minutes = '0'] = (value || '00:00').split(':');
+  return Number(hours) * 60 + Number(minutes);
+}
+
+function minutesToTime(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60).toString().padStart(2, '0');
+  const minutes = (totalMinutes % 60).toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function assignmentStartTimes(branch?: Branch, pool?: ResourcePool) {
+  const start = timeToMinutes(branch?.workingHoursStart || '06:00');
+  const end = timeToMinutes(branch?.workingHoursEnd || '22:00');
+  const step = pool?.minBookingDurationMinutes || 60;
+  const latestStart = end - step;
+  const slots: string[] = [];
+  for (let minute = start; minute <= latestStart; minute += step) {
+    slots.push(minutesToTime(minute));
+  }
+  return slots;
+}
+
 function useAdminApi() {
   const { accessToken } = useAuth();
   return useMemo(() => ({
@@ -572,6 +595,9 @@ function AssignmentsPage() {
   const [branchId, setBranchId] = useState('');
   const [resourcePoolId, setResourcePoolId] = useState('');
   const pools = usePools(branchId);
+  const selectedBranch = branches.data?.find((branch) => branch.id === branchId);
+  const selectedPool = pools.data?.find((pool) => pool.id === resourcePoolId);
+  const startTimes = assignmentStartTimes(selectedBranch, selectedPool);
   const [selectedUser, setSelectedUser] = useState<UserLookupResult | null>(null);
   const [form, setForm] = useState({ daysOfWeek: ['1', '2', '3', '4', '5'], startTime: '10:00' });
 
@@ -582,6 +608,12 @@ function AssignmentsPage() {
   React.useEffect(() => {
     if (!resourcePoolId && pools.data?.[0]) setResourcePoolId(pools.data[0].id);
   }, [resourcePoolId, pools.data]);
+
+  React.useEffect(() => {
+    if (startTimes.length > 0 && !startTimes.includes(form.startTime)) {
+      setForm((draft) => ({ ...draft, startTime: startTimes[0] }));
+    }
+  }, [form.startTime, startTimes]);
 
   const assignments = useQuery({
     queryKey: ['assignments', resourcePoolId],
@@ -608,7 +640,7 @@ function AssignmentsPage() {
   return (
     <main className="content-grid two">
       <section className="panel">
-        <h2>Create Assignment</h2>
+        <h2>Assign Member to Recurring Slot</h2>
         <div className="form-grid compact">
           <label>Branch<select value={branchId} onChange={(event) => { setBranchId(event.target.value); setResourcePoolId(''); }}>
             <option value="">Select branch</option>
@@ -634,7 +666,21 @@ function AssignmentsPage() {
               </label>
             ))}
           </div>
-          <label>Start time<input type="time" value={form.startTime} onChange={(event) => setForm((draft) => ({ ...draft, startTime: event.target.value }))} /></label>
+          <div className="time-slot-section">
+            <span className="field-label">Start time</span>
+            <div className="time-slot-grid">
+              {startTimes.map((time) => (
+                <button
+                  type="button"
+                  className={`time-slot ${form.startTime === time ? 'active' : ''}`}
+                  key={time}
+                  onClick={() => setForm((draft) => ({ ...draft, startTime: time }))}
+                >
+                  {time}
+                </button>
+              ))}
+            </div>
+          </div>
           <button className="primary-btn" disabled={create.isPending || !selectedUser || !resourcePoolId || form.daysOfWeek.length === 0} onClick={() => create.mutate()}>
             {create.isPending ? <RefreshCw className="spin" size={16} /> : <Users size={16} />}
             {create.isPending ? 'Assigning...' : 'Assign member'}
