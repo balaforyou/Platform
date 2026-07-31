@@ -218,6 +218,12 @@ button:disabled {
   background: #1e293b;
 }
 
+.mobile-nav-bar,
+.mobile-nav-backdrop,
+.mobile-nav-drawer {
+  display: none;
+}
+
 .workspace {
   min-width: 0;
 }
@@ -437,14 +443,122 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .app-shell {
+    grid-template-rows: auto 1fr;
+    align-content: start;
+  }
+
+  .mobile-nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 64px;
+    padding: 10px 14px;
+    background: #0f172a;
+    color: #ffffff;
+  }
+
+  .mobile-tenant {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .mobile-tenant div:last-child {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .mobile-tenant strong,
+  .mobile-tenant span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-tenant span {
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .mobile-menu-btn {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #1e293b;
+    color: #ffffff;
+  }
+
+  .mobile-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    display: block;
+    border: 0;
+    border-radius: 0;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(2px);
+  }
+
+  .mobile-nav-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 120;
+    width: min(320px, 86vw);
+    max-height: 100vh;
+    overflow-y: auto;
+    display: none;
+    flex-direction: column;
+    gap: 20px;
+    padding: 18px;
+    background: #0f172a;
+    color: #ffffff;
+    box-shadow: 18px 0 40px rgba(15, 23, 42, 0.28);
+  }
+
+  .mobile-nav-drawer.open {
+    display: flex;
+  }
+
+  .mobile-nav-drawer nav {
+    display: grid;
+    gap: 6px;
+  }
+
+  .mobile-nav-drawer a {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 6px;
+    color: #e2e8f0;
+    text-decoration: none;
+  }
+
+  .mobile-nav-drawer a:hover {
+    background: #1e293b;
+  }
+
   .app-shell,
   .workspace {
     width: 100%;
   }
 
   .sidebar {
-    position: static;
-    width: 100%;
+    display: none;
   }
 
   .page-grid,

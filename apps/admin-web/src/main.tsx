@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import {
   AlertTriangle,
@@ -11,11 +11,13 @@ import {
   LayoutDashboard,
   Link as LinkIcon,
   LogOut,
+  Menu,
   RefreshCw,
   Save,
   ShieldAlert,
   SlidersHorizontal,
   Users,
+  X,
 } from 'lucide-react';
 import { apiRequest, AuthProvider, TenantProvider, useAuth, useTenant } from '@badminton/ui-shared';
 import './styles.css';
@@ -323,6 +325,8 @@ function RequireAdmin() {
 function Shell() {
   const { tenant } = useTenant();
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const [isMobileNavOpen, setMobileNavOpen] = useState(false);
   const navItems = [
     { to: '/', label: 'Overview', icon: LayoutDashboard },
     { to: '/resources', label: 'Resources', icon: SlidersHorizontal },
@@ -331,8 +335,46 @@ function Shell() {
     { to: '/negotiated', label: 'Negotiated', icon: LinkIcon },
     { to: '/refunds', label: 'Refunds', icon: Banknote },
   ];
+  const currentSection = navItems.find((item) => item.to === location.pathname)?.label || 'Admin Console';
+  const closeMobileNav = () => setMobileNavOpen(false);
+
   return (
     <div className="app-shell">
+      <header className="mobile-nav-bar">
+        <div className="mobile-tenant">
+          <div className="brand-mark small">{tenant?.appName?.[0] ?? 'A'}</div>
+          <div>
+            <strong>{tenant?.appName || 'Admin'}</strong>
+            <span>{currentSection}</span>
+          </div>
+        </div>
+        <button
+          className="mobile-menu-btn"
+          type="button"
+          aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-expanded={isMobileNavOpen}
+          onClick={() => setMobileNavOpen((open) => !open)}
+        >
+          {isMobileNavOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </header>
+      {isMobileNavOpen ? <button className="mobile-nav-backdrop" aria-label="Close navigation menu" onClick={closeMobileNav} /> : null}
+      <aside className={`mobile-nav-drawer ${isMobileNavOpen ? 'open' : ''}`} aria-hidden={!isMobileNavOpen}>
+        <div className="tenant-block">
+          <div className="brand-mark small">{tenant?.appName?.[0] ?? 'A'}</div>
+          <div>
+            <strong>{tenant?.appName || 'Admin'}</strong>
+            <span>{tenant?.subdomain}</span>
+          </div>
+        </div>
+        <nav>
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return <Link key={item.to} to={item.to} onClick={closeMobileNav}><Icon size={17} />{item.label}</Link>;
+          })}
+        </nav>
+        <button className="ghost-btn" onClick={logout}><LogOut size={16} />Sign out</button>
+      </aside>
       <aside className="sidebar">
         <div className="tenant-block">
           <div className="brand-mark small">{tenant?.appName?.[0] ?? 'A'}</div>
