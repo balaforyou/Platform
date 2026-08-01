@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TenantProvider, useTenant, AuthProvider, useAuth } from '@badminton/ui-shared';
+import { apiRequest, TenantProvider, useTenant, AuthProvider, useAuth } from '@badminton/ui-shared';
 import LoginScreen from './components/LoginScreen';
 import PwaInstallPrompt from './components/PwaInstallPrompt';
 import BranchSelect from './components/BranchSelect';
@@ -12,7 +12,7 @@ import CourtBooking from './components/CourtBooking';
 import BookingPay from './components/BookingPay';
 import BookingHistory from './components/BookingHistory';
 import BookingConfirmation from './components/BookingConfirmation';
-import { Calendar, User, LogOut, ArrowRight, Activity, MapPin, Phone, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckCircle, Clock, User, LogOut, ArrowRight, Activity, MapPin, Phone, RefreshCw } from 'lucide-react';
 import './index.css';
 
 // Capture beforeinstallprompt event globally to avoid React component mounting race conditions
@@ -109,8 +109,32 @@ function Layout() {
  */
 function MainDashboard() {
   const { tenant } = useTenant();
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const navigate = useNavigate();
+  const [memberSession, setMemberSession] = useState<any | null>(null);
+  const [memberSessionLoading, setMemberSessionLoading] = useState(false);
+  const [memberSessionError, setMemberSessionError] = useState<string | null>(null);
+  const [confirmingAttendance, setConfirmingAttendance] = useState(false);
+
+  const loadMemberSession = async () => {
+    if (user?.userType !== 'MEMBER' || !accessToken) return;
+    try {
+      setMemberSessionLoading(true);
+      setMemberSessionError(null);
+      const res = await apiRequest('/slot-engine/member/today-assignment', {
+        token: accessToken,
+      });
+      setMemberSession(res);
+    } catch (err: any) {
+      setMemberSessionError(err.message || 'Unable to load today\'s member session.');
+    } finally {
+      setMemberSessionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMemberSession();
+  }, [accessToken, user?.userType]);
 
   const handleBookNow = () => {
     const savedBranch = localStorage.getItem('selected_branch_id');
@@ -119,6 +143,96 @@ function MainDashboard() {
     } else {
       navigate('/branches');
     }
+  };
+
+  const handleConfirmAttendance = async () => {
+    try {
+      setConfirmingAttendance(true);
+      setMemberSessionError(null);
+      await apiRequest('/slot-engine/member/today-assignment/confirm', {
+        method: 'POST',
+        token: accessToken,
+      });
+      await loadMemberSession();
+    } catch (err: any) {
+      setMemberSessionError(err.message || 'Attendance confirmation failed.');
+      await loadMemberSession();
+    } finally {
+      setConfirmingAttendance(false);
+    }
+  };
+
+  const renderMemberSessionCard = () => {
+    if (user?.userType !== 'MEMBER') return null;
+
+    const booking = memberSession?.booking;
+    const windowStart = memberSession?.window?.startTime ? new Date(memberSession.window.startTime) : null;
+    const poolName = memberSession?.assignment?.resourcePool?.name;
+
+    return (
+      <section className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-4" id="member-session-card">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wider text-[var(--brand-primary)] font-bold">Member Attendance</p>
+            <h3 className="text-xl font-extrabold font-outfit text-white">Today&apos;s Member Session</h3>
+          </div>
+          <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
+            <Clock className="h-5 w-5" />
+          </div>
+        </div>
+
+        {memberSessionLoading ? (
+          <div className="flex items-center gap-2 text-sm text-gray-300"><RefreshCw className="h-4 w-4 animate-spin" />Loading today&apos;s session</div>
+        ) : null}
+
+        {memberSessionError ? (
+          <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+            <AlertTriangle className="h-4 w-4" />{memberSessionError}
+          </div>
+        ) : null}
+
+        {memberSession?.state === 'HAS_SESSION' ? (
+          <div className="space-y-4">
+            <div className="grid gap-2 text-sm text-gray-300">
+              <div className="flex justify-between gap-4"><span>Slot</span><span className="text-white font-semibold">{poolName}</span></div>
+              <div className="flex justify-between gap-4"><span>Time</span><span className="text-white font-semibold">{windowStart ? windowStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : memberSession.assignment?.startTime}</span></div>
+              {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="text-white font-semibold">{new Date(memberSession.cutoffTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
+            </div>
+            {booking?.memberAttendanceConfirmedAt ? (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+                <CheckCircle className="h-4 w-4" />Attendance confirmed
+              </div>
+            ) : booking?.status === 'RELEASED_NO_SHOW' ? (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-200">
+                <AlertTriangle className="h-4 w-4" />Confirmation cutoff passed
+              </div>
+            ) : (
+              <button
+                className="w-full rounded-2xl bg-[var(--brand-primary)] px-5 py-3 font-bold text-white disabled:opacity-60"
+                disabled={!memberSession.canConfirm || confirmingAttendance}
+                onClick={handleConfirmAttendance}
+                id="confirm-member-attendance-btn"
+              >
+                {confirmingAttendance ? 'Confirming...' : 'I am coming'}
+              </button>
+            )}
+          </div>
+        ) : null}
+
+        {memberSession?.state === 'NO_SESSION_TODAY' ? (
+          <p className="text-sm text-gray-300">No recurring member session is scheduled for you today.</p>
+        ) : null}
+        {memberSession?.state === 'NO_ACTIVE_ASSIGNMENT' ? (
+          <p className="text-sm text-gray-300">No active recurring member assignment is linked to this account.</p>
+        ) : null}
+        {memberSession?.state === 'SUBSCRIPTION_INACTIVE' ? (
+          <p className="text-sm text-amber-200">Your recurring slot is paused because the subscription is not active.</p>
+        ) : null}
+        {memberSession?.state === 'WINDOW_NOT_FOUND' ? (
+          <p className="text-sm text-amber-200">Today&apos;s recurring slot has not been opened on the court schedule yet.</p>
+        ) : null}
+      </section>
+    );
   };
 
   return (
@@ -159,6 +273,8 @@ function MainDashboard() {
           </div>
         </div>
       </div>
+
+      {renderMemberSessionCard()}
 
       {/* Dashboard Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

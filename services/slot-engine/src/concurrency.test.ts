@@ -33,6 +33,7 @@ async function waitForServer(url: string, retries = 15): Promise<boolean> {
 async function cleanDatabase() {
   await db.booking.deleteMany();
   await db.memberGroupAssignment.deleteMany();
+  await db.subscription.deleteMany();
   await db.availabilityWindow.deleteMany();
   await db.resource.deleteMany();
   await db.blockedWindow.deleteMany();
@@ -522,8 +523,8 @@ async function runTests() {
   // - A guest booking (isMemberBooking = false, status = CONFIRMED) starting at the same time
   //   must NOT be auto-released (guests paid and should not lose their slot).
 
-  // Create a pool and window starting 15 minutes from now
-  const windowStartT6 = nextAlignedHour(1);
+  // Create a pool and window starting 15 minutes from now.
+  const windowStartT6 = new Date(Date.now() + 15 * 60 * 1000);
   const windowEndT6 = new Date(windowStartT6.getTime() + 1 * 60 * 60 * 1000);
 
   const windowT6 = await db.availabilityWindow.create({
@@ -547,6 +548,22 @@ async function runTests() {
       isMemberBooking: true,
       heldUntil: new Date(),
       idempotencyKey: 'member-booking-t6',
+    },
+  });
+
+  // Create attendance-confirmed member booking; the sweep must not undo this.
+  const attendanceConfirmedMember = await db.booking.create({
+    data: {
+      tenantId,
+      branchId,
+      resourcePoolId: pooledPool.id,
+      windowId: windowT6.id,
+      userId: 'member-attendance-confirmed-t6',
+      status: BookingStatus.CONFIRMED,
+      isMemberBooking: true,
+      memberAttendanceConfirmedAt: new Date(),
+      heldUntil: new Date(),
+      idempotencyKey: 'member-booking-confirmed-t6',
     },
   });
 
@@ -574,6 +591,7 @@ async function runTests() {
 
   // Retrieve updated bookings from DB
   const updatedMember = await db.booking.findUnique({ where: { id: memberBooking.id } });
+  const updatedAttendanceConfirmedMember = await db.booking.findUnique({ where: { id: attendanceConfirmedMember.id } });
   const updatedGuest = await db.booking.findUnique({ where: { id: guestBooking.id } });
 
   if (updatedMember?.status !== BookingStatus.RELEASED_NO_SHOW) {
@@ -584,7 +602,276 @@ async function runTests() {
     throw new Error(`Test 6 failed: Expected guest booking to remain CONFIRMED, got ${updatedGuest?.status}`);
   }
 
+  if (updatedAttendanceConfirmedMember?.status !== BookingStatus.CONFIRMED) {
+    throw new Error(`Test 6 failed: Expected attendance-confirmed member booking to remain CONFIRMED, got ${updatedAttendanceConfirmedMember?.status}`);
+  }
+
   console.log('Test 6 passed successfully!');
+
+  // ==========================================
+  // TEST 7: Member self-confirm attendance uses JWT identity and one atomic booking path
+  // ==========================================
+  console.log('\nTest 7: Member self-confirm attendance states, trust boundary, and concurrency...');
+
+  const memberTenant = tenantId;
+  const memberPool = await db.resourcePool.create({
+    data: {
+      tenantId: memberTenant,
+      branchId,
+      name: 'Member Self Confirm Pool',
+      allocationMode: 'POOLED',
+      capacity: 8,
+      minOccupancy: 2,
+      minBookingDurationMinutes: 60,
+      pricingMode: 'FLAT',
+      defaultRate: 0,
+    },
+  });
+  await db.bookingRule.create({
+    data: {
+      resourcePoolId: memberPool.id,
+      gracePeriodMinutes: 30,
+      guestAccessCutoffMinutes: 120,
+      cancellationPolicyJson: { type: 'tiered', tiers: [] },
+    },
+  });
+
+  const futureWindowStart = nextAlignedHour(4);
+  const futureWindowEnd = new Date(futureWindowStart.getTime() + 60 * 60 * 1000);
+  const assignmentStartTime = futureWindowStart.toISOString().slice(11, 16);
+  const todayIsoWeekday = String(new Date().getDay() === 0 ? 7 : new Date().getDay());
+  const notTodayIsoWeekday = todayIsoWeekday === '1' ? '2' : '1';
+
+  const selfConfirmWindow = await db.availabilityWindow.create({
+    data: {
+      resourcePoolId: memberPool.id,
+      startTime: futureWindowStart,
+      endTime: futureWindowEnd,
+      capacity: 8,
+    },
+  });
+
+  const memberSelfUserId = 'member-self-confirm-001';
+  const otherMemberUserId = 'member-self-confirm-other';
+  await db.subscription.create({
+    data: {
+      userId: memberSelfUserId,
+      tenantId: memberTenant,
+      mandateId: 'mandate-member-self-confirm-001',
+      amount: 100000,
+      frequency: 'monthly',
+      status: 'active',
+    },
+  });
+  await db.memberGroupAssignment.create({
+    data: {
+      userId: memberSelfUserId,
+      resourcePoolId: memberPool.id,
+      daysOfWeek: todayIsoWeekday,
+      startTime: assignmentStartTime,
+      status: 'ACTIVE',
+    },
+  });
+  await db.memberGroupAssignment.create({
+    data: {
+      userId: otherMemberUserId,
+      resourcePoolId: memberPool.id,
+      daysOfWeek: notTodayIsoWeekday,
+      startTime: assignmentStartTime,
+      status: 'SUSPENDED',
+    },
+  });
+
+  const memberToken = signJwt({ userId: memberSelfUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
+  const guestToken = signJwt({ userId: 'guest-self-confirm-001', tenantId: memberTenant, userType: 'GUEST', roles: [] });
+  const memberHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${memberToken}` };
+
+  const todayRes = await fetch(`${baseUrl}/member/today-assignment`, { headers: memberHeaders });
+  const todayBody = (await todayRes.json() as any).data;
+  console.log('MEMBER_CONFIRM_EVIDENCE today_success', JSON.stringify({ status: todayRes.status, body: todayBody }));
+  if (todayRes.status !== 200 || todayBody.state !== 'HAS_SESSION' || !todayBody.canConfirm) {
+    throw new Error(`Test 7 failed: Expected HAS_SESSION/canConfirm, got ${todayRes.status} ${JSON.stringify(todayBody)}`);
+  }
+
+  const guestConfirmRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${guestToken}` },
+    body: JSON.stringify({}),
+  });
+  console.log('MEMBER_CONFIRM_EVIDENCE non_member_rejection', JSON.stringify({ status: guestConfirmRes.status, body: await guestConfirmRes.json() }));
+  if (guestConfirmRes.status !== 403) {
+    throw new Error(`Test 7 failed: Expected guest confirm rejection 403, got ${guestConfirmRes.status}`);
+  }
+
+  const confirmRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
+    method: 'POST',
+    headers: memberHeaders,
+    body: JSON.stringify({ userId: otherMemberUserId }),
+  });
+  const confirmBody = (await confirmRes.json() as any).data;
+  console.log('MEMBER_CONFIRM_EVIDENCE authorized_success_spoof_ignored', JSON.stringify({ status: confirmRes.status, body: confirmBody }));
+  if (confirmRes.status !== 201 || confirmBody.userId !== memberSelfUserId || confirmBody.userId === otherMemberUserId || !confirmBody.memberAttendanceConfirmedAt) {
+    throw new Error('Test 7 failed: Confirm did not derive identity from JWT or did not stamp attendance confirmation.');
+  }
+  const confirmedCount = await db.booking.count({
+    where: { userId: memberSelfUserId, windowId: selfConfirmWindow.id, status: { not: BookingStatus.CANCELLED } },
+  });
+  if (confirmedCount !== 1) throw new Error(`Test 7 failed: Expected one confirmed member booking, got ${confirmedCount}`);
+
+  const noSessionUserId = 'member-self-confirm-no-session';
+  await db.subscription.create({
+    data: {
+      userId: noSessionUserId,
+      tenantId: memberTenant,
+      mandateId: 'mandate-member-no-session',
+      amount: 100000,
+      frequency: 'monthly',
+      status: 'active',
+    },
+  });
+  await db.memberGroupAssignment.create({
+    data: {
+      userId: noSessionUserId,
+      resourcePoolId: memberPool.id,
+      daysOfWeek: notTodayIsoWeekday,
+      startTime: assignmentStartTime,
+      status: 'ACTIVE',
+    },
+  });
+  const noSessionToken = signJwt({ userId: noSessionUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
+  const noSessionRes = await fetch(`${baseUrl}/member/today-assignment`, {
+    headers: { Authorization: `Bearer ${noSessionToken}` },
+  });
+  console.log('MEMBER_CONFIRM_EVIDENCE no_session_today', JSON.stringify({ status: noSessionRes.status, body: await noSessionRes.json() }));
+
+  const inactiveUserId = 'member-self-confirm-inactive';
+  await db.memberGroupAssignment.create({
+    data: {
+      userId: inactiveUserId,
+      resourcePoolId: memberPool.id,
+      daysOfWeek: todayIsoWeekday,
+      startTime: assignmentStartTime,
+      status: 'ACTIVE',
+    },
+  });
+  await db.subscription.create({
+    data: {
+      userId: inactiveUserId,
+      tenantId: memberTenant,
+      mandateId: 'mandate-member-inactive',
+      amount: 100000,
+      frequency: 'monthly',
+      status: 'suspended',
+    },
+  });
+  const inactiveToken = signJwt({ userId: inactiveUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
+  const inactiveRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${inactiveToken}` },
+  });
+  console.log('MEMBER_CONFIRM_EVIDENCE subscription_inactive', JSON.stringify({ status: inactiveRes.status, body: await inactiveRes.json() }));
+  if (inactiveRes.status !== 409) throw new Error(`Test 7 failed: Expected inactive subscription 409, got ${inactiveRes.status}`);
+
+  const cutoffUserId = 'member-self-confirm-cutoff';
+  const soonWindowStart = nextAlignedHour(1);
+  const soonWindowEnd = new Date(soonWindowStart.getTime() + 60 * 60 * 1000);
+  const cutoffPool = await db.resourcePool.create({
+    data: {
+      tenantId: memberTenant,
+      branchId,
+      name: 'Member Cutoff Pool',
+      allocationMode: 'POOLED',
+      capacity: 8,
+      minOccupancy: 2,
+      minBookingDurationMinutes: 60,
+      pricingMode: 'FLAT',
+      defaultRate: 0,
+    },
+  });
+  await db.bookingRule.create({
+    data: {
+      resourcePoolId: cutoffPool.id,
+      gracePeriodMinutes: 120,
+      guestAccessCutoffMinutes: 120,
+      cancellationPolicyJson: { type: 'tiered', tiers: [] },
+    },
+  });
+  await db.availabilityWindow.create({
+    data: {
+      resourcePoolId: cutoffPool.id,
+      startTime: soonWindowStart,
+      endTime: soonWindowEnd,
+      capacity: 8,
+    },
+  });
+  await db.subscription.create({
+    data: {
+      userId: cutoffUserId,
+      tenantId: memberTenant,
+      mandateId: 'mandate-member-cutoff',
+      amount: 100000,
+      frequency: 'monthly',
+      status: 'active',
+    },
+  });
+  await db.memberGroupAssignment.create({
+    data: {
+      userId: cutoffUserId,
+      resourcePoolId: cutoffPool.id,
+      daysOfWeek: todayIsoWeekday,
+      startTime: soonWindowStart.toISOString().slice(11, 16),
+      status: 'ACTIVE',
+    },
+  });
+  const cutoffToken = signJwt({ userId: cutoffUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
+  const cutoffRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cutoffToken}` },
+  });
+  console.log('MEMBER_CONFIRM_EVIDENCE cutoff_passed', JSON.stringify({ status: cutoffRes.status, body: await cutoffRes.json() }));
+  if (cutoffRes.status !== 409) throw new Error(`Test 7 failed: Expected cutoff passed 409, got ${cutoffRes.status}`);
+
+  const raceUserId = 'member-self-confirm-race';
+  await db.subscription.create({
+    data: {
+      userId: raceUserId,
+      tenantId: memberTenant,
+      mandateId: 'mandate-member-race',
+      amount: 100000,
+      frequency: 'monthly',
+      status: 'active',
+    },
+  });
+  await db.memberGroupAssignment.create({
+    data: {
+      userId: raceUserId,
+      resourcePoolId: memberPool.id,
+      daysOfWeek: todayIsoWeekday,
+      startTime: assignmentStartTime,
+      status: 'ACTIVE',
+    },
+  });
+  const raceToken = signJwt({ userId: raceUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
+  const raceHeaders = { Authorization: `Bearer ${raceToken}` };
+  const [memberRaceRes1, memberRaceRes2] = await Promise.all([
+    fetch(`${baseUrl}/member/today-assignment/confirm`, { method: 'POST', headers: raceHeaders }),
+    fetch(`${baseUrl}/member/today-assignment/confirm`, { method: 'POST', headers: raceHeaders }),
+  ]);
+  const memberRaceBody1 = (await memberRaceRes1.json() as any).data;
+  const memberRaceBody2 = (await memberRaceRes2.json() as any).data;
+  const raceCount = await db.booking.count({
+    where: { userId: raceUserId, windowId: selfConfirmWindow.id, status: { not: BookingStatus.CANCELLED } },
+  });
+  console.log('MEMBER_CONFIRM_EVIDENCE concurrent_double_confirm', JSON.stringify({
+    statuses: [memberRaceRes1.status, memberRaceRes2.status],
+    bookingIds: [memberRaceBody1?.id, memberRaceBody2?.id],
+    raceCount,
+  }));
+  if (raceCount !== 1 || memberRaceBody1?.id !== memberRaceBody2?.id) {
+    throw new Error('Test 7 failed: Concurrent confirm did not resolve to one booking.');
+  }
+
+  console.log('Test 7 passed successfully!');
 
   console.log('\nAll Phase 1 Concurrency & Business Logic Tests Passed Successfully!');
 }

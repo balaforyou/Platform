@@ -224,6 +224,9 @@ model Booking {
   heldUntil      DateTime
   idempotencyKey String?        @unique // unique check for API requests
   isMemberBooking Boolean       @default(false)
+  // WHY: Member booking existence and attendance confirmation are distinct states.
+  // The grace sweep releases only member bookings where this is still null.
+  memberAttendanceConfirmedAt DateTime?
   price          Decimal?       @db.Decimal(10, 2)
   refundAmount   Decimal?       @db.Decimal(10, 2)
   createdAt      DateTime       @default(now())

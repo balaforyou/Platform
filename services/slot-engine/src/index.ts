@@ -218,6 +218,150 @@ const resolvePrice = (
   return activeRate;
 };
 
+type TodayAssignmentResolution =
+  | { state: 'NO_ACTIVE_ASSIGNMENT'; weekday: string }
+  | { state: 'NO_SESSION_TODAY'; weekday: string; assignment: any }
+  | { state: 'WINDOW_NOT_FOUND'; weekday: string; assignment: any }
+  | { state: 'HAS_SESSION'; weekday: string; assignment: any; window: any; existingBooking: any | null; rule: any | null; cutoffTime: Date };
+
+function todayDateString(now: Date): string {
+  return now.toISOString().slice(0, 10);
+}
+
+function isoWeekday(now: Date): string {
+  return String(now.getDay() === 0 ? 7 : now.getDay());
+}
+
+function memberBookingIdempotencyKey(userId: string, windowId: string, now: Date): string {
+  return `member-booking-${userId}-${windowId}-${todayDateString(now)}`;
+}
+
+async function getActiveSubscription(userId: string, tenantId: string) {
+  return prisma.subscription.findFirst({
+    where: {
+      userId,
+      tenantId,
+      status: 'active',
+    },
+  });
+}
+
+async function resolveTodayMemberAssignment(userId: string, tenantId: string, now: Date): Promise<TodayAssignmentResolution> {
+  const weekday = isoWeekday(now);
+  const assignment = await prisma.memberGroupAssignment.findFirst({
+    where: {
+      userId,
+      status: 'ACTIVE',
+      resourcePool: { tenantId },
+    },
+    include: {
+      resourcePool: { include: { bookingRules: true } },
+    },
+  });
+
+  if (!assignment) return { state: 'NO_ACTIVE_ASSIGNMENT', weekday };
+
+  const days = assignment.daysOfWeek.split(',').map((d: string) => d.trim());
+  if (!days.includes(weekday)) {
+    return { state: 'NO_SESSION_TODAY', weekday, assignment };
+  }
+
+  const windowStart = new Date(`${todayDateString(now)}T${assignment.startTime}:00.000Z`);
+  const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
+  const matchingWindow = await prisma.availabilityWindow.findFirst({
+    where: {
+      resourcePoolId: assignment.resourcePoolId,
+      startTime: { gte: windowStart, lte: windowEnd },
+    },
+  });
+  if (!matchingWindow) return { state: 'WINDOW_NOT_FOUND', weekday, assignment };
+
+  const existingBooking = await prisma.booking.findFirst({
+    where: {
+      userId: assignment.userId,
+      windowId: matchingWindow.id,
+      status: { not: BookingStatus.CANCELLED },
+    },
+  });
+  const rule = assignment.resourcePool.bookingRules[0] ?? null;
+  const gracePeriodMinutes = rule ? rule.gracePeriodMinutes : 30;
+  const cutoffTime = new Date(matchingWindow.startTime.getTime() - gracePeriodMinutes * 60 * 1000);
+
+  return {
+    state: 'HAS_SESSION',
+    weekday,
+    assignment,
+    window: matchingWindow,
+    existingBooking,
+    rule,
+    cutoffTime,
+  };
+}
+
+async function ensureTodayMemberBooking({
+  assignment,
+  matchingWindow,
+  now,
+  status,
+  attendanceConfirmedAt,
+}: {
+  assignment: any;
+  matchingWindow: any;
+  now: Date;
+  status: BookingStatus;
+  attendanceConfirmedAt: Date | null;
+}) {
+  const key = memberBookingIdempotencyKey(assignment.userId, matchingWindow.id, now);
+
+  try {
+    return await prisma.$transaction(async (tx: any) => {
+      // WHY: Member confirm and sweep are competing triggers for the same logical
+      // daily booking. Locking the window and double-checking inside the transaction
+      // preserves the Phase 9 sweep concurrency contract for both callers.
+      await tx.$queryRaw`
+        SELECT id FROM "AvailabilityWindow" WHERE id = ${matchingWindow.id} FOR UPDATE
+      `;
+
+      const existing = await tx.booking.findFirst({
+        where: {
+          userId: assignment.userId,
+          windowId: matchingWindow.id,
+          status: { not: BookingStatus.CANCELLED },
+        },
+      });
+      if (existing) return { booking: existing, created: false };
+
+      const pool = assignment.resourcePool;
+      const resolvedPrice = resolvePrice(pool, matchingWindow, 1);
+      const booking = await tx.booking.create({
+        data: {
+          tenantId: pool.tenantId,
+          branchId: pool.branchId,
+          resourcePoolId: pool.id,
+          resourceId: null,
+          windowId: matchingWindow.id,
+          userId: assignment.userId,
+          status,
+          heldAt: now,
+          heldUntil: now,
+          idempotencyKey: key,
+          isMemberBooking: true,
+          memberAttendanceConfirmedAt: attendanceConfirmedAt,
+          refundAmount: null,
+          price: resolvedPrice,
+        },
+      });
+      return { booking, created: true };
+    });
+  } catch (err: any) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const existing = await prisma.booking.findUnique({ where: { idempotencyKey: key } });
+      if (existing) return { booking: existing, created: false };
+    }
+    throw err;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Health
 // ---------------------------------------------------------------------------
@@ -1315,6 +1459,150 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
 });
 
 // ---------------------------------------------------------------------------
+// Member self-confirm attendance
+// ---------------------------------------------------------------------------
+
+async function requireMemberJwt(request: any, reply: any) {
+  try {
+    const decodedUser: any = await request.jwtVerify();
+    const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
+    const tenantId = decodedUser.tenantId;
+    if (!userId || !tenantId) {
+      reply.status(401);
+      const err = new Error('Unauthorized');
+      (err as any).statusCode = 401;
+      (err as any).code = 'UNAUTHORIZED';
+      throw err;
+    }
+    if (decodedUser.userType !== 'MEMBER') {
+      reply.status(403);
+      const err = new Error('Member access required');
+      (err as any).statusCode = 403;
+      (err as any).code = 'MEMBER_REQUIRED';
+      throw err;
+    }
+    return { userId, tenantId };
+  } catch (err: any) {
+    if (!err.statusCode && !err.code) {
+      reply.status(401);
+      const authErr = new Error('Unauthorized');
+      (authErr as any).code = 'UNAUTHORIZED';
+      throw authErr;
+    }
+    throw err;
+  }
+}
+
+function shapeTodayAssignment(resolution: TodayAssignmentResolution, subscriptionStatus?: string) {
+  if (resolution.state !== 'HAS_SESSION') return resolution;
+  const booking = resolution.existingBooking;
+  return {
+    state: subscriptionStatus && subscriptionStatus !== 'active' ? 'SUBSCRIPTION_INACTIVE' : 'HAS_SESSION',
+    weekday: resolution.weekday,
+    assignment: resolution.assignment,
+    window: resolution.window,
+    booking,
+    cutoffTime: resolution.cutoffTime,
+    canConfirm: !booking && !subscriptionStatus && new Date() < resolution.cutoffTime,
+    reason: booking ? booking.status : undefined,
+  };
+}
+
+// GET /member/today-assignment — member dashboard state for today's recurring slot.
+// WHY: The dashboard needs deliberate states for no-session, inactive subscription,
+// and missing-window cases instead of silently hiding the member attendance card.
+server.get('/member/today-assignment', async (request, reply) => {
+  const { userId, tenantId } = await requireMemberJwt(request, reply);
+  const now = new Date();
+  const resolution = await resolveTodayMemberAssignment(userId, tenantId, now);
+  if (resolution.state !== 'HAS_SESSION') return resolution;
+
+  const activeSubscription = await getActiveSubscription(userId, tenantId);
+  if (!activeSubscription) {
+    return shapeTodayAssignment(resolution, 'inactive');
+  }
+
+  return {
+    ...shapeTodayAssignment(resolution),
+    subscriptionStatus: activeSubscription.status,
+  };
+});
+
+// POST /member/today-assignment/confirm — creates today's member booking via the
+// same atomic lazy-generation helper used by the grace-period sweep.
+server.post('/member/today-assignment/confirm', async (request, reply) => {
+  const { userId, tenantId } = await requireMemberJwt(request, reply);
+  const now = new Date();
+  const resolution = await resolveTodayMemberAssignment(userId, tenantId, now);
+
+  if (resolution.state === 'NO_ACTIVE_ASSIGNMENT') {
+    reply.status(404);
+    const err = new Error('No active member assignment');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NO_ACTIVE_ASSIGNMENT';
+    throw err;
+  }
+  if (resolution.state === 'NO_SESSION_TODAY') {
+    reply.status(409);
+    const err = new Error('No recurring session today');
+    (err as any).statusCode = 409;
+    (err as any).code = 'NO_SESSION_TODAY';
+    throw err;
+  }
+  if (resolution.state === 'WINDOW_NOT_FOUND') {
+    reply.status(404);
+    const err = new Error('Today recurring slot window was not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'WINDOW_NOT_FOUND';
+    throw err;
+  }
+
+  const activeSubscription = await getActiveSubscription(userId, tenantId);
+  if (!activeSubscription) {
+    reply.status(409);
+    const err = new Error('Active subscription is required to confirm attendance');
+    (err as any).statusCode = 409;
+    (err as any).code = 'SUBSCRIPTION_INACTIVE';
+    throw err;
+  }
+
+  if (now >= resolution.cutoffTime) {
+    reply.status(409);
+    const err = new Error('Confirmation cutoff has passed');
+    (err as any).statusCode = 409;
+    (err as any).code = 'CONFIRMATION_CUTOFF_PASSED';
+    throw err;
+  }
+
+  if (resolution.existingBooking) {
+    if (resolution.existingBooking.status === BookingStatus.RELEASED_NO_SHOW) {
+      reply.status(409);
+      const err = new Error('Confirmation cutoff has passed');
+      (err as any).statusCode = 409;
+      (err as any).code = 'CONFIRMATION_CUTOFF_PASSED';
+      throw err;
+    }
+    if (!resolution.existingBooking.memberAttendanceConfirmedAt) {
+      return prisma.booking.update({
+        where: { id: resolution.existingBooking.id },
+        data: { memberAttendanceConfirmedAt: now },
+      });
+    }
+    return resolution.existingBooking;
+  }
+
+  const ensured = await ensureTodayMemberBooking({
+    assignment: resolution.assignment,
+    matchingWindow: resolution.window,
+    now,
+    status: BookingStatus.CONFIRMED,
+    attendanceConfirmedAt: now,
+  });
+  reply.status(ensured.created ? 201 : 200);
+  return ensured.booking;
+});
+
+// ---------------------------------------------------------------------------
 // Member Group Assignments
 // ---------------------------------------------------------------------------
 
@@ -1468,6 +1756,7 @@ server.post('/bookings/sweep', async () => {
     where: {
       isMemberBooking: true,
       status: BookingStatus.CONFIRMED,
+      memberAttendanceConfirmedAt: null,
       window: { startTime: { gte: now } },
     },
     include: {
@@ -1542,47 +1831,20 @@ server.post('/bookings/sweep', async () => {
     const cutoffTime = new Date(matchingWindow.startTime.getTime() - cutoffMinutes * 60 * 1000);
     if (now < cutoffTime) continue;
 
-    // Create the lazy booking inside a transaction with FOR UPDATE to prevent concurrent sweeps
-    // creating duplicate bookings for the same member + window.
+    // Create through the same atomic helper used by member self-confirm.
+    // WHY: Sweep and confirm are competing triggers for one logical daily member booking,
+    // so the lock/double-check/create path must not drift between callers.
     try {
-      await prisma.$transaction(async (tx: any) => {
-        // Lock the window row to prevent concurrent sweep runs.
-        await tx.$queryRaw`
-          SELECT id FROM "AvailabilityWindow" WHERE id = ${matchingWindow.id} FOR UPDATE
-        `;
-
-        // Double-check inside transaction (race-safe).
-        const doubleCheck = await tx.booking.findFirst({
-          where: {
-            userId: assignment.userId,
-            windowId: matchingWindow.id,
-            status: { not: BookingStatus.CANCELLED },
-          },
-        });
-        if (doubleCheck) return;
-
-        const pool = assignment.resourcePool;
-        const resolvedPrice = resolvePrice(pool, matchingWindow, 1);
-
-        await tx.booking.create({
-          data: {
-            tenantId: pool.tenantId,
-            branchId: pool.branchId,
-            resourcePoolId: pool.id,
-            resourceId: null,
-            windowId: matchingWindow.id,
-            userId: assignment.userId,
-            status: BookingStatus.RELEASED_NO_SHOW,
-            heldAt: now,
-            heldUntil: now, // Released immediately — no hold window for sweep-generated bookings
-            idempotencyKey: `sweep-${assignment.userId}-${matchingWindow.id}-${todayDateStr}`,
-            isMemberBooking: true,
-            refundAmount: null,
-            price: resolvedPrice,
-          },
-        });
-        lazyGeneratedCount++;
+      const ensured = await ensureTodayMemberBooking({
+        assignment,
+        matchingWindow,
+        now,
+        status: BookingStatus.RELEASED_NO_SHOW,
+        attendanceConfirmedAt: null,
       });
+      if (ensured.created) {
+        lazyGeneratedCount++;
+      }
     } catch (err: any) {
       // P2002 = concurrent sweep already created this booking — safe to skip.
       if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
