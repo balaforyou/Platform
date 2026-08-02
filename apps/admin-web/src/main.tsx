@@ -166,7 +166,7 @@ const weekdayOptions = [
   { value: '4', label: 'Thu' },
   { value: '5', label: 'Fri' },
   { value: '6', label: 'Sat' },
-  { value: '0', label: 'Sun' },
+  { value: '7', label: 'Sun' },
 ];
 
 function timeToMinutes(value?: string | null) {
