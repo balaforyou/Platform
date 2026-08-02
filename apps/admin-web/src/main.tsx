@@ -80,6 +80,7 @@ type MemberAssignment = {
   startTime: string;
   status: string;
   resourcePool?: ResourcePool;
+  member?: UserLookupResult | null;
 };
 
 type AdminBooking = {
@@ -189,6 +190,10 @@ function assignmentStartTimes(branch?: Branch, pool?: ResourcePool) {
     slots.push(minutesToTime(minute));
   }
   return slots;
+}
+
+function formatMemberContact(member?: UserLookupResult | null) {
+  return member?.phone || 'Phone not available';
 }
 
 function useAdminApi() {
@@ -735,7 +740,7 @@ function AssignmentsPage() {
         <div className="table-list">
           {(assignments.data || []).map((assignment) => (
             <div className="table-row" key={assignment.id}>
-              <div><strong>{assignment.userId}</strong><span>{assignment.resourcePool?.name || assignment.resourcePoolId} | {assignment.daysOfWeek} {assignment.startTime}</span></div>
+              <div><strong>{formatMemberContact(assignment.member)}</strong><span>{assignment.resourcePool?.name || assignment.resourcePoolId} | {assignment.daysOfWeek} {assignment.startTime}</span></div>
               <button className="secondary-btn" onClick={() => update.mutate({ id: assignment.id, status: assignment.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' })}>{assignment.status}</button>
             </div>
           ))}

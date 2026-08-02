@@ -1692,7 +1692,24 @@ server.get('/member-group-assignments', async (request, reply) => {
     include: { resourcePool: true },
     orderBy: { createdAt: 'desc' },
   });
-  return assignments;
+
+  const userIds = [...new Set(assignments.map((assignment: any) => assignment.userId))];
+  const tenantIds = [...new Set(assignments.map((assignment: any) => assignment.resourcePool.tenantId))];
+  const users = userIds.length
+    ? await prisma.user.findMany({
+      where: {
+        id: { in: userIds },
+        tenantId: { in: tenantIds },
+      },
+      select: { id: true, tenantId: true, phone: true, userType: true },
+    })
+    : [];
+  const usersByTenantAndId = new Map(users.map((user: any) => [`${user.tenantId}:${user.id}`, user]));
+
+  return assignments.map((assignment: any) => ({
+    ...assignment,
+    member: usersByTenantAndId.get(`${assignment.resourcePool.tenantId}:${assignment.userId}`) || null,
+  }));
 });
 
 // Update assignment status (ACTIVE ↔ SUSPENDED). Internal or owner only.

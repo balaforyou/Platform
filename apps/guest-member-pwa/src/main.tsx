@@ -45,6 +45,10 @@ const queryClient = new QueryClient({
   },
 });
 
+function formatUserContact(user: any) {
+  return user?.phone || 'Phone not available';
+}
+
 /**
  * Shared Layout wrapper containing navbar, footer, and PwaInstallPrompt.
  */
@@ -295,15 +299,11 @@ function MainDashboard() {
           <h3 className="text-lg font-bold font-outfit text-white">Profile Details</h3>
           <div className="text-xs text-gray-400 space-y-2 font-mono">
             <div className="flex justify-between">
-              <span>User:</span>
-              <span className="text-gray-200">{user?.userId || user?.id}</span>
+              <span>Signed in as:</span>
+              <span className="text-gray-200">{formatUserContact(user)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Phone:</span>
-              <span className="text-gray-200">{user?.phone || 'Not Verified'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Role Scope:</span>
+              <span>Account type:</span>
               <span className="text-[var(--brand-primary)]">{user?.roles?.[0] || 'member'}</span>
             </div>
           </div>
