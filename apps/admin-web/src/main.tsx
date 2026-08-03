@@ -169,6 +169,16 @@ const weekdayOptions = [
   { value: '7', label: 'Sun' },
 ];
 
+function formatDaysOfWeek(daysOfWeek: string) {
+  return daysOfWeek
+    .split(',')
+    .map((day) => {
+      const trimmed = day.trim();
+      return weekdayOptions.find((option) => option.value === trimmed)?.label || trimmed;
+    })
+    .join(', ');
+}
+
 function timeToMinutes(value?: string | null) {
   const [hours = '0', minutes = '0'] = (value || '00:00').split(':');
   return Number(hours) * 60 + Number(minutes);
@@ -740,7 +750,7 @@ function AssignmentsPage() {
         <div className="table-list">
           {(assignments.data || []).map((assignment) => (
             <div className="table-row" key={assignment.id}>
-              <div><strong>{formatMemberContact(assignment.member)}</strong><span>{assignment.resourcePool?.name || assignment.resourcePoolId} | {assignment.daysOfWeek} {assignment.startTime}</span></div>
+              <div><strong>{formatMemberContact(assignment.member)}</strong><span>{assignment.resourcePool?.name || assignment.resourcePoolId} | {formatDaysOfWeek(assignment.daysOfWeek)} {assignment.startTime}</span></div>
               <button className="secondary-btn" onClick={() => update.mutate({ id: assignment.id, status: assignment.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' })}>{assignment.status}</button>
             </div>
           ))}
