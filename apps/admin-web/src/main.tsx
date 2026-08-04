@@ -109,6 +109,11 @@ type OccupancySummary = {
   occupancyPercentage: number;
 };
 
+type BranchGuestOccupancy = OccupancySummary & {
+  resourcePoolId: string;
+  resourcePoolName: string;
+};
+
 type ApiError = Error & { code?: string; statusCode?: number };
 
 const queryClient = new QueryClient({
@@ -518,13 +523,66 @@ function BranchSelector({ value, onChange }: { value: string; onChange: (value: 
 }
 
 function Overview() {
+  const api = useAdminApi();
   const branches = useBranches();
+  const [branchId, setBranchId] = useState('');
+  const [date, setDate] = useState(todayIsoDate());
   const active = branches.data?.filter((branch) => branch.status === 'ACTIVE').length || 0;
+  const selectedBranch = branches.data?.find((branch) => branch.id === branchId);
+  const occupancy = useQuery({
+    queryKey: ['branch-guest-occupancy', branchId, date],
+    enabled: !!branchId,
+    queryFn: () => api.get<BranchGuestOccupancy[]>(`/slot-engine/branches/${branchId}/guest-occupancy?date=${date}`),
+  });
+
+  React.useEffect(() => {
+    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
+  }, [branchId, branches.data]);
+
   return (
-    <main className="page-grid">
-      <section className="metric-card"><span>Branches</span><strong>{branches.data?.length || 0}</strong></section>
-      <section className="metric-card"><span>Active</span><strong>{active}</strong></section>
-      <section className="metric-card"><span>Workflows</span><strong>5</strong></section>
+    <main className="overview-stack">
+      <section className="page-grid">
+        <div className="metric-card"><span>Branches</span><strong>{branches.data?.length || 0}</strong></div>
+        <div className="metric-card"><span>Active</span><strong>{active}</strong></div>
+        <div className="metric-card"><span>Workflows</span><strong>5</strong></div>
+      </section>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Guest Occupancy</h2>
+            <p className="muted">Confirmed guest slots by court for the selected branch and date.</p>
+          </div>
+          {occupancy.isFetching && <RefreshCw className="spin" size={18} />}
+        </div>
+        <div className="form-grid compact">
+          <label>Branch<select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+            <option value="">Select branch</option>
+            {(branches.data || []).map((branch) => <option value={branch.id} key={branch.id}>{branch.name}</option>)}
+          </select></label>
+          <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+        </div>
+        <MutationFeedback error={branches.error || occupancy.error} />
+        {!branchId && <p className="empty-state">Select a branch to view guest occupancy.</p>}
+        {branchId && occupancy.data?.length === 0 && (
+          <p className="empty-state">{selectedBranch?.name || 'This branch'} has no resource pools configured yet.</p>
+        )}
+        {!!occupancy.data?.length && (
+          <div className="occupancy-list">
+            {occupancy.data.map((pool) => (
+              <div className="occupancy-row" key={pool.resourcePoolId}>
+                <div>
+                  <strong>{pool.resourcePoolName}</strong>
+                  <span>{pool.confirmedSeats} of {pool.totalCapacity} guest slots confirmed</span>
+                </div>
+                <div className="occupancy-meter" aria-label={`${pool.occupancyPercentage}% occupied`}>
+                  <span style={{ width: `${Math.min(pool.occupancyPercentage, 100)}%` }} />
+                </div>
+                <strong className="occupancy-value">{pool.totalCapacity > 0 ? `${pool.occupancyPercentage}%` : 'No windows'}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }

@@ -193,6 +193,69 @@ const requirePoolScope = async (auth: AdminAuthContext, resourcePoolId: string, 
   return pool;
 };
 
+type GuestOccupancyRow = {
+  resourcePoolId: string;
+  resourcePoolName: string;
+  totalCapacity: number;
+  confirmedSeats: number;
+  occupancyPercentage: number;
+};
+
+function dayBounds(date?: string) {
+  // Preserve the existing occupancy endpoint's UTC-day semantics for this phase.
+  const day = date ? new Date(date) : new Date();
+  const startOfDay = new Date(day);
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const endOfDay = new Date(day);
+  endOfDay.setUTCHours(23, 59, 59, 999);
+  return { startOfDay, endOfDay };
+}
+
+async function computePoolGuestOccupancy(resourcePoolIds: string[], date?: string): Promise<GuestOccupancyRow[]> {
+  if (resourcePoolIds.length === 0) return [];
+
+  const pools = await prisma.resourcePool.findMany({
+    where: { id: { in: resourcePoolIds } },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+  const { startOfDay, endOfDay } = dayBounds(date);
+  const windows = await prisma.availabilityWindow.findMany({
+    where: {
+      resourcePoolId: { in: resourcePoolIds },
+      startTime: { gte: startOfDay, lte: endOfDay },
+    },
+    select: { id: true, resourcePoolId: true, capacity: true },
+  });
+
+  const windowIds = windows.map((window) => window.id);
+  const confirmedByWindow = windowIds.length > 0
+    ? await prisma.booking.groupBy({
+        by: ['windowId'],
+        where: {
+          windowId: { in: windowIds },
+          isMemberBooking: false,
+          status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
+        },
+        _count: { _all: true },
+      })
+    : [];
+  const confirmedLookup = new Map(confirmedByWindow.map((row) => [row.windowId, row._count._all]));
+
+  return pools.map((pool) => {
+    const poolWindows = windows.filter((window) => window.resourcePoolId === pool.id);
+    const totalCapacity = poolWindows.reduce((sum, window) => sum + window.capacity, 0);
+    const confirmedSeats = poolWindows.reduce((sum, window) => sum + (confirmedLookup.get(window.id) || 0), 0);
+    return {
+      resourcePoolId: pool.id,
+      resourcePoolName: pool.name,
+      totalCapacity,
+      confirmedSeats,
+      occupancyPercentage: totalCapacity > 0 ? Math.round((confirmedSeats / totalCapacity) * 100) : 0,
+    };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Price resolution helper
 // ---------------------------------------------------------------------------
@@ -589,34 +652,36 @@ server.get('/resource-pools/:id/occupancy', async (request, reply) => {
     throw new Error('Resource pool not found');
   }
 
-  // WHY: Default to today's windows when no date supplied.
-  const day = date ? new Date(date) : new Date();
-  const startOfDay = new Date(day);
-  startOfDay.setUTCHours(0, 0, 0, 0);
-  const endOfDay = new Date(day);
-  endOfDay.setUTCHours(23, 59, 59, 999);
+  const [occupancy] = await computePoolGuestOccupancy([pool.id], date);
+  return {
+    totalCapacity: occupancy?.totalCapacity ?? 0,
+    confirmedSeats: occupancy?.confirmedSeats ?? 0,
+    occupancyPercentage: occupancy?.occupancyPercentage ?? 0,
+  };
+});
 
-  const windows = await prisma.availabilityWindow.findMany({
-    where: {
-      resourcePoolId: id,
-      startTime: { gte: startOfDay, lte: endOfDay },
-    },
+// Admin overview occupancy for all guest-bookable pools in a branch.
+// WHY: This is operational branch data, so it uses branch-scoped admin auth instead
+// of the public single-pool aggregate endpoint above.
+server.get('/branches/:id/guest-occupancy', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  const { date } = request.query as any;
+
+  if (!isAuthorizedForBranch(auth, id)) {
+    reply.status(403);
+    const err = new Error('Forbidden: Not authorized for this branch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+
+  const pools = await prisma.resourcePool.findMany({
+    where: { branchId: id },
+    select: { id: true },
+    orderBy: { name: 'asc' },
   });
-
-  const windowIds = windows.map((w: any) => w.id);
-  const confirmedSeats = await prisma.booking.count({
-    where: {
-      windowId: { in: windowIds },
-      status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
-    },
-  });
-
-  const totalCapacity = pool.capacity;
-  const occupancyPercentage = totalCapacity > 0
-    ? Math.round((confirmedSeats / totalCapacity) * 100)
-    : 0;
-
-  return { totalCapacity, confirmedSeats, occupancyPercentage };
+  return computePoolGuestOccupancy(pools.map((pool) => pool.id), date);
 });
 
 // GET /branches/:id/resource-pools (public, no auth)
