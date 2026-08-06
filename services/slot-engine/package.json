@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
+    "test:availability-generation": "dotenv -e ../../.env -- tsx src/availabilityGeneration.phaseA.test.ts",
     "test:concurrency": "dotenv -e ../../.env -- node dist/concurrency.test.js"
   },
   "dependencies": {

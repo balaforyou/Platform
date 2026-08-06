@@ -26,6 +26,11 @@ enum BookingStatus {
   CANCELLED
 }
 
+enum AvailabilityOverrideType {
+  CLOSED
+  MODIFIED
+}
+
 enum BranchStatus {
   DRAFT
   ACTIVE
@@ -112,6 +117,9 @@ model ResourcePool {
   defaultRate               Decimal                 @default(100.00) @db.Decimal(10, 2)
   resources                 Resource[]
   availabilityWindows       AvailabilityWindow[]
+  availabilityPatterns      AvailabilityPattern[]
+  availabilityOverrides     AvailabilityOverride[]
+  generationLocks           GenerationLock[]
   bookingRules              BookingRule[]
   blockedWindows            BlockedWindow[]
   bookings                  Booking[]
@@ -141,6 +149,8 @@ model AvailabilityWindow {
   startTime      DateTime
   endTime        DateTime
   capacity       Int          @default(1)  // Capacity count for POOLED mode (always 1 for FIXED_INSTANCE)
+  generatedFromPatternId String?
+  generationDate DateTime?
   // Per-release pricing override; null means "use pool default".
   // WHY: Both fields are always set together (both-or-neither rule enforced at API layer).
   pricingMode    PricingMode?
@@ -150,6 +160,55 @@ model AvailabilityWindow {
   updatedAt      DateTime     @updatedAt
 
   @@index([startTime, endTime])
+}
+
+model AvailabilityPattern {
+  id                  String       @id @default(uuid())
+  resourcePoolId      String
+  resourcePool        ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  daysOfWeek          String
+  startTime           String
+  endTime             String
+  slotDurationMinutes Int
+  capacity            Int
+  pricingMode         PricingMode?
+  price               Decimal?     @db.Decimal(10, 2)
+  status              String       @default("ACTIVE")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([resourcePoolId, status])
+}
+
+model AvailabilityOverride {
+  id                  String                   @id @default(uuid())
+  resourcePoolId      String
+  resourcePool        ResourcePool             @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  date                DateTime
+  type                AvailabilityOverrideType
+  startTime           String?
+  endTime             String?
+  slotDurationMinutes Int?
+  capacity            Int?
+  pricingMode         PricingMode?
+  price               Decimal?                 @db.Decimal(10, 2)
+  reason              String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  @@unique([resourcePoolId, date])
+  @@index([resourcePoolId, date])
+}
+
+model GenerationLock {
+  id             String       @id @default(uuid())
+  resourcePoolId String
+  resourcePool   ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  date           DateTime
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([resourcePoolId, date])
 }
 
 model BookingRule {
