@@ -1,7 +1,8 @@
 import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
-import { PrismaClient, BookingStatus, AllocationMode, PricingMode, Prisma } from '@badminton/database';
+import { PrismaClient, BookingStatus, AllocationMode, PricingMode, Prisma, AvailabilityOverrideType } from '@badminton/database';
+import { ensureAvailabilityWindowsForDate } from './availabilityGeneration.js';
 
 const server = fastify({ logger: true });
 
@@ -229,6 +230,178 @@ function dayBounds(date?: string) {
   return { startOfDay, endOfDay };
 }
 
+function dateOnly(value: string | Date) {
+  const date = typeof value === 'string' ? new Date(`${value}T00:00:00.000Z`) : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const err = new Error('Invalid date');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_DATE';
+    throw err;
+  }
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
+}
+
+function dateOnlyString(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function datesInRange(fromDate: string, toDate: string, maxDays = 366) {
+  const start = dateOnly(fromDate);
+  const end = dateOnly(toDate);
+  if (end < start) {
+    const err = new Error('toDate must be on or after fromDate');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_DATE_RANGE';
+    throw err;
+  }
+  const dates: Date[] = [];
+  for (let cursor = start.getTime(); cursor <= end.getTime(); cursor += 24 * 60 * 60 * 1000) {
+    dates.push(new Date(cursor));
+    if (dates.length > maxDays) {
+      const err = new Error(`Date range cannot exceed ${maxDays} days`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'DATE_RANGE_TOO_LARGE';
+      throw err;
+    }
+  }
+  return dates;
+}
+
+function validateTimeString(value: unknown, fieldName: string) {
+  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
+    const err = new Error(`${fieldName} must be HH:mm`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_TIME';
+    throw err;
+  }
+}
+
+function validateWholeSlotRange(startTime: string, endTime: string, slotDurationMinutes: number) {
+  validateTimeString(startTime, 'startTime');
+  validateTimeString(endTime, 'endTime');
+  if (!Number.isInteger(slotDurationMinutes) || slotDurationMinutes <= 0 || 1440 % slotDurationMinutes !== 0) {
+    const err = new Error('slotDurationMinutes must be a positive slot increment that divides one day');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_DURATION';
+    throw err;
+  }
+  const [startHour, startMinute] = startTime.split(':').map(Number);
+  const [endHour, endMinute] = endTime.split(':').map(Number);
+  const start = startHour * 60 + startMinute;
+  const end = endHour * 60 + endMinute;
+  if (end <= start || (end - start) % slotDurationMinutes !== 0) {
+    const err = new Error('time range must contain whole slots');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_TIME_RANGE';
+    throw err;
+  }
+}
+
+function patternDataFromBody(body: any, reply: any, partial = false) {
+  const data: any = {};
+  const required = ['daysOfWeek', 'startTime', 'endTime', 'slotDurationMinutes', 'capacity'];
+  if (!partial) {
+    for (const field of required) {
+      if (body[field] === undefined) {
+        reply.status(400);
+        const err = new Error(`${field} is required`);
+        (err as any).statusCode = 400;
+        (err as any).code = 'BAD_REQUEST';
+        throw err;
+      }
+    }
+  }
+
+  if (body.daysOfWeek !== undefined) {
+    const days = String(body.daysOfWeek).split(',').map((day) => day.trim()).filter(Boolean);
+    if (days.length === 0 || days.some((day) => !/^[1-7]$/.test(day))) {
+      reply.status(400);
+      const err = new Error('daysOfWeek must contain ISO weekdays 1-7');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_DAYS_OF_WEEK';
+      throw err;
+    }
+    data.daysOfWeek = [...new Set(days)].join(',');
+  }
+
+  const nextStartTime = body.startTime;
+  const nextEndTime = body.endTime;
+  const nextDuration = body.slotDurationMinutes !== undefined ? Number(body.slotDurationMinutes) : undefined;
+  if (!partial || nextStartTime !== undefined || nextEndTime !== undefined || nextDuration !== undefined) {
+    if (nextStartTime === undefined || nextEndTime === undefined || nextDuration === undefined) {
+      reply.status(400);
+      const err = new Error('startTime, endTime, and slotDurationMinutes must be provided together');
+      (err as any).statusCode = 400;
+      (err as any).code = 'PARTIAL_TIME_RANGE';
+      throw err;
+    }
+    validateWholeSlotRange(String(nextStartTime), String(nextEndTime), nextDuration);
+    data.startTime = String(nextStartTime);
+    data.endTime = String(nextEndTime);
+    data.slotDurationMinutes = nextDuration;
+  }
+
+  if (body.capacity !== undefined) {
+    const capacity = Number(body.capacity);
+    if (!Number.isInteger(capacity) || capacity <= 0) {
+      reply.status(400);
+      const err = new Error('capacity must be a positive integer');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_CAPACITY';
+      throw err;
+    }
+    data.capacity = capacity;
+  }
+
+  const hasMode = body.pricingMode != null;
+  const hasPrice = body.price != null;
+  if (hasMode !== hasPrice) {
+    reply.status(400);
+    const err = new Error('pricingMode and price must both be provided or both omitted');
+    (err as any).statusCode = 400;
+    (err as any).code = 'PARTIAL_PRICING_OVERRIDE';
+    throw err;
+  }
+  if (hasMode) {
+    if (!Object.values(PricingMode).includes(body.pricingMode)) {
+      reply.status(400);
+      const err = new Error('Invalid pricingMode');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PRICING_MODE';
+      throw err;
+    }
+    const price = Number(body.price);
+    if (Number.isNaN(price) || price < 0) {
+      reply.status(400);
+      const err = new Error('price must be a non-negative number');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PRICE';
+      throw err;
+    }
+    data.pricingMode = body.pricingMode;
+    data.price = new Prisma.Decimal(price);
+  }
+  if (body.status !== undefined) {
+    if (!['ACTIVE', 'SUSPENDED'].includes(body.status)) {
+      reply.status(400);
+      const err = new Error('status must be ACTIVE or SUSPENDED');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_STATUS';
+      throw err;
+    }
+    data.status = body.status;
+  }
+  return data;
+}
+
+async function ensureGenerationForPoolDates(resourcePoolId: string, dates: Date[]) {
+  const uniqueDates = [...new Set(dates.map(dateOnlyString))];
+  for (const date of uniqueDates) {
+    await ensureAvailabilityWindowsForDate(resourcePoolId, date);
+  }
+}
+
 async function computePoolGuestOccupancy(resourcePoolIds: string[], date?: string): Promise<GuestOccupancyRow[]> {
   if (resourcePoolIds.length === 0) return [];
 
@@ -237,6 +410,9 @@ async function computePoolGuestOccupancy(resourcePoolIds: string[], date?: strin
     select: { id: true, name: true },
     orderBy: { name: 'asc' },
   });
+  if (date) {
+    await Promise.all(pools.map((pool) => ensureAvailabilityWindowsForDate(pool.id, date)));
+  }
   const { startOfDay, endOfDay } = dayBounds(date);
   const windows = await prisma.availabilityWindow.findMany({
     where: {
@@ -810,6 +986,267 @@ server.get('/resource-pools/:id/occupancy', async (request, reply) => {
   };
 });
 
+// ---------------------------------------------------------------------------
+// Availability Patterns
+// ---------------------------------------------------------------------------
+
+server.get('/resource-pools/:id/availability-patterns', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
+  return prisma.availabilityPattern.findMany({
+    where: { resourcePoolId: id },
+    orderBy: { createdAt: 'asc' },
+  });
+});
+
+server.post('/resource-pools/:id/availability-patterns', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+  const data = patternDataFromBody(request.body as any, reply);
+
+  const pattern = await prisma.availabilityPattern.create({
+    data: {
+      resourcePoolId: id,
+      ...data,
+    },
+  });
+  reply.status(201);
+  return pattern;
+});
+
+server.patch('/resource-pools/:id/availability-patterns/:patternId', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id, patternId } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
+  const existing = await prisma.availabilityPattern.findFirst({ where: { id: patternId, resourcePoolId: id } });
+  if (!existing) {
+    reply.status(404);
+    const err = new Error('Availability pattern not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+
+  const body = request.body as any;
+  const merged = {
+    ...existing,
+    ...body,
+    slotDurationMinutes: body.slotDurationMinutes !== undefined ? Number(body.slotDurationMinutes) : existing.slotDurationMinutes,
+  };
+  const data = patternDataFromBody(merged, reply, false);
+
+  return prisma.availabilityPattern.update({
+    where: { id: patternId },
+    data,
+  });
+});
+
+server.delete('/resource-pools/:id/availability-patterns/:patternId', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id, patternId } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
+  const existing = await prisma.availabilityPattern.findFirst({ where: { id: patternId, resourcePoolId: id } });
+  if (!existing) {
+    reply.status(404);
+    const err = new Error('Availability pattern not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+
+  return prisma.availabilityPattern.delete({ where: { id: patternId } });
+});
+
+// ---------------------------------------------------------------------------
+// Availability Overrides
+// ---------------------------------------------------------------------------
+
+server.get('/resource-pools/:id/availability-overrides', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  const { fromDate, toDate } = request.query as any;
+  await requirePoolScope(auth, id, reply);
+
+  const where: any = { resourcePoolId: id };
+  if (fromDate || toDate) {
+    where.date = {
+      ...(fromDate ? { gte: dateOnly(fromDate) } : {}),
+      ...(toDate ? { lte: dateOnly(toDate) } : {}),
+    };
+  }
+
+  return prisma.availabilityOverride.findMany({
+    where,
+    orderBy: { date: 'asc' },
+  });
+});
+
+function overrideDataFromBody(body: any, reply: any) {
+  if (!Object.values(AvailabilityOverrideType).includes(body.type)) {
+    reply.status(400);
+    const err = new Error('type must be CLOSED or MODIFIED');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_OVERRIDE_TYPE';
+    throw err;
+  }
+
+  const data: any = {
+    type: body.type,
+    reason: body.reason ?? null,
+  };
+
+  if (body.type === AvailabilityOverrideType.CLOSED) {
+    return {
+      ...data,
+      startTime: null,
+      endTime: null,
+      slotDurationMinutes: null,
+      capacity: null,
+      pricingMode: null,
+      price: null,
+    };
+  }
+
+  for (const field of ['startTime', 'endTime', 'slotDurationMinutes', 'capacity']) {
+    if (body[field] === undefined || body[field] === null) {
+      reply.status(400);
+      const err = new Error(`${field} is required for a modified override`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_OVERRIDE';
+      throw err;
+    }
+  }
+  const slotDurationMinutes = Number(body.slotDurationMinutes);
+  validateWholeSlotRange(String(body.startTime), String(body.endTime), slotDurationMinutes);
+  const capacity = Number(body.capacity);
+  if (!Number.isInteger(capacity) || capacity <= 0) {
+    reply.status(400);
+    const err = new Error('capacity must be a positive integer');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_CAPACITY';
+    throw err;
+  }
+
+  const hasMode = body.pricingMode != null;
+  const hasPrice = body.price != null;
+  if (hasMode !== hasPrice) {
+    reply.status(400);
+    const err = new Error('pricingMode and price must both be provided or both omitted');
+    (err as any).statusCode = 400;
+    (err as any).code = 'PARTIAL_PRICING_OVERRIDE';
+    throw err;
+  }
+
+  data.startTime = String(body.startTime);
+  data.endTime = String(body.endTime);
+  data.slotDurationMinutes = slotDurationMinutes;
+  data.capacity = capacity;
+  data.pricingMode = null;
+  data.price = null;
+  if (hasMode) {
+    if (!Object.values(PricingMode).includes(body.pricingMode)) {
+      reply.status(400);
+      const err = new Error('Invalid pricingMode');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PRICING_MODE';
+      throw err;
+    }
+    const price = Number(body.price);
+    if (Number.isNaN(price) || price < 0) {
+      reply.status(400);
+      const err = new Error('price must be a non-negative number');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PRICE';
+      throw err;
+    }
+    data.pricingMode = body.pricingMode;
+    data.price = new Prisma.Decimal(price);
+  }
+  return data;
+}
+
+server.post('/resource-pools/:id/availability-overrides', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  const body = request.body as any;
+  await requirePoolScope(auth, id, reply);
+
+  const fromDate = body.fromDate ?? body.date;
+  const toDate = body.toDate ?? body.date ?? body.fromDate;
+  if (!fromDate || !toDate) {
+    reply.status(400);
+    const err = new Error('fromDate/toDate or date is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  const dates = datesInRange(String(fromDate), String(toDate), 90);
+  const data = overrideDataFromBody(body, reply);
+
+  const overrides = await prisma.$transaction(
+    dates.map((date) => prisma.availabilityOverride.upsert({
+      where: {
+        resourcePoolId_date: {
+          resourcePoolId: id,
+          date,
+        },
+      },
+      update: data,
+      create: {
+        resourcePoolId: id,
+        date,
+        ...data,
+      },
+    })),
+  );
+  reply.status(201);
+  return overrides;
+});
+
+server.patch('/resource-pools/:id/availability-overrides/:overrideId', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id, overrideId } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
+  const existing = await prisma.availabilityOverride.findFirst({ where: { id: overrideId, resourcePoolId: id } });
+  if (!existing) {
+    reply.status(404);
+    const err = new Error('Availability override not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+
+  const merged = { ...existing, ...(request.body as any) };
+  const data = overrideDataFromBody(merged, reply);
+  return prisma.availabilityOverride.update({
+    where: { id: overrideId },
+    data,
+  });
+});
+
+server.delete('/resource-pools/:id/availability-overrides/:overrideId', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id, overrideId } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
+  const existing = await prisma.availabilityOverride.findFirst({ where: { id: overrideId, resourcePoolId: id } });
+  if (!existing) {
+    reply.status(404);
+    const err = new Error('Availability override not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+
+  return prisma.availabilityOverride.delete({ where: { id: overrideId } });
+});
+
 // Admin overview occupancy for all guest-bookable pools in a branch.
 // WHY: This is operational branch data, so it uses branch-scoped admin auth instead
 // of the public single-pool aggregate endpoint above.
@@ -1105,15 +1542,22 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
 
   const pool = await prisma.resourcePool.findUnique({
     where: { id },
+    include: { bookingRules: true },
   });
   if (!pool) {
     reply.status(404);
     throw new Error('Resource pool not found');
   }
 
-  // WHY: Parse search range. Default to returning windows starting in the next 30 days.
-  let startRange = new Date();
-  let endRange = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const guestOpenWindowDays = pool.bookingRules[0]?.guestOpenWindowDays ?? 7;
+  const today = dateOnly(new Date());
+  const maxBrowseDate = new Date(today.getTime() + guestOpenWindowDays * 24 * 60 * 60 * 1000);
+
+  // WHY: Guests can browse only as far as the existing booking rule allows.
+  // The recurring pattern can be durable indefinitely, but visible reach is capped.
+  let startRange = new Date(today);
+  let endRange = new Date(maxBrowseDate);
+  endRange.setUTCHours(23, 59, 59, 999);
 
   if (date) {
     startRange = new Date(`${date}T00:00:00.000Z`);
@@ -1127,6 +1571,24 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
     const toDate = new Date(to);
     if (!isNaN(toDate.getTime())) endRange = toDate;
   }
+
+  if (Number.isNaN(startRange.getTime()) || Number.isNaN(endRange.getTime()) || endRange < startRange) {
+    reply.status(400);
+    const err = new Error('Invalid availability date range');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_DATE_RANGE';
+    throw err;
+  }
+
+  if (dateOnly(endRange) > maxBrowseDate) {
+    reply.status(400);
+    const err = new Error(`Availability can only be browsed ${guestOpenWindowDays} days ahead`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'BROWSE_AHEAD_LIMIT_EXCEEDED';
+    throw err;
+  }
+
+  await ensureGenerationForPoolDates(id, datesInRange(dateOnlyString(startRange), dateOnlyString(endRange), guestOpenWindowDays + 1));
 
   const windows = await prisma.availabilityWindow.findMany({
     where: {
