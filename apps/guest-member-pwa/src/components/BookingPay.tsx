@@ -105,10 +105,16 @@ export default function BookingPay() {
       });
 
       const orderId = orderRes.order_id;
+      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY;
+      if (!razorpayKey) {
+        setError('Razorpay key is not configured. Please contact support.');
+        setPaying(false);
+        return;
+      }
 
       // 2. Open standard checkout overlay with order_id
       const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY || 'rzp_test_TJllXnaezST7MV',
+        key: razorpayKey,
         amount: orderRes.amount,
         currency: orderRes.currency,
         name: 'Badminton Hub',
