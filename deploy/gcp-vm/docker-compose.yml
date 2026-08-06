@@ -1,0 +1,160 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - max_connections=30
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: deploy/gcp-vm/Dockerfile.node-service
+      args:
+        SERVICE_PACKAGE: "@badminton/database"
+        SERVICE_PATH: "packages/database"
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    restart: "no"
+
+  slot-engine:
+    build:
+      context: ../..
+      dockerfile: deploy/gcp-vm/Dockerfile.node-service
+      args:
+        SERVICE_PACKAGE: "@badminton/slot-engine"
+        SERVICE_PATH: "services/slot-engine"
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3001
+      NOTIFICATION_SERVICE_URL: http://notification:3005
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  identity-auth:
+    build:
+      context: ../..
+      dockerfile: deploy/gcp-vm/Dockerfile.node-service
+      args:
+        SERVICE_PACKAGE: "@badminton/identity-auth"
+        SERVICE_PATH: "services/identity-auth"
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3002
+      SLOT_ENGINE_URL: http://slot-engine:3001
+      TENANT_SERVICE_URL: http://tenant-management:3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      slot-engine:
+        condition: service_started
+      tenant-management:
+        condition: service_started
+
+  tenant-management:
+    build:
+      context: ../..
+      dockerfile: deploy/gcp-vm/Dockerfile.node-service
+      args:
+        SERVICE_PACKAGE: "@badminton/tenant-management"
+        SERVICE_PATH: "services/tenant-management"
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  payment:
+    build:
+      context: ../..
+      dockerfile: deploy/gcp-vm/Dockerfile.node-service
+      args:
+        SERVICE_PACKAGE: "@badminton/payment"
+        SERVICE_PATH: "services/payment"
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3004
+      SLOT_ENGINE_URL: http://slot-engine:3001
+      NOTIFICATION_SERVICE_URL: http://notification:3005
+    depends_on:
+      postgres:
+        condition: service_healthy
+      slot-engine:
+        condition: service_started
+      notification:
+        condition: service_started
+
+  notification:
+    build:
+      context: ../..
+      dockerfile: deploy/gcp-vm/Dockerfile.node-service
+      args:
+        SERVICE_PACKAGE: "@badminton/notification"
+        SERVICE_PATH: "services/notification"
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3005
+      IDENTITY_SERVICE_URL: http://identity-auth:3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    build:
+      context: ../..
+      dockerfile: deploy/gcp-vm/Dockerfile.caddy-static
+      args:
+        VITE_RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      slot-engine:
+        condition: service_started
+      identity-auth:
+        condition: service_started
+      tenant-management:
+        condition: service_started
+      payment:
+        condition: service_started
+      notification:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  caddy_data:
+  caddy_config:

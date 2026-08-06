@@ -1,0 +1,44 @@
+:80 {
+	@adminRoot {
+		path /admin
+	}
+	rewrite @adminRoot /admin/
+
+	handle /admin* {
+		uri strip_prefix /admin
+		root * /srv/admin-web
+		try_files {path} /index.html
+		file_server
+	}
+
+	handle /api/slot-engine/* {
+		uri strip_prefix /api/slot-engine
+		reverse_proxy slot-engine:3001
+	}
+
+	handle /api/identity/* {
+		uri strip_prefix /api/identity
+		reverse_proxy identity-auth:3002
+	}
+
+	handle /api/tenant/* {
+		uri strip_prefix /api/tenant
+		reverse_proxy tenant-management:3003
+	}
+
+	handle /api/payment/* {
+		uri strip_prefix /api/payment
+		reverse_proxy payment:3004
+	}
+
+	handle /api/notification/* {
+		uri strip_prefix /api/notification
+		reverse_proxy notification:3005
+	}
+
+	handle {
+		root * /srv/guest-member-pwa
+		try_files {path} /index.html
+		file_server
+	}
+}
