@@ -1,0 +1,101 @@
+<mxfile host="app.diagrams.net" modified="2026-07-31T18:30:00.000Z" agent="Claude" version="24.0.0" type="device">
+  <diagram name="GCP Deployment" id="gcp-deployment-1">
+    <mxGraphModel dx="1800" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="820" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="legend" value="Legend:  Teal solid = decided AND verified with real credentials   |   Amber dashed = decided architecture, not yet built/verified   |   Gray = external actor" style="text;html=1;fontSize=12;align=left;verticalAlign=top" vertex="1" parent="1">
+          <mxGeometry x="20" y="5" width="900" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- USERS ROW -->
+        <mxCell id="u1" value="Guest&#10;browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="80" y="40" width="130" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="u2" value="Member&#10;browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="240" y="40" width="130" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="u3" value="Admin&#10;browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="400" y="40" width="130" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- FIREBASE HOSTING -->
+        <mxCell id="fh" value="Firebase Hosting&#10;serves guest-member-pwa + admin-web static builds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" vertex="1" parent="1">
+          <mxGeometry x="150" y="130" width="330" height="56" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rewrite" value="Hosting rewrites: /api/* → per-service Cloud Run URL&#10;PROPOSED, NEVER FORMALLY DECIDED — F-004" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="150" y="210" width="330" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- CLOUD RUN SERVICES -->
+        <mxCell id="crBox" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;opacity=35;" vertex="1" parent="1">
+          <mxGeometry x="30" y="300" width="620" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="crLabel" value="Cloud Run (asia-south1 / Mumbai) — 5 independent services, scale-to-zero" style="text;html=1;fontSize=13;fontStyle=1;align=left;verticalAlign=top;fontColor=#3d5a99" vertex="1" parent="1">
+          <mxGeometry x="40" y="305" width="500" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s1" value="Slot Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" vertex="1" parent="1">
+          <mxGeometry x="50" y="340" width="110" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="Identity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" vertex="1" parent="1">
+          <mxGeometry x="175" y="340" width="110" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="Tenant" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" vertex="1" parent="1">
+          <mxGeometry x="300" y="340" width="110" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="Payment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" vertex="1" parent="1">
+          <mxGeometry x="425" y="340" width="110" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="Notification" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" vertex="1" parent="1">
+          <mxGeometry x="550" y="340" width="90" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="secrets" value="Secret Manager&#10;RECOMMENDED, not yet decided — would prevent the exact&#10;JWT-secret-mismatch bug already found once between services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="405" width="610" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- CLOUD SQL -->
+        <mxCell id="sql" value="Cloud SQL PostgreSQL (asia-south1)&#10;shared by all 5 services — no free tier, the real ongoing cost driver" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" vertex="1" parent="1">
+          <mxGeometry x="150" y="480" width="330" height="56" as="geometry" />
+        </mxCell>
+
+        <!-- EXTERNAL SERVICES -->
+        <mxCell id="extBox" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;opacity=40;" vertex="1" parent="1">
+          <mxGeometry x="700" y="300" width="260" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="extLabel" value="External providers" style="text;html=1;fontSize=13;fontStyle=1;align=left;verticalAlign=top" vertex="1" parent="1">
+          <mxGeometry x="710" y="305" width="200" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rzp" value="Razorpay&#10;Payments + webhook&#10;CONFIRMED — real test-mode credentials, real UPI payment done end-to-end" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b0e3e6;strokeColor=#0e8088;" vertex="1" parent="1">
+          <mxGeometry x="715" y="335" width="230" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="msg91" value="MSG91 (SMS/OTP)&#10;DECIDED, NEVER INTEGRATED — every OTP so far used the dev-fallback code, never a real SMS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="715" y="415" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="fcm" value="Firebase Cloud Messaging (push)&#10;DECIDED, NEVER VERIFIED — channel-policy/dispatch logic built, no real device push ever confirmed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="715" y="490" width="230" height="66" as="geometry" />
+        </mxCell>
+
+        <!-- EDGES -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="u1" target="fh"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="u2" target="fh"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="u3" target="fh"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="fh" target="rewrite"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#d79b00;" edge="1" parent="1" source="rewrite" target="crBox"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s1" target="sql"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s2" target="sql"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s3" target="sql"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s4" target="sql"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s5" target="sql"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="webhook" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="rzp" target="s4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#d79b00;" edge="1" parent="1" source="s2" target="msg91"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#d79b00;" edge="1" parent="1" source="s5" target="fcm"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
