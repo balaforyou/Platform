@@ -201,6 +201,24 @@ type GuestOccupancyRow = {
   occupancyPercentage: number;
 };
 
+type MemberAttendanceState =
+  | 'CONFIRMED'
+  | 'PENDING_CONFIRMATION'
+  | 'PAST_CUTOFF'
+  | 'RELEASED_NO_SHOW'
+  | 'SUBSCRIPTION_INACTIVE'
+  | 'WINDOW_NOT_FOUND';
+
+type MemberAttendanceRow = {
+  memberPhone: string;
+  resourcePoolName: string;
+  startTime: string;
+  endTime: string | null;
+  cutoffTime: string | null;
+  status: MemberAttendanceState;
+  statusLabel: string;
+};
+
 function dayBounds(date?: string) {
   // Preserve the existing occupancy endpoint's UTC-day semantics for this phase.
   const day = date ? new Date(date) : new Date();
@@ -253,6 +271,138 @@ async function computePoolGuestOccupancy(resourcePoolIds: string[], date?: strin
       confirmedSeats,
       occupancyPercentage: totalCapacity > 0 ? Math.round((confirmedSeats / totalCapacity) * 100) : 0,
     };
+  });
+}
+
+function slotStartForDate(dateString: string, startTime: string): Date {
+  return new Date(`${dateString}T${startTime}:00.000Z`);
+}
+
+async function computeBranchMemberAttendance(branchId: string, date: string | undefined, now: Date): Promise<MemberAttendanceRow[]> {
+  const dateString = date || todayDateString(now);
+  const selectedDay = new Date(`${dateString}T00:00:00.000Z`);
+  const weekday = isoWeekday(selectedDay);
+  const { startOfDay, endOfDay } = dayBounds(dateString);
+
+  const assignments = await prisma.memberGroupAssignment.findMany({
+    where: {
+      status: 'ACTIVE',
+      resourcePool: { branchId },
+    },
+    include: {
+      resourcePool: { include: { bookingRules: true } },
+    },
+    orderBy: { startTime: 'asc' },
+  });
+  const matchingAssignments = assignments.filter((assignment) => (
+    assignment.daysOfWeek.split(',').map((day: string) => day.trim()).includes(weekday)
+  ));
+  if (matchingAssignments.length === 0) return [];
+
+  const userIds = Array.from(new Set(matchingAssignments.map((assignment) => assignment.userId)));
+  const poolIds = Array.from(new Set(matchingAssignments.map((assignment) => assignment.resourcePoolId)));
+  const [users, windows, subscriptions] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, phone: true },
+    }),
+    prisma.availabilityWindow.findMany({
+      where: {
+        resourcePoolId: { in: poolIds },
+        startTime: { gte: startOfDay, lte: endOfDay },
+      },
+      select: { id: true, resourcePoolId: true, startTime: true, endTime: true },
+      orderBy: { startTime: 'asc' },
+    }),
+    prisma.subscription.findMany({
+      where: {
+        userId: { in: userIds },
+        status: 'active',
+      },
+      select: { userId: true },
+    }),
+  ]);
+  const userPhone = new Map(users.map((user) => [user.id, user.phone || 'Phone not available']));
+  const activeSubscriptions = new Set(subscriptions.map((subscription) => subscription.userId));
+  const windowByAssignment = new Map<string, any>();
+
+  for (const assignment of matchingAssignments) {
+    const expectedStart = slotStartForDate(dateString, assignment.startTime);
+    const expectedEnd = new Date(expectedStart.getTime() + 60 * 60 * 1000);
+    const matchingWindow = windows.find((window) => (
+      window.resourcePoolId === assignment.resourcePoolId &&
+      window.startTime >= expectedStart &&
+      window.startTime <= expectedEnd
+    ));
+    if (matchingWindow) {
+      windowByAssignment.set(assignment.id, matchingWindow);
+    }
+  }
+
+  const windowIds = Array.from(new Set(Array.from(windowByAssignment.values()).map((window: any) => window.id)));
+  const bookings = windowIds.length > 0
+    ? await prisma.booking.findMany({
+        where: {
+          userId: { in: userIds },
+          windowId: { in: windowIds },
+          isMemberBooking: true,
+          status: { not: BookingStatus.CANCELLED },
+        },
+        select: {
+          userId: true,
+          windowId: true,
+          status: true,
+          memberAttendanceConfirmedAt: true,
+        },
+      })
+    : [];
+  const bookingByUserWindow = new Map(bookings.map((booking) => [`${booking.userId}:${booking.windowId}`, booking]));
+
+  return matchingAssignments.flatMap<MemberAttendanceRow>((assignment) => {
+    const memberPhone = userPhone.get(assignment.userId) || 'Phone not available';
+    const matchingWindow = windowByAssignment.get(assignment.id);
+    if (!matchingWindow) {
+      return [{
+        memberPhone,
+        resourcePoolName: assignment.resourcePool.name,
+        startTime: assignment.startTime,
+        endTime: null,
+        cutoffTime: null,
+        status: 'WINDOW_NOT_FOUND' as MemberAttendanceState,
+        statusLabel: 'Window not found',
+      }];
+    }
+
+    const rule = assignment.resourcePool.bookingRules[0];
+    const gracePeriodMinutes = rule ? rule.gracePeriodMinutes : 30;
+    const cutoffTime = new Date(matchingWindow.startTime.getTime() - gracePeriodMinutes * 60 * 1000);
+
+    const booking = bookingByUserWindow.get(`${assignment.userId}:${matchingWindow.id}`);
+    let status: MemberAttendanceState = 'PENDING_CONFIRMATION';
+    let statusLabel = 'Pending confirmation';
+    if (!activeSubscriptions.has(assignment.userId)) {
+      status = 'SUBSCRIPTION_INACTIVE';
+      statusLabel = 'Subscription inactive';
+    } else if (booking?.memberAttendanceConfirmedAt) {
+      status = 'CONFIRMED';
+      statusLabel = 'Confirmed';
+    } else if (booking?.status === BookingStatus.RELEASED_NO_SHOW) {
+      status = 'RELEASED_NO_SHOW';
+      statusLabel = 'Released no-show';
+    } else if (now >= cutoffTime) {
+      status = 'PAST_CUTOFF';
+      statusLabel = 'Cutoff passed';
+    }
+
+    return [{
+      memberPhone,
+      resourcePoolName: assignment.resourcePool.name,
+      startTime: matchingWindow.startTime.toISOString(),
+      endTime: matchingWindow.endTime.toISOString(),
+      cutoffTime: cutoffTime.toISOString(),
+      status,
+      statusLabel,
+    }];
   });
 }
 
@@ -682,6 +832,24 @@ server.get('/branches/:id/guest-occupancy', async (request, reply) => {
     orderBy: { name: 'asc' },
   });
   return computePoolGuestOccupancy(pools.map((pool) => pool.id), date);
+});
+
+// Admin overview member attendance for confirmation windows that are currently open
+// or already past cutoff. Uses the same branch authorization and F-022 cutoff semantics.
+server.get('/branches/:id/member-attendance', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  const { date } = request.query as any;
+
+  if (!isAuthorizedForBranch(auth, id)) {
+    reply.status(403);
+    const err = new Error('Forbidden: Not authorized for this branch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+
+  return computeBranchMemberAttendance(id, date, new Date());
 });
 
 // GET /branches/:id/resource-pools (public, no auth)

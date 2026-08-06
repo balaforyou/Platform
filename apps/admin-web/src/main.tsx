@@ -114,6 +114,16 @@ type BranchGuestOccupancy = OccupancySummary & {
   resourcePoolName: string;
 };
 
+type MemberAttendanceRow = {
+  memberPhone: string;
+  resourcePoolName: string;
+  startTime: string;
+  endTime: string | null;
+  cutoffTime: string | null;
+  status: 'CONFIRMED' | 'PENDING_CONFIRMATION' | 'PAST_CUTOFF' | 'RELEASED_NO_SHOW' | 'SUBSCRIPTION_INACTIVE' | 'WINDOW_NOT_FOUND';
+  statusLabel: string;
+};
+
 type ApiError = Error & { code?: string; statusCode?: number };
 
 const queryClient = new QueryClient({
@@ -463,6 +473,15 @@ function formatWindow(slot: AvailabilitySlot) {
   return `${start.toLocaleString()} - ${end.toLocaleTimeString()} (${slot.remainingCapacity} open)`;
 }
 
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString();
+}
+
+function formatMemberAttendanceWindow(row: MemberAttendanceRow) {
+  if (!row.endTime) return `Assigned start ${row.startTime}`;
+  return `${formatDateTime(row.startTime)} - ${formatDateTime(row.endTime)}`;
+}
+
 function formatBookingWindow(booking: AdminBooking) {
   if (!booking.window) return booking.id;
   const start = new Date(booking.window.startTime);
@@ -534,6 +553,11 @@ function Overview() {
     enabled: !!branchId,
     queryFn: () => api.get<BranchGuestOccupancy[]>(`/slot-engine/branches/${branchId}/guest-occupancy?date=${date}`),
   });
+  const memberAttendance = useQuery({
+    queryKey: ['branch-member-attendance', branchId, date],
+    enabled: !!branchId,
+    queryFn: () => api.get<MemberAttendanceRow[]>(`/slot-engine/branches/${branchId}/member-attendance?date=${date}`),
+  });
 
   React.useEffect(() => {
     if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
@@ -552,7 +576,7 @@ function Overview() {
             <h2>Guest Occupancy</h2>
             <p className="muted">Confirmed guest slots by court for the selected branch and date.</p>
           </div>
-          {occupancy.isFetching && <RefreshCw className="spin" size={18} />}
+          {(occupancy.isFetching || memberAttendance.isFetching) && <RefreshCw className="spin" size={18} />}
         </div>
         <div className="form-grid compact">
           <label>Branch<select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
@@ -561,7 +585,7 @@ function Overview() {
           </select></label>
           <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
         </div>
-        <MutationFeedback error={branches.error || occupancy.error} />
+        <MutationFeedback error={branches.error || occupancy.error || memberAttendance.error} />
         {!branchId && <p className="empty-state">Select a branch to view guest occupancy.</p>}
         {branchId && occupancy.data?.length === 0 && (
           <p className="empty-state">{selectedBranch?.name || 'This branch'} has no resource pools configured yet.</p>
@@ -578,6 +602,34 @@ function Overview() {
                   <span style={{ width: `${Math.min(pool.occupancyPercentage, 100)}%` }} />
                 </div>
                 <strong className="occupancy-value">{pool.totalCapacity > 0 ? `${pool.occupancyPercentage}%` : 'No windows'}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Member Attendance</h2>
+            <p className="muted">Members whose confirmation windows are open or already past cutoff.</p>
+          </div>
+        </div>
+        {branchId && memberAttendance.data?.length === 0 && (
+          <p className="empty-state">No member attendance windows are currently open for this branch.</p>
+        )}
+        {!!memberAttendance.data?.length && (
+          <div className="attendance-list">
+            {memberAttendance.data.map((row) => (
+              <div className="attendance-row" key={`${row.memberPhone}-${row.resourcePoolName}-${row.startTime}`}>
+                <div>
+                  <strong>{row.memberPhone}</strong>
+                  <span>{row.resourcePoolName}</span>
+                </div>
+                <div>
+                  <strong>{formatMemberAttendanceWindow(row)}</strong>
+                  <span>{row.cutoffTime ? `Cutoff ${formatDateTime(row.cutoffTime)}` : 'Assigned window missing'}</span>
+                </div>
+                <span className={`status-pill attendance-${row.status.toLowerCase().replace(/_/g, '-')}`}>{row.statusLabel}</span>
               </div>
             ))}
           </div>
