@@ -11,10 +11,13 @@
     "prisma:migrate": "pnpm --filter @badminton/database run prisma:migrate",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "pnpm -r run typecheck",
-    "test:concurrency": "pnpm --filter @badminton/slot-engine run test:concurrency",
-    "test:auth": "pnpm --filter @badminton/identity-auth run test:auth",
-    "test:tenant": "pnpm --filter @badminton/tenant-management run test:tenant",
-    "test:payment": "pnpm --filter @badminton/payment run test:payment"
+    "test:regression": "node scripts/test-regression.mjs",
+    "test:regression:auth": "pnpm --filter @badminton/identity-auth run test:regression",
+    "test:regression:tenant": "pnpm --filter @badminton/tenant-management run test:regression",
+    "test:regression:slot": "pnpm --filter @badminton/slot-engine run test:regression",
+    "test:regression:payment": "pnpm --filter @badminton/payment run test:regression",
+    "test:regression:notification": "pnpm --filter @badminton/notification run test:regression",
+    "test:e2e": "pnpm --filter @badminton/guest-member-pwa run test:e2e"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

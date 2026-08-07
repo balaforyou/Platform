@@ -9,9 +9,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test:availability-generation": "dotenv -e ../../.env -- tsx src/availabilityGeneration.phaseA.test.ts",
-    "test:availability-generation-api": "dotenv -e ../../.env -- tsx src/availabilityGeneration.phaseB.test.ts",
-    "test:concurrency": "dotenv -e ../../.env -- node dist/concurrency.test.js"
+    "test:regression": "dotenv -e ../../.env -- node dist/regression/run.js"
   },
   "dependencies": {
     "fastify": "^4.27.0",
@@ -23,6 +21,7 @@
   "devDependencies": {
     "typescript": "^5.4.5",
     "tsx": "^4.10.5",
-    "dotenv-cli": "^7.4.2"
+    "dotenv-cli": "^7.4.2",
+    "@badminton/test-harness": "workspace:*"
   }
 }

@@ -1,4 +1,4 @@
-import { test, expect, request as playwrightRequest } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { PrismaClient, BookingStatus } from '@badminton/database';
 
 const prisma = new PrismaClient();
@@ -123,7 +123,7 @@ test.describe('Member self-confirm attendance', () => {
     await prisma.$disconnect();
   });
 
-  test('renders session and no-session states, confirms through UI, and guards double-confirm', async ({ page, baseURL }) => {
+  test('renders session and no-session states and confirms through the UI', async ({ page }) => {
     const todayApi = page.waitForResponse((res) => res.url().includes('/api/slot-engine/member/today-assignment') && res.request().method() === 'GET');
     await loginAs(page, activePhone);
     const todayResponse = await todayApi;
@@ -159,23 +159,11 @@ test.describe('Member self-confirm attendance', () => {
     await expect(page.locator('#member-session-card')).toContainText('No recurring member session is scheduled for you today.');
     await page.screenshot({ path: 'test-results/member-self-confirm-no-session.png', fullPage: true });
 
-    const api = await playwrightRequest.newContext({ baseURL });
-    const otpRes = await api.post('/api/identity/auth/otp/request', { data: { phone: '+919833333333', tenantId } });
-    expect(otpRes.status()).toBe(200);
-    const verifyRes = await api.post('/api/identity/auth/otp/verify', { data: { phone: '+919833333333', tenantId, code: '123456' } });
-    const token = (await verifyRes.json()).data.accessToken;
-    const [raceRes1, raceRes2] = await Promise.all([
-      api.post('/api/slot-engine/member/today-assignment/confirm', { headers: { Authorization: `Bearer ${token}` } }),
-      api.post('/api/slot-engine/member/today-assignment/confirm', { headers: { Authorization: `Bearer ${token}` } }),
-    ]);
-    const [raceBody1, raceBody2] = await Promise.all([raceRes1.json(), raceRes2.json()]);
-    const raceCount = await prisma.booking.count({ where: { userId: raceMemberId, windowId: activeWindowId, status: { not: BookingStatus.CANCELLED } } });
-    console.log('PLAYWRIGHT_MEMBER_CONFIRM_EVIDENCE rendered_context_double_confirm', JSON.stringify({
-      statuses: [raceRes1.status(), raceRes2.status()],
-      bookingIds: [raceBody1.data?.id, raceBody2.data?.id],
-      raceCount,
-    }));
-    expect(raceCount).toBe(1);
-    expect(raceBody1.data?.id).toBe(raceBody2.data?.id);
+    // SCOPE NOTE: the concurrent double-confirm race check used to run here via
+    // playwrightRequest — raw API calls that drove no browser and duplicated
+    // what concurrency.test.ts Test 7 already proved. It now lives once, in
+    // services/slot-engine/src/regression/member-flow.regression.ts.
+    // This spec keeps what genuinely needs a browser: the rendered session card,
+    // the confirm click, and the resulting "Attendance confirmed" state above.
   });
 });
