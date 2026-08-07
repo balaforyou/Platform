@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { PrismaClient } from '@badminton/database';
-import { SERVICE_URLS } from '@badminton/test-harness';
+import { SERVICE_URLS, signJwt } from '@badminton/test-harness';
 
 export const db = new PrismaClient();
 
@@ -27,6 +27,36 @@ export interface PaymentContext {
   payloadStr?: string;
   /** Set by the webhook→confirm section, consumed by the refund section. */
   bookingConfirmed?: any;
+  /** Set by the duplicate-intent section, consumed by the F-045 identity sections. */
+  dupIntentBookingId?: string;
+}
+
+/**
+ * A user's own bearer token.
+ *
+ * F-045: POST /bookings derives identity from the JWT, and both payment
+ * endpoints now cross-check the caller against the booking's owner — so tests
+ * must actually hold the token of whoever they claim to be.
+ */
+export function userToken(userId: string = USER_ID, tenantId: string = TENANT_ID): string {
+  return signJwt({ userId, tenantId, userType: 'GUEST', roles: [] });
+}
+
+/** Headers for a self-service booking POST as `userId`. */
+export function bookingHeaders(userId: string, idempotencyKey: string) {
+  return {
+    'Content-Type': 'application/json',
+    'idempotency-key': idempotencyKey,
+    Authorization: `Bearer ${userToken(userId)}`,
+  };
+}
+
+/** Headers for an authenticated payment call as `userId`. */
+export function paymentHeaders(userId: string = USER_ID) {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${userToken(userId)}`,
+  };
 }
 
 /** Produces a valid Razorpay HMAC signature for a raw payload string. */

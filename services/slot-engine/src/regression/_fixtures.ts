@@ -1,5 +1,5 @@
 import { PrismaClient } from '@badminton/database';
-import { SERVICE_URLS } from '@badminton/test-harness';
+import { SERVICE_URLS, signJwt } from '@badminton/test-harness';
 
 export const db = new PrismaClient();
 export const baseUrl = SERVICE_URLS.slotEngine;
@@ -23,6 +23,26 @@ export interface SlotEngineContext {
   window: any;
   pooledPool: any;
   pooledWindow: any;
+}
+
+/**
+ * A guest's own bearer token.
+ *
+ * F-045: POST /bookings now derives userId AND tenantId from the verified JWT,
+ * so a test acting as a given user must actually hold that user's token — the
+ * body no longer decides who books.
+ */
+export function guestToken(userId: string, tenantId: string = TENANT_ID): string {
+  return signJwt({ userId, tenantId, userType: 'GUEST', roles: [] });
+}
+
+/** Standard headers for a self-service booking POST as `userId`. */
+export function bookingHeaders(userId: string, idempotencyKey: string) {
+  return {
+    'Content-Type': 'application/json',
+    'idempotency-key': idempotencyKey,
+    Authorization: `Bearer ${guestToken(userId)}`,
+  };
 }
 
 export function nextAlignedHour(hoursFromNow: number): Date {

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@badminton/database';
-import { SERVICE_URLS } from '@badminton/test-harness';
+import { SERVICE_URLS, signJwt } from '@badminton/test-harness';
 
 export const db = new PrismaClient();
 
@@ -84,18 +84,25 @@ export async function setupBaseFixtures(): Promise<IdentityContext> {
   });
   const window = ((await windowRes.json()) as any).data;
 
+  // F-045: POST /bookings derives the booker's identity from the JWT, so the
+  // seed must hold the booker's own token rather than naming them in the body.
+  const bookerToken = signJwt({
+    userId: 'booker-user-id',
+    tenantId: TENANT_ID,
+    userType: 'GUEST',
+    roles: [],
+  });
   const bookingRes = await fetch(`${slotEngineUrl}/bookings`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'idempotency-key': 'invite-booking-key-t3',
+      Authorization: `Bearer ${bookerToken}`,
     },
     body: JSON.stringify({
-      tenantId: TENANT_ID,
       branchId: BRANCH_ID,
       resourcePoolId: pool.id,
       windowId: window.id,
-      userId: 'booker-user-id',
       coPlayers: [PHONE],
     }),
   });

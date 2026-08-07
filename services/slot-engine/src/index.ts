@@ -1646,6 +1646,13 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
 // ---------------------------------------------------------------------------
 
 server.post('/bookings', async (request, reply) => {
+  // F-045: identity is established BEFORE anything else, including the
+  // idempotency short-circuit below. If auth came after it, an unauthenticated
+  // caller replaying a known key would still read back another user's booking.
+  const claims = await requireUserJwt(request, reply);
+  const userId = claims.userId;
+  const tenantId = claims.tenantId;
+
   const idempotencyKey = request.headers['idempotency-key'] as string | undefined;
   if (!idempotencyKey) {
     reply.status(400);
@@ -1663,16 +1670,21 @@ server.post('/bookings', async (request, reply) => {
   }
 
   const {
-    tenantId,
     branchId,
     resourcePoolId,
     resourceId,
     windowId,
-    userId,
     isMemberBooking,
     coPlayers,
-    // WHY: price is intentionally destructured and discarded. The self-service path
-    // must never honour a caller-supplied price — this is the Phase 4 trust boundary.
+    // WHY: identity and price are intentionally destructured and discarded.
+    // The self-service path must never honour a caller-supplied price (Phase 4
+    // trust boundary) nor a caller-supplied identity (F-045). Both are ignored
+    // silently rather than rejected: presence is not an error, it is simply
+    // never read — the same contract /member/today-assignment/confirm uses.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    userId: _ignoredUserId,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    tenantId: _ignoredTenantId,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     price: _ignoredPrice,
     ...rest
@@ -2157,7 +2169,18 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
 // Member self-confirm attendance
 // ---------------------------------------------------------------------------
 
-async function requireMemberJwt(request: any, reply: any) {
+/**
+ * Verifies the caller's JWT and returns the identity claims it carries.
+ *
+ * WHY THIS EXISTS SEPARATELY FROM requireMemberJwt: this is the identity core,
+ * with no role gate. `requireMemberJwt` adds a MEMBER-only check on top, which
+ * would wrongly reject guests — and guests are exactly who use POST /bookings.
+ * Splitting it keeps one implementation of "who is calling" for both.
+ *
+ * Callers must treat the returned identity as the ONLY source of truth. Never
+ * read an id out of the request body for identity purposes (F-045).
+ */
+async function requireUserJwt(request: any, reply: any) {
   try {
     const decodedUser: any = await request.jwtVerify();
     const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
@@ -2169,14 +2192,12 @@ async function requireMemberJwt(request: any, reply: any) {
       (err as any).code = 'UNAUTHORIZED';
       throw err;
     }
-    if (decodedUser.userType !== 'MEMBER') {
-      reply.status(403);
-      const err = new Error('Member access required');
-      (err as any).statusCode = 403;
-      (err as any).code = 'MEMBER_REQUIRED';
-      throw err;
-    }
-    return { userId, tenantId };
+    return {
+      userId,
+      tenantId,
+      userType: decodedUser.userType,
+      roles: (decodedUser.roles ?? []) as string[],
+    };
   } catch (err: any) {
     if (!err.statusCode && !err.code) {
       reply.status(401);
@@ -2186,6 +2207,18 @@ async function requireMemberJwt(request: any, reply: any) {
     }
     throw err;
   }
+}
+
+async function requireMemberJwt(request: any, reply: any) {
+  const claims = await requireUserJwt(request, reply);
+  if (claims.userType !== 'MEMBER') {
+    reply.status(403);
+    const err = new Error('Member access required');
+    (err as any).statusCode = 403;
+    (err as any).code = 'MEMBER_REQUIRED';
+    throw err;
+  }
+  return { userId: claims.userId, tenantId: claims.tenantId };
 }
 
 function shapeTodayAssignment(resolution: TodayAssignmentResolution, subscriptionStatus?: string) {

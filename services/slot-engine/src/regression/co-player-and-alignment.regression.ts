@@ -11,12 +11,10 @@ import { baseUrl, SlotEngineContext, TENANT_ID, BRANCH_ID } from './_fixtures';
  * What stayed in Playwright: F-009's client-side half only (the red error box
  * rendering and the successful-reserve redirect), which genuinely needs a browser.
  *
- * NOTE on the JWT below: POST /bookings does not currently call jwtVerify() —
- * it reads userId straight from the body (see F-045 in docs/findings_register.md,
- * out of scope here). The token is sent anyway to keep parity with how the
- * original Playwright test called this endpoint. These sections deliberately
- * encode CURRENT behavior; they must not be rewritten to assert F-045's fix
- * until that fix actually lands.
+ * NOTE on the JWT below: F-045 has now landed, so POST /bookings verifies the
+ * token and derives identity from it. The token below is therefore load-bearing,
+ * not decorative — without it these requests would 401 before ever reaching the
+ * co-player validation being tested here.
  */
 export const coPlayerAndAlignmentSections: Section<SlotEngineContext>[] = [
   {
@@ -38,11 +36,9 @@ export const coPlayerAndAlignmentSections: Section<SlotEngineContext>[] = [
             'Idempotency-Key': idempotencyKey,
           },
           body: JSON.stringify({
-            tenantId: TENANT_ID,
             branchId: BRANCH_ID,
             resourcePoolId: ctx.pooledPool.id,
             windowId: ctx.pooledWindow.id,
-            userId: 'f009-regression-user',
             coPlayers,
           }),
         });

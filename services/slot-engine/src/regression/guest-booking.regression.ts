@@ -1,38 +1,160 @@
-import { Section } from '@badminton/test-harness';
-import { db, baseUrl, SlotEngineContext, TENANT_ID, BRANCH_ID, USER_ID_1, USER_ID_2 } from './_fixtures';
+import { Section, expectIdentityFromJwt, inspect } from '@badminton/test-harness';
+import {
+  db,
+  baseUrl,
+  bookingHeaders,
+  guestToken,
+  SlotEngineContext,
+  BRANCH_ID,
+  TENANT_ID,
+  USER_ID_1,
+  USER_ID_2,
+} from './_fixtures';
 
 /**
- * GUEST BOOKING — hold concurrency and idempotency contracts.
- * Migrated verbatim from concurrency.test.ts Tests 1-4.
+ * GUEST BOOKING — hold concurrency, idempotency, and the F-045 identity boundary.
+ *
+ * Concurrency/idempotency sections migrated from concurrency.test.ts Tests 1-4.
+ * The identity sections are new with F-045: POST /bookings now derives userId
+ * and tenantId from the verified JWT and never reads them from the body.
  */
 export const guestBookingSections: Section<SlotEngineContext>[] = [
   {
+    name: 'F-045: POST /bookings derives identity from the JWT and ignores a spoofed body userId',
+    async run(ctx) {
+      await db.booking.deleteMany();
+
+      // User A's token, but the body claims to be user B.
+      const res = await fetch(`${baseUrl}/bookings`, {
+        method: 'POST',
+        headers: bookingHeaders(USER_ID_1, 'f045-spoof-key'),
+        body: JSON.stringify({
+          tenantId: 'forged-tenant-id',
+          branchId: BRANCH_ID,
+          resourcePoolId: ctx.pooledPool.id,
+          windowId: ctx.pooledWindow.id,
+          userId: USER_ID_2, // spoofed — must be ignored, not rejected
+        }),
+      });
+      const body = (await res.json()) as any;
+      const booking = body.data ?? body;
+
+      console.log(
+        'BOOKING_IDENTITY_EVIDENCE spoofed_userid_ignored',
+        JSON.stringify({
+          status: res.status,
+          sentUserIdInBody: USER_ID_2,
+          tokenUserId: USER_ID_1,
+          persistedUserId: booking?.userId,
+          persistedTenantId: booking?.tenantId,
+        }),
+      );
+
+      // Ignored, not rejected: the request SUCCEEDS, attributed to the token.
+      if (res.status !== 201) {
+        throw new Error(`Expected 201 (spoofed id ignored, not rejected), got ${res.status}`);
+      }
+      expectIdentityFromJwt(booking?.userId, USER_ID_1, USER_ID_2, 'POST /bookings');
+
+      // tenantId is token-derived too — the forged one must not have landed.
+      if (booking?.tenantId !== TENANT_ID) {
+        throw new Error(
+          `Expected token-derived tenantId ${TENANT_ID}, got ${booking?.tenantId} (body sent 'forged-tenant-id')`,
+        );
+      }
+
+      // And the row on disk agrees with the response.
+      const persisted = await db.booking.findUnique({ where: { id: booking.id } });
+      if (persisted?.userId !== USER_ID_1) {
+        throw new Error(`Persisted booking.userId is ${persisted?.userId}, expected ${USER_ID_1}`);
+      }
+    },
+  },
+
+  {
+    name: 'F-045: POST /bookings rejects an unauthenticated caller (401), including idempotency-key replay',
+    async run(ctx) {
+      const noAuth = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'idempotency-key': 'f045-noauth-key' },
+          body: JSON.stringify({
+            tenantId: TENANT_ID,
+            branchId: BRANCH_ID,
+            resourcePoolId: ctx.pooledPool.id,
+            windowId: ctx.pooledWindow.id,
+            userId: USER_ID_1,
+          }),
+        }),
+      );
+      console.log(
+        'BOOKING_IDENTITY_EVIDENCE unauthenticated_rejected',
+        JSON.stringify({ status: noAuth.status, body: noAuth.json }),
+      );
+      if (noAuth.status !== 401) {
+        throw new Error(`Expected 401 for unauthenticated booking, got ${noAuth.status}`);
+      }
+
+      // Replaying a key that DOES exist must still 401 — auth runs before the
+      // idempotency short-circuit, so a stranger can't read back the record.
+      const replay = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'idempotency-key': 'f045-spoof-key' },
+          body: JSON.stringify({ resourcePoolId: ctx.pooledPool.id, windowId: ctx.pooledWindow.id }),
+        }),
+      );
+      console.log(
+        'BOOKING_IDENTITY_EVIDENCE unauthenticated_idempotency_replay_rejected',
+        JSON.stringify({ status: replay.status, body: replay.json }),
+      );
+      if (replay.status !== 401) {
+        throw new Error(`Expected 401 replaying a known idempotency key unauthenticated, got ${replay.status}`);
+      }
+
+      const bogusToken = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'idempotency-key': 'f045-badtoken-key',
+            Authorization: 'Bearer not-a-real-jwt',
+          },
+          body: JSON.stringify({ resourcePoolId: ctx.pooledPool.id, windowId: ctx.pooledWindow.id }),
+        }),
+      );
+      if (bogusToken.status !== 401) {
+        throw new Error(`Expected 401 for a malformed token, got ${bogusToken.status}`);
+      }
+    },
+  },
+
+  {
     name: 'Concurrent holds on FIXED_INSTANCE (exactly one 201, one 409 SLOT_ALREADY_BOOKED)',
     async run(ctx) {
+      await db.booking.deleteMany();
+
       // Two simultaneous requests for the same court+window: only one may win.
+      // Each caller now holds their own token (F-045).
       const req1 = fetch(`${baseUrl}/bookings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'idempotency-key': 'fixed-key-req1' },
+        headers: bookingHeaders(USER_ID_1, 'fixed-key-req1'),
         body: JSON.stringify({
-          tenantId: TENANT_ID,
           branchId: BRANCH_ID,
           resourcePoolId: ctx.fixedPool.id,
           resourceId: ctx.resource.id,
           windowId: ctx.window.id,
-          userId: USER_ID_1,
         }),
       });
 
       const req2 = fetch(`${baseUrl}/bookings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'idempotency-key': 'fixed-key-req2' },
+        headers: bookingHeaders(USER_ID_2, 'fixed-key-req2'),
         body: JSON.stringify({
-          tenantId: TENANT_ID,
           branchId: BRANCH_ID,
           resourcePoolId: ctx.fixedPool.id,
           resourceId: ctx.resource.id,
           windowId: ctx.window.id,
-          userId: USER_ID_2,
         }),
       });
 
@@ -61,13 +183,11 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
       const makeReq = (key: string, userId: string) =>
         fetch(`${baseUrl}/bookings`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'idempotency-key': key },
+          headers: bookingHeaders(userId, key),
           body: JSON.stringify({
-            tenantId: TENANT_ID,
             branchId: BRANCH_ID,
             resourcePoolId: ctx.pooledPool.id,
             windowId: ctx.pooledWindow.id,
-            userId,
           }),
         });
 
@@ -107,16 +227,14 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
 
       const idemKey = 'idempotency-test-key-t3';
       const body = JSON.stringify({
-        tenantId: TENANT_ID,
         branchId: BRANCH_ID,
         resourcePoolId: ctx.pooledPool.id,
         windowId: ctx.pooledWindow.id,
-        userId: USER_ID_1,
       });
 
       const holdRes1 = await fetch(`${baseUrl}/bookings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'idempotency-key': idemKey },
+        headers: bookingHeaders(USER_ID_1, idemKey),
         body,
       });
       if (holdRes1.status !== 201) {
@@ -126,7 +244,7 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
 
       const holdRes2 = await fetch(`${baseUrl}/bookings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'idempotency-key': idemKey },
+        headers: bookingHeaders(USER_ID_1, idemKey),
         body,
       });
       if (holdRes2.status !== 200) {
@@ -147,16 +265,14 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
 
       const raceKey = 'idempotency-race-key-t4';
       const body = JSON.stringify({
-        tenantId: TENANT_ID,
         branchId: BRANCH_ID,
         resourcePoolId: ctx.pooledPool.id,
         windowId: ctx.pooledWindow.id,
-        userId: USER_ID_1,
       });
       const makeReq = () =>
         fetch(`${baseUrl}/bookings`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'idempotency-key': raceKey },
+          headers: bookingHeaders(USER_ID_1, raceKey),
           body,
         });
 
@@ -181,3 +297,6 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
     },
   },
 ];
+
+// Re-exported so other suites can mint a matching token without duplicating the shape.
+export { guestToken };

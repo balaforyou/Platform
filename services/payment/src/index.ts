@@ -54,9 +54,57 @@ server.get('/health', async () => {
   return { status: 'ok', service: 'payment' };
 });
 
+/**
+ * Verifies the caller's JWT and returns its identity claims.
+ *
+ * Mirrors slot-engine's requireUserJwt and the rule already stated on
+ * POST /refunds/override: identity is ALWAYS derived from the verified token,
+ * never accepted from the request body (F-045).
+ */
+async function requireUserJwt(request: any, reply: any) {
+  try {
+    const decoded: any = await request.jwtVerify();
+    const userId = decoded.userId || decoded.sub || decoded.id;
+    if (!userId) {
+      reply.status(401);
+      const err = new Error('Unauthorized: no user identity in token');
+      (err as any).statusCode = 401;
+      (err as any).code = 'UNAUTHORIZED';
+      throw err;
+    }
+    return { userId, tenantId: decoded.tenantId, roles: (decoded.roles ?? []) as string[] };
+  } catch (err: any) {
+    if (err.statusCode || err.code) throw err;
+    reply.status(401);
+    const authErr = new Error('Unauthorized: Invalid or missing token');
+    (authErr as any).statusCode = 401;
+    (authErr as any).code = 'UNAUTHORIZED';
+    throw authErr;
+  }
+}
+
+/**
+ * F-045: a booking's payment flow may only be driven by the booking's owner.
+ * Fails closed — a missing/null owner id is a rejection, never a match.
+ */
+function requireBookingOwnership(ownerId: string | null | undefined, callerId: string, reply: any) {
+  if (!ownerId || ownerId !== callerId) {
+    reply.status(403);
+    const err = new Error('Forbidden: booking belongs to another user');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+}
+
 // Create Payment Intent (with duplicate prevention checks)
 // WHY: Ensures only one intent is created per booking, returning the pending one if retried.
 const createIntentHandler = async (request: any, reply: any) => {
+  // F-045: this endpoint previously had NO auth at all — anyone who knew a
+  // bookingId could create or read back a payment intent for someone else's
+  // booking. Identity now comes from the verified token only.
+  const claims = await requireUserJwt(request, reply);
+
   const { bookingId } = request.body as any;
   if (!bookingId) {
     reply.status(400);
@@ -72,6 +120,11 @@ const createIntentHandler = async (request: any, reply: any) => {
   });
 
   if (existingIntent) {
+    // WHY the ownership check sits ABOVE the early return: otherwise this
+    // branch hands an existing intent (amount, gatewayRef, userId) to any
+    // caller who guesses a bookingId, which is the same leak in a new shape.
+    requireBookingOwnership(existingIntent.userId, claims.userId, reply);
+
     if (existingIntent.status === 'captured') {
       reply.status(400);
       const err = new Error('Payment has already been captured for this booking');
@@ -109,6 +162,10 @@ const createIntentHandler = async (request: any, reply: any) => {
     throw new Error('Slot Engine communication failure: ' + e.message);
   }
 
+  // F-045: the caller must own the booking they are paying for. Checked before
+  // any status/pricing work so a foreign booking never reveals its state either.
+  requireBookingOwnership(booking?.userId, claims.userId, reply);
+
   if (!booking || booking.status !== 'HELD') {
     reply.status(400);
     const err = new Error('Only held bookings can have payment intents created');
@@ -139,18 +196,37 @@ server.post('/payments/intents', createIntentHandler);
 server.post('/intents', createIntentHandler);
 
 const createOrderHandler = async (request: any, reply: any) => {
-  // Authentication verification
-  try {
-    await request.jwtVerify();
-  } catch (err: any) {
-    reply.status(401);
-    const authErr = new Error('Unauthorized: Invalid or missing token');
-    (authErr as any).statusCode = 401;
-    (authErr as any).code = 'UNAUTHORIZED';
-    throw authErr;
-  }
+  // F-045: this endpoint already verified that SOME valid token was presented,
+  // but never checked that the token's owner is the booking's owner.
+  const claims = await requireUserJwt(request, reply);
 
   const { amount, currency, receipt, bookingId } = request.body as any;
+
+  // F-045: bookingId is now REQUIRED. It was optional, which meant "omit it"
+  // was a way to skip the ownership check entirely. It is a resource selector,
+  // not a claimed identity — without it the check cannot run at all.
+  if (!bookingId) {
+    reply.status(400);
+    const err = new Error('bookingId is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  // The intent's userId was itself copied server-side from booking.userId when
+  // the intent was created, so it is an authoritative owner record — and a
+  // local read, with no extra cross-service hop.
+  const owningIntent = await prisma.paymentIntent.findFirst({
+    where: { referenceId: bookingId },
+  });
+  if (!owningIntent) {
+    reply.status(404);
+    const err = new Error('No payment intent exists for this booking');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+  requireBookingOwnership(owningIntent.userId, claims.userId, reply);
 
   // Validate amount >= 100 paise
   if (amount === undefined || amount === null || typeof amount !== 'number') {
@@ -176,18 +252,11 @@ const createOrderHandler = async (request: any, reply: any) => {
       receipt: receipt ? receipt.slice(0, 40) : `receipt_${Date.now()}`,
     });
 
-    // If bookingId is provided, dynamically update the pending PaymentIntent's gatewayRef
-    if (bookingId) {
-      const intent = await prisma.paymentIntent.findFirst({
-        where: { referenceId: bookingId },
-      });
-      if (intent) {
-        await prisma.paymentIntent.update({
-          where: { id: intent.id },
-          data: { gatewayRef: order.id },
-        });
-      }
-    }
+    // Point the (already resolved and ownership-checked) intent at this order.
+    await prisma.paymentIntent.update({
+      where: { id: owningIntent.id },
+      data: { gatewayRef: order.id },
+    });
 
     return {
       order_id: order.id,

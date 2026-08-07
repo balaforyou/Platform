@@ -7,8 +7,9 @@ import {
   internalKey,
   webhookSecret,
   generateRazorpaySignature,
+  bookingHeaders,
+  paymentHeaders,
   PaymentContext,
-  TENANT_ID,
   BRANCH_ID,
   USER_ID,
 } from './_fixtures';
@@ -82,15 +83,14 @@ export const webhookSignatureAndIdempotencySections: Section<PaymentContext>[] =
   {
     name: 'E2E webhook booking confirmation (HELD → CONFIRMED, PaymentIntent → captured)',
     async run(ctx) {
+      // F-045: identity comes from the token; the body no longer names the booker.
       const holdRes = await fetch(`${slotEngineUrl}/bookings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'idempotency-key': 'e2e-payment-hold-key' },
+        headers: bookingHeaders(USER_ID, 'e2e-payment-hold-key'),
         body: JSON.stringify({
-          tenantId: TENANT_ID,
           branchId: BRANCH_ID,
           resourcePoolId: ctx.pool.id,
           windowId: ctx.window.id,
-          userId: USER_ID,
         }),
       });
       const holdBooking = ((await holdRes.json()) as any).data;
@@ -100,7 +100,7 @@ export const webhookSignatureAndIdempotencySections: Section<PaymentContext>[] =
 
       const intentRes = await fetch(`${paymentUrl}/payments/intents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: paymentHeaders(USER_ID),
         body: JSON.stringify({ bookingId: holdBooking.id }),
       });
       const intent = ((await intentRes.json()) as any).data;
