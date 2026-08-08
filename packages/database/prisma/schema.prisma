@@ -211,6 +211,45 @@ model GenerationLock {
   @@unique([resourcePoolId, date])
 }
 
+model ScheduledJob {
+  name                String    @id
+  enabled             Boolean   @default(true)
+  intervalSeconds     Int
+  timeoutSeconds      Int       @default(60)
+  nextRunAt           DateTime
+  lastRunAt           DateTime?
+  lastRunStatus       String?
+  lastRunError        String?
+  lastRunDurationMs   Int?
+  consecutiveFailures Int       @default(0)
+  circuitOpenedAt     DateTime?
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([enabled, nextRunAt])
+}
+
+model ScheduledJobDispatch {
+  id           String    @id @default(uuid())
+  jobName      String
+  tenantId     String?
+  subjectId    String?
+  dedupKey     String
+  status       String    @default("PENDING")
+  attempts     Int       @default(0)
+  lastError    String?
+  occurrenceAt DateTime?
+  expiresAt    DateTime?
+  dispatchedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([jobName, dedupKey])
+  @@index([jobName, status, createdAt])
+  @@index([expiresAt])
+}
+
 model BookingRule {
   id                       String       @id @default(uuid())
   resourcePoolId           String

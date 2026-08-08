@@ -1,0 +1,20 @@
+{
+  "name": "@badminton/job-scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test:phase-a": "dotenv -e ../../.env -- tsx tests/phaseA.test.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@badminton/database": "workspace:*",
+    "@types/node": "^20.12.12",
+    "dotenv-cli": "^7.4.2",
+    "tsx": "^4.10.5",
+    "typescript": "^5.4.5"
+  }
+}
