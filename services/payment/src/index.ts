@@ -228,16 +228,24 @@ const createOrderHandler = async (request: any, reply: any) => {
   }
   requireBookingOwnership(owningIntent.userId, claims.userId, reply);
 
-  // Validate amount >= 100 paise
-  if (amount === undefined || amount === null || typeof amount !== 'number') {
-    reply.status(400);
-    const err = new Error('amount is required and must be a number');
-    (err as any).statusCode = 400;
-    (err as any).code = 'BAD_REQUEST';
+  // F-049: the charge is ALWAYS the amount stored on the PaymentIntent, never
+  // the one in the request body. That stored value was determined at an earlier,
+  // properly-authorized step — server-side resolvePrice for standard bookings
+  // (which already honours a window-level pricing override), or an admin's
+  // negotiatedPrice for negotiated ones. The body's `amount` is ignored, not
+  // rejected, matching how identity and price are handled elsewhere.
+  const authoritativeAmount = owningIntent.amount;
+
+  if (typeof authoritativeAmount !== 'number' || !Number.isFinite(authoritativeAmount)) {
+    reply.status(409);
+    const err = new Error('Stored payment amount for this booking is unusable');
+    (err as any).statusCode = 409;
+    (err as any).code = 'INVALID_STORED_AMOUNT';
     throw err;
   }
 
-  if (amount < 100) {
+  // Validation applies to the amount actually charged, not to the discarded one.
+  if (authoritativeAmount < 100) {
     reply.status(400);
     const err = new Error('Amount must be at least 100 paise');
     (err as any).statusCode = 400;
@@ -245,9 +253,23 @@ const createOrderHandler = async (request: any, reply: any) => {
     throw err;
   }
 
+  // Traceable to a specific booking if this is ever reviewed later.
+  if (amount !== undefined && amount !== null && Number(amount) !== authoritativeAmount) {
+    console.log(
+      'PAYMENT_AMOUNT_EVIDENCE client_amount_overridden',
+      JSON.stringify({
+        bookingId,
+        intentId: owningIntent.id,
+        clientSuppliedAmount: amount,
+        authoritativeAmount,
+        callerUserId: claims.userId,
+      }),
+    );
+  }
+
   try {
     const order = await razorpayClient.orders.create({
-      amount,
+      amount: authoritativeAmount,
       currency: currency || 'INR',
       receipt: receipt ? receipt.slice(0, 40) : `receipt_${Date.now()}`,
     });

@@ -1,9 +1,10 @@
-import { Section, signJwt, expectForbidden } from '@badminton/test-harness';
+import { Section, signJwt, inspect, expectForbidden } from '@badminton/test-harness';
 import {
   db,
   slotEngineUrl,
   paymentUrl,
   futureAlignedHour,
+  paymentHeaders,
   PaymentContext,
   TENANT_ID,
   BRANCH_ID,
@@ -93,6 +94,71 @@ export const negotiatedLinkSections: Section<PaymentContext>[] = [
       await expectForbidden(forbiddenNegotiatedRes, 'member JWT creating a negotiated payment link');
 
       console.log('Negotiated orchestration returned one booking/payment link across retry and rejected member JWT.');
+
+      // Hand the negotiated booking to the F-049 section below.
+      ctx.negotiatedBookingId = negotiated1.booking.id;
+    },
+  },
+
+  {
+    name: 'F-049: a negotiated (admin-set) price survives create-order unchanged',
+    async run(ctx) {
+      // Negotiated bookings carry a legitimately different, admin-set price.
+      // The fix must read the STORED value, not flatten it to a standard
+      // server computation — otherwise it would silently undo a legitimate
+      // admin negotiation.
+      if (!ctx.negotiatedBookingId) {
+        throw new Error('The negotiated orchestration section must run first.');
+      }
+
+      const negotiatedIntent = await db.paymentIntent.findFirst({
+        where: { referenceId: ctx.negotiatedBookingId },
+      });
+      if (!negotiatedIntent) throw new Error('Expected a PaymentIntent for the negotiated booking.');
+
+      // 222.00 negotiated → 22200 paise, deliberately distinct from the
+      // 125.00/12500 standard price the same pool would otherwise resolve.
+      if (negotiatedIntent.amount !== 22200) {
+        throw new Error(`Expected negotiated amount 22200 paise, got ${negotiatedIntent.amount}`);
+      }
+
+      const res = await inspect(
+        await fetch(`${paymentUrl}/payments/create-order`, {
+          method: 'POST',
+          headers: paymentHeaders(USER_ID),
+          body: JSON.stringify({
+            bookingId: ctx.negotiatedBookingId,
+            amount: 12500, // attempt to pull it down to the standard price
+            currency: 'INR',
+          }),
+        }),
+      );
+
+      console.log(
+        'PAYMENT_AMOUNT_EVIDENCE negotiated_price_preserved',
+        JSON.stringify({
+          status: res.status,
+          bookingId: ctx.negotiatedBookingId,
+          intentId: negotiatedIntent.id,
+          clientSuppliedAmount: 12500,
+          authoritativeAmount: negotiatedIntent.amount,
+        }),
+      );
+
+      if ([400, 401, 403].includes(res.status)) {
+        throw new Error(`Negotiated booking owner was rejected: ${res.status} ${res.raw}`);
+      }
+      if (res.status === 200) {
+        const charged = (res.json?.data ?? res.json)?.amount;
+        if (Number(charged) !== negotiatedIntent.amount) {
+          throw new Error(`Charged ${charged}, expected the negotiated ${negotiatedIntent.amount}`);
+        }
+      }
+
+      const after = await db.paymentIntent.findFirst({ where: { id: negotiatedIntent.id } });
+      if (after?.amount !== negotiatedIntent.amount) {
+        throw new Error(`Negotiated amount was altered: ${negotiatedIntent.amount} → ${after?.amount}`);
+      }
     },
   },
 ];

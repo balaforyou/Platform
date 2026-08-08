@@ -245,4 +245,75 @@ export const priceIntegritySections: Section<PaymentContext>[] = [
       }
     },
   },
+
+  {
+    name: 'F-049: create-order charges the stored intent amount, never the client-supplied one',
+    async run(ctx) {
+      if (!ctx.dupIntentBookingId) {
+        throw new Error('Duplicate-prevention section must run first to provide a booking id.');
+      }
+
+      const intentBefore = await db.paymentIntent.findFirst({
+        where: { referenceId: ctx.dupIntentBookingId },
+      });
+      if (!intentBefore) throw new Error('Expected a PaymentIntent for the seeded booking.');
+
+      // The booking is ₹125.00 → 12500 paise, resolved server-side by resolvePrice
+      // (which also honours any window-level pricing override).
+      if (intentBefore.amount !== 12500) {
+        throw new Error(`Expected authoritative amount 12500 paise, got ${intentBefore.amount}`);
+      }
+
+      // The owner attempts to pay ₹1.00 for a ₹125.00 booking.
+      const tampered = await inspect(
+        await fetch(`${paymentUrl}/payments/create-order`, {
+          method: 'POST',
+          headers: paymentHeaders(USER_ID),
+          body: JSON.stringify({
+            bookingId: ctx.dupIntentBookingId,
+            amount: 100, // 100 paise = ₹1.00
+            currency: 'INR',
+            receipt: ctx.dupIntentBookingId,
+          }),
+        }),
+      );
+
+      console.log(
+        'PAYMENT_AMOUNT_EVIDENCE tampered_amount_not_charged',
+        JSON.stringify({
+          status: tampered.status,
+          bookingId: ctx.dupIntentBookingId,
+          intentId: intentBefore.id,
+          clientSuppliedAmount: 100,
+          authoritativeAmount: intentBefore.amount,
+        }),
+      );
+
+      // The tampered value must never become the charge. Not rejected — overridden.
+      if ([400, 401, 403].includes(tampered.status)) {
+        throw new Error(
+          `The booking's owner was rejected rather than having the amount overridden: ${tampered.status} ${tampered.raw}`,
+        );
+      }
+      if (tampered.status === 200) {
+        const charged = (tampered.json?.data ?? tampered.json)?.amount;
+        if (Number(charged) !== intentBefore.amount) {
+          throw new Error(
+            `Razorpay order was created for ${charged}, expected the authoritative ${intentBefore.amount}`,
+          );
+        }
+      }
+
+      // The stored amount must be untouched by the attempt, whatever happened upstream.
+      const intentAfter = await db.paymentIntent.findFirst({
+        where: { referenceId: ctx.dupIntentBookingId },
+      });
+      if (intentAfter?.amount !== intentBefore.amount) {
+        throw new Error(
+          `Stored intent amount changed from ${intentBefore.amount} to ${intentAfter?.amount} — a client-supplied amount leaked into storage`,
+        );
+      }
+    },
+  },
+
 ];

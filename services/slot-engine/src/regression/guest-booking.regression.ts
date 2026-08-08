@@ -1,4 +1,5 @@
 import { Section, expectIdentityFromJwt, inspect } from '@badminton/test-harness';
+import { BookingStatus } from '@badminton/database';
 import {
   db,
   baseUrl,
@@ -125,6 +126,265 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
       );
       if (bogusToken.status !== 401) {
         throw new Error(`Expected 401 for a malformed token, got ${bogusToken.status}`);
+      }
+    },
+  },
+
+  {
+    name: 'F-048: isMemberBooking:true cannot buy the longer browse-ahead window',
+    async run() {
+      // A pool whose rule uses the defaults: guest 7 days, member 30 days.
+      const pool = await db.resourcePool.create({
+        data: {
+          tenantId: TENANT_ID,
+          branchId: BRANCH_ID,
+          name: 'F-048 Browse Window Pool',
+          allocationMode: 'POOLED',
+          capacity: 8,
+          minOccupancy: 1,
+          minBookingDurationMinutes: 60,
+          pricingMode: 'FLAT',
+          defaultRate: 100,
+          basePrice: 100,
+        },
+      });
+      await db.bookingRule.create({
+        data: {
+          resourcePoolId: pool.id,
+          guestOpenWindowDays: 7,
+          memberWindowDays: 30,
+          gracePeriodMinutes: 30,
+          cancellationPolicyJson: { type: 'tiered', tiers: [] },
+        },
+      });
+
+      // 14 days out: outside the guest window, comfortably inside the member one.
+      // Pre-fix, isMemberBooking:true made this succeed.
+      const farStart = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+      farStart.setMinutes(0, 0, 0);
+      const farWindow = await db.availabilityWindow.create({
+        data: {
+          resourcePoolId: pool.id,
+          startTime: farStart,
+          endTime: new Date(farStart.getTime() + 60 * 60 * 1000),
+          capacity: 8,
+        },
+      });
+
+      const escalation = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: bookingHeaders(USER_ID_1, 'f048-escalation-key'),
+          body: JSON.stringify({
+            branchId: BRANCH_ID,
+            resourcePoolId: pool.id,
+            windowId: farWindow.id,
+            isMemberBooking: true, // the escalation attempt
+          }),
+        }),
+      );
+      console.log(
+        'BOOKING_MEMBERFLAG_EVIDENCE escalation_rejected',
+        JSON.stringify({
+          status: escalation.status,
+          daysAhead: 14,
+          guestOpenWindowDays: 7,
+          memberWindowDays: 30,
+          body: escalation.json,
+        }),
+      );
+      if (escalation.status !== 400 || escalation.json?.error?.code !== 'BOOKING_WINDOW_CLOSED') {
+        throw new Error(
+          `Expected 400 BOOKING_WINDOW_CLOSED for a 14-day-ahead booking claiming membership, got ${escalation.status}: ${escalation.raw}`,
+        );
+      }
+
+      // Inside the guest window the booking succeeds, but the claim is discarded.
+      const nearStart = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      nearStart.setMinutes(0, 0, 0);
+      const nearWindow = await db.availabilityWindow.create({
+        data: {
+          resourcePoolId: pool.id,
+          startTime: nearStart,
+          endTime: new Date(nearStart.getTime() + 60 * 60 * 1000),
+          capacity: 8,
+        },
+      });
+
+      const accepted = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: bookingHeaders(USER_ID_1, 'f048-ignored-key'),
+          body: JSON.stringify({
+            branchId: BRANCH_ID,
+            resourcePoolId: pool.id,
+            windowId: nearWindow.id,
+            isMemberBooking: true, // ignored, not rejected
+          }),
+        }),
+      );
+      const created = accepted.json?.data ?? accepted.json;
+      console.log(
+        'BOOKING_MEMBERFLAG_EVIDENCE spoof_ignored',
+        JSON.stringify({
+          status: accepted.status,
+          requestedIsMemberBooking: true,
+          persistedIsMemberBooking: created?.isMemberBooking,
+        }),
+      );
+      if (accepted.status !== 201) {
+        throw new Error(`Expected 201 inside the guest window, got ${accepted.status}: ${accepted.raw}`);
+      }
+      const persisted = await db.booking.findUnique({ where: { id: created.id } });
+      if (persisted?.isMemberBooking !== false) {
+        throw new Error(
+          `Expected persisted isMemberBooking=false despite the body asking for true, got ${persisted?.isMemberBooking}`,
+        );
+      }
+
+      // CONSEQUENCE 1: it counts as guest occupancy (a forged flag would hide it,
+      // distorting the metric that drives low-occupancy release).
+      await db.booking.update({ where: { id: created.id }, data: { status: BookingStatus.CONFIRMED } });
+      const occ = await inspect(await fetch(`${baseUrl}/resource-pools/${pool.id}/occupancy`));
+      const occData = occ.json?.data ?? occ.json;
+      console.log(
+        'BOOKING_MEMBERFLAG_EVIDENCE counted_as_guest_occupancy',
+        JSON.stringify({
+          confirmedSeats: occData?.confirmedSeats,
+          totalCapacity: occData?.totalCapacity,
+          occupancyPercentage: occData?.occupancyPercentage,
+        }),
+      );
+      // Assert on the real field name and reject a missing/NaN value outright —
+      // `Number(undefined) < 1` is false, so a typo here would pass silently.
+      if (!occData || !Number.isFinite(Number(occData.confirmedSeats))) {
+        throw new Error(`Occupancy response did not carry a numeric confirmedSeats: ${occ.raw}`);
+      }
+      if (Number(occData.confirmedSeats) < 1) {
+        throw new Error(
+          `Expected the booking to count as guest occupancy (confirmedSeats >= 1), got ${occData.confirmedSeats}`,
+        );
+      }
+
+      // CONSEQUENCE 2: the grace sweep must NOT release it. A forged member flag
+      // would have made the sweep release this paid guest booking as a no-show.
+      await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST' });
+      const afterSweep = await db.booking.findUnique({ where: { id: created.id } });
+      console.log(
+        'BOOKING_MEMBERFLAG_EVIDENCE survives_grace_sweep',
+        JSON.stringify({ statusAfterSweep: afterSweep?.status }),
+      );
+      if (afterSweep?.status !== BookingStatus.CONFIRMED) {
+        throw new Error(
+          `Guest booking must survive the grace sweep, but status became ${afterSweep?.status}`,
+        );
+      }
+    },
+  },
+
+  {
+    name: 'Blocked-window overlap is time-bounded (non-overlapping block does not block; overlapping one does)',
+    async run() {
+      // REGRESSION GUARD for the raw-query casing trap. The blocked-window
+      // filter read window.starttime/endtime (lowercase) off a raw SELECT *,
+      // which returns camelCase keys. Prisma strips undefined filter values, so
+      // the time bounds vanished and ANY BlockedWindow row for the pool blocked
+      // EVERY slot in it. This proves the bounds are back.
+      const pool = await db.resourcePool.create({
+        data: {
+          tenantId: TENANT_ID,
+          branchId: BRANCH_ID,
+          name: 'Blocked Window Overlap Pool',
+          allocationMode: 'POOLED',
+          capacity: 4,
+          minOccupancy: 1,
+          minBookingDurationMinutes: 60,
+          pricingMode: 'FLAT',
+          defaultRate: 100,
+          basePrice: 100,
+        },
+      });
+
+      const start = new Date(Date.now() + 3 * 60 * 60 * 1000);
+      start.setMinutes(0, 0, 0);
+      const bookable = await db.availabilityWindow.create({
+        data: {
+          resourcePoolId: pool.id,
+          startTime: start,
+          endTime: new Date(start.getTime() + 60 * 60 * 1000),
+          capacity: 4,
+        },
+      });
+
+      // A block on a completely different day — must NOT affect this slot.
+      const farBlockStart = new Date(start.getTime() + 5 * 24 * 60 * 60 * 1000);
+      await db.blockedWindow.create({
+        data: {
+          resourcePoolId: pool.id,
+          startTime: farBlockStart,
+          endTime: new Date(farBlockStart.getTime() + 60 * 60 * 1000),
+          reason: 'Unrelated maintenance five days later',
+        },
+      });
+
+      const notBlocked = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: bookingHeaders(USER_ID_1, 'blocked-window-nonoverlap-key'),
+          body: JSON.stringify({
+            branchId: BRANCH_ID,
+            resourcePoolId: pool.id,
+            windowId: bookable.id,
+          }),
+        }),
+      );
+      console.log(
+        'BLOCKED_WINDOW_EVIDENCE non_overlapping_block_ignored',
+        JSON.stringify({ status: notBlocked.status, code: notBlocked.json?.error?.code }),
+      );
+      if (notBlocked.status !== 201) {
+        throw new Error(
+          `A block 5 days away must not block this slot, got ${notBlocked.status}: ${notBlocked.raw}`,
+        );
+      }
+
+      // A genuinely overlapping block MUST still block.
+      const second = await db.availabilityWindow.create({
+        data: {
+          resourcePoolId: pool.id,
+          startTime: new Date(start.getTime() + 2 * 60 * 60 * 1000),
+          endTime: new Date(start.getTime() + 3 * 60 * 60 * 1000),
+          capacity: 4,
+        },
+      });
+      await db.blockedWindow.create({
+        data: {
+          resourcePoolId: pool.id,
+          startTime: new Date(start.getTime() + 2 * 60 * 60 * 1000),
+          endTime: new Date(start.getTime() + 3 * 60 * 60 * 1000),
+          reason: 'Court resurfacing during this exact slot',
+        },
+      });
+
+      const blocked = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: bookingHeaders(USER_ID_1, 'blocked-window-overlap-key'),
+          body: JSON.stringify({
+            branchId: BRANCH_ID,
+            resourcePoolId: pool.id,
+            windowId: second.id,
+          }),
+        }),
+      );
+      console.log(
+        'BLOCKED_WINDOW_EVIDENCE overlapping_block_enforced',
+        JSON.stringify({ status: blocked.status, code: blocked.json?.error?.code }),
+      );
+      if (blocked.status !== 409 || blocked.json?.error?.code !== 'SLOT_BLOCKED') {
+        throw new Error(
+          `An overlapping block must return 409 SLOT_BLOCKED, got ${blocked.status}: ${blocked.raw}`,
+        );
       }
     },
   },

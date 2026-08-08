@@ -29,6 +29,8 @@ export interface PaymentContext {
   bookingConfirmed?: any;
   /** Set by the duplicate-intent section, consumed by the F-045 identity sections. */
   dupIntentBookingId?: string;
+  /** Set by the negotiated-link section, consumed by the F-049 negotiated-price section. */
+  negotiatedBookingId?: string;
 }
 
 /**

@@ -1674,19 +1674,21 @@ server.post('/bookings', async (request, reply) => {
     resourcePoolId,
     resourceId,
     windowId,
-    isMemberBooking,
     coPlayers,
-    // WHY: identity and price are intentionally destructured and discarded.
-    // The self-service path must never honour a caller-supplied price (Phase 4
-    // trust boundary) nor a caller-supplied identity (F-045). Both are ignored
-    // silently rather than rejected: presence is not an error, it is simply
-    // never read — the same contract /member/today-assignment/confirm uses.
+    // WHY: identity, price and membership are intentionally destructured and
+    // discarded. The self-service path must never honour a caller-supplied
+    // price (Phase 4 trust boundary), identity (F-045), or membership claim
+    // (F-048). All are ignored silently rather than rejected: presence is not
+    // an error, it is simply never read — the same contract
+    // /member/today-assignment/confirm uses.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     userId: _ignoredUserId,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     tenantId: _ignoredTenantId,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     price: _ignoredPrice,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    isMemberBooking: _ignoredIsMemberBooking,
     ...rest
   } = request.body as any;
   void rest; // suppresses unused-var lint for the spread remainder
@@ -1710,6 +1712,12 @@ server.post('/bookings', async (request, reply) => {
   try {
     const booking = await prisma.$transaction(async (tx: any) => {
       // 1. Lock the AvailabilityWindow row FOR UPDATE.
+      // CASING TRAP: this is a RAW query, so the returned object carries the
+      // database's real quoted-camelCase keys (startTime, endTime) — NOT the
+      // lowercase forms. Reading `window.starttime` yields undefined, which
+      // silently disabled the browse-ahead gate (Invalid Date compares false)
+      // and stripped the time bounds from the blocked-window filter. Always
+      // use startTime/endTime here.
       const windows = await tx.$queryRaw<any[]>`
         SELECT * FROM "AvailabilityWindow" WHERE id = ${windowId} FOR UPDATE
       `;
@@ -1745,13 +1753,19 @@ server.post('/bookings', async (request, reply) => {
         throw err;
       }
 
-      // 4. Enforce booking window (guest vs member limits).
+      // 4. Enforce the guest browse-ahead window.
+      // F-048: this endpoint always applies guestOpenWindowDays. It previously
+      // switched to the longer memberWindowDays on a client-supplied flag, so
+      // any caller could bypass F-043's guest restriction by asserting
+      // membership. Real member bookings never come through here — they are
+      // created server-side by ensureTodayMemberBooking from a genuine
+      // MemberGroupAssignment — so there is nothing legitimate to preserve.
       const rule = await tx.bookingRule.findFirst({ where: { resourcePoolId } });
-      const windowDays = isMemberBooking ? (rule?.memberWindowDays ?? 30) : (rule?.guestOpenWindowDays ?? 7);
+      const windowDays = rule?.guestOpenWindowDays ?? 7;
       const maxBookingDate = new Date();
       maxBookingDate.setDate(maxBookingDate.getDate() + windowDays);
 
-      if (new Date(window.starttime) > maxBookingDate) {
+      if (new Date(window.startTime) > maxBookingDate) {
         const err = new Error('Booking window is not open yet');
         (err as any).statusCode = 400;
         (err as any).code = 'BOOKING_WINDOW_CLOSED';
@@ -1766,8 +1780,8 @@ server.post('/bookings', async (request, reply) => {
             { resourceId: null },
             ...(resourceId ? [{ resourceId }] : []),
           ],
-          startTime: { lte: window.endtime },
-          endTime: { gte: window.starttime },
+          startTime: { lte: window.endTime },
+          endTime: { gte: window.startTime },
         },
       });
       if (blocked) {
@@ -1835,7 +1849,13 @@ server.post('/bookings', async (request, reply) => {
           heldAt: now,
           heldUntil,
           idempotencyKey,
-          isMemberBooking: !!isMemberBooking,
+          // F-048: always false here. ensureTodayMemberBooking (the F-022 atomic
+          // helper) is the ONLY legitimate producer of isMemberBooking: true,
+          // and it derives that from a real MemberGroupAssignment server-side.
+          // A forged flag on this row would also hide the booking from
+          // computePoolGuestOccupancy, surface it on the member-attendance
+          // dashboard, and make the grace sweep release a paid guest booking.
+          isMemberBooking: false,
           refundAmount: null,
           price: resolvedPrice,
           players: normalizedCoPlayers.length > 0 ? {
@@ -1953,8 +1973,8 @@ server.post('/bookings/negotiated', async (request, reply) => {
             { resourceId: null },
             ...(resourceId ? [{ resourceId }] : []),
           ],
-          startTime: { lte: window.endtime },
-          endTime: { gte: window.starttime },
+          startTime: { lte: window.endTime },
+          endTime: { gte: window.startTime },
         },
       });
       if (blocked) {
