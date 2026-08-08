@@ -43,11 +43,11 @@ export default function CourtBooking() {
         });
         const matched = res?.find(p => p.id === poolId);
         if (!matched) {
-          throw new Error('Court category not found at this branch.');
+          throw new Error('Resource category not found at this branch.');
         }
         setPool(matched);
       } catch (err: any) {
-        setError(err.message || 'Failed to load court category details.');
+        setError(err.message || 'Failed to load resource category details.');
       } finally {
         setLoading(false);
       }
@@ -59,30 +59,37 @@ export default function CourtBooking() {
   // 2. Fetch availability slots when date or pool changes
   useEffect(() => {
     if (!poolId || !bookingDate) return;
+    let isCurrentRequest = true;
 
     const fetchSlots = async () => {
       try {
         setSlotsLoading(true);
+        setSlots([]);
         setSelectedSlot(null);
         setBookingError(null);
         // GET /resource-pools/:id/availability?date=YYYY-MM-DD
         const res = await apiRequest<any[]>(`/slot-engine/resource-pools/${poolId}/availability?date=${bookingDate}`, {
           token: accessToken,
         });
-        setSlots(res || []);
+        if (!isCurrentRequest) return;
+        setSlots(Array.isArray(res) ? res : (res as any)?.data || []);
       } catch (err: any) {
-        setBookingError(err.message || 'Failed to fetch court availability.');
+        if (!isCurrentRequest) return;
+        setBookingError(err.message || 'Failed to fetch availability.');
       } finally {
-        setSlotsLoading(false);
+        if (isCurrentRequest) setSlotsLoading(false);
       }
     };
 
     fetchSlots();
+    return () => {
+      isCurrentRequest = false;
+    };
   }, [poolId, bookingDate, accessToken]);
 
   const handleAddPlayer = () => {
     if (pool && (1 + coPlayers.length >= pool.capacity)) {
-      setBookingError(`Maximum players capacity of ${pool.capacity} reached.`);
+      setBookingError(`Maximum participant capacity of ${pool.capacity} reached.`);
       return;
     }
     setCoPlayers([...coPlayers, '']);
@@ -176,7 +183,7 @@ export default function CourtBooking() {
       // Redirect to checkout
       navigate(`/bookings/${booking.id}/pay`);
     } catch (err: any) {
-      setBookingError(err.message || 'Failed to reserve court slot. Please try another slot.');
+      setBookingError(err.message || 'Failed to reserve slot. Please try another slot.');
     } finally {
       setSubmitting(false);
     }
@@ -220,7 +227,7 @@ export default function CourtBooking() {
           Book <span className="text-[var(--brand-primary)]">{pool.name}</span>
         </h2>
         <p className="text-gray-400 text-xs">
-          Select date, choose an available slot, and enter co-players to compute the total rate.
+          Select date, choose an available slot, and enter participants to compute the total rate.
         </p>
       </div>
 
@@ -230,7 +237,7 @@ export default function CourtBooking() {
           <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-4">
             <h3 className="text-sm font-bold font-outfit text-gray-300 uppercase tracking-wider flex items-center space-x-2">
               <Calendar className="h-4 w-4 text-[var(--brand-primary)]" />
-              <span>1. Choose Game Date</span>
+              <span>1. Choose Date</span>
             </h3>
             
             <input
@@ -303,12 +310,12 @@ export default function CourtBooking() {
             <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-6">
               <h3 className="text-sm font-bold font-outfit text-gray-300 uppercase tracking-wider flex items-center space-x-2">
                 <Users className="h-4 w-4 text-[var(--brand-primary)]" />
-                <span>3. Co-Players & Rates</span>
+                <span>3. Participants & Rates</span>
               </h3>
 
               {/* Co-players list */}
               <div className="space-y-3">
-                <label className="text-xs text-gray-400 font-medium">Add co-player mobile numbers:</label>
+                <label className="text-xs text-gray-400 font-medium">Add participant mobile numbers:</label>
                 {coPlayers.map((phone, idx) => (
                   <div key={idx} className="flex items-center space-x-2">
                     <input
@@ -334,7 +341,7 @@ export default function CourtBooking() {
                     id="add-co-player-btn"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    <span>Add Co-Player</span>
+                    <span>Add Participant</span>
                   </button>
                 )}
               </div>
@@ -346,12 +353,12 @@ export default function CourtBooking() {
                   <span className="text-gray-200">
                     {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON' 
                       ? 'Per-person rate multiplication' 
-                      : 'Flat court booking rate'}
+                      : 'Flat booking rate'}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs text-gray-400 font-medium">
                   <span>Group Size:</span>
-                  <span className="text-gray-200">{1 + coPlayers.length} Players</span>
+                  <span className="text-gray-200">{1 + coPlayers.length} Participants</span>
                 </div>
                 <div className="flex justify-between items-end pt-2 border-t border-white/5">
                   <span className="text-sm font-bold text-white font-outfit">Total Estimate:</span>
@@ -387,7 +394,7 @@ export default function CourtBooking() {
             </div>
           ) : (
             <div className="bg-white/5 border border-white/5 p-6 rounded-2xl text-center text-gray-400 py-16 text-xs font-semibold">
-              Select a court availability slot to display player setup and pricing details.
+              Select an availability slot to display participant setup and pricing details.
             </div>
           )}
         </div>

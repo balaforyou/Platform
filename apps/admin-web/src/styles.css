@@ -476,6 +476,14 @@ button:disabled {
   width: auto;
 }
 
+.inline-check {
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
 .check-group,
 .lookup-box {
   display: flex;
@@ -517,6 +525,31 @@ button:disabled {
 .select-row.active {
   border-color: #e11d48;
   box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.12);
+}
+
+.scheduling-page .content-grid {
+  align-items: start;
+}
+
+.preview-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.preview-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(160px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.preview-row span {
+  color: #64748b;
 }
 
 .time-slot-section {

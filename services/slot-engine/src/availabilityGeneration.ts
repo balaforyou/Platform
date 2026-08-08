@@ -168,20 +168,20 @@ export async function ensureAvailabilityWindowsForDate(
     throw err;
   }
 
-  return prisma.$transaction(async (tx: any) => {
-    await tx.generationLock.upsert({
-      where: {
-        resourcePoolId_date: {
-          resourcePoolId,
-          date: generationDate,
-        },
-      },
-      update: {},
-      create: {
+  try {
+    await prisma.generationLock.create({
+      data: {
         resourcePoolId,
         date: generationDate,
       },
     });
+  } catch (err: any) {
+    if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+      throw err;
+    }
+  }
+
+  return prisma.$transaction(async (tx: any) => {
     await tx.$queryRaw`
       SELECT id FROM "GenerationLock"
       WHERE "resourcePoolId" = ${resourcePoolId}

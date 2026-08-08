@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Banknote,
   CalendarClock,
+  CalendarDays,
   Copy,
   LayoutDashboard,
   Link as LinkIcon,
@@ -64,6 +65,33 @@ type AvailabilitySlot = {
     price?: string | null;
   };
   remainingCapacity: number;
+};
+
+type AvailabilityPattern = {
+  id: string;
+  resourcePoolId: string;
+  daysOfWeek: string;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes: number;
+  capacity: number;
+  pricingMode?: 'FLAT' | 'PER_PERSON' | null;
+  price?: string | null;
+  status: 'ACTIVE' | 'SUSPENDED';
+};
+
+type AvailabilityOverride = {
+  id: string;
+  resourcePoolId: string;
+  date: string;
+  type: 'CLOSED' | 'MODIFIED';
+  startTime?: string | null;
+  endTime?: string | null;
+  slotDurationMinutes?: number | null;
+  capacity?: number | null;
+  pricingMode?: 'FLAT' | 'PER_PERSON' | null;
+  price?: string | null;
+  reason?: string | null;
 };
 
 type UserLookupResult = {
@@ -154,6 +182,30 @@ const branchScheduleSchema = z.object({
   workingHoursEnd: z.string().regex(/^\d{2}:\d{2}$/),
 });
 
+const patternSchema = z.object({
+  daysOfWeek: z.string().min(1),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  slotDurationMinutes: z.coerce.number().int().positive(),
+  capacity: z.coerce.number().int().positive(),
+  pricingMode: z.enum(['FLAT', 'PER_PERSON']).optional(),
+  price: z.coerce.number().min(0).optional(),
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
+});
+
+const overrideSchema = z.object({
+  fromDate: z.string().min(1),
+  toDate: z.string().min(1),
+  type: z.enum(['CLOSED', 'MODIFIED']),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  slotDurationMinutes: z.coerce.number().int().positive().optional(),
+  capacity: z.coerce.number().int().positive().optional(),
+  pricingMode: z.enum(['FLAT', 'PER_PERSON']).optional(),
+  price: z.coerce.number().min(0).optional(),
+  reason: z.string().optional(),
+});
+
 const resourcePoolFieldLabels: Record<string, string> = {
   name: 'Pool Name',
   capacity: 'Capacity',
@@ -192,6 +244,15 @@ function formatDaysOfWeek(daysOfWeek: string) {
       return weekdayOptions.find((option) => option.value === trimmed)?.label || trimmed;
     })
     .join(', ');
+}
+
+function formatTimeRange(startTime?: string | null, endTime?: string | null) {
+  if (!startTime || !endTime) return 'Closed';
+  return `${startTime} - ${endTime}`;
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function timeToMinutes(value?: string | null) {
@@ -240,6 +301,10 @@ function useAdminApi() {
       method: 'PUT',
       token: accessToken,
       body: JSON.stringify(body),
+    }),
+    delete: <T,>(path: string) => apiRequest<T>(path, {
+      method: 'DELETE',
+      token: accessToken,
     }),
   }), [accessToken]);
 }
@@ -360,6 +425,7 @@ function Shell() {
   const navItems = [
     { to: '/', label: 'Overview', icon: LayoutDashboard },
     { to: '/resources', label: 'Resources', icon: SlidersHorizontal },
+    { to: '/scheduling', label: 'Scheduling', icon: CalendarDays },
     { to: '/assignments', label: 'Assignments', icon: Users },
     { to: '/occupancy', label: 'Low Occupancy', icon: CalendarClock },
     { to: '/negotiated', label: 'Negotiated', icon: LinkIcon },
@@ -755,6 +821,303 @@ function ResourcesPage() {
   );
 }
 
+function SchedulingPage() {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  const branches = useBranches();
+  const [branchId, setBranchId] = useState('');
+  const pools = usePools(branchId);
+  const [poolId, setPoolId] = useState('');
+  const selectedPool = pools.data?.find((pool) => pool.id === poolId);
+  const [selectedPatternId, setSelectedPatternId] = useState('');
+  const [selectedOverrideId, setSelectedOverrideId] = useState('');
+  const [previewDate, setPreviewDate] = useState(todayIsoDate());
+  const [patternDraft, setPatternDraft] = useState<Record<string, string>>({
+    daysOfWeek: '2,4',
+    startTime: '18:00',
+    endTime: '22:00',
+    slotDurationMinutes: '60',
+    capacity: '4',
+    pricingMode: '',
+    price: '',
+    status: 'ACTIVE',
+  });
+  const [overrideDraft, setOverrideDraft] = useState<Record<string, string>>({
+    fromDate: todayIsoDate(),
+    toDate: todayIsoDate(),
+    type: 'CLOSED',
+    startTime: '18:00',
+    endTime: '20:00',
+    slotDurationMinutes: '60',
+    capacity: '4',
+    pricingMode: '',
+    price: '',
+    reason: '',
+  });
+
+  React.useEffect(() => {
+    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
+  }, [branchId, branches.data]);
+
+  React.useEffect(() => {
+    if (!poolId && pools.data?.[0]) setPoolId(pools.data[0].id);
+  }, [poolId, pools.data]);
+
+  const patterns = useQuery({
+    queryKey: ['availability-patterns', poolId],
+    enabled: !!poolId,
+    queryFn: () => api.get<AvailabilityPattern[]>(`/slot-engine/resource-pools/${poolId}/availability-patterns`),
+  });
+
+  const overrides = useQuery({
+    queryKey: ['availability-overrides', poolId],
+    enabled: !!poolId,
+    queryFn: () => api.get<AvailabilityOverride[]>(`/slot-engine/resource-pools/${poolId}/availability-overrides`),
+  });
+
+  const preview = useAvailability(poolId, previewDate);
+
+  React.useEffect(() => {
+    if (!selectedPatternId) return;
+    const pattern = patterns.data?.find((item) => item.id === selectedPatternId);
+    if (!pattern) return;
+    setPatternDraft({
+      daysOfWeek: pattern.daysOfWeek,
+      startTime: pattern.startTime,
+      endTime: pattern.endTime,
+      slotDurationMinutes: String(pattern.slotDurationMinutes),
+      capacity: String(pattern.capacity),
+      pricingMode: pattern.pricingMode || '',
+      price: pattern.price ? String(pattern.price) : '',
+      status: pattern.status,
+    });
+  }, [selectedPatternId, patterns.data]);
+
+  React.useEffect(() => {
+    if (!selectedOverrideId) return;
+    const override = overrides.data?.find((item) => item.id === selectedOverrideId);
+    if (!override) return;
+    const date = override.date.slice(0, 10);
+    setOverrideDraft({
+      fromDate: date,
+      toDate: date,
+      type: override.type,
+      startTime: override.startTime || '18:00',
+      endTime: override.endTime || '20:00',
+      slotDurationMinutes: override.slotDurationMinutes ? String(override.slotDurationMinutes) : '60',
+      capacity: override.capacity ? String(override.capacity) : '4',
+      pricingMode: override.pricingMode || '',
+      price: override.price ? String(override.price) : '',
+      reason: override.reason || '',
+    });
+  }, [selectedOverrideId, overrides.data]);
+
+  const savePattern = useMutation({
+    mutationFn: () => {
+      if (!poolId) throw new Error('Select a resource pool');
+      const parsed = patternSchema.parse({
+        ...patternDraft,
+        pricingMode: patternDraft.pricingMode || undefined,
+        price: patternDraft.price || undefined,
+      });
+      if ((parsed.pricingMode && parsed.price === undefined) || (!parsed.pricingMode && parsed.price !== undefined)) {
+        throw new Error('Pricing mode and price must be set together');
+      }
+      const path = `/slot-engine/resource-pools/${poolId}/availability-patterns${selectedPatternId ? `/${selectedPatternId}` : ''}`;
+      return selectedPatternId
+        ? api.patch<AvailabilityPattern>(path, parsed)
+        : api.post<AvailabilityPattern>(path, parsed);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['availability-patterns', poolId] });
+      qc.invalidateQueries({ queryKey: ['availability', poolId, previewDate] });
+    },
+  });
+
+  const deletePattern = useMutation({
+    mutationFn: () => {
+      if (!poolId || !selectedPatternId) throw new Error('Select a pattern');
+      return api.delete<AvailabilityPattern>(`/slot-engine/resource-pools/${poolId}/availability-patterns/${selectedPatternId}`);
+    },
+    onSuccess: () => {
+      setSelectedPatternId('');
+      qc.invalidateQueries({ queryKey: ['availability-patterns', poolId] });
+    },
+  });
+
+  const saveOverride = useMutation({
+    mutationFn: () => {
+      if (!poolId) throw new Error('Select a resource pool');
+      const parsed = overrideSchema.parse({
+        ...overrideDraft,
+        startTime: overrideDraft.type === 'MODIFIED' ? overrideDraft.startTime : undefined,
+        endTime: overrideDraft.type === 'MODIFIED' ? overrideDraft.endTime : undefined,
+        slotDurationMinutes: overrideDraft.type === 'MODIFIED' ? overrideDraft.slotDurationMinutes : undefined,
+        capacity: overrideDraft.type === 'MODIFIED' ? overrideDraft.capacity : undefined,
+        pricingMode: overrideDraft.type === 'MODIFIED' && overrideDraft.pricingMode ? overrideDraft.pricingMode : undefined,
+        price: overrideDraft.type === 'MODIFIED' && overrideDraft.price ? overrideDraft.price : undefined,
+        reason: overrideDraft.reason || undefined,
+      });
+      if (parsed.type === 'MODIFIED' && ((parsed.pricingMode && parsed.price === undefined) || (!parsed.pricingMode && parsed.price !== undefined))) {
+        throw new Error('Pricing mode and price must be set together');
+      }
+      if (selectedOverrideId) {
+        const { fromDate: _fromDate, toDate: _toDate, ...singleDatePayload } = parsed;
+        return api
+          .patch<AvailabilityOverride>(`/slot-engine/resource-pools/${poolId}/availability-overrides/${selectedOverrideId}`, singleDatePayload)
+          .then((override) => [override]);
+      }
+      return api.post<AvailabilityOverride[]>(`/slot-engine/resource-pools/${poolId}/availability-overrides`, parsed);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['availability-overrides', poolId] });
+      qc.invalidateQueries({ queryKey: ['availability', poolId, previewDate] });
+    },
+  });
+
+  const deleteOverride = useMutation({
+    mutationFn: () => {
+      if (!poolId || !selectedOverrideId) throw new Error('Select an override');
+      return api.delete<AvailabilityOverride>(`/slot-engine/resource-pools/${poolId}/availability-overrides/${selectedOverrideId}`);
+    },
+    onSuccess: () => {
+      setSelectedOverrideId('');
+      qc.invalidateQueries({ queryKey: ['availability-overrides', poolId] });
+    },
+  });
+
+  const toggleDay = (day: string) => {
+    const days = patternDraft.daysOfWeek.split(',').map((item) => item.trim()).filter(Boolean);
+    const next = days.includes(day) ? days.filter((item) => item !== day) : [...days, day];
+    setPatternDraft((draft) => ({ ...draft, daysOfWeek: next.sort().join(',') }));
+  };
+
+  return (
+    <main className="overview-stack scheduling-page">
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Scheduling</h2>
+            <p className="muted">Manage recurring availability and date-specific changes for resource pools.</p>
+          </div>
+          {(patterns.isFetching || overrides.isFetching || preview.isFetching) ? <RefreshCw className="spin" size={18} /> : null}
+        </div>
+        <div className="form-grid compact">
+          <label>Branch<select value={branchId} onChange={(event) => { setBranchId(event.target.value); setPoolId(''); setSelectedPatternId(''); setSelectedOverrideId(''); }}>
+            <option value="">Select branch</option>
+            {(branches.data || []).map((branch) => <option value={branch.id} key={branch.id}>{branch.name}</option>)}
+          </select></label>
+          <label>Resource pool<select value={poolId} onChange={(event) => { setPoolId(event.target.value); setSelectedPatternId(''); setSelectedOverrideId(''); }}>
+            <option value="">Select pool</option>
+            {(pools.data || []).map((pool) => <option value={pool.id} key={pool.id}>{pool.name}</option>)}
+          </select></label>
+        </div>
+        <MutationFeedback error={branches.error || pools.error} />
+      </section>
+
+      <main className="content-grid two">
+        <section className="panel" id="scheduling-pattern-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Recurring Pattern</h2>
+              <p className="muted">Create or update a weekly availability rule.</p>
+            </div>
+            <button className="secondary-btn" onClick={() => { setSelectedPatternId(''); setPatternDraft({ daysOfWeek: '2,4', startTime: '18:00', endTime: '22:00', slotDurationMinutes: '60', capacity: '4', pricingMode: '', price: '', status: 'ACTIVE' }); }}>New</button>
+          </div>
+          <div className="form-grid compact">
+            <label>Existing pattern<select value={selectedPatternId} onChange={(event) => setSelectedPatternId(event.target.value)}>
+              <option value="">New pattern</option>
+              {(patterns.data || []).map((pattern) => (
+                <option key={pattern.id} value={pattern.id}>{formatDaysOfWeek(pattern.daysOfWeek)} {formatTimeRange(pattern.startTime, pattern.endTime)} | {pattern.status}</option>
+              ))}
+            </select></label>
+            <div className="check-group">
+              <span className="field-label">Weekdays</span>
+              {weekdayOptions.map((day) => (
+                <label className="check-row inline-check" key={day.value}>
+                  <input type="checkbox" checked={patternDraft.daysOfWeek.split(',').includes(day.value)} onChange={() => toggleDay(day.value)} />
+                  {day.label}
+                </label>
+              ))}
+            </div>
+            <label>Start time<input value={patternDraft.startTime} onChange={(event) => setPatternDraft((draft) => ({ ...draft, startTime: event.target.value }))} /></label>
+            <label>End time<input value={patternDraft.endTime} onChange={(event) => setPatternDraft((draft) => ({ ...draft, endTime: event.target.value }))} /></label>
+            <label>Slot duration<input value={patternDraft.slotDurationMinutes} onChange={(event) => setPatternDraft((draft) => ({ ...draft, slotDurationMinutes: event.target.value }))} /></label>
+            <label>Capacity<input value={patternDraft.capacity} onChange={(event) => setPatternDraft((draft) => ({ ...draft, capacity: event.target.value }))} /></label>
+            <label>Status<select value={patternDraft.status} onChange={(event) => setPatternDraft((draft) => ({ ...draft, status: event.target.value }))}><option>ACTIVE</option><option>SUSPENDED</option></select></label>
+            <label>Pricing mode<select value={patternDraft.pricingMode} onChange={(event) => setPatternDraft((draft) => ({ ...draft, pricingMode: event.target.value }))}><option value="">Use pool default</option><option value="FLAT">Flat</option><option value="PER_PERSON">Per person</option></select></label>
+            <label>Price override<input value={patternDraft.price} onChange={(event) => setPatternDraft((draft) => ({ ...draft, price: event.target.value }))} /></label>
+            <button className="primary-btn" disabled={!poolId || savePattern.isPending} onClick={() => savePattern.mutate()}>{savePattern.isPending ? <RefreshCw className="spin" size={16} /> : <Save size={16} />}{selectedPatternId ? 'Update pattern' : 'Create pattern'}</button>
+            <button className="secondary-btn" disabled={!selectedPatternId || deletePattern.isPending} onClick={() => deletePattern.mutate()}>Delete pattern</button>
+          </div>
+          <MutationFeedback error={patterns.error || savePattern.error || deletePattern.error} successMessage={savePattern.isSuccess ? 'Pattern saved.' : deletePattern.isSuccess ? 'Pattern deleted.' : undefined} />
+        </section>
+
+        <section className="panel" id="scheduling-override-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Date Override</h2>
+              <p className="muted">Close dates or replace generated slots for a specific range.</p>
+            </div>
+            <button className="secondary-btn" onClick={() => { setSelectedOverrideId(''); setOverrideDraft({ fromDate: todayIsoDate(), toDate: todayIsoDate(), type: 'CLOSED', startTime: '18:00', endTime: '20:00', slotDurationMinutes: '60', capacity: '4', pricingMode: '', price: '', reason: '' }); }}>New</button>
+          </div>
+          <div className="form-grid compact">
+            <label>Existing override<select value={selectedOverrideId} onChange={(event) => setSelectedOverrideId(event.target.value)}>
+              <option value="">New override</option>
+              {(overrides.data || []).map((override) => (
+                <option key={override.id} value={override.id}>{formatDate(override.date)} | {override.type === 'CLOSED' ? 'Closed' : formatTimeRange(override.startTime, override.endTime)}</option>
+              ))}
+            </select></label>
+            <label>From date<input type="date" value={overrideDraft.fromDate} disabled={!!selectedOverrideId} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, fromDate: event.target.value, toDate: draft.toDate || event.target.value }))} /></label>
+            <label>To date<input type="date" value={overrideDraft.toDate} disabled={!!selectedOverrideId} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, toDate: event.target.value }))} /></label>
+            <label>Type<select value={overrideDraft.type} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, type: event.target.value }))}><option value="CLOSED">Closed</option><option value="MODIFIED">Modified</option></select></label>
+            <label>Reason<input value={overrideDraft.reason} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, reason: event.target.value }))} /></label>
+            {overrideDraft.type === 'MODIFIED' ? (
+              <>
+                <label>Start time<input value={overrideDraft.startTime} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, startTime: event.target.value }))} /></label>
+                <label>End time<input value={overrideDraft.endTime} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, endTime: event.target.value }))} /></label>
+                <label>Slot duration<input value={overrideDraft.slotDurationMinutes} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, slotDurationMinutes: event.target.value }))} /></label>
+                <label>Capacity<input value={overrideDraft.capacity} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, capacity: event.target.value }))} /></label>
+                <label>Pricing mode<select value={overrideDraft.pricingMode} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, pricingMode: event.target.value }))}><option value="">Use pool default</option><option value="FLAT">Flat</option><option value="PER_PERSON">Per person</option></select></label>
+                <label>Price override<input value={overrideDraft.price} onChange={(event) => setOverrideDraft((draft) => ({ ...draft, price: event.target.value }))} /></label>
+              </>
+            ) : null}
+            <button className="primary-btn" disabled={!poolId || saveOverride.isPending} onClick={() => saveOverride.mutate()}>{saveOverride.isPending ? <RefreshCw className="spin" size={16} /> : <Save size={16} />}{selectedOverrideId ? 'Update override' : 'Create override'}</button>
+            <button className="secondary-btn" disabled={!selectedOverrideId || deleteOverride.isPending} onClick={() => deleteOverride.mutate()}>Delete override</button>
+          </div>
+          <MutationFeedback error={overrides.error || saveOverride.error || deleteOverride.error} successMessage={saveOverride.isSuccess ? 'Override saved.' : deleteOverride.isSuccess ? 'Override deleted.' : undefined} />
+        </section>
+      </main>
+
+      <section className="panel" id="scheduling-preview-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Availability Preview</h2>
+            <p className="muted">Uses the live availability endpoint for the selected pool and date.</p>
+          </div>
+        </div>
+        <div className="form-grid compact">
+          <label>Preview date<input type="date" value={previewDate} onChange={(event) => setPreviewDate(event.target.value)} /></label>
+        </div>
+        <MutationFeedback error={preview.error} />
+        {preview.isFetching ? <p className="empty-state">Loading availability...</p> : null}
+        {preview.isSuccess && preview.data.length === 0 ? <p className="empty-state">No bookable slots for this date.</p> : null}
+        {!!preview.data?.length ? (
+          <div className="preview-list">
+            {preview.data.map((slot) => (
+              <div className="preview-row" key={slot.window.id}>
+                <strong>{new Date(slot.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(slot.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+                <span>{slot.remainingCapacity} available of {slot.window.capacity}</span>
+                <span>{slot.window.pricingMode || selectedPool?.pricingMode || 'FLAT'} | ₹{Number(slot.window.price ?? selectedPool?.defaultRate ?? 0)}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
 function AssignmentsPage() {
   const api = useAdminApi();
   const qc = useQueryClient();
@@ -1121,6 +1484,7 @@ function AppRoutes() {
         <Route element={<Shell />}>
           <Route index element={<Overview />} />
           <Route path="/resources" element={<ResourcesPage />} />
+          <Route path="/scheduling" element={<SchedulingPage />} />
           <Route path="/assignments" element={<AssignmentsPage />} />
           <Route path="/occupancy" element={<OccupancyPage />} />
           <Route path="/negotiated" element={<NegotiatedPage />} />
