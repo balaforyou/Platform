@@ -187,7 +187,14 @@ test.describe('F-023 cross-system integration', () => {
   });
 
   test('protects confirmed member attendance and releases unconfirmed capacity to guest booking and refund override', async ({ browser, baseURL }) => {
-    const api = await playwrightRequest.newContext({ baseURL });
+    // F-053: /bookings/sweep now requires the internal service key. This context is
+    // Node-side only — the key must never reach the PWA's browser-side apiRequest helper.
+    const api = await playwrightRequest.newContext({
+      baseURL,
+      extraHTTPHeaders: {
+        Authorization: `Bearer ${process.env.INTERNAL_SERVICE_KEY || 'test-service-key'}`,
+      },
+    });
     console.log('F023_SEEDED_IDENTITIES', JSON.stringify({
       tenantId,
       branchId,

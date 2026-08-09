@@ -1,6 +1,6 @@
 import { Section } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
-import { db, baseUrl, SlotEngineContext, TENANT_ID, BRANCH_ID, USER_ID_1, USER_ID_2 } from './_fixtures';
+import { db, baseUrl, internalKey, SlotEngineContext, TENANT_ID, BRANCH_ID, USER_ID_1, USER_ID_2 } from './_fixtures';
 
 /**
  * SWEEP / RELEASE MECHANICS.
@@ -27,7 +27,10 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
       });
       console.log(`Expired HELD booking created with ID: ${expiredHold.id}`);
 
-      const sweepRes = await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST' });
+      const sweepRes = await fetch(`${baseUrl}/bookings/sweep`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${internalKey}` },
+      });
       const sweepData = ((await sweepRes.json()) as any).data;
       console.log('Sweep result:', sweepData);
 
@@ -107,7 +110,10 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
 
       console.log(`Created member booking: ${memberBooking.id} and guest booking: ${guestBooking.id}`);
 
-      const sweepRes2 = await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST' });
+      const sweepRes2 = await fetch(`${baseUrl}/bookings/sweep`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${internalKey}` },
+      });
       const sweepData2 = ((await sweepRes2.json()) as any).data;
       console.log('Sweep 2 result:', sweepData2);
 

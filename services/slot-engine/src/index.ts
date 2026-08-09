@@ -2506,7 +2506,13 @@ server.patch('/member-group-assignments/:id', async (request, reply) => {
 // TEST & OPS ONLY: Sweep route to manually trigger background cleanup sweeps.
 // WHY: In production this runs as a cron/background job. Exposed as an endpoint for
 // deterministic automated and manual testing.
-server.post('/bookings/sweep', async () => {
+// AUTH: internal service key only (F-053). This endpoint releases real reservations,
+// so it must never be callable anonymously — Caddy routes /api/slot-engine/* publicly.
+// requireInternalKey (not getInternalOrAdminAuth) is deliberate: no admin UI triggers a
+// sweep, so the tighter guard costs nothing today. An ops-facing trigger would need the
+// admin path instead.
+server.post('/bookings/sweep', async (request, reply) => {
+  requireInternalKey(request, reply);
   const now = new Date();
 
   // 1. Expire stale HELD bookings past their 5-minute hold TTL.

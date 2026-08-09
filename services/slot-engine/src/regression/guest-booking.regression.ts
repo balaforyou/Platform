@@ -3,6 +3,7 @@ import { BookingStatus } from '@badminton/database';
 import {
   db,
   baseUrl,
+  internalKey,
   bookingHeaders,
   guestToken,
   SlotEngineContext,
@@ -268,7 +269,10 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
 
       // CONSEQUENCE 2: the grace sweep must NOT release it. A forged member flag
       // would have made the sweep release this paid guest booking as a no-show.
-      await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST' });
+      await fetch(`${baseUrl}/bookings/sweep`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${internalKey}` },
+      });
       const afterSweep = await db.booking.findUnique({ where: { id: created.id } });
       console.log(
         'BOOKING_MEMBERFLAG_EVIDENCE survives_grace_sweep',
