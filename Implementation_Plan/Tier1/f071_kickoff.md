@@ -31,6 +31,16 @@ These three are **dual-path** — they accept an internal service key **or** a u
 
 This is the same move F-048 made: it established that `isMemberBooking` had no legitimate precedent as a request input *before* concluding it should be removed. Apply that instinct here. If the convention genuinely does not exist yet, say so plainly and propose one with reasoning — but do not invent one while believing you are following one.
 
+### If the investigation comes back empty — decided in advance, 9 Aug 2026
+
+A nil result is **not a blocked investigation**. It means the codebase has never answered "what is an `owner` allowed to reach," and these three routes are simply where that absence became visible and exploitable. That is a materially larger finding than "three routes have a broken guard," and it must not be understated.
+
+Pre-committed handling, so this does not stall mid-investigation waiting on a decision:
+
+1. **The fix still proceeds.** Comparing the JWT's `tenantId` against the booking's tenant is correct on its own merits regardless of precedent, and F-071 is the concrete evidence that it *should become* the precedent.
+2. **Flag the nil result explicitly before proposing the fix** — same as every other real decision point in this project. Do not fold it into the fix's rationale silently.
+3. **The absence gets its own finding**, reported for a reviewer-assigned ID rather than absorbed into F-071's resolution text — approximately: *no platform-wide convention exists for whether the `owner` role is tenant-scoped; F-071's fix establishes one for these three routes, but every other admin-scoped endpoint should be audited against the same question.* Folding it into F-071's resolution would understate the scope of what was actually discovered.
+
 ---
 
 ## Edge cases, against the standing categories
