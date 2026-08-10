@@ -194,6 +194,51 @@ const requirePoolScope = async (auth: AdminAuthContext, resourcePoolId: string, 
   return pool;
 };
 
+// WHY (F-071): the booking-scoped routes (cancel, read, cancel-preview) each carried an
+// identical inline IDOR guard that failed in two opposite directions. It tested
+// `roles.includes('branch_manager')` against a claim format that is actually
+// `branch_manager:<branchId>`, so it never matched and a real branch manager was wrongly
+// DENIED; and `roles.includes('owner')` did match while no tenant or branch comparison
+// existed anywhere in those handlers, so any owner could reach ANY booking in ANY tenant.
+//
+// This implements the convention the platform already established in Tenant Management's
+// GET /users/:userId/branches/:branchId/check — "owner grants access to all branches under
+// the tenant" — where the tenant is resolved from the resource and role assignments are
+// filtered by it. Here the equivalent facts (tenantId, branchId) are read from the booking
+// row, never from the request.
+//
+// Three identical copies is how F-022's drift happened; one function is the durable fix.
+const requireBookingAccess = (booking: any, decodedUser: any, reply: any) => {
+  const forbidden = () => {
+    reply.status(403);
+    const err = new Error('Forbidden');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    return err;
+  };
+
+  // WHY: tenant is the OUTER boundary and applies to every JWT caller, including the
+  // booking's own guest. A userId match already proves identity within a tenant, so this
+  // is defence in depth — it means a future bug in identity or booking lookup still cannot
+  // cross a tenant boundary. A token carrying no tenantId claim fails closed here.
+  if (!decodedUser.tenantId || decodedUser.tenantId !== booking.tenantId) {
+    throw forbidden();
+  }
+
+  const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
+  const roles: string[] = decodedUser.roles ?? [];
+
+  const isBookingOwner = booking.userId === userId;
+  // Reuses the same helper the 14 correctly-guarded admin routes rely on: it already
+  // understands `owner` and the real `branch_manager:<branchId>` format. The bug was never
+  // in this helper — it was that these routes never called it.
+  const isScopedAdmin = isAuthorizedForBranch({ isInternal: false, userId, roles }, booking.branchId);
+
+  if (!isBookingOwner && !isScopedAdmin) {
+    throw forbidden();
+  }
+};
+
 type GuestOccupancyRow = {
   resourcePoolId: string;
   resourcePoolName: string;
@@ -2207,17 +2252,9 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
     throw new Error('Booking not found');
   }
 
-  // IDOR Guard: Verify ownership or admin privileges if not internal service
+  // IDOR Guard (F-071): tenant-scoped, branch-aware, shared by all three booking routes.
   if (!isInternal && decodedUser) {
-    const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
-    const roles = decodedUser.roles || [];
-    const isOwner = booking.userId === userId;
-    const isAdmin = roles.includes('owner') || roles.includes('branch_manager');
-
-    if (!isOwner && !isAdmin) {
-      reply.status(403);
-      throw new Error('Forbidden');
-    }
+    requireBookingAccess(booking, decodedUser, reply);
   }
 
   if (booking.status === BookingStatus.CANCELLED) return booking; // idempotent
@@ -2842,17 +2879,9 @@ server.get('/bookings/:id', async (request, reply) => {
     throw err;
   }
 
-  // IDOR Guard: Verify ownership or admin privileges if not internal service
+  // IDOR Guard (F-071): tenant-scoped, branch-aware, shared by all three booking routes.
   if (!isInternal && decodedUser) {
-    const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
-    const roles = decodedUser.roles || [];
-    const isOwner = booking.userId === userId;
-    const isAdmin = roles.includes('owner') || roles.includes('branch_manager');
-
-    if (!isOwner && !isAdmin) {
-      reply.status(403);
-      throw new Error('Forbidden');
-    }
+    requireBookingAccess(booking, decodedUser, reply);
   }
 
   return booking;
@@ -2920,17 +2949,9 @@ server.get('/bookings/:id/cancel-preview', async (request, reply) => {
     throw new Error('Booking not found');
   }
 
-  // IDOR Guard: Verify ownership or admin privileges if not internal service
+  // IDOR Guard (F-071): tenant-scoped, branch-aware, shared by all three booking routes.
   if (!isInternal && decodedUser) {
-    const userId = decodedUser.userId || decodedUser.sub || decodedUser.id;
-    const roles = decodedUser.roles || [];
-    const isOwner = booking.userId === userId;
-    const isAdmin = roles.includes('owner') || roles.includes('branch_manager');
-
-    if (!isOwner && !isAdmin) {
-      reply.status(403);
-      throw new Error('Forbidden');
-    }
+    requireBookingAccess(booking, decodedUser, reply);
   }
 
   if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD && booking.status !== BookingStatus.CANCELLED) {
