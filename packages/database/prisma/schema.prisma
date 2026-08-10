@@ -267,6 +267,12 @@ model BookingRule {
   cancellationPolicyJson   Json         // Tiered policy mapping: { type: "tiered", tiers: [{ min_hours_before_slot, refund_percent }] }
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
+
+  // WHY (F-067): every reader takes bookingRules[0] or findFirst, so a pool with two rows
+  // has a non-deterministic effective policy — payment, refund and cutoff behaviour would
+  // vary between requests. One rule per pool is the invariant those readers already assume;
+  // this makes the database enforce it rather than hope for it.
+  @@unique([resourcePoolId])
 }
 
 model BlockedWindow {

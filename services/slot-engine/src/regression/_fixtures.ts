@@ -100,7 +100,7 @@ export async function setupBaseFixtures(): Promise<SlotEngineContext> {
 
   await fetch(`${baseUrl}/booking-rules`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       resourcePoolId: fixedPool.id,
       gracePeriodMinutes: 30,

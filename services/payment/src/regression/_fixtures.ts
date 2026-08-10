@@ -114,7 +114,7 @@ export async function setupBaseFixtures(): Promise<PaymentContext> {
 
   await fetch(`${slotEngineUrl}/booking-rules`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       resourcePoolId: pool.id,
       memberWindowDays: 30,

@@ -175,7 +175,7 @@ const isAuthorizedForBranch = (auth: AdminAuthContext, branchId: string): boolea
 const requirePoolScope = async (auth: AdminAuthContext, resourcePoolId: string, reply: any) => {
   const pool = await prisma.resourcePool.findUnique({
     where: { id: resourcePoolId },
-    include: { resources: true, bookingRules: true },
+    include: { resources: true, bookingRules: { orderBy: { createdAt: 'asc' } } },
   });
   if (!pool) {
     reply.status(404);
@@ -466,7 +466,7 @@ async function computeBranchMemberAttendance(branchId: string, date: string | un
       resourcePool: { branchId },
     },
     include: {
-      resourcePool: { include: { bookingRules: true } },
+      resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } },
     },
     orderBy: { startTime: 'asc' },
   });
@@ -644,7 +644,7 @@ async function resolveTodayMemberAssignment(userId: string, tenantId: string, no
       resourcePool: { tenantId },
     },
     include: {
-      resourcePool: { include: { bookingRules: true } },
+      resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } },
     },
   });
 
@@ -869,7 +869,7 @@ server.patch('/resource-pools/:id', async (request, reply) => {
   return await prisma.resourcePool.update({
     where: { id },
     data,
-    include: { resources: true, bookingRules: true },
+    include: { resources: true, bookingRules: { orderBy: { createdAt: 'asc' } } },
   });
 });
 
@@ -1298,7 +1298,7 @@ server.get('/branches/:id/resource-pools', async (request) => {
     where: { branchId: id },
     include: {
       resources: true,
-      bookingRules: true,
+      bookingRules: { orderBy: { createdAt: 'asc' } },
     },
     orderBy: { name: 'asc' },
   });
@@ -1390,76 +1390,58 @@ server.post('/resource-pools/:id/windows/:windowId/release', async (request, rep
 // Booking Rules
 // ---------------------------------------------------------------------------
 
-// Configure Booking Rules — Phase 9 adds guestAccessCutoffMinutes, lowOccupancyThresholdPct.
-server.post('/booking-rules', async (request) => {
-  const {
-    resourcePoolId,
-    memberWindowDays,
-    guestOpenWindowDays,
-    gracePeriodMinutes,
-    guestAccessCutoffMinutes,
-    lowOccupancyThresholdPct,
-    prepaymentRequired,
-    cancellationPolicyJson,
-  } = request.body as any;
+// ---------------------------------------------------------------------------
+// Booking-rule validation — shared by BOTH setters (F-068)
+// ---------------------------------------------------------------------------
 
-  // WHY: Establishes booking rules per pool, including guest/member reservation windows,
-  // the two distinct cutoff mechanisms, and cancellation policies.
-  const rule = await prisma.bookingRule.create({
-    data: {
-      resourcePoolId,
-      memberWindowDays: memberWindowDays ? Number(memberWindowDays) : 30,
-      guestOpenWindowDays: guestOpenWindowDays ? Number(guestOpenWindowDays) : 7,
-      gracePeriodMinutes: gracePeriodMinutes ? Number(gracePeriodMinutes) : 30,
-      guestAccessCutoffMinutes: guestAccessCutoffMinutes ? Number(guestAccessCutoffMinutes) : 120,
-      lowOccupancyThresholdPct: lowOccupancyThresholdPct ? Number(lowOccupancyThresholdPct) : 50,
-      prepaymentRequired: prepaymentRequired !== false,
-      cancellationPolicyJson: cancellationPolicyJson || {
-        type: 'tiered',
-        tiers: [
-          { min_hours_before_slot: 24, refund_percent: 100 },
-          { min_hours_before_slot: 6, refund_percent: 50 },
-          { min_hours_before_slot: 0, refund_percent: 0 },
-        ],
-      },
-    },
-  });
-  return rule;
-});
+// WHY: the tiered default was duplicated verbatim in both setters. One definition means
+// they cannot drift apart.
+const DEFAULT_CANCELLATION_POLICY = {
+  type: 'tiered',
+  tiers: [
+    { min_hours_before_slot: 24, refund_percent: 100 },
+    { min_hours_before_slot: 6, refund_percent: 50 },
+    { min_hours_before_slot: 0, refund_percent: 0 },
+  ],
+};
 
-// Upsert Booking Rule for a Resource Pool (admin-only).
-// WHY: Admin Web config should be recoverable for pools that were created before a
-// rule existed; upsert avoids stranding those pools while keeping the rule pool-scoped.
-server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
-  const auth = await getInternalOrAdminAuth(request, reply);
-  const { id } = request.params as any;
-  await requirePoolScope(auth, id, reply);
-  const body = request.body as any;
+const BOOKING_RULE_INTEGER_FIELDS = [
+  'memberWindowDays',
+  'guestOpenWindowDays',
+  'gracePeriodMinutes',
+  'guestAccessCutoffMinutes',
+] as const;
 
-  const existing = await prisma.bookingRule.findFirst({ where: { resourcePoolId: id } });
-  const data: any = {};
+// WHY (F-068): POST previously used truthiness — `x ? Number(x) : default` — so an explicit
+// 0 was falsy and silently became the default, while a negative sailed through unchecked.
+// A negative gracePeriodMinutes puts the confirmation cutoff AFTER the window starts and
+// inverts every `now >= cutoffTime` comparison downstream.
+//
+// The rule, identical on both setters: 0 is legal (it means "confirm right up to slot
+// start"), negatives/floats/NaN are not. Absence is the only thing that differs between
+// them — POST creates and falls back to a default, PUT partial-updates and leaves the
+// stored value alone — which is a difference in semantics, not in accepted values.
+function isProvided(value: any) {
+  return value !== undefined && value !== null;
+}
 
-  const integerFields = [
-    'memberWindowDays',
-    'guestOpenWindowDays',
-    'gracePeriodMinutes',
-    'guestAccessCutoffMinutes',
-  ];
-  for (const field of integerFields) {
-    if (body[field] !== undefined) {
-      const value = Number(body[field]);
-      if (!Number.isInteger(value) || value < 0) {
-        reply.status(400);
-        const err = new Error(`${field} must be a non-negative integer`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_RULE_VALUE';
-        throw err;
-      }
-      data[field] = value;
+function validateBookingRuleFields(body: any, reply: any): Record<string, any> {
+  const data: Record<string, any> = {};
+
+  for (const field of BOOKING_RULE_INTEGER_FIELDS) {
+    if (!isProvided(body[field])) continue;
+    const value = Number(body[field]);
+    if (!Number.isInteger(value) || value < 0) {
+      reply.status(400);
+      const err = new Error(`${field} must be a non-negative integer`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_RULE_VALUE';
+      throw err;
     }
+    data[field] = value;
   }
 
-  if (body.lowOccupancyThresholdPct !== undefined) {
+  if (isProvided(body.lowOccupancyThresholdPct)) {
     const threshold = Number(body.lowOccupancyThresholdPct);
     if (!Number.isInteger(threshold) || threshold < 0 || threshold > 100) {
       reply.status(400);
@@ -1471,33 +1453,119 @@ server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
     data.lowOccupancyThresholdPct = threshold;
   }
 
-  if (body.prepaymentRequired !== undefined) {
-    data.prepaymentRequired = Boolean(body.prepaymentRequired);
+  if (isProvided(body.prepaymentRequired)) {
+    // WHY: previously `!== false` on POST and `Boolean()` on PUT — opposite coercions, so
+    // the same payload could mean different things depending on the endpoint. Now only a
+    // real boolean is accepted; anything else is a client error rather than a silent guess.
+    if (typeof body.prepaymentRequired !== 'boolean') {
+      reply.status(400);
+      const err = new Error('prepaymentRequired must be a boolean');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_RULE_VALUE';
+      throw err;
+    }
+    data.prepaymentRequired = body.prepaymentRequired;
   }
 
-  if (body.cancellationPolicyJson !== undefined) {
+  if (isProvided(body.cancellationPolicyJson)) {
     data.cancellationPolicyJson = body.cancellationPolicyJson;
   }
 
-  const defaultPolicy = existing?.cancellationPolicyJson || {
-    type: 'tiered',
-    tiers: [
-      { min_hours_before_slot: 24, refund_percent: 100 },
-      { min_hours_before_slot: 6, refund_percent: 50 },
-      { min_hours_before_slot: 0, refund_percent: 0 },
-    ],
-  };
+  return data;
+}
 
-  if (!existing && data.lowOccupancyThresholdPct === undefined) {
+// Configure Booking Rules — Phase 9 adds guestAccessCutoffMinutes, lowOccupancyThresholdPct.
+// AUTH (F-061): same guard as the sibling PUT /resource-pools/:id/booking-rule. This
+// endpoint writes payment, refund and cutoff policy, and Caddy routes /api/slot-engine/*
+// publicly. Authenticate first, then authorize against the pool — requirePoolScope re-reads
+// pool.branchId from the database, so the body-supplied resourcePoolId cannot assert branch
+// authority it does not have.
+server.post('/booking-rules', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+
+  const { resourcePoolId } = request.body as any;
+
+  // WHY: checked after auth so an unauthenticated caller learns nothing about the schema,
+  // and before requirePoolScope because that helper would otherwise query on undefined.
+  if (!resourcePoolId) {
     reply.status(400);
-    const err = new Error('lowOccupancyThresholdPct is required when creating a booking rule');
+    const err = new Error('resourcePoolId is required');
     (err as any).statusCode = 400;
-    (err as any).code = 'THRESHOLD_REQUIRED';
+    (err as any).code = 'BAD_REQUEST';
     throw err;
   }
 
+  await requirePoolScope(auth, resourcePoolId, reply);
+
+  // WHY: Establishes booking rules per pool, including guest/member reservation windows,
+  // the two distinct cutoff mechanisms, and cancellation policies. Validation is the shared
+  // one (F-068); only the create-time defaults are POST-specific.
+  const data = validateBookingRuleFields(request.body, reply);
+
+  try {
+    const rule = await prisma.bookingRule.create({
+      data: {
+        resourcePoolId,
+        memberWindowDays: data.memberWindowDays ?? 30,
+        guestOpenWindowDays: data.guestOpenWindowDays ?? 7,
+        gracePeriodMinutes: data.gracePeriodMinutes ?? 30,
+        guestAccessCutoffMinutes: data.guestAccessCutoffMinutes ?? 120,
+        lowOccupancyThresholdPct: data.lowOccupancyThresholdPct ?? 50,
+        prepaymentRequired: data.prepaymentRequired ?? true,
+        cancellationPolicyJson: data.cancellationPolicyJson ?? DEFAULT_CANCELLATION_POLICY,
+      },
+    });
+    return rule;
+  } catch (err: any) {
+    // WHY: F-067's unique constraint turns "create a second rule" from a silent duplicate
+    // into a P2002. Left unhandled that surfaced as a 500 carrying the raw Prisma message —
+    // absolute source paths and all — which is precisely the F-034 leak pattern. Translate
+    // it into the actionable answer: the pool already has a rule, update it via the PUT.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      reply.status(409);
+      const conflict = new Error(
+        'A booking rule already exists for this resource pool. Use PUT /resource-pools/:id/booking-rule to update it.',
+      );
+      (conflict as any).statusCode = 409;
+      (conflict as any).code = 'BOOKING_RULE_EXISTS';
+      throw conflict;
+    }
+    throw err;
+  }
+});
+
+// Upsert Booking Rule for a Resource Pool (admin-only).
+// WHY: Admin Web config should be recoverable for pools that were created before a
+// rule existed; upsert avoids stranding those pools while keeping the rule pool-scoped.
+server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+  // F-068: identical validation to POST /booking-rules — same accepted values, same error
+  // codes. Only absence differs: here an omitted field leaves the stored value untouched.
+  const data = validateBookingRuleFields(request.body, reply);
+
+  const existing = await prisma.bookingRule.findFirst({
+    where: { resourcePoolId: id },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  // WHY: preserve an existing custom policy across a partial update that doesn't mention it.
+  const defaultPolicy = existing?.cancellationPolicyJson ?? DEFAULT_CANCELLATION_POLICY;
+
+  // WHY (F-068): the previous THRESHOLD_REQUIRED gate rejected a create that omitted
+  // lowOccupancyThresholdPct, while POST silently defaulted it to 50 — the same payload
+  // succeeded on one setter and 400'd on the other. Aligned on the permissive side because
+  // tightening would break both regression suites' base fixtures, neither of which sends
+  // the field. Admin Web always sends it, so no real flow depended on the rejection.
+
+  // WHY (F-067): keyed on resourcePoolId, now that it is unique. The previous
+  // `where: { id: existing?.id ?? '__missing__' }` sentinel was a TOCTOU hazard — two
+  // concurrent PUTs on a rule-less pool both saw existing === null and both took the
+  // create branch, producing exactly the duplicate rows F-067 describes. Upserting on the
+  // unique column makes the database arbitrate instead of the read-then-write gap.
   return await prisma.bookingRule.upsert({
-    where: { id: existing?.id ?? '__missing__' },
+    where: { resourcePoolId: id },
     update: data,
     create: {
       resourcePoolId: id,
@@ -1542,7 +1610,7 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
 
   const pool = await prisma.resourcePool.findUnique({
     where: { id },
-    include: { bookingRules: true },
+    include: { bookingRules: { orderBy: { createdAt: 'asc' } } },
   });
   if (!pool) {
     reply.status(404);
@@ -1760,7 +1828,7 @@ server.post('/bookings', async (request, reply) => {
       // membership. Real member bookings never come through here — they are
       // created server-side by ensureTodayMemberBooking from a genuine
       // MemberGroupAssignment — so there is nothing legitimate to preserve.
-      const rule = await tx.bookingRule.findFirst({ where: { resourcePoolId } });
+      const rule = await tx.bookingRule.findFirst({ where: { resourcePoolId }, orderBy: { createdAt: 'asc' } });
       const windowDays = rule?.guestOpenWindowDays ?? 7;
       const maxBookingDate = new Date();
       maxBookingDate.setDate(maxBookingDate.getDate() + windowDays);
@@ -2162,7 +2230,7 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
   let refundAmount: Prisma.Decimal | null = null;
 
   if (booking.status === BookingStatus.CONFIRMED) {
-    const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId } });
+    const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId }, orderBy: { createdAt: 'asc' } });
     const now = new Date();
     const startTime = new Date(booking.window.startTime);
     const hoursBeforeSlot = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
@@ -2532,7 +2600,7 @@ server.post('/bookings/sweep', async (request, reply) => {
     },
     include: {
       window: true,
-      resourcePool: { include: { bookingRules: true } },
+      resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } },
     },
   });
 
@@ -2558,7 +2626,7 @@ server.post('/bookings/sweep', async (request, reply) => {
   const activeAssignments = await prisma.memberGroupAssignment.findMany({
     where: { status: 'ACTIVE' },
     include: {
-      resourcePool: { include: { bookingRules: true } },
+      resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } },
     },
   });
 
@@ -2878,7 +2946,7 @@ server.get('/bookings/:id/cancel-preview', async (request, reply) => {
     const originalPrice = Number(booking.price || 0);
     refundPercent = originalPrice > 0 ? Math.round((refundAmount / originalPrice) * 100) : 0;
   } else if (booking.status === BookingStatus.CONFIRMED) {
-    const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId } });
+    const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId }, orderBy: { createdAt: 'asc' } });
     const now = new Date();
     const startTime = new Date(booking.window.startTime);
     const hoursBeforeSlot = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
