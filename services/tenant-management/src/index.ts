@@ -66,7 +66,9 @@ const verifyTenantOwnerOrInternal = async (request: any, reply: any, tenantId: s
 
 // Route for service health check
 server.get('/health', async () => {
-  return { status: 'ok', service: 'tenant-management' };
+  // F-077: BUILD_GIT_SHA is baked in at image build; the deploy verifier compares it
+    // against the SHA it intended to ship. 'unknown' locally, where there is no build step.
+    return { status: 'ok', service: 'tenant-management', version: process.env.BUILD_GIT_SHA ?? 'unknown' };
 });
 
 // Platform endpoint to create a Tenant

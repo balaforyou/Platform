@@ -156,13 +156,49 @@ migrate:
   restart: "no"
 ```
 
-Deployment order:
+Packaging — run on the development machine before copying to the VM:
 
 ```bash
-docker compose --env-file .env up -d postgres
-docker compose --env-file .env run --rm migrate
-docker compose --env-file .env up -d --build
+git rev-parse HEAD > BUILD_SHA
+tar --exclude=node_modules --exclude=.git --exclude=.env --exclude=dist \
+    --exclude=deploy-package.tar -cf tier1-deploy.tar \
+    BUILD_SHA apps packages services deploy docs scripts \
+    package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json Caddyfile
 ```
+
+`BUILD_SHA` gives the tarball its own provenance. Before this, there was no way to tell which commit an archive represented without extracting it and grepping source — which is literally how F-077's stale frontend was identified. Use a dated or named archive rather than reusing `deploy-package.tar`, so a stale copy can never be mistaken for a fresh one.
+
+Deployment order — **canonical sequence, revised after F-077 (9 Aug 2026)**:
+
+```bash
+export GIT_SHA=$(cat ~/badminton-platform/BUILD_SHA)
+
+docker compose --env-file .env up -d postgres
+docker compose --env-file .env build                 # every image, GIT_SHA baked in
+docker compose --env-file .env run --rm migrate      # refuses to run from a stale image
+docker compose --env-file .env up -d
+
+pnpm run deploy:verify https://elitecourts.duckdns.org "$GIT_SHA"
+```
+
+**A deploy is not complete until the last command exits zero.** This is not a closing suggestion — it is the step that determines whether the deploy succeeded, and its exit code is the answer.
+
+The reason is F-077. On 9 Aug a deploy rebuilt the application services while Docker served `migrate` from a cached image and `caddy` was skipped entirely under memory pressure. Production ran for nine days with three components at three different vintages. Every check available at the time passed: the containers were healthy, the smoke tests returned the expected `401`s, and `migrate` reported `"No pending migrations to apply."` before exiting `0`. Nothing distinguished that state from a good one until a user-facing screen returned a `42P10`.
+
+Two guards now make that state impossible to reach quietly:
+
+- **`migrate` refuses to run from a stale image.** Each image bakes the SHA it was built from; the deploy supplies the SHA it intends to run. A mismatch aborts before the database is touched. Note a migration *count* check cannot do this — a stale image and the database it already migrated agree with each other.
+- **`deploy:verify` checks every component independently** — five services via `/health`, both frontends via `version.json` — and names whichever is behind. Partial staleness is the common failure, and knowing *which* component is stale is the difference between a one-line fix and a day of diagnosis.
+
+**If a deploy was ever bypassed**, check before trusting anything about the running state:
+
+```sql
+SELECT * FROM "_deploy_audit" ORDER BY "at" DESC LIMIT 5;
+```
+
+`ALLOW_UNVERIFIED_MIGRATE=1` skips the stale-image guard. It exists deliberately — an invisible escape hatch is worse than a visible one — but every use writes a `MIGRATE_VERIFICATION_BYPASSED` row recording the image's SHA, the intended SHA and the time. The migrate container runs with `--rm`, so its console output belongs only to whoever was watching that terminal; this row is what makes a bypassed deploy visible to whoever looks next. An empty or absent table means no bypass has occurred.
+
+Build memory: `caddy` compiles both Vite apps and exhausts an e2-small. The proven route is resizing the VM to e2-medium for the build and back down afterwards. **Do not skip `caddy` to avoid the resize** — that is precisely how the frontend fell a whole feature behind and stayed there, silently, because a stale bundle produces no symptom at all.
 
 This makes database schema application explicit and repeatable after a VM rebuild without turning migrations into a side effect of every service start.
 

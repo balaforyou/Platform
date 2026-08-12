@@ -38,7 +38,9 @@ function normalizePhone(phone: string): string {
 
 // Helper endpoint for health checks
 server.get('/health', async () => {
-  return { status: 'ok', service: 'identity-auth' };
+  // F-077: BUILD_GIT_SHA is baked in at image build; the deploy verifier compares it
+    // against the SHA it intended to ship. 'unknown' locally, where there is no build step.
+    return { status: 'ok', service: 'identity-auth', version: process.env.BUILD_GIT_SHA ?? 'unknown' };
 });
 
 server.get('/users/lookup', async (request, reply) => {

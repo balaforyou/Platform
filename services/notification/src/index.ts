@@ -124,7 +124,9 @@ async function resolveAndQueue(
 // Health check
 // ============================================================
 server.get('/health', async () => {
-  return { status: 'ok', service: 'notification' };
+  // F-077: BUILD_GIT_SHA is baked in at image build; the deploy verifier compares it
+    // against the SHA it intended to ship. 'unknown' locally, where there is no build step.
+    return { status: 'ok', service: 'notification', version: process.env.BUILD_GIT_SHA ?? 'unknown' };
 });
 
 // Dummy route to test error enveloping

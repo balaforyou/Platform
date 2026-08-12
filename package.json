@@ -4,6 +4,7 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "packageManager": "pnpm@11.17.0",
   "scripts": {
     "db:up": "docker-compose up -d",
     "db:down": "docker-compose down",
@@ -17,7 +18,8 @@
     "test:regression:slot": "pnpm --filter @badminton/slot-engine run test:regression",
     "test:regression:payment": "pnpm --filter @badminton/payment run test:regression",
     "test:regression:notification": "pnpm --filter @badminton/notification run test:regression",
-    "test:e2e": "pnpm --filter @badminton/guest-member-pwa run test:e2e"
+    "test:e2e": "pnpm --filter @badminton/guest-member-pwa run test:e2e",
+    "deploy:verify": "node scripts/verify-deployment.mjs"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

@@ -33,11 +33,16 @@ services:
       args:
         SERVICE_PACKAGE: "@badminton/database"
         SERVICE_PATH: "packages/database"
+        GIT_SHA: ${GIT_SHA:-unknown}
     env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    environment:
+      # F-077: supplied at RUN time, not build time - the guard compares this against the
+      # SHA baked into the image to detect a stale/cached build before it touches the DB.
+      EXPECTED_GIT_SHA: ${GIT_SHA:-}
+    command: ["sh", "-c", "node scripts/verify-build-sha.mjs && pnpm exec prisma migrate deploy"]
     restart: "no"
 
   slot-engine:
@@ -47,6 +52,7 @@ services:
       args:
         SERVICE_PACKAGE: "@badminton/slot-engine"
         SERVICE_PATH: "services/slot-engine"
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -63,6 +69,7 @@ services:
       args:
         SERVICE_PACKAGE: "@badminton/identity-auth"
         SERVICE_PATH: "services/identity-auth"
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -84,6 +91,7 @@ services:
       args:
         SERVICE_PACKAGE: "@badminton/tenant-management"
         SERVICE_PATH: "services/tenant-management"
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -99,6 +107,7 @@ services:
       args:
         SERVICE_PACKAGE: "@badminton/payment"
         SERVICE_PATH: "services/payment"
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -120,6 +129,7 @@ services:
       args:
         SERVICE_PACKAGE: "@badminton/notification"
         SERVICE_PATH: "services/notification"
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -135,6 +145,7 @@ services:
       dockerfile: deploy/gcp-vm/Dockerfile.caddy-static
       args:
         VITE_RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     ports:
       - "80:80"
