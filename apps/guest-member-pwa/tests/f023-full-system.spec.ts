@@ -38,11 +38,30 @@ function todayDateString(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
-function nextAlignedHour(hoursFromNow: number) {
-  const start = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
-  // setUTCMinutes, not setMinutes: on a half-hour-offset zone such as IST, zeroing LOCAL
-  // minutes lands the instant on :30 UTC, so the "aligned hour" was not aligned at all.
-  start.setUTCMinutes(0, 0, 0);
+/**
+ * F-073: a future instant guaranteed to fall inside TODAY's UTC date.
+ *
+ * Mirrors `withinTodayUtc` in services/slot-engine/src/regression/_fixtures.ts. Duplicated
+ * rather than imported because this Playwright spec does not share that module.
+ *
+ * A fixed relative offset silently lands on tomorrow when the suite runs late in the UTC
+ * day, while `resolveTodayMemberAssignment` looks only for today's branch date plus the
+ * assignment's `startTime` — so the window exists, nothing errors, and the seeded session
+ * is simply never found. That is F-073, and it is genuinely time-of-day dependent: the
+ * equivalent regression fixtures passed all day and failed after 22:00 UTC.
+ */
+function withinTodayUtc(minutesAhead: number) {
+  const now = new Date();
+  const endOfUtcDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  const minutesLeft = Math.floor((endOfUtcDay - now.getTime()) / 60000);
+  const offset = Math.min(minutesAhead, minutesLeft - 2);
+  if (offset < 2) {
+    throw new Error(
+      `withinTodayUtc: only ${minutesLeft} minutes remain in the UTC day; this fixture needs at least 2.`,
+    );
+  }
+  const start = new Date(now.getTime() + offset * 60 * 1000);
+  start.setUTCSeconds(0, 0);
   return start;
 }
 
@@ -158,7 +177,7 @@ async function seedF023() {
 
   // Future aligned window: both members begin before cutoff. Each scenario moves
   // its own rule past cutoff immediately before calling the real sweep endpoint.
-  const start = nextAlignedHour(2);
+  const start = withinTodayUtc(2 * 60); // F-073: pinned inside today's UTC date
   const end = new Date(start.getTime() + 60 * 60 * 1000);
   await prisma.availabilityWindow.create({ data: { id: windowAId, resourcePoolId: poolAId, startTime: start, endTime: end, capacity: 4 } });
   await prisma.availabilityWindow.create({ data: { id: windowBId, resourcePoolId: poolBId, startTime: start, endTime: end, capacity: 4 } });
