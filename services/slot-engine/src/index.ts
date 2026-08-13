@@ -2723,37 +2723,17 @@ server.post('/bookings/sweep', async (request, reply) => {
     data: { status: BookingStatus.RELEASED_NO_SHOW },
   });
 
-  // 2. Auto-release unconfirmed member bookings past gracePeriodMinutes.
-  // WHY: gracePeriodMinutes governs individual member seat release — distinct from guestAccessCutoffMinutes.
-  const activeMemberBookings = await prisma.booking.findMany({
-    where: {
-      isMemberBooking: true,
-      status: BookingStatus.CONFIRMED,
-      memberAttendanceConfirmedAt: null,
-      window: { startTime: { gte: now } },
-    },
-    include: {
-      window: true,
-      resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } },
-    },
-  });
+  // F-065: the former step 2 — a scan for member bookings CONFIRMED with attendance still
+  // null, released at gracePeriodMinutes — was UNREACHABLE and has been removed.
+  // ensureTodayMemberBooking is the only producer of isMemberBooking: true (every other
+  // write sets it false explicitly), and its two call sites are member confirm, which
+  // always sets memberAttendanceConfirmedAt, and the sweep below, which always writes
+  // RELEASED_NO_SHOW. Member bookings are never created HELD, so the HELD -> CONFIRMED
+  // route cannot reach them either. No row could satisfy all three conditions.
+  // Member release is now step 2 below, driven by the SAME gracePeriodMinutes the member
+  // is shown and confirm enforces — which is the whole point of F-065.
 
-  let releasedMembersCount = 0;
-  for (const b of activeMemberBookings) {
-    const rule = b.resourcePool.bookingRules[0];
-    const gracePeriodMinutes = rule ? rule.gracePeriodMinutes : 30;
-    const startTime = new Date(b.window.startTime);
-    const limitTime = new Date(startTime.getTime() - gracePeriodMinutes * 60 * 1000);
-    if (now >= limitTime) {
-      await prisma.booking.update({
-        where: { id: b.id },
-        data: { status: BookingStatus.RELEASED_NO_SHOW },
-      });
-      releasedMembersCount++;
-    }
-  }
-
-  // 3. Lazy member booking generation from MemberGroupAssignment.
+  // 2. Member release, and 3. the low-occupancy alert — two INDEPENDENT triggers.
   // WHY: For each active assignment matching today's weekday, ensure a booking exists
   // for today's matching window. Creates RELEASED_NO_SHOW if past guestAccessCutoffMinutes
   // so the slot can be opened to guests if occupancy is low.
@@ -2765,6 +2745,7 @@ server.post('/bookings/sweep', async (request, reply) => {
   });
 
   let lazyGeneratedCount = 0;
+  let releasedMembersCount = 0;
   const alertsDispatched: string[] = [];
 
   // F-066: one weekday cannot be correct for branches in different timezones, so the
@@ -2817,38 +2798,65 @@ server.post('/bookings/sweep', async (request, reply) => {
         status: { not: BookingStatus.CANCELLED },
       },
     });
-    if (existingBooking) continue;
-
-    // WHY: guestAccessCutoffMinutes governs when the lazy booking is generated.
-    // Only create the RELEASED_NO_SHOW booking once we're past the cutoff window.
     const rule = assignment.resourcePool.bookingRules[0];
-    const cutoffMinutes = rule?.guestAccessCutoffMinutes ?? 120;
-    const cutoffTime = new Date(matchingWindow.startTime.getTime() - cutoffMinutes * 60 * 1000);
-    if (now < cutoffTime) continue;
 
-    // Create through the same atomic helper used by member self-confirm.
-    // WHY: Sweep and confirm are competing triggers for one logical daily member booking,
-    // so the lock/double-check/create path must not drift between callers.
-    try {
-      const ensured = await ensureTodayMemberBooking({
-        assignment,
-        matchingWindow,
-        now,
-        timeZone,
-        status: BookingStatus.RELEASED_NO_SHOW,
-        attendanceConfirmedAt: null,
-      });
-      if (ensured.created) {
-        lazyGeneratedCount++;
-      }
-    } catch (err: any) {
-      // P2002 = concurrent sweep already created this booking — safe to skip.
-      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
-        throw err;
+    // 2. MEMBER RELEASE — gracePeriodMinutes.
+    // F-065: this is the exact value the member is shown (resolveTodayMemberAssignment) and
+    // that confirm enforces. It previously read guestAccessCutoffMinutes, so a member was
+    // locked out 90 minutes before the deadline still on their screen, and confirm then
+    // rejected them with CONFIRMATION_CUTOFF_PASSED. The moment a member can no longer
+    // confirm is the moment the slot is abandoned — one deadline, not two.
+    //
+    // No timezone conversion here, deliberately: startTime is an absolute instant and
+    // subtracting minutes from it is timezone-invariant. F-066 Stage 1 fixed WHICH window
+    // is selected, which is the lookup above; routing this subtraction through branchTime
+    // would add a conversion where none belongs.
+    if (!existingBooking) {
+      const graceMinutes = rule?.gracePeriodMinutes ?? 30;
+      const releaseTime = new Date(matchingWindow.startTime.getTime() - graceMinutes * 60 * 1000);
+      if (now >= releaseTime) {
+        // Create through the same atomic helper used by member self-confirm.
+        // WHY: Sweep and confirm are competing triggers for one logical daily member
+        // booking, so the lock/double-check/create path must not drift between callers.
+        try {
+          const ensured = await ensureTodayMemberBooking({
+            assignment,
+            matchingWindow,
+            now,
+            timeZone,
+            status: BookingStatus.RELEASED_NO_SHOW,
+            attendanceConfirmedAt: null,
+          });
+          if (ensured.created) {
+            // One event, two honest readings: a booking row was created, and a member lost
+            // their slot. This is now the sole member-release path.
+            lazyGeneratedCount++;
+            releasedMembersCount++;
+          }
+        } catch (err: any) {
+          // P2002 = concurrent sweep already created this booking — safe to skip.
+          if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+            throw err;
+          }
+        }
       }
     }
 
-    // 4. After generation, check occupancy and dispatch alert if below threshold.
+    // 3. LOW-OCCUPANCY ALERT — guestAccessCutoffMinutes, unchanged.
+    // F-065: this is why guestAccessCutoffMinutes is NOT vestigial. It governs how much
+    // lead time an admin gets to sell a freed slot to guests, which is a different question
+    // from when a member loses their seat. Collapsing the two onto gracePeriodMinutes would
+    // have moved this to T-30 — too late to act on — while looking like a simplification.
+    //
+    // The `existingBooking` precondition is preserved EXACTLY as it was, using the value
+    // read before the release above. It means a pool where every member already has a
+    // booking never gets an occupancy check at all, which is a real defect — tracked as
+    // F-089 rather than silently widened here.
+    if (existingBooking) continue;
+    const alertMinutes = rule?.guestAccessCutoffMinutes ?? 120;
+    const alertTime = new Date(matchingWindow.startTime.getTime() - alertMinutes * 60 * 1000);
+    if (now < alertTime) continue;
+
     const thresholdPct = rule?.lowOccupancyThresholdPct ?? 50;
     const totalCapacity = assignment.resourcePool.capacity;
     if (totalCapacity > 0) {
@@ -2863,6 +2871,40 @@ server.post('/bookings/sweep', async (request, reply) => {
       if (occupancyPercentage < thresholdPct) {
         const poolId = assignment.resourcePoolId;
         if (!alertsDispatched.includes(poolId)) {
+          // F-065: dedupe ACROSS sweep runs, not just within one.
+          // Previously the alert fired once by accident: the same iteration that passed the
+          // cutoff also created the booking, so every later run hit `if (existingBooking)`
+          // first. Decoupling release to gracePeriodMinutes removes that, leaving a 90-minute
+          // span with no booking — so an unguarded alert would fire on EVERY run, which is
+          // about 90 duplicate admin alerts per session once F-044 Phase B schedules this
+          // every 60 seconds. That is the very feature F-065 unblocks, so it is solved here.
+          //
+          // Insert-first against the existing @@unique([jobName, dedupKey]) on
+          // ScheduledJobDispatch — the same atomic-gate pattern as payment's webhook
+          // idempotency. Insert-first rather than record-after-send because only the insert
+          // is atomic: two concurrent sweeps would both pass a read-then-send check. The
+          // trade-off is that a failed send is not retried, which matches the existing
+          // non-blocking behaviour below, where a fetch failure is already swallowed.
+          // Written with Prisma directly rather than through the ScheduledJobStore port,
+          // per F-057.
+          try {
+            await prisma.scheduledJobDispatch.create({
+              data: {
+                jobName: 'low_occupancy_alert',
+                tenantId: assignment.resourcePool.tenantId,
+                subjectId: poolId,
+                dedupKey: `${poolId}:${matchingWindow.id}`,
+                status: 'SENT',
+                occurrenceAt: matchingWindow.startTime,
+                dispatchedAt: new Date(),
+              },
+            });
+          } catch (err: any) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+              continue; // already alerted for this pool + window
+            }
+            throw err;
+          }
           alertsDispatched.push(poolId);
           try {
             await fetch(`${notificationUrl}/notifications/send`, {

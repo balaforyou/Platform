@@ -56,6 +56,36 @@ export function nextAlignedHour(hoursFromNow: number): Date {
 }
 
 /**
+ * F-073: a future instant guaranteed to fall inside TODAY's UTC date.
+ *
+ * A fixed relative offset such as `nextAlignedHour(4)` silently lands on tomorrow when the
+ * suite runs late in the UTC day, and several things then look for it on today's date:
+ * `resolveTodayMemberAssignment` builds its lookup from today's branch date plus the
+ * assignment's `startTime`, and `/occupancy` counts bookings within today's UTC bounds.
+ * The window exists, nothing errors, and the section fails with WINDOW_NOT_FOUND or a zero
+ * seat count — which is exactly F-073, and it is genuinely time-of-day dependent: these
+ * sections passed all day and failed after 22:00 UTC.
+ *
+ * Requesting the offset you want and taking whatever remains of the day keeps the intent
+ * ("a window a few hours out") while removing the dependency on the wall-clock hour.
+ */
+export function withinTodayUtc(minutesAhead: number): Date {
+  const now = new Date();
+  const endOfUtcDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  const minutesLeft = Math.floor((endOfUtcDay - now.getTime()) / 60000);
+  const offset = Math.min(minutesAhead, minutesLeft - 2);
+  if (offset < 2) {
+    throw new Error(
+      `withinTodayUtc: only ${minutesLeft} minutes remain in the UTC day; this fixture needs at least 2. ` +
+        'Re-run outside the final two minutes before UTC midnight.',
+    );
+  }
+  const date = new Date(now.getTime() + offset * 60 * 1000);
+  date.setUTCSeconds(0, 0);
+  return date;
+}
+
+/**
  * Wipes every table these sections touch.
  *
  * NOTE (consolidation-specific): availabilityPattern / availabilityOverride /

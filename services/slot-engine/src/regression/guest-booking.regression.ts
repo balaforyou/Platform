@@ -6,6 +6,7 @@ import {
   internalKey,
   bookingHeaders,
   guestToken,
+  withinTodayUtc,
   SlotEngineContext,
   BRANCH_ID,
   TENANT_ID,
@@ -205,8 +206,10 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
       }
 
       // Inside the guest window the booking succeeds, but the claim is discarded.
-      const nearStart = new Date(Date.now() + 2 * 60 * 60 * 1000);
-      nearStart.setUTCMinutes(0, 0, 0);
+      // F-073: pinned inside today's UTC date. At +2h this lands on tomorrow when the suite
+      // runs after 22:00 UTC, and the occupancy endpoint below counts only TODAY's bookings —
+      // so confirmedSeats read 0 and the section failed for a reason unrelated to F-048.
+      const nearStart = withinTodayUtc(2 * 60);
       const nearWindow = await db.availabilityWindow.create({
         data: {
           resourcePoolId: pool.id,

@@ -1,6 +1,6 @@
 import { Section, signJwt, inspect, expectForbidden, expectIdentityFromJwt } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
-import { db, baseUrl, nextAlignedHour, SlotEngineContext, TENANT_ID, BRANCH_ID } from './_fixtures';
+import { db, baseUrl, nextAlignedHour, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID } from './_fixtures';
 
 /**
  * MEMBER SELF-CONFIRM ATTENDANCE (F-022).
@@ -41,7 +41,10 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
         },
       });
 
-      const futureWindowStart = nextAlignedHour(4);
+      // F-073: pinned inside today's UTC date. nextAlignedHour(4) lands on tomorrow when
+      // the suite runs after ~20:00 UTC, and resolveTodayMemberAssignment only ever looks
+      // for today's date + startTime — so the window exists and is never found.
+      const futureWindowStart = withinTodayUtc(4 * 60);
       const futureWindowEnd = new Date(futureWindowStart.getTime() + 60 * 60 * 1000);
       const assignmentStartTime = futureWindowStart.toISOString().slice(11, 16);
       // F-066/F-073: derived from UTC — the clock the seeded branch uses — not from the
@@ -209,7 +212,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
 
       // PAST CUTOFF → 409.
       const cutoffUserId = 'member-self-confirm-cutoff';
-      const soonWindowStart = nextAlignedHour(1);
+      const soonWindowStart = withinTodayUtc(60); // F-073: same constraint as above
       const soonWindowEnd = new Date(soonWindowStart.getTime() + 60 * 60 * 1000);
       const cutoffPool = await db.resourcePool.create({
         data: {
