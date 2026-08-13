@@ -30,7 +30,11 @@ export interface IdentityContext {
 
 function futureAlignedHour(hoursFromNow: number) {
   const date = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
-  date.setMinutes(0, 0, 0);
+  // F-066/F-073: setUTCMinutes, not setMinutes. Availability-window alignment is now
+  // judged on the branch's clock (UTC for these fixtures); zeroing LOCAL minutes on a
+  // half-hour-offset zone such as IST lands the instant on :30 UTC, which is genuinely
+  // unaligned and is correctly rejected with UNALIGNED_TIME_BOUNDARY.
+  date.setUTCMinutes(0, 0, 0);
   return date;
 }
 

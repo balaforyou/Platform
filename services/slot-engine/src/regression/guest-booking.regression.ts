@@ -162,7 +162,11 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
       // 14 days out: outside the guest window, comfortably inside the member one.
       // Pre-fix, isMemberBooking:true made this succeed.
       const farStart = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-      farStart.setMinutes(0, 0, 0);
+  // F-066/F-073: setUTCMinutes, not setMinutes. Availability-window alignment is now
+  // judged on the branch's clock (UTC for these fixtures); zeroing LOCAL minutes on a
+  // half-hour-offset zone such as IST lands the instant on :30 UTC, which is genuinely
+  // unaligned and is correctly rejected with UNALIGNED_TIME_BOUNDARY.
+      farStart.setUTCMinutes(0, 0, 0);
       const farWindow = await db.availabilityWindow.create({
         data: {
           resourcePoolId: pool.id,
@@ -202,7 +206,7 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
 
       // Inside the guest window the booking succeeds, but the claim is discarded.
       const nearStart = new Date(Date.now() + 2 * 60 * 60 * 1000);
-      nearStart.setMinutes(0, 0, 0);
+      nearStart.setUTCMinutes(0, 0, 0);
       const nearWindow = await db.availabilityWindow.create({
         data: {
           resourcePoolId: pool.id,
@@ -310,7 +314,7 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
       });
 
       const start = new Date(Date.now() + 3 * 60 * 60 * 1000);
-      start.setMinutes(0, 0, 0);
+      start.setUTCMinutes(0, 0, 0);
       const bookable = await db.availabilityWindow.create({
         data: {
           resourcePoolId: pool.id,

@@ -97,8 +97,13 @@ export const coPlayerAndAlignmentSections: Section<SlotEngineContext>[] = [
         });
 
       // 60-minute pool: unaligned startTime must suggest the two nearest hours.
+      // F-066: the timestamps carry an explicit `Z`. They were previously timezone-naive,
+      // which Node parses as SERVER-local — so this test silently asserted the runner's own
+      // timezone and would have reported different boundaries on a differently-configured
+      // machine. Boundaries are now judged on the branch's clock, so the input has to name
+      // an unambiguous instant for the assertion to mean anything.
       const pool60 = await createPool('Pool 60min Test', 60);
-      const res60 = await postWindow(pool60.id, '2026-07-31T22:16:00', '2026-07-31T23:00:00');
+      const res60 = await postWindow(pool60.id, '2026-07-31T22:16:00Z', '2026-07-31T23:00:00Z');
       if (res60.status !== 400) {
         throw new Error(`Expected 400 for unaligned 60-minute start, got ${res60.status}`);
       }
@@ -112,7 +117,7 @@ export const coPlayerAndAlignmentSections: Section<SlotEngineContext>[] = [
 
       // 30-minute pool: same input suggests different boundaries.
       const pool30 = await createPool('Pool 30min Test', 30);
-      const res30 = await postWindow(pool30.id, '2026-07-31T22:16:00', '2026-07-31T23:00:00');
+      const res30 = await postWindow(pool30.id, '2026-07-31T22:16:00Z', '2026-07-31T23:00:00Z');
       if (res30.status !== 400) {
         throw new Error(`Expected 400 for unaligned 30-minute start, got ${res30.status}`);
       }
@@ -125,7 +130,7 @@ export const coPlayerAndAlignmentSections: Section<SlotEngineContext>[] = [
       }
 
       // endTime is validated independently of startTime.
-      const res30End = await postWindow(pool30.id, '2026-07-31T22:00:00', '2026-07-31T23:15:00');
+      const res30End = await postWindow(pool30.id, '2026-07-31T22:00:00Z', '2026-07-31T23:15:00Z');
       if (res30End.status !== 400) {
         throw new Error(`Expected 400 for unaligned 30-minute end, got ${res30End.status}`);
       }

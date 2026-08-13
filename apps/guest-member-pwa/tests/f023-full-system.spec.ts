@@ -20,8 +20,12 @@ const poolBId = 'f023-pool-released';
 const windowAId = 'f023-window-confirmed';
 const windowBId = 'f023-window-released';
 
+// F-066/F-073: every date derivation in this file reads ONE clock — UTC — matching the
+// timezone the seeded branch carries below. Previously the weekday came from the runner's
+// local clock while the window and startTime came from UTC, so a run crossing local
+// midnight put them on different calendar days and produced spurious WINDOW_NOT_FOUND.
 function isoWeekday(now = new Date()) {
-  const day = now.getDay();
+  const day = now.getUTCDay();
   return String(day === 0 ? 7 : day);
 }
 
@@ -36,7 +40,9 @@ function todayDateString(now = new Date()) {
 
 function nextAlignedHour(hoursFromNow: number) {
   const start = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
-  start.setMinutes(0, 0, 0);
+  // setUTCMinutes, not setMinutes: on a half-hour-offset zone such as IST, zeroing LOCAL
+  // minutes lands the instant on :30 UTC, so the "aligned hour" was not aligned at all.
+  start.setUTCMinutes(0, 0, 0);
   return start;
 }
 
@@ -98,8 +104,8 @@ async function seedF023() {
   });
   await prisma.branch.upsert({
     where: { id: branchId },
-    update: { name: 'F023 Integration Arena', status: 'ACTIVE', workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], workingHoursStart: '06:00', workingHoursEnd: '23:00' },
-    create: { id: branchId, tenantId, name: 'F023 Integration Arena', status: 'ACTIVE', workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], workingHoursStart: '06:00', workingHoursEnd: '23:00' },
+    update: { name: 'F023 Integration Arena', timezone: 'UTC', status: 'ACTIVE', workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], workingHoursStart: '06:00', workingHoursEnd: '23:00' },
+    create: { id: branchId, tenantId, name: 'F023 Integration Arena', timezone: 'UTC', status: 'ACTIVE', workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], workingHoursStart: '06:00', workingHoursEnd: '23:00' },
   });
 
   await upsertUser(ownerId, ownerPhone, 'MEMBER');

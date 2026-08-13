@@ -3,6 +3,16 @@ import fastifyJwt from '@fastify/jwt';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
 import { PrismaClient, BookingStatus, AllocationMode, PricingMode, Prisma, AvailabilityOverrideType } from '@badminton/database';
 import { ensureAvailabilityWindowsForDate } from './availabilityGeneration.js';
+import {
+  DEFAULT_TIME_ZONE,
+  addBranchDays,
+  branchDateString,
+  branchHHMM,
+  branchIsoWeekday,
+  branchLocalToUtc,
+  branchMinutesOfDay,
+  safeTimeZone,
+} from './branchTime.js';
 
 const server = fastify({ logger: true });
 
@@ -46,49 +56,44 @@ function isValidIndianPhone(phone: string): boolean {
 // ---------------------------------------------------------------------------
 // Helpers: F-010 Time Boundary Alignment Snapping
 // ---------------------------------------------------------------------------
-function isAlignedToBoundary(date: Date, durationMinutes: number): boolean {
-  const totalMinutes = date.getHours() * 60 + date.getMinutes();
+// F-066: these read the clock of the BRANCH, not of the server process. Previously they
+// used getHours()/setHours(), so the boundary a request was judged against depended on the
+// container's own timezone. That is not cosmetic: under IST the offset is 330 minutes and
+// 330 % 60 = 30, so the same request would be accepted or rejected differently for
+// 60-minute slots purely because of an environment variable. Latent today only because the
+// containers happen to run UTC.
+function snapToBoundary(
+  date: Date,
+  durationMinutes: number,
+  timeZone: string,
+  round: (n: number) => number,
+): Date {
+  const totalMinutes = branchMinutesOfDay(date, timeZone);
+  const snapped = round(totalMinutes / durationMinutes) * durationMinutes;
+  // Minutes may exceed a day after snapping; normalise into days + HH:mm before converting
+  // back, since branchLocalToUtc takes a real wall-clock reading rather than an overflow.
+  const dayShift = Math.floor(snapped / 1440);
+  const withinDay = ((snapped % 1440) + 1440) % 1440;
+  const hhmm = `${String(Math.floor(withinDay / 60)).padStart(2, '0')}:${String(withinDay % 60).padStart(2, '0')}`;
+  const base = dayShift === 0 ? date : addBranchDays(date, dayShift, timeZone);
+  return branchLocalToUtc(branchDateString(base, timeZone), hhmm, timeZone);
+}
+
+function isAlignedToBoundary(date: Date, durationMinutes: number, timeZone: string): boolean {
+  const totalMinutes = branchMinutesOfDay(date, timeZone);
   return totalMinutes % durationMinutes === 0 && date.getSeconds() === 0 && date.getMilliseconds() === 0;
 }
 
-function floorTimeToBoundary(date: Date, durationMinutes: number): Date {
-  const result = new Date(date);
-  result.setSeconds(0);
-  result.setMilliseconds(0);
-  const totalMinutes = result.getHours() * 60 + result.getMinutes();
-  const snappedMinutes = Math.floor(totalMinutes / durationMinutes) * durationMinutes;
-  result.setHours(0, snappedMinutes, 0, 0);
-  return result;
+function floorTimeToBoundary(date: Date, durationMinutes: number, timeZone: string): Date {
+  return snapToBoundary(date, durationMinutes, timeZone, Math.floor);
 }
 
-function ceilTimeToBoundary(date: Date, durationMinutes: number): Date {
-  const result = new Date(date);
-  result.setSeconds(0);
-  result.setMilliseconds(0);
-  const totalMinutes = result.getHours() * 60 + result.getMinutes();
-  const snappedMinutes = Math.ceil(totalMinutes / durationMinutes) * durationMinutes;
-  result.setHours(0, snappedMinutes, 0, 0);
-  return result;
+function ceilTimeToBoundary(date: Date, durationMinutes: number, timeZone: string): Date {
+  return snapToBoundary(date, durationMinutes, timeZone, Math.ceil);
 }
 
-function alignTimeToBoundary(date: Date, durationMinutes: number): Date {
-  const result = new Date(date);
-  result.setSeconds(0);
-  result.setMilliseconds(0);
-  const totalMinutes = result.getHours() * 60 + result.getMinutes();
-  const snappedMinutes = Math.round(totalMinutes / durationMinutes) * durationMinutes;
-  
-  // NOTE: Passing minutes > 59 to setHours is a standard JS Date behavior.
-  // The Date engine automatically handles minute overflows, cleanly rolling over
-  // hours and days without introducing timezone shift side-effects.
-  result.setHours(0, snappedMinutes, 0, 0);
-  return result;
-}
-
-function formatHHMM(date: Date): string {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+function formatHHMM(date: Date, timeZone: string): string {
+  return branchHHMM(date, timeZone);
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +278,20 @@ function dayBounds(date?: string) {
   const endOfDay = new Date(day);
   endOfDay.setUTCHours(23, 59, 59, 999);
   return { startOfDay, endOfDay };
+}
+
+/**
+ * F-066: the same bounds, but for a calendar day on the BRANCH's clock.
+ *
+ * Deliberately separate from `dayBounds` rather than replacing it: `dayBounds` is shared
+ * with the occupancy endpoint, which feeds availability generation — explicitly Stage 2
+ * scope, because changing it would move which windows that endpoint returns. For a UTC
+ * branch this produces byte-identical bounds, so the split costs nothing today.
+ */
+function branchDayBounds(dateString: string, timeZone: string) {
+  const startOfDay = branchLocalToUtc(dateString, '00:00', timeZone);
+  const nextDay = addBranchDays(startOfDay, 1, timeZone);
+  return { startOfDay, endOfDay: new Date(nextDay.getTime() - 1) };
 }
 
 function dateOnly(value: string | Date) {
@@ -495,15 +514,22 @@ async function computePoolGuestOccupancy(resourcePoolIds: string[], date?: strin
   });
 }
 
-function slotStartForDate(dateString: string, startTime: string): Date {
-  return new Date(`${dateString}T${startTime}:00.000Z`);
+// F-066: `startTime` is branch local time per the schema, so the branch's clock decides
+// which instant it names. Previously pasted straight into a UTC ISO string.
+function slotStartForDate(dateString: string, startTime: string, timeZone: string): Date {
+  return branchLocalToUtc(dateString, startTime, timeZone);
 }
 
 async function computeBranchMemberAttendance(branchId: string, date: string | undefined, now: Date): Promise<MemberAttendanceRow[]> {
-  const dateString = date || todayDateString(now);
-  const selectedDay = new Date(`${dateString}T00:00:00.000Z`);
-  const weekday = isoWeekday(selectedDay);
-  const { startOfDay, endOfDay } = dayBounds(dateString);
+  // F-066: this admin-facing attendance view had the same mixed-clock defect as the member
+  // path — an explicit `date` was read as UTC while the weekday came from the process's
+  // local clock, so the roster could be built for one calendar day and filtered by another.
+  const timeZone = await getBranchTimeZone(branchId);
+  const dateString = date || todayDateString(now, timeZone);
+  // Midday anchor: any instant inside the branch's day names that day, and noon is the one
+  // choice no DST transition can move across a date boundary.
+  const weekday = branchIsoWeekday(branchLocalToUtc(dateString, '12:00', timeZone), timeZone);
+  const { startOfDay, endOfDay } = branchDayBounds(dateString, timeZone);
 
   const assignments = await prisma.memberGroupAssignment.findMany({
     where: {
@@ -548,7 +574,7 @@ async function computeBranchMemberAttendance(branchId: string, date: string | un
   const windowByAssignment = new Map<string, any>();
 
   for (const assignment of matchingAssignments) {
-    const expectedStart = slotStartForDate(dateString, assignment.startTime);
+    const expectedStart = slotStartForDate(dateString, assignment.startTime, timeZone);
     const expectedEnd = new Date(expectedStart.getTime() + 60 * 60 * 1000);
     const matchingWindow = windows.find((window) => (
       window.resourcePoolId === assignment.resourcePoolId &&
@@ -658,16 +684,64 @@ type TodayAssignmentResolution =
   | { state: 'WINDOW_NOT_FOUND'; weekday: string; assignment: any }
   | { state: 'HAS_SESSION'; weekday: string; assignment: any; window: any; existingBooking: any | null; rule: any | null; cutoffTime: Date };
 
-function todayDateString(now: Date): string {
-  return now.toISOString().slice(0, 10);
+// F-066: "today" and "this weekday" are properties of the BRANCH, not of the server.
+// These previously disagreed with each other — the date came from UTC and the weekday from
+// the process's local clock — so a member with a Thursday session could be told there was
+// no session today because the container's own clock still said Wednesday.
+function todayDateString(now: Date, timeZone: string): string {
+  return branchDateString(now, timeZone);
 }
 
-function isoWeekday(now: Date): string {
-  return String(now.getDay() === 0 ? 7 : now.getDay());
+function isoWeekday(now: Date, timeZone: string): string {
+  return branchIsoWeekday(now, timeZone);
 }
 
-function memberBookingIdempotencyKey(userId: string, windowId: string, now: Date): string {
-  return `member-booking-${userId}-${windowId}-${todayDateString(now)}`;
+function memberBookingIdempotencyKey(userId: string, windowId: string, now: Date, timeZone: string): string {
+  return `member-booking-${userId}-${windowId}-${todayDateString(now, timeZone)}`;
+}
+
+/**
+ * F-066: resolves a branch's timezone.
+ *
+ * WHY A SEPARATE QUERY: `ResourcePool.branchId` is a scalar with no Prisma relation (see
+ * schema.prisma, "Scalar UUID, no DB relation yet"), so the branch cannot be `include`d
+ * from a pool. This is a primary-key lookup on paths that already issue several queries.
+ *
+ * The stored value is passed through `safeTimeZone` because Tenant Management writes it
+ * without validation and `Intl` throws on an unknown zone.
+ */
+async function getBranchTimeZone(branchId: string): Promise<string> {
+  const branch = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { timezone: true },
+  });
+  if (!branch) {
+    console.warn(`[branchTime] branch ${branchId} not found — using ${DEFAULT_TIME_ZONE}`);
+    return DEFAULT_TIME_ZONE;
+  }
+  return safeTimeZone(branch.timezone, `branch ${branchId}`);
+}
+
+/**
+ * Batch form for the sweep, which iterates every active assignment across every branch.
+ * One `findMany` instead of an N+1, and one bad row cannot poison the others because each
+ * value is validated independently.
+ */
+async function getBranchTimeZones(branchIds: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(branchIds)];
+  const branches = await prisma.branch.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, timezone: true },
+  });
+  const map = new Map<string, string>();
+  for (const b of branches) map.set(b.id, safeTimeZone(b.timezone, `branch ${b.id}`));
+  for (const id of unique) {
+    if (!map.has(id)) {
+      console.warn(`[branchTime] branch ${id} not found — using ${DEFAULT_TIME_ZONE}`);
+      map.set(id, DEFAULT_TIME_ZONE);
+    }
+  }
+  return map;
 }
 
 async function getActiveSubscription(userId: string, tenantId: string) {
@@ -681,7 +755,9 @@ async function getActiveSubscription(userId: string, tenantId: string) {
 }
 
 async function resolveTodayMemberAssignment(userId: string, tenantId: string, now: Date): Promise<TodayAssignmentResolution> {
-  const weekday = isoWeekday(now);
+  // F-066: the assignment lookup is not date-dependent, so it runs FIRST — the weekday
+  // cannot be computed until we know which branch's clock to read. Only the
+  // NO_ACTIVE_ASSIGNMENT case has no branch to consult, and it reports UTC.
   const assignment = await prisma.memberGroupAssignment.findFirst({
     where: {
       userId,
@@ -693,14 +769,21 @@ async function resolveTodayMemberAssignment(userId: string, tenantId: string, no
     },
   });
 
-  if (!assignment) return { state: 'NO_ACTIVE_ASSIGNMENT', weekday };
+  if (!assignment) {
+    return { state: 'NO_ACTIVE_ASSIGNMENT', weekday: branchIsoWeekday(now, DEFAULT_TIME_ZONE) };
+  }
+
+  const timeZone = await getBranchTimeZone(assignment.resourcePool.branchId);
+  const weekday = isoWeekday(now, timeZone);
 
   const days = assignment.daysOfWeek.split(',').map((d: string) => d.trim());
   if (!days.includes(weekday)) {
     return { state: 'NO_SESSION_TODAY', weekday, assignment };
   }
 
-  const windowStart = new Date(`${todayDateString(now)}T${assignment.startTime}:00.000Z`);
+  // F-066: `startTime` is documented as branch local time in the schema, and is now read
+  // as such instead of being pasted into a UTC ISO string.
+  const windowStart = branchLocalToUtc(todayDateString(now, timeZone), assignment.startTime, timeZone);
   const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
   const matchingWindow = await prisma.availabilityWindow.findFirst({
     where: {
@@ -738,14 +821,20 @@ async function ensureTodayMemberBooking({
   now,
   status,
   attendanceConfirmedAt,
+  timeZone,
 }: {
   assignment: any;
   matchingWindow: any;
   now: Date;
   status: BookingStatus;
   attendanceConfirmedAt: Date | null;
+  timeZone: string;
 }) {
-  const key = memberBookingIdempotencyKey(assignment.userId, matchingWindow.id, now);
+  // F-066: the key embeds the calendar date, which is now the BRANCH's date. Under a UTC
+  // branch this is byte-identical to before. Safe to change because the duplicate guard
+  // that actually prevents a second booking is the (userId, windowId) check inside the
+  // transaction below — the key is a second line of defence, not the only one.
+  const key = memberBookingIdempotencyKey(assignment.userId, matchingWindow.id, now, timeZone);
 
   try {
     return await prisma.$transaction(async (tx: any) => {
@@ -965,13 +1054,16 @@ server.post('/resource-pools/:id/availability-windows', async (request, reply) =
   }
 
   const duration = pool.minBookingDurationMinutes || 60;
+  // F-066: slot boundaries and the "did you mean 10:00 or 11:00?" hint are stated on the
+  // branch's clock, not the server's.
+  const poolTimeZone = await getBranchTimeZone(pool.branchId);
   const start = new Date(startTime);
   const end = new Date(endTime);
 
-  if (!isAlignedToBoundary(start, duration)) {
-    const enteredStr = formatHHMM(start);
-    const lowerStr = formatHHMM(floorTimeToBoundary(start, duration));
-    const upperStr = formatHHMM(ceilTimeToBoundary(start, duration));
+  if (!isAlignedToBoundary(start, duration, poolTimeZone)) {
+    const enteredStr = formatHHMM(start, poolTimeZone);
+    const lowerStr = formatHHMM(floorTimeToBoundary(start, duration, poolTimeZone), poolTimeZone);
+    const upperStr = formatHHMM(ceilTimeToBoundary(start, duration, poolTimeZone), poolTimeZone);
     reply.status(400);
     const err = new Error(`Start time must align to ${duration}-minute slots for this court. You entered ${enteredStr} — did you mean ${lowerStr} or ${upperStr}?`);
     (err as any).statusCode = 400;
@@ -979,10 +1071,10 @@ server.post('/resource-pools/:id/availability-windows', async (request, reply) =
     throw err;
   }
 
-  if (!isAlignedToBoundary(end, duration)) {
-    const enteredStr = formatHHMM(end);
-    const lowerStr = formatHHMM(floorTimeToBoundary(end, duration));
-    const upperStr = formatHHMM(ceilTimeToBoundary(end, duration));
+  if (!isAlignedToBoundary(end, duration, poolTimeZone)) {
+    const enteredStr = formatHHMM(end, poolTimeZone);
+    const lowerStr = formatHHMM(floorTimeToBoundary(end, duration, poolTimeZone), poolTimeZone);
+    const upperStr = formatHHMM(ceilTimeToBoundary(end, duration, poolTimeZone), poolTimeZone);
     reply.status(400);
     const err = new Error(`End time must align to ${duration}-minute slots for this court. You entered ${enteredStr} — did you mean ${lowerStr} or ${upperStr}?`);
     (err as any).statusCode = 400;
@@ -1877,8 +1969,10 @@ server.post('/bookings', async (request, reply) => {
       // MemberGroupAssignment — so there is nothing legitimate to preserve.
       const rule = await tx.bookingRule.findFirst({ where: { resourcePoolId }, orderBy: { createdAt: 'asc' } });
       const windowDays = rule?.guestOpenWindowDays ?? 7;
-      const maxBookingDate = new Date();
-      maxBookingDate.setDate(maxBookingDate.getDate() + windowDays);
+      // F-066: an N-day horizon counted in branch-local days. setDate() counted them on
+      // the server's clock, so the cutoff drifted by the UTC offset.
+      const horizonTimeZone = await getBranchTimeZone(pool.branchId);
+      const maxBookingDate = addBranchDays(new Date(), windowDays, horizonTimeZone);
 
       if (new Date(window.startTime) > maxBookingDate) {
         const err = new Error('Booking window is not open yet');
@@ -2450,6 +2544,7 @@ server.post('/member/today-assignment/confirm', async (request, reply) => {
     assignment: resolution.assignment,
     matchingWindow: resolution.window,
     now,
+    timeZone: await getBranchTimeZone(resolution.assignment.resourcePool.branchId),
     status: BookingStatus.CONFIRMED,
     attendanceConfirmedAt: now,
   });
@@ -2672,16 +2767,38 @@ server.post('/bookings/sweep', async (request, reply) => {
   let lazyGeneratedCount = 0;
   const alertsDispatched: string[] = [];
 
-  // ISO weekday: 1=Mon … 7=Sun (same convention as the daysOfWeek field)
-  const todayIsoWeekday = String(now.getDay() === 0 ? 7 : now.getDay());
+  // F-066: one weekday cannot be correct for branches in different timezones, so the
+  // weekday and date are derived PER ASSIGNMENT from its own branch's clock. They were
+  // previously hoisted out of this loop, computed once from the server's local weekday and
+  // the UTC date — two clocks that disagree for part of every day.
+  const branchTimeZones = await getBranchTimeZones(
+    activeAssignments.map((a: any) => a.resourcePool.branchId),
+  );
 
   for (const assignment of activeAssignments) {
+    const timeZone = branchTimeZones.get(assignment.resourcePool.branchId) ?? DEFAULT_TIME_ZONE;
+    // ISO weekday: 1=Mon … 7=Sun (same convention as the daysOfWeek field)
+    const todayIsoWeekday = isoWeekday(now, timeZone);
+
     const days = assignment.daysOfWeek.split(',').map((d: string) => d.trim());
     if (!days.includes(todayIsoWeekday)) continue;
 
-    // Find today's availability window for this pool starting at assignment.startTime.
-    const todayDateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
-    const windowStart = new Date(`${todayDateStr}T${assignment.startTime}:00.000Z`);
+    // Find today's availability window for this pool starting at assignment.startTime,
+    // which the schema documents as branch local time.
+    // F-066: `startTime` is stored as a free-form String with no format constraint, so a
+    // malformed value would throw here. One bad assignment row must not abort the sweep
+    // for every other branch, which is what an unguarded throw in this loop would do.
+    const todayDateStr = todayDateString(now, timeZone);
+    let windowStart: Date;
+    try {
+      windowStart = branchLocalToUtc(todayDateStr, assignment.startTime, timeZone);
+    } catch (err: any) {
+      console.warn(
+        `[sweep] skipping assignment ${assignment.id}: unusable startTime ` +
+          `${JSON.stringify(assignment.startTime)} — ${err.message}`,
+      );
+      continue;
+    }
     const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000); // search 1-hour span
 
     const matchingWindow = await prisma.availabilityWindow.findFirst({
@@ -2717,6 +2834,7 @@ server.post('/bookings/sweep', async (request, reply) => {
         assignment,
         matchingWindow,
         now,
+        timeZone,
         status: BookingStatus.RELEASED_NO_SHOW,
         attendanceConfirmedAt: null,
       });

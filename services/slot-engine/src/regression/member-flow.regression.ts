@@ -44,7 +44,11 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
       const futureWindowStart = nextAlignedHour(4);
       const futureWindowEnd = new Date(futureWindowStart.getTime() + 60 * 60 * 1000);
       const assignmentStartTime = futureWindowStart.toISOString().slice(11, 16);
-      const todayIsoWeekday = String(new Date().getDay() === 0 ? 7 : new Date().getDay());
+      // F-066/F-073: derived from UTC — the clock the seeded branch uses — not from the
+      // runner's local weekday. Reading getDay() here put the assignment on a different
+      // calendar day than the window whenever the runner's zone disagreed with UTC, which
+      // is a real several-hour span every day on any non-UTC machine.
+      const todayIsoWeekday = String(new Date().getUTCDay() === 0 ? 7 : new Date().getUTCDay());
       const notTodayIsoWeekday = todayIsoWeekday === '1' ? '2' : '1';
 
       const selfConfirmWindow = await db.availabilityWindow.create({

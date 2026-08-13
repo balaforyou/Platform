@@ -45,9 +45,13 @@ export function bookingHeaders(userId: string, idempotencyKey: string) {
   };
 }
 
+// F-066/F-073: aligns on UTC, the clock the seeded fixtures' branch uses. `setMinutes`
+// zeroes LOCAL minutes, which on a half-hour-offset zone such as IST leaves the instant at
+// :30 UTC — an "aligned hour" that is not aligned, and which drifts away from the weekday
+// derived elsewhere in the same fixture.
 export function nextAlignedHour(hoursFromNow: number): Date {
   const date = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
-  date.setMinutes(0, 0, 0);
+  date.setUTCMinutes(0, 0, 0);
   return date;
 }
 
