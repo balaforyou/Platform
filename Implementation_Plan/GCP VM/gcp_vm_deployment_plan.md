@@ -189,6 +189,7 @@ Two guards now make that state impossible to reach quietly:
 
 - **`migrate` refuses to run from a stale image.** Each image bakes the SHA it was built from; the deploy supplies the SHA it intends to run. A mismatch aborts before the database is touched. Note a migration *count* check cannot do this — a stale image and the database it already migrated agree with each other.
 - **`deploy:verify` checks every component independently** — five services via `/health`, both frontends via `version.json` — and names whichever is behind. Partial staleness is the common failure, and knowing *which* component is stale is the difference between a one-line fix and a day of diagnosis.
+- **The live `Caddyfile` is mounted, not baked (F-083).** `SITE_ADDRESS` must be set in `.env` to the real domain. Without a hostname Caddy serves plain HTTP and never requests a certificate — one `warn` line and no other symptom. Run `deploy:verify` against the `https://` URL specifically: if TLS is down every component fails to connect, which is a blunt signal but a real one.
 
 **If a deploy was ever bypassed**, check before trusting anything about the running state:
 
@@ -315,6 +316,8 @@ Example route shape:
 
 If no domain is ready, HTTP on the static IP is acceptable for demo verification. HTTPS should wait for a domain DNS record pointed at the static IP; Caddy's automatic TLS needs a hostname, not just a raw IP.
 
+**F-083 — this paragraph was already correct and the config still did not carry it.** The site address lives in `SITE_ADDRESS` (compose passes it to the `caddy` container, the `Caddyfile` reads it as `{$SITE_ADDRESS::80}`, defaulting to `:80` for local stacks). Set it to the bare domain — no scheme, no port. Getting this wrong is silent in both directions: a bare `:80` yields plain HTTP with one `warn` line, and the `Caddyfile` is mounted from disk rather than baked into the image, so an edit that is never mounted also does nothing. Verified red/green: with the mount absent the same image ignores `SITE_ADDRESS` entirely, `docker compose ps` reports `running`, HTTP serves `200` and HTTPS refuses the connection outright.
+
 ### Secrets Handling
 
 Secrets must never enter git.
@@ -348,6 +351,7 @@ Do not:
 Minimum VM `.env` values:
 
 ```dotenv
+SITE_ADDRESS=elitecourts.duckdns.org
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=REPLACE_WITH_LONG_RANDOM_VALUE
 POSTGRES_DB=badminton_db

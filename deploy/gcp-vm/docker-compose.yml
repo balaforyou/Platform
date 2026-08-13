@@ -150,7 +150,18 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # F-083: the real domain in production; defaults to :80 so local stacks are unchanged.
+      # Without a hostname here Caddy serves plain HTTP and never provisions a certificate.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
     volumes:
+      # F-083: WITHOUT this line Caddy silently uses the Caddyfile baked into the image at
+      # build time instead of the live one on disk. Proven: the same image ignores
+      # SITE_ADDRESS entirely when unmounted, and honours it when mounted, with no rebuild.
+      # That matters because caddy is the heaviest image to rebuild (both Vite builds, and
+      # the memory ceiling recorded in F-077), so a Caddyfile edit that needs a full rebuild
+      # to take effect is one that will silently not take effect.
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

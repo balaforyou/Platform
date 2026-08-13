@@ -1,4 +1,12 @@
-:80 {
+# F-083: the site address must carry a HOSTNAME for Caddy to provision automatic HTTPS.
+# A bare ":80" makes Caddy log one warn line — "server is listening only on the HTTP port,
+# so no automatic HTTPS will be applied" — and then serve plain HTTP forever. Nothing
+# crashes, nothing reports unhealthy, and the container looks entirely normal.
+#
+# Defaults to :80 so local and CI stacks are unchanged; production sets SITE_ADDRESS to the
+# real domain in .env. The doubled colon is not a typo: {$VAR:default} is Caddy's env
+# placeholder syntax and the default here is itself ":80".
+{$SITE_ADDRESS::80} {
 	@adminRoot {
 		path /admin
 	}
