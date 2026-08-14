@@ -7,29 +7,31 @@ This register is the SME-facing decision surface for the reconstructed AS-IS bas
 |---|---:|---|
 | RE-011 validation questions | 20 | Source set from RE-011 Cross-Flow Questions Requiring Business Validation |
 | Merged | 4 | Overlapping recovery, tenant/ownership, and payment-confirmation questions were consolidated where one SME decision resolves multiple technical issues |
-| Split | 0 | No RE-011 question required separate independent decisions beyond its stated topic |
-| Additional uncovered questions | 0 | Upstream finding coverage did not expose an additional business question absent from RE-011 |
-| Final VALIDATION identities | 16 | VALIDATION-001 through VALIDATION-016 |
+| Split | 1 | Notification persistence/delivery remains VALIDATION-013; notification history identity binding is split to VALIDATION-018 |
+| Additional uncovered questions | 1 | Architect source verification exposed a confirmed executable check-in access-control question absent from RE-011 |
+| Final VALIDATION identities | 18 | VALIDATION-001 through VALIDATION-018 |
 
 ## Validation Register
 | Validation | Category | Priority | Question Summary | Status | Decision |
 |---|---|---|---|---|---|
-| VALIDATION-001 | Availability / Capacity | P0 | Should capacity use one canonical formula or context-specific formulas? | PENDING | PENDING |
+| VALIDATION-001 | Availability / Capacity | P0 | Should browse, booking, member, automated release, and manual release use one capacity formula or context-specific formulas? | PENDING | PENDING |
 | VALIDATION-002 | Booking | P0 | Should booking confirmation enforce hold expiry and payment proof/state? | PENDING | PENDING |
 | VALIDATION-003 | Booking | P1 | What should happen when stale-hold release and confirmation race? | PENDING | PENDING |
 | VALIDATION-004 | Payment | P0 | What recovery is required when payment capture succeeds but booking confirmation fails? | PENDING | PENDING |
-| VALIDATION-005 | Payment | P1 | Should FLOW-052 enforce ownership after Razorpay signature verification? | PENDING | PENDING |
+| VALIDATION-005 | Payment | P1 | Should authenticated-user ownership be enforced in addition to provider-bound signed order identity? | PENDING | PENDING |
 | VALIDATION-006 | Payment | P1 | Should direct verify and webhook capture remain distinct variants or converge? | PENDING | PENDING |
 | VALIDATION-007 | Availability / Capacity | P2 | Should negotiated booking keep its distinct group-size/pricing treatment? | PENDING | PENDING |
 | VALIDATION-008 | Membership / Attendance | P1 | Should canConfirm and executable member confirmation use the same existing-booking semantics? | PENDING | PENDING |
-| VALIDATION-009 | Membership / Attendance | P1 | Should member no-show remain a none -> RELEASED_NO_SHOW booking creation path? | PENDING | PENDING |
+| VALIDATION-009 | Membership / Attendance | P1 | Should generated no-show records appear in member history as Booking/Expired entries? | PENDING | PENDING |
 | VALIDATION-010 | Membership / Attendance | P0 | Should subscription creation require authenticated identity binding before eligibility use? | PENDING | PENDING |
 | VALIDATION-011 | Cancellation / Refund | P1 | Should refund remain separate from cancellation or be business-required continuation? | PENDING | PENDING |
 | VALIDATION-012 | Cancellation / Refund | P1 | What does local Refund mean without evidenced provider refund execution? | PENDING | PENDING |
 | VALIDATION-013 | Notification | P1 | Should upstream producer success guarantee NotificationRequest persistence and delivery tracking? | PENDING | PENDING |
-| VALIDATION-014 | Scheduler / Dispatch | P2 | Should manual execution share the same lease semantics as due-job execution? | PENDING | PENDING |
+| VALIDATION-014 | Scheduler / Dispatch | P1 | Should manual execution share the same lease semantics as due-job execution? | PENDING | PENDING |
 | VALIDATION-015 | Authorization / Tenant / Ownership | P0 | Which tenant/ownership authority is authoritative across JWT, body, stored entity, provider, and internal-key boundaries? | PENDING | PENDING |
-| VALIDATION-016 | Temporal Behaviour | P2 | Which timezone/time basis is canonical across scheduling, booking, cancellation, retry, and lease rules? | PENDING | PENDING |
+| VALIDATION-016 | Temporal Behaviour | P0 | Which business-local time semantics are intended across branch availability, booking cutoff, cancellation, attendance, retry, and leases? | PENDING | PENDING |
+| VALIDATION-017 | Authorization / Tenant / Ownership | P0 | Who is permitted to check in a booking, and what tenant/ownership/role/time conditions must govern that mutation? | PENDING | PENDING |
+| VALIDATION-018 | Notification | P0 | What stable tenant/user identity should authorize notification-history access, and should exact recipient strings ever be sufficient ownership authority? | PENDING | PENDING |
 
 ## Booking
 ## VALIDATION-002 - Confirmation expiry and payment proof
@@ -106,16 +108,53 @@ PENDING
 ### Potential Impact Areas
 BUSINESS_RULE, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
-## Availability / Capacity
-## VALIDATION-001 - Capacity formula
+## VALIDATION-017 - Booking check-in access control
 ### Business Question
-Should availability, booking, occupancy, member booking, no-show, and release paths use one canonical capacity formula or remain context-specific?
+Who is permitted to check in a booking, and what tenant/ownership/role/time conditions must govern that mutation?
 ### Why This Needs Validation
-RE-011 preserves capacity divergence across browse, standard booking, negotiated booking, member booking, and sweep/no-show paths. A later requirements baseline cannot treat capacity as business-validated until this is confirmed.
+Architect source verification confirmed executable FLOW-035 behaviour: POST /bookings/:id/check-in has no authentication, tenant validation, ownership validation, role validation, or timing validation. It only checks that Booking.status is CONFIRMED before mutating the booking to CHECKED_IN. An unauthenticated caller who knows a booking id can invoke the state mutation.
 ### Current AS-IS Evidence
 | Evidence Type | IDs |
 |---|---|
-| Flows | FLOW-024, FLOW-029, FLOW-030, FLOW-044, FLOW-049 |
+| Flows | FLOW-035 |
+| Business Rules | BR-086, BR-087, BR-088, BR-089, BR-090, BR-091, BR-092 |
+| State Conflicts | STATE-CONFLICT-003 |
+| Invariant Findings | INVARIANT-FINDING-002 |
+| Authorization Findings | AUTHZ-FINDING-001 |
+| Integration Findings | N/A |
+| Cross-Flow Findings | N/A |
+| Journey Gaps | N/A |
+| Variants | N/A |
+| Uncertainties | FLOW-035-UNCERTAINTY-001, FLOW-035-UNCERTAINTY-002, FLOW-035-UNCERTAINTY-003 |
+### Observed Current Behaviour
+CONFIRMED EXECUTABLE ACCESS-CONTROL GAP: unauthenticated callers can invoke CONFIRMED -> CHECKED_IN for a known booking id. The only executable guard is current Booking.status == CONFIRMED; repeated CHECKED_IN calls are idempotent.
+### Decision Options
+A. Confirm current unauthenticated check-in mutation boundary
+B. Require business-defined authentication, tenant, ownership, role, and timing guards
+C. Business-defined alternative
+### SME Decision
+PENDING
+### Decision Notes
+PENDING
+### Decision Owner
+PENDING
+### Decision Date
+PENDING
+### Resulting Impact
+PENDING
+### Potential Impact Areas
+AUTHORIZATION, STATE_MODEL, POLICY_INVARIANT, BUSINESS_RULE, API_CONTRACT, TEST_EXPECTATION
+
+## Availability / Capacity
+## VALIDATION-001 - Capacity formula
+### Business Question
+Should availability/browse, standard booking, negotiated booking, member booking, automated no-show/release, manual capacity-release, and occupancy read paths use one canonical capacity formula or remain context-specific?
+### Why This Needs Validation
+RE-011 preserves capacity divergence across browse, standard booking, negotiated booking, member booking, manual capacity-release, occupancy read, and sweep/no-show paths. A later requirements baseline cannot treat capacity as business-validated until this is confirmed.
+### Current AS-IS Evidence
+| Evidence Type | IDs |
+|---|---|
+| Flows | FLOW-024, FLOW-029, FLOW-030, FLOW-044, FLOW-045, FLOW-047, FLOW-048, FLOW-049 |
 | Business Rules | BR-044, BR-045, BR-058, BR-059, BR-063, BR-064, BR-125 |
 | State Conflicts | STATE-CONFLICT-001 |
 | Invariant Findings | INVARIANT-FINDING-003 |
@@ -126,7 +165,7 @@ RE-011 preserves capacity divergence across browse, standard booking, negotiated
 | Variants | XFLOW-VARIANT-001, XFLOW-VARIANT-003, XFLOW-VARIANT-006 |
 | Uncertainties | FLOW-024-UNCERTAINTY-001, FLOW-024-UNCERTAINTY-002, FLOW-024-UNCERTAINTY-003 |
 ### Observed Current Behaviour
-Different flows count or affect capacity using different booking-state and member-treatment semantics.
+Different flows count, read, or affect capacity using different booking-state, member-treatment, manual-release, and automated-release semantics.
 ### Decision Options
 A. Keep context-specific capacity semantics
 B. Define one canonical capacity formula
@@ -221,9 +260,9 @@ STATE_MODEL, INTEGRATION, SERVICE_BOUNDARY, OPERATIONAL_PROCESS, TEST_EXPECTATIO
 
 ## VALIDATION-005 - Direct payment verification ownership
 ### Business Question
-Should direct payment verification enforce PaymentIntent/booking ownership after Razorpay signature verification?
+Should authenticated-user ownership be enforced in addition to the provider-bound signed order identity?
 ### Why This Needs Validation
-FLOW-052 has authenticated caller and payment signature evidence, but RE-008 records ownership not explicitly checked after signature. This affects how the business interprets direct verification trust.
+FLOW-052 requires JWT authentication and Razorpay signature evidence. The caller supplies Razorpay payment/order/signature fields; the HMAC covers orderId|paymentId; PaymentIntent is resolved by signed orderId -> gatewayRef; booking identity comes from PaymentIntent.referenceId. The verify handler does not check PaymentIntent or Booking ownership against the JWT caller, and it does not revalidate amount.
 ### Current AS-IS Evidence
 | Evidence Type | IDs |
 |---|---|
@@ -238,7 +277,7 @@ FLOW-052 has authenticated caller and payment signature evidence, but RE-008 rec
 | Variants | XFLOW-VARIANT-002, XFLOW-VARIANT-007 |
 | Uncertainties | FLOW-052-UNCERTAINTY-001, FLOW-052-UNCERTAINTY-002, FLOW-052-UNCERTAINTY-003, FLOW-052-UNCERTAINTY-004 |
 ### Observed Current Behaviour
-Direct verification is signature-gated but not clearly owner-gated after signature verification.
+Direct verification is JWT-gated and provider-signature-gated. The caller does not directly supply or select PaymentIntent/booking identity; local PaymentIntent selection follows the signed provider order identity, then booking confirmation follows PaymentIntent.referenceId. Ownership is not additionally enforced against the authenticated caller.
 ### Decision Options
 A. Confirm current direct verification boundary
 B. Require ownership validation after signature
@@ -333,9 +372,9 @@ BUSINESS_RULE, STATE_MODEL, DOMAIN_MODEL, API_CONTRACT, TEST_EXPECTATION
 
 ## VALIDATION-009 - Member no-show semantics
 ### Business Question
-Should member no-show remain a none -> RELEASED_NO_SHOW booking creation path, and how should attendance reports interpret it?
+Should an automatically generated no-show record appear in the member's booking history as a Booking/Expired entry, or should no-show attendance be represented/displayed differently?
 ### Why This Needs Validation
-RE-006 and RE-011 preserve member no-show as creation of a RELEASED_NO_SHOW booking where no non-cancelled booking exists. This must not be confused with CONFIRMED -> RELEASED_NO_SHOW.
+FLOW-049 creates an actual member Booking row when no non-cancelled booking exists after the member confirmation cutoff. The row uses status = RELEASED_NO_SHOW and isMemberBooking = true. The member history endpoint returns it because /bookings/my filters by userId without excluding RELEASED_NO_SHOW, and the PWA renders RELEASED_NO_SHOW as "Expired".
 ### Current AS-IS Evidence
 | Evidence Type | IDs |
 |---|---|
@@ -350,7 +389,7 @@ RE-006 and RE-011 preserve member no-show as creation of a RELEASED_NO_SHOW book
 | Variants | XFLOW-VARIANT-003 |
 | Uncertainties | FLOW-049 uncertainty lineage |
 ### Observed Current Behaviour
-Member no-show can create a RELEASED_NO_SHOW booking without a prior confirmed booking transition.
+Member no-show is confirmed executable user-visible behaviour: none -> RELEASED_NO_SHOW creates a Booking row, the row is returned by member history, and the PWA displays it as an Expired booking.
 ### Decision Options
 A. Confirm current member no-show creation semantics
 B. Define a different attendance/no-show interpretation
@@ -372,7 +411,7 @@ STATE_MODEL, DOMAIN_MODEL, POLICY_INVARIANT, TEST_EXPECTATION
 ### Business Question
 Should subscription creation require authenticated identity binding before subscription status is used for member eligibility?
 ### Why This Needs Validation
-FLOW-053 stores tenantId/userId from the request body, while FLOW-043/FLOW-044/FLOW-046 read subscription status for attendance eligibility. This links a weak creation boundary to downstream member behaviour.
+FLOW-053 exposes POST /subscriptions as a publicly reachable application route. It accepts tenantId and userId from the request body and uses them directly, with no JWT/internal-key identity binding before FLOW-043/FLOW-044/FLOW-046 read subscription status for attendance eligibility.
 ### Current AS-IS Evidence
 | Evidence Type | IDs |
 |---|---|
@@ -387,7 +426,7 @@ FLOW-053 stores tenantId/userId from the request body, while FLOW-043/FLOW-044/F
 | Variants | XFLOW-VARIANT-005 |
 | Uncertainties | FLOW-053-UNCERTAINTY-001, FLOW-053-UNCERTAINTY-002, FLOW-053-UNCERTAINTY-003, FLOW-055-UNCERTAINTY-* |
 ### Observed Current Behaviour
-Subscription status can influence member attendance eligibility after a body-driven subscription creation boundary.
+POST /subscriptions is publicly reachable at application-route level; tenantId and userId are request-body supplied and used directly; no JWT/internal-key identity binding is performed.
 ### Decision Options
 A. Confirm current body-driven subscription creation boundary
 B. Require authenticated identity binding before eligibility use
@@ -481,29 +520,29 @@ PENDING
 DOMAIN_MODEL, INTEGRATION, POLICY_INVARIANT, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
 ## Notification
-## VALIDATION-013 - Notification persistence, delivery, and history binding
+## VALIDATION-013 - Notification persistence and delivery
 ### Business Question
-Should upstream producer success guarantee notification persistence/delivery tracking, and should notification history be tenant/user-bound rather than exact-recipient-bound?
+Should upstream producer success guarantee notification persistence and delivery tracking?
 ### Why This Needs Validation
-FLOW-049 and FLOW-055 can trigger notifications, FLOW-061 queues, FLOW-065 processes, and FLOW-064 reads by recipient. RE-011 consolidates producer guarantee and recipient/tenant binding as one notification ownership and outcome question.
+FLOW-049 and FLOW-055 can trigger notifications, FLOW-061 queues, and FLOW-065 processes delivery/retry/dead-letter outcomes. Producer success and durable notification outcome tracking are operational/reliability questions distinct from notification-history identity binding, which is split to VALIDATION-018.
 ### Current AS-IS Evidence
 | Evidence Type | IDs |
 |---|---|
-| Flows | FLOW-049, FLOW-055, FLOW-061, FLOW-062, FLOW-063, FLOW-064, FLOW-065 |
-| Business Rules | BR-186, BR-187, BR-212-BR-221 |
+| Flows | FLOW-049, FLOW-055, FLOW-061, FLOW-062, FLOW-063, FLOW-065 |
+| Business Rules | BR-186, BR-187, BR-212-BR-217, BR-220-BR-221 |
 | State Conflicts | N/A |
 | Invariant Findings | INVARIANT-FINDING-008 |
-| Authorization Findings | AUTHZ-FINDING-004, AUTHZ-FINDING-007 |
+| Authorization Findings | AUTHZ-FINDING-007 |
 | Integration Findings | INTEGRATION-FINDING-005, INTEGRATION-FINDING-006 |
 | Cross-Flow Findings | XFLOW-FINDING-007 |
 | Journey Gaps | XFLOW-GAP-005 |
 | Variants | XFLOW-VARIANT-006 |
-| Uncertainties | FLOW-055-UNCERTAINTY-004, FLOW-061-UNCERTAINTY-001, FLOW-062-UNCERTAINTY-001, FLOW-063-UNCERTAINTY-001, FLOW-064-UNCERTAINTY-001, FLOW-065-UNCERTAINTY-001 |
+| Uncertainties | FLOW-055-UNCERTAINTY-004, FLOW-061-UNCERTAINTY-001, FLOW-062-UNCERTAINTY-001, FLOW-063-UNCERTAINTY-001, FLOW-065-UNCERTAINTY-001 |
 ### Observed Current Behaviour
-Notification production, persistence, delivery, retry/dead-letter, and history filtering are separate concerns with weak ownership evidence.
+Notification production, persistence, delivery, retry, and dead-letter behaviours are separate concerns with weak producer outcome evidence.
 ### Decision Options
-A. Confirm current best-effort and recipient-based notification semantics
-B. Require producer persistence guarantee and tenant/user-bound history
+A. Confirm current best-effort notification persistence/delivery semantics
+B. Require producer persistence and delivery tracking guarantees
 C. Business-defined alternative
 ### SME Decision
 PENDING
@@ -518,12 +557,49 @@ PENDING
 ### Potential Impact Areas
 AUTHORIZATION, INTEGRATION, DOMAIN_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
+## VALIDATION-018 - Notification history identity binding
+### Business Question
+What stable tenant/user identity should authorize notification-history access, and should exact recipient strings ever be sufficient ownership authority?
+### Why This Needs Validation
+FLOW-064 reads notification history by exact recipient string. Source verification shows `GET /notifications/:userId/history` uses the route parameter directly as `NotificationRequest.recipient`, with no tenant or stable user binding in that query. Because recipient strings may be phone numbers, the privacy decision is independent of delivery reliability and can be resolved separately.
+### Current AS-IS Evidence
+| Evidence Type | IDs |
+|---|---|
+| Flows | FLOW-064 |
+| Business Rules | BR-218, BR-219 |
+| State Conflicts | N/A |
+| Invariant Findings | N/A |
+| Authorization Findings | AUTHZ-FINDING-004 |
+| Integration Findings | N/A |
+| Cross-Flow Findings | XFLOW-FINDING-009 |
+| Journey Gaps | N/A |
+| Variants | N/A |
+| Uncertainties | FLOW-064-UNCERTAINTY-001 |
+### Observed Current Behaviour
+Notification history is filtered by exact `recipient` string and limited to 50 newest rows. There is no evidenced tenant/user ownership check in the history query; this is a concrete privacy concern if exact recipient strings are reused or reassigned.
+### Decision Options
+A. Confirm exact-recipient history binding
+B. Require stable tenant/user identity authorization for notification history
+C. Business-defined alternative
+### SME Decision
+PENDING
+### Decision Notes
+PENDING
+### Decision Owner
+PENDING
+### Decision Date
+PENDING
+### Resulting Impact
+PENDING
+### Potential Impact Areas
+AUTHORIZATION, DOMAIN_MODEL, API_CONTRACT, POLICY_INVARIANT, TEST_EXPECTATION
+
 ## Scheduler / Dispatch
 ## VALIDATION-014 - Scheduler and dispatch semantics
 ### Business Question
 Should manual scheduled-job execution share due-job lease semantics, and should FLOW-049 markers remain distinct from generic ScheduledJobDispatch records?
 ### Why This Needs Validation
-FLOW-066 has due-job lease semantics, FLOW-067 has manual execution semantics, and FLOW-068/FLOW-069 define dispatch lifecycle. RE-011 also preserves FLOW-049 direct marker behaviour as separate from generic dispatch.
+FLOW-066 has due-job lease semantics, FLOW-067 has manual execution semantics, and FLOW-068/FLOW-069 define dispatch lifecycle. RE-011 also preserves FLOW-049 direct marker behaviour as separate from generic dispatch. Findings register evidence shows the scheduler infrastructure is newly introduced from F-044 Phase A and still has open Phase B operational semantics, making this a lower-cost point to settle lease/manual execution semantics before more dependents are added.
 ### Current AS-IS Evidence
 | Evidence Type | IDs |
 |---|---|
@@ -600,24 +676,25 @@ Recovery/compensation decisions are represented by VALIDATION-004, VALIDATION-01
 ## Temporal Behaviour
 ## VALIDATION-016 - Canonical time basis
 ### Business Question
-Which timezone and time basis should be canonical across branch availability, booking hold expiry, cancellation calculations, member cutoff, notification retry, and scheduler leases?
+Which business-local time semantics are intended across branch availability, booking hold expiry, cancellation calculations, member cutoff/attendance, notification retry, and scheduler leases?
 ### Why This Needs Validation
-RE-011 identifies multiple time concepts with branch-local, server-time, generated date, and unknown bases. Business validation is needed before later phases can interpret time-dependent behaviour consistently.
+Inconsistent/noncanonical time handling is already an active engineering concern, not only a future clarification. Findings register entries F-066, F-073, F-086, F-087, and F-088 document mixed clocks, branch timezone reachability, fixture/date failures, member-attendance time defects, and timezone-naive datetime parsing. SME validation is needed for intended business-local semantics; low-level UTC storage mechanics remain an engineering implementation detail unless the business requires a specific representation.
 ### Current AS-IS Evidence
 | Evidence Type | IDs |
 |---|---|
-| Flows | FLOW-001, FLOW-023, FLOW-024, FLOW-029, FLOW-034, FLOW-036, FLOW-037, FLOW-043, FLOW-044, FLOW-049, FLOW-061, FLOW-065, FLOW-066, FLOW-067 |
+| Flows | FLOW-001, FLOW-023, FLOW-024, FLOW-029, FLOW-034, FLOW-036, FLOW-037, FLOW-043, FLOW-044, FLOW-046, FLOW-049, FLOW-061, FLOW-065, FLOW-066, FLOW-067 |
 | Business Rules | BR-002, BR-030, BR-038, BR-061, BR-084, BR-096, BR-102, BR-120, BR-124, BR-220, BR-222, BR-223, BR-224, BR-225 |
 | State Conflicts | STATE-CONFLICT-002 |
 | Invariant Findings | INVARIANT-FINDING-001, INVARIANT-FINDING-009 |
 | Authorization Findings | N/A |
 | Integration Findings | INTEGRATION-FINDING-007 |
 | Cross-Flow Findings | XFLOW-FINDING-001, XFLOW-FINDING-008 |
+| Findings Register | F-066, F-073, F-086, F-087, F-088 |
 | Journey Gaps | XFLOW-GAP-006 |
 | Variants | N/A |
 | Uncertainties | FLOW-024-UNCERTAINTY-*, FLOW-029-UNCERTAINTY-*, FLOW-043-UNCERTAINTY-*, FLOW-066-UNCERTAINTY-001, FLOW-067-UNCERTAINTY-001 |
 ### Observed Current Behaviour
-Time-dependent behaviours use multiple bases that are not normalized by the reconstruction artifacts.
+Engineering fact: the repository already records active mixed-clock and branch-time defects/remediation work. SME decision: define the intended business-local time semantics for branch availability, booking cutoff, cancellation, attendance, retry, and scheduler behaviour.
 ### Decision Options
 A. Confirm current context-specific time bases
 B. Define a canonical time basis per business operation
@@ -650,8 +727,8 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 | 10 | subscription identity binding | VALIDATION-010 | DIRECT |
 | 11 | automatic vs separate refund journey | VALIDATION-011 | DIRECT |
 | 12 | local Refund vs provider refund meaning | VALIDATION-012 | DIRECT |
-| 13 | producer success vs NotificationRequest persistence | VALIDATION-013 | MERGED |
-| 14 | notification history recipient/tenant binding | VALIDATION-013 | MERGED |
+| 13 | producer success vs NotificationRequest persistence | VALIDATION-013 | DIRECT |
+| 14 | notification history recipient/tenant binding | VALIDATION-018 | SPLIT |
 | 15 | manual execution vs lease | VALIDATION-014 | MERGED |
 | 16 | FLOW-049 marker vs generic ScheduledJobDispatch | VALIDATION-014 | MERGED |
 | 17 | authoritative tenant source across boundaries | VALIDATION-015 | MERGED |
@@ -659,14 +736,19 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 | 19 | webhook idempotency timing/replay recovery | VALIDATION-006 | MERGED |
 | 20 | canonical timezone basis | VALIDATION-016 | DIRECT |
 
+## Additional Source Verification Mapping
+| Source Verification Item | Topic | VALIDATION ID | Action |
+|---|---|---|---|
+| Architect CHECK-001 | FLOW-035 unauthenticated check-in mutation | VALIDATION-017 | ADDED |
+
 ## Finding Coverage Matrix
 | Upstream Finding | VALIDATION ID(s) | Validation Required? | Reason |
 |---|---|---|---|
 | STATE-CONFLICT-001 | VALIDATION-001 | YES | Capacity formula decision required |
 | STATE-CONFLICT-002 | VALIDATION-002, VALIDATION-003, VALIDATION-004 | YES | Confirmation/payment/hold semantics require SME decision |
-| STATE-CONFLICT-003 | N/A | NO | ALREADY_COVERED by upstream check-in finding; no additional RE-011 question |
+| STATE-CONFLICT-003 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation |
 | INVARIANT-FINDING-001 | VALIDATION-002, VALIDATION-003 | YES | Hold/payment confirmation invariant needs business validation |
-| INVARIANT-FINDING-002 | N/A | NO | ALREADY_COVERED by upstream check-in validation surface |
+| INVARIANT-FINDING-002 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation |
 | INVARIANT-FINDING-003 | VALIDATION-001, VALIDATION-009 | YES | Capacity and no-show semantics require validation |
 | INVARIANT-FINDING-004 | VALIDATION-011 | YES | Cancellation/refund continuation decision required |
 | INVARIANT-FINDING-005 | VALIDATION-004, VALIDATION-006 | YES | Payment-confirmation atomicity/retry decision required |
@@ -674,10 +756,10 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 | INVARIANT-FINDING-007 | VALIDATION-010, VALIDATION-015 | YES | Subscription identity and tenant authority require validation |
 | INVARIANT-FINDING-008 | VALIDATION-013 | YES | Notification guarantee decision required |
 | INVARIANT-FINDING-009 | VALIDATION-014, VALIDATION-016 | YES | Scheduler lease/time semantics require validation |
-| AUTHZ-FINDING-001 | N/A | NO | ALREADY_COVERED by upstream check-in finding; no separate RE-011 question |
+| AUTHZ-FINDING-001 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation |
 | AUTHZ-FINDING-002 | VALIDATION-005, VALIDATION-015 | YES | Direct verify ownership and tenant/ownership authority require validation |
 | AUTHZ-FINDING-003 | VALIDATION-010, VALIDATION-015 | YES | Subscription identity binding requires validation |
-| AUTHZ-FINDING-004 | VALIDATION-013, VALIDATION-015 | YES | Notification history ownership requires validation |
+| AUTHZ-FINDING-004 | VALIDATION-018, VALIDATION-015 | YES | Notification history ownership requires validation |
 | AUTHZ-FINDING-005 | VALIDATION-002, VALIDATION-015 | YES | Internal-key bypass decision required |
 | AUTHZ-FINDING-006 | VALIDATION-006, VALIDATION-015 | YES | Provider webhook trust requires validation |
 | AUTHZ-FINDING-007 | VALIDATION-013 | YES | Notification auth/worker boundary requires validation |
@@ -697,7 +779,7 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 | XFLOW-FINDING-006 | VALIDATION-010, VALIDATION-015 | YES | Subscription identity and tenant authority decision required |
 | XFLOW-FINDING-007 | VALIDATION-013 | YES | Notification outcome decision required |
 | XFLOW-FINDING-008 | VALIDATION-014, VALIDATION-016 | YES | Scheduler/temporal decision required |
-| XFLOW-FINDING-009 | VALIDATION-015 | YES | Tenant authority decision required |
+| XFLOW-FINDING-009 | VALIDATION-015, VALIDATION-018 | YES | Tenant authority and notification-history recipient binding require validation |
 | XFLOW-FINDING-010 | VALIDATION-011, VALIDATION-012 | YES | Refund continuation/provider meaning decision required |
 | XFLOW-GAP-001 | VALIDATION-004 | YES | Payment-confirmation recovery gap |
 | XFLOW-GAP-002 | VALIDATION-007 | YES | Negotiated orchestration recovery gap |
@@ -723,28 +805,28 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 |---|---|---|
 | FLOW-001-UNCERTAINTY-* through FLOW-018-UNCERTAINTY-* | VALIDATION-015, VALIDATION-016 where tenant/time related; otherwise N/A | BUSINESS_VALIDATION for tenant/time families; NO_DECISION_REQUIRED otherwise |
 | FLOW-019-UNCERTAINTY-* through FLOW-028-UNCERTAINTY-* | VALIDATION-001, VALIDATION-016 | BUSINESS_VALIDATION for capacity/time families |
-| FLOW-029-UNCERTAINTY-* through FLOW-037-UNCERTAINTY-* | VALIDATION-002, VALIDATION-003, VALIDATION-011, VALIDATION-016 | BUSINESS_VALIDATION for booking, cancellation, and timing families |
+| FLOW-029-UNCERTAINTY-* through FLOW-037-UNCERTAINTY-* | VALIDATION-002, VALIDATION-003, VALIDATION-011, VALIDATION-016, VALIDATION-017 | BUSINESS_VALIDATION for booking, cancellation, check-in access control, and timing families |
 | FLOW-038-UNCERTAINTY-* through FLOW-039-UNCERTAINTY-* | VALIDATION-001 | BUSINESS_VALIDATION for capacity/policy families |
 | FLOW-040-UNCERTAINTY-* through FLOW-049-UNCERTAINTY-* | VALIDATION-008, VALIDATION-009, VALIDATION-013, VALIDATION-016 | BUSINESS_VALIDATION for member/no-show/notification/time families |
 | FLOW-050-UNCERTAINTY-* through FLOW-058-UNCERTAINTY-* | VALIDATION-004, VALIDATION-005, VALIDATION-006, VALIDATION-007, VALIDATION-010, VALIDATION-015 | BUSINESS_VALIDATION for payment, subscription, tenant, and webhook families |
 | FLOW-059-UNCERTAINTY-* through FLOW-060-UNCERTAINTY-* | VALIDATION-011, VALIDATION-012 | BUSINESS_VALIDATION for refund families |
-| FLOW-061-UNCERTAINTY-* through FLOW-065-UNCERTAINTY-* | VALIDATION-013 | BUSINESS_VALIDATION for notification families |
+| FLOW-061-UNCERTAINTY-* through FLOW-065-UNCERTAINTY-* | VALIDATION-013, VALIDATION-018 | BUSINESS_VALIDATION for notification persistence and notification-history identity families |
 | FLOW-066-UNCERTAINTY-* through FLOW-070-UNCERTAINTY-* | VALIDATION-014, VALIDATION-016; N/A for pure health checks | BUSINESS_VALIDATION for scheduler/time families; NO_DECISION_REQUIRED for pure health lineage |
 | All 86 canonical uncertainty identities from RE-010 | See family mappings above | ACCOUNTED; unresolved by design |
 
 ## SME Review Sequence
 | Order | Group | Reason |
 |---:|---|---|
-| 1 | Availability / Capacity | Capacity interpretation affects booking, attendance, and release semantics. |
-| 2 | Booking | Confirmation and hold semantics affect payment and cancellation interpretation. |
-| 3 | Payment | Payment decisions depend on booking confirmation ownership. |
-| 4 | Membership / Attendance | Attendance depends on booking, capacity, and subscription semantics. |
-| 5 | Cancellation / Refund | Refund meaning depends on booking cancellation and payment capture. |
-| 6 | Authorization / Tenant / Ownership | Tenant authority impacts several remaining trust decisions. |
-| 7 | Recovery / Compensation | Recovery decisions depend on accepted boundary semantics. |
-| 8 | Notification | Notification guarantees depend on accepted producer/recovery expectations. |
-| 9 | Scheduler / Dispatch | Operational semantics can be validated after domain journeys. |
-| 10 | Temporal Behaviour | Finalize time basis across accepted journey semantics. |
+| 1 | Temporal Behaviour | Canonical business-local time semantics are an active engineering dependency for scheduling, availability, booking, cancellation, and attendance. |
+| 2 | Availability / Capacity | Capacity interpretation affects booking, attendance, and release semantics. |
+| 3 | Booking | Confirmation and hold semantics affect payment and cancellation interpretation. |
+| 4 | Payment | Payment decisions depend on booking confirmation ownership. |
+| 5 | Membership / Attendance | Attendance depends on booking, capacity, and subscription semantics. |
+| 6 | Cancellation / Refund | Refund meaning depends on booking cancellation and payment capture. |
+| 7 | Authorization / Tenant / Ownership | Tenant authority impacts several remaining trust decisions. |
+| 8 | Recovery / Compensation | Recovery decisions depend on accepted boundary semantics. |
+| 9 | Notification | Notification guarantees and notification-history privacy need separate validation before SME decisions are recorded. |
+| 10 | Scheduler / Dispatch | Scheduler semantics are cheaper to settle while the scheduler has few established dependents. |
 
 ## Decision Propagation Register
 | VALIDATION | Potentially Affected Artifacts |
@@ -765,6 +847,8 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 | VALIDATION-014 | RE-006, RE-007, RE-009, RE-010, RE-011 |
 | VALIDATION-015 | RE-005, RE-007, RE-008, RE-009, RE-010, RE-011 |
 | VALIDATION-016 | RE-005, RE-006, RE-007, RE-010, RE-011 |
+| VALIDATION-017 | RE-006, RE-007, RE-008, RE-010, RE-011 |
+| VALIDATION-018 | RE-007, RE-008, RE-010, RE-011 |
 
 ## Decision Processing Protocol
 When SME answers a VALIDATION:
@@ -794,18 +878,20 @@ When SME answers a VALIDATION:
 | Subscription identity | VALIDATION-010 | PENDING | INVARIANT-FINDING-007, AUTHZ-FINDING-003 |
 | Cancellation to refund | VALIDATION-011 | PENDING | INVARIANT-FINDING-004 |
 | Local refund meaning | VALIDATION-012 | PENDING | INTEGRATION-FINDING-004 |
-| Notification guarantee/history | VALIDATION-013 | PENDING | XFLOW-FINDING-007 |
+| Notification guarantee | VALIDATION-013 | PENDING | XFLOW-FINDING-007 |
+| Notification history identity binding | VALIDATION-018 | PENDING | AUTHZ-FINDING-004, FLOW-064, BR-218 |
 | Scheduler/manual/dispatch | VALIDATION-014 | PENDING | XFLOW-FINDING-008, XFLOW-VARIANT-006 |
 | Tenant/ownership authority | VALIDATION-015 | PENDING | XFLOW-FINDING-009 |
 | Time basis | VALIDATION-016 | PENDING | XFLOW-FINDING-001, XFLOW-FINDING-008 |
+| Booking check-in access control | VALIDATION-017 | PENDING | STATE-CONFLICT-003, INVARIANT-FINDING-002, AUTHZ-FINDING-001 |
 
 ## Mechanical Validation
 | Check | Result |
 |---|---:|
 | RE-011 questions inspected | 20 |
 | RE-011 questions mapped | 20 |
-| Final VALIDATION IDs | 16 |
-| Pending validations | 16 |
+| Final VALIDATION IDs | 18 |
+| Pending validations | 18 |
 | Resolved validations | 0 |
 | Deferred validations | 0 |
 | Decision IDs | 0 |
@@ -821,6 +907,12 @@ When SME answers a VALIDATION:
 | Duplicate VALIDATION IDs | 0 |
 | Validation entries without evidence | 0 |
 | RE-011 questions without validation mapping | 0 |
+| VALIDATION-001 includes FLOW-048 | YES |
+| VALIDATION-014 priority | P1 |
+| VALIDATION-016 priority | P0 |
+| Notification privacy validation | VALIDATION-018 |
+| Notification privacy priority | P0 |
+| VALIDATION-017 priority | P0 |
 
 ## Completion Status
 RE-012 - BUSINESS VALIDATION & DECISION REGISTER
@@ -838,10 +930,10 @@ RE-011 QUESTIONS MAPPED:
 20
 
 VALIDATIONS:
-16
+18
 
 PENDING:
-16
+18
 
 RESOLVED:
 0
@@ -887,3 +979,33 @@ VALIDATIONS WITHOUT EVIDENCE:
 
 LINEAGE:
 PRESERVED
+
+## Architect Review Delta Closure
+| Item | Result |
+|---|---|
+| RE-010 coverage caveats repaired | YES |
+| RE-011 70-flow coverage repaired | YES |
+| FLOW-048 added to capacity divergence where supported | YES |
+| VALIDATION-001 scope propagated | YES |
+| VALIDATION-014 recalibrated | YES - P1 |
+| VALIDATION-016 recalibrated/reframed | YES - P0 |
+| Notification privacy disposition | SPLIT to VALIDATION-018, P0 |
+| FLOW-035 equivalent register finding | NOT FOUND |
+| Mechanical validation result | PASS |
+| Lineage result | PRESERVED |
+
+REGISTER ACTION REQUIRED:
+Create a first-class security finding for confirmed unauthenticated FLOW-035 check-in mutation.
+
+Evidence:
+- POST /bookings/:id/check-in
+- authentication: none
+- tenant check: none
+- ownership check: none
+- role check: none
+- timing check: none
+- state check: CONFIRMED
+- mutation: CONFIRMED -> CHECKED_IN
+
+Outstanding:
+- findings_register.md still requires the FLOW-035 first-class security finding; it was intentionally not modified in this scoped delta.

@@ -20,6 +20,41 @@ Rebuilt mechanically from RE-001 through RE-009 after the lineage recovery delta
 | Persisted queue/event-supporting entities | 4 | RE-009 | PRESERVED |
 | Unique FLOW uncertainties | 86 | RE-005 | PRESERVED |
 
+## Rule Coverage Caveats
+The 231 rule count is the canonical traceability-row/identity count from RE-005. It does not mean 231 semantically unique business behaviours. RE-005 currently classifies the 231 candidate-to-BR rows as 104 `UNIQUE`, 93 `CONTEXT_VARIANT`, and 34 `TECHNICAL_SUPPORT`; the approved RE-005 matrix has no `DUPLICATE` disposition rows.
+
+| Coverage Metric | Result |
+|---|---:|
+| Flows | 70 |
+| Flows with >=1 candidate/business rule | 55 |
+| Flows with zero rule coverage | 15 |
+| Missing required mappings | 0 |
+
+Zero-rule flows: FLOW-019, FLOW-020, FLOW-021, FLOW-022, FLOW-023, FLOW-025, FLOW-026, FLOW-027, FLOW-028, FLOW-038, FLOW-039, FLOW-045, FLOW-047, FLOW-048, FLOW-049.
+
+`ZERO RULES EXTRACTED` means no candidate rule was extracted for that FLOW in RE-005. It is not automatically a `MISSING REQUIRED MAPPING`: RE-010 preserves every known FLOW row, and missing required mappings remain 0 because the canonical RE-005 candidate rules that do exist are all mapped to BR identities.
+
+## Capability Rule Coverage
+| Capability | Mapped Flows | Candidate Rules | BRs | Coverage Status |
+|---|---|---:|---:|---|
+| CAP-001 | FLOW-001, FLOW-002, FLOW-003, FLOW-004, FLOW-005, FLOW-006, FLOW-007, FLOW-008 | 16 | 16 | COVERED |
+| CAP-002 | FLOW-011, FLOW-012, FLOW-013, FLOW-014 | 8 | 8 | COVERED |
+| CAP-003 | FLOW-015, FLOW-016, FLOW-017, FLOW-018 | 8 | 8 | COVERED |
+| CAP-004 | FLOW-009, FLOW-010 | 4 | 4 | COVERED |
+| CAP-005 | FLOW-019, FLOW-020, FLOW-021, FLOW-022 | 0 | 0 | FLOW_ONLY_NO_RULES |
+| CAP-006 | FLOW-023, FLOW-024, FLOW-025, FLOW-026, FLOW-027, FLOW-028 | 12 | 12 | COVERED |
+| CAP-007 | FLOW-029, FLOW-030, FLOW-031, FLOW-032, FLOW-033, FLOW-034, FLOW-035, FLOW-036, FLOW-037 | 57 | 57 | COVERED |
+| CAP-008 | FLOW-038, FLOW-039 | 0 | 0 | FLOW_ONLY_NO_RULES |
+| CAP-009 | FLOW-040, FLOW-041, FLOW-042, FLOW-043, FLOW-044 | 21 | 21 | COVERED |
+| CAP-010 | FLOW-045, FLOW-046, FLOW-047, FLOW-048, FLOW-049 | 4 | 4 | COVERED |
+| CAP-011 | FLOW-050, FLOW-051, FLOW-052, FLOW-053, FLOW-054, FLOW-055, FLOW-056, FLOW-057, FLOW-058 | 66 | 66 | COVERED |
+| CAP-012 | FLOW-059, FLOW-060 | 15 | 15 | COVERED |
+| CAP-013 | FLOW-061, FLOW-062, FLOW-063, FLOW-064, FLOW-065 | 10 | 10 | COVERED |
+| CAP-014 | FLOW-066, FLOW-067, FLOW-068, FLOW-069, FLOW-070 | 10 | 10 | COVERED |
+| CAP-015 | None | 0 | 0 | NO_EXECUTABLE_RULE_COVERAGE |
+| CAP-016 | None | 0 | 0 | NO_EXECUTABLE_RULE_COVERAGE |
+| CAP-017 | None | 0 | 0 | NO_EXECUTABLE_RULE_COVERAGE |
+
 ## Candidate Rule Registry
 | Candidate Rule ID | FLOW ID | CAP ID | Domain | Evidence Status | BR ID | Statement |
 |---|---|---|---|---|---|---|
@@ -857,6 +892,11 @@ Rebuilt mechanically from RE-001 through RE-009 after the lineage recovery delta
 | Broken canonical references | 0 |
 | Duplicate canonical identities | 0 |
 | Missing required mappings | 0 |
+| Flows with rule coverage | 55 |
+| Flows with zero rule coverage | 15 |
+| Zero-rule flows explicitly disclosed | YES |
+| Capabilities represented | 17/17 |
+| Capabilities with zero rule coverage explicitly represented | 5 |
 
 ## Completion Status
 FLOW LINEAGE: PRESERVED

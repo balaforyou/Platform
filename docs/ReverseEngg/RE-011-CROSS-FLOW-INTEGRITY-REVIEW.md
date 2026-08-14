@@ -10,8 +10,8 @@ Known upstream issues represented by STATE-CONFLICT, INVARIANT-FINDING, AUTHZ-FI
 |---|---|---|---|---|---|
 | Identity & Session | FLOW-013, FLOW-001 | FLOW-001, FLOW-002, FLOW-003, FLOW-004, FLOW-005, FLOW-006, FLOW-007, FLOW-008, FLOW-009, FLOW-010 | FLOW-004, FLOW-005 | CONSISTENT_WITH_VARIANTS | XFLOW-VARIANT-007 |
 | Tenant & Branch Administration | FLOW-011, FLOW-013 | FLOW-011, FLOW-012, FLOW-013, FLOW-014, FLOW-015, FLOW-016, FLOW-017, FLOW-018 | FLOW-017, FLOW-018 | CONSISTENT_WITH_VARIANTS | XFLOW-VARIANT-008 |
-| Availability Management | FLOW-019, FLOW-023, FLOW-025 | FLOW-019, FLOW-020, FLOW-021, FLOW-022, FLOW-023, FLOW-024, FLOW-025, FLOW-026, FLOW-027, FLOW-028, FLOW-038, FLOW-039 | FLOW-024 | CONFLICTING | STATE-CONFLICT-001, XFLOW-FINDING-002 |
-| Standard Guest Booking | FLOW-024, FLOW-029 | FLOW-029, FLOW-050, FLOW-051, FLOW-052, FLOW-054, FLOW-034, FLOW-031, FLOW-032, FLOW-033, FLOW-035, FLOW-036, FLOW-037, FLOW-049 | FLOW-035, FLOW-037, FLOW-049 | WEAK | XFLOW-FINDING-001, XFLOW-FINDING-002, XFLOW-GAP-001 |
+| Availability Management | FLOW-019, FLOW-023, FLOW-025 | FLOW-019, FLOW-020, FLOW-021, FLOW-022, FLOW-023, FLOW-024, FLOW-025, FLOW-026, FLOW-027, FLOW-028, FLOW-038, FLOW-039, FLOW-047, FLOW-048 | FLOW-024, FLOW-047, FLOW-048 | CONFLICTING | STATE-CONFLICT-001, XFLOW-FINDING-002 |
+| Standard Guest Booking | FLOW-024, FLOW-029 | FLOW-029, FLOW-050, FLOW-051, FLOW-052, FLOW-054, FLOW-034, FLOW-031, FLOW-032, FLOW-033, FLOW-035, FLOW-036, FLOW-037, FLOW-045, FLOW-049 | FLOW-035, FLOW-037, FLOW-045, FLOW-049 | WEAK | XFLOW-FINDING-001, XFLOW-FINDING-002, XFLOW-GAP-001 |
 | Negotiated Booking | FLOW-057 | FLOW-030, FLOW-056, FLOW-057, FLOW-054, FLOW-034 | FLOW-034 | CONSISTENT_WITH_VARIANTS | XFLOW-VARIANT-001, XFLOW-GAP-002 |
 | Booking Confirmation | FLOW-052, FLOW-054, FLOW-034 | FLOW-052, FLOW-054, FLOW-034 | FLOW-031, FLOW-032 | WEAK | STATE-CONFLICT-002, INVARIANT-FINDING-001, INVARIANT-FINDING-005 |
 | Check-In | FLOW-035 | FLOW-035, FLOW-044, FLOW-046 | FLOW-046 | WEAK | STATE-CONFLICT-003, AUTHZ-FINDING-001 |
@@ -67,6 +67,7 @@ Cross-flow race assessment: FLOW-049 release vs FLOW-034 confirmation is a cross
 | FLOW-030 | Held/confirmed capacity/block checks preserved | Negotiated non-member booking | Internal negotiated path; idempotency evidenced | Availability, block, capacity; group/pricing waived | CONTEXT_VARIANT |
 | FLOW-044 | Existing non-cancelled booking detection; creates CONFIRMED member booking when none exists | Member attendance-specific | Transaction/window checks per RE-006 | Assignment/resource context | CONTEXT_VARIANT |
 | FLOW-049 | Stale HELD release; member no-show creation | none -> RELEASED_NO_SHOW member no-show | Sweep/dispatch semantics separate | Operational sweep | CONFLICTING as global formula; STATE-CONFLICT-001 |
+| FLOW-048 | Manual release request for a resource-pool window | Admin/manual capacity-release path | Release acceptance/rejection path; no RE-005 candidate rules extracted | Resource pool window release request | CONTEXT_VARIANT |
 
 ## Payment / Booking Integrity
 PaymentIntent existence and amount begin in FLOW-050, provider order metadata in FLOW-051, capture in FLOW-052 or FLOW-054, and Booking HELD -> CONFIRMED in FLOW-034. PaymentIntent capture is not Booking confirmation atomicity. Executable outcomes preserved: PaymentIntent = captured with Booking = HELD after downstream confirmation failure; Booking = CONFIRMED without FLOW-034 itself proving captured payment.
@@ -215,12 +216,12 @@ Business Validation Required: YES
 
 ### XFLOW-FINDING-002
 Finding ID: XFLOW-FINDING-002
-Title: Capacity semantics differ between browse, booking, member, and sweep paths
+Title: Capacity semantics differ between browse, booking, member, manual release, and sweep paths
 Journey: Availability / Capacity
-Flows: FLOW-024, FLOW-029, FLOW-030, FLOW-044, FLOW-049
-Upstream IDs: BR-044, BR-045, BR-058, BR-059, BR-063, BR-064, BR-125, STATE-CONFLICT-001, INVARIANT-FINDING-003
-Observed Behaviour: FLOW-024 and FLOW-029 count HELD/CONFIRMED for slot availability; FLOW-030 preserves capacity/block checks while waiving standard group/pricing; FLOW-044 member booking semantics are separate; FLOW-049 releases stale holds and creates member no-show records.
-Cross-Flow Integrity Concern: Composed journeys do not expose a single capacity-consumer definition across guest, negotiated, member, release, and no-show contexts.
+Flows: FLOW-024, FLOW-029, FLOW-030, FLOW-044, FLOW-048, FLOW-049
+Upstream IDs: BR-044, BR-045, BR-058, BR-059, BR-063, BR-064, BR-125, RULE-VARIANT-009, STATE-CONFLICT-001, INVARIANT-FINDING-003
+Observed Behaviour: FLOW-024 uses browse availability capacity semantics; FLOW-029 uses standard booking capacity semantics; FLOW-030 preserves capacity/block checks while waiving standard group/pricing; FLOW-044 member booking semantics are separate; FLOW-049 releases stale holds and creates member no-show records; FLOW-048 is the manual capacity-release request path.
+Cross-Flow Integrity Concern: Composed journeys do not expose a single capacity-consumer definition across availability/browse, standard booking, negotiated booking, member booking, automated no-show/release, and manual capacity-release contexts.
 Possible Executable Outcome: Availability may show capacity differently from later occupancy or no-show/release interpretation.
 Classification: CONTEXT_DEPENDENT
 Business Validation Required: YES
@@ -350,7 +351,7 @@ No new XFLOW-CONFLICT IDs are introduced. STATE-CONFLICT-001, STATE-CONFLICT-002
 | RE-011 Issue | STATE-CONFLICT | INVARIANT-FINDING | AUTHZ-FINDING | INTEGRATION-FINDING | New XFLOW Needed? |
 |---|---|---|---|---|---|
 | Hold/payment confirmation assumptions | STATE-CONFLICT-002 | INVARIANT-FINDING-001, INVARIANT-FINDING-005 | AUTHZ-FINDING-005 | INTEGRATION-FINDING-001, INTEGRATION-FINDING-002 | Yes: XFLOW-FINDING-001 and XFLOW-FINDING-005 compose timing/payment/recovery |
-| Capacity active-state mismatch | STATE-CONFLICT-001 | INVARIANT-FINDING-003 | None | None | Yes: XFLOW-FINDING-002 composes guest/negotiated/member/sweep |
+| Capacity active-state mismatch | STATE-CONFLICT-001 | INVARIANT-FINDING-003 | None | None | Yes: XFLOW-FINDING-002 composes guest/negotiated/member/manual-release/sweep |
 | Check-in auth/timing | STATE-CONFLICT-003 | INVARIANT-FINDING-002 | AUTHZ-FINDING-001 | None | No; upstream finding sufficient |
 | Cancellation/refund separation | None | INVARIANT-FINDING-004, INVARIANT-FINDING-006 | AUTHZ-FINDING-005 | INTEGRATION-FINDING-003, INTEGRATION-FINDING-004 | Yes: XFLOW-FINDING-010 / XFLOW-GAP-003 |
 | Subscription identity binding | None | INVARIANT-FINDING-007 | AUTHZ-FINDING-003 | None | Yes: XFLOW-FINDING-006 composes with attendance eligibility |
@@ -377,7 +378,7 @@ No new XFLOW-CONFLICT IDs are introduced. STATE-CONFLICT-001, STATE-CONFLICT-002
 |---|---|---|
 | Booking | Should FLOW-034 remain a trusted internal override despite BR-084 and BR-085, or should it enforce heldUntil/payment state? | XFLOW-FINDING-001, STATE-CONFLICT-002, INVARIANT-FINDING-001, FLOW-034, BR-084, BR-085 |
 | Booking | What outcome is intended if FLOW-049 stale-hold release and FLOW-034 confirmation race on the same HELD booking? | XFLOW-FINDING-001, FLOW-049, FLOW-034, TRANSITION-BOOKING-009, TRANSITION-BOOKING-003 |
-| Availability / Capacity | Should HELD/CONFIRMED, non-member CONFIRMED/CHECKED_IN, member booking, RELEASED_NO_SHOW, and released markers use one capacity formula or context-specific formulas? | XFLOW-FINDING-002, STATE-CONFLICT-001, INVARIANT-FINDING-003 |
+| Availability / Capacity | Should browse capacity, standard booking capacity, negotiated booking capacity, member booking capacity, automated no-show/release, and manual capacity-release use one capacity formula or context-specific formulas? | XFLOW-FINDING-002, FLOW-048, STATE-CONFLICT-001, INVARIANT-FINDING-003 |
 | Availability / Capacity | Should negotiated bookings continue to waive group-size/pricing while preserving capacity/block checks? | XFLOW-VARIANT-001, FLOW-030, BR-063, BR-064 |
 | Payment | What recovery is expected when PaymentIntent is captured but FLOW-034 confirmation fails? | XFLOW-FINDING-005, XFLOW-GAP-001, INTEGRATION-FINDING-001 |
 | Payment | Should FLOW-052 direct verify enforce PaymentIntent/booking ownership after signature verification? | AUTHZ-FINDING-002, FLOW-052, BR-160, BR-161 |
@@ -414,6 +415,14 @@ All direct RE-011 references were validated against identities present in RE-010
 |---|---:|
 | Journeys reviewed | 17 |
 | Flows participating in reviewed journeys | 70 |
+| Distinct flows represented in Journey Integrity Matrix | 70 |
+| Flows reviewed compositionally | 70 |
+| Flows explicitly N/A | 0 |
+| Unclassified flows | 0 |
+| FLOW-045 represented | YES |
+| FLOW-047 represented | YES |
+| FLOW-048 represented | YES |
+| XFLOW-FINDING-002 includes FLOW-048 | YES |
 | Upstream state conflicts referenced | 3 |
 | Upstream invariant findings referenced | 9 |
 | Upstream authorization findings referenced | 7 |
