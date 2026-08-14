@@ -2298,13 +2298,50 @@ server.post('/bookings/:id/confirm', async (request, reply) => {
 });
 
 // Check-in (CONFIRMED → CHECKED_IN).
+//
+// WHY (F-090): this route previously had no caller identity check at all — the only
+// booking-scoped route in this file without one, sitting between `confirm` and `cancel`
+// which both have one. An unauthenticated POST genuinely mutated a real booking, through
+// the public gateway, and the mutation is irreversible: nothing transitions CHECKED_IN
+// back and `cancel` accepts only HELD/CONFIRMED (:2357-2360 below), so flipping a booking
+// permanently destroys its owner's refund path.
+//
+// It uses `cancel`'s dual-path guard rather than `confirm`'s internal-key-only one, because
+// check-in is genuinely self-service today: the sole caller anywhere is the guest PWA's
+// "I'm Here" button, which already sends the user's access token. Internal-key-only would
+// have broken the one working caller. Whether check-in *should* be staff-operated instead
+// is a product question deliberately left open as F-093, not settled by this fix.
+//
+// Built from `requireUserJwt` rather than copying `cancel`'s inline try/catch, because that
+// block throws a bare Error after reply.status(401) and the envelope maps it to 500 — the
+// separately-tracked F-092. Copying it would have propagated that bug into a second route.
 server.post('/bookings/:id/check-in', async (request, reply) => {
+  // WHY: identity is established BEFORE the booking lookup, following the ordering F-045
+  // established for POST /bookings. If auth ran after, the 404-vs-401 difference would let
+  // an unauthenticated caller probe which booking ids exist.
+  let isInternal = false;
+  let claims: any = null;
+
+  try {
+    requireInternalKey(request, reply);
+    isInternal = true;
+  } catch {
+    claims = await requireUserJwt(request, reply);
+  }
+
   const { id } = request.params as any;
 
   const booking = await prisma.booking.findUnique({ where: { id } });
   if (!booking) {
     reply.status(404);
     throw new Error('Booking not found');
+  }
+
+  // IDOR guard (F-071), same helper the cancel/read/cancel-preview routes use. Runs BEFORE
+  // the idempotent early-return below, so an authenticated but unauthorised caller cannot
+  // probe another booking's status through it.
+  if (!isInternal) {
+    requireBookingAccess(booking, claims, reply);
   }
 
   if (booking.status === BookingStatus.CHECKED_IN) return booking; // idempotent
