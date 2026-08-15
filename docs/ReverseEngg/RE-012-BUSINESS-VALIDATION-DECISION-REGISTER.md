@@ -109,15 +109,34 @@ PENDING
 BUSINESS_RULE, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
 ## VALIDATION-017 - Booking check-in access control
+
+STATUS MARKER, added 15 Aug 2026 — read before the AS-IS text below.
+The engineering half of this validation is CLOSED. F-090 was fixed in commit `0e94800`
+(`requireInternalKey` OR `requireUserJwt`, then `requireBookingAccess` before the idempotent
+early-return, verified 6 cases x 2 surfaces with database read-back) and is recorded as Resolved
+in `docs/findings_register.md`. The "CONFIRMED ENGINEERING FACT" and "CONFIRMED EXECUTABLE
+ACCESS-CONTROL GAP" statements below were accurate when written on 14 Aug 2026 and describe the
+AS-IS state at reconstruction time; they no longer describe the running system. They are left
+unedited so the reconstruction reads as what was actually found.
+The BUSINESS half remains genuinely open: who may check in, and under what timing rules. That is
+tracked as F-093 (should check-in be guest self-service or staff-operated) and F-094 (check-in
+timing is enforced only in the browser). Decision Options A and B below map onto F-093 directly.
+Two lines later in this document — `Register action | RESOLVED` and
+`F-090 register handback outstanding | NO` — refer to the register-synchronisation task being
+complete, not to the defect; the defect's closure is this marker.
+
 ### Business Question
-Who is permitted to check in a booking, and what tenant/ownership/role/time conditions must govern that mutation?
+Who is permitted to check in a booking, and what tenant, ownership, role/permission, booking-state, branch, and timing conditions must be satisfied before CONFIRMED -> CHECKED_IN is allowed?
 ### Why This Needs Validation
-Architect source verification confirmed executable FLOW-035 behaviour: POST /bookings/:id/check-in has no authentication, tenant validation, ownership validation, role validation, or timing validation. It only checks that Booking.status is CONFIRMED before mutating the booking to CHECKED_IN. An unauthenticated caller who knows a booking id can invoke the state mutation.
+CONFIRMED ENGINEERING FACT: FLOW-035 permits unauthenticated state mutation and is recorded in the findings register as F-090. POST /bookings/:id/check-in has no authentication, tenant validation, ownership validation, role/permission validation, branch validation, or timing validation. It only checks that Booking.status is CONFIRMED before mutating the booking to CHECKED_IN; already CHECKED_IN is idempotently accepted.
+
+BUSINESS DECISION REQUIRED: the intended actor(s), ownership model, branch/tenant constraints, permitted booking state, and check-in timing policy still require authoritative definition.
 ### Current AS-IS Evidence
 | Evidence Type | IDs |
 |---|---|
 | Flows | FLOW-035 |
 | Business Rules | BR-086, BR-087, BR-088, BR-089, BR-090, BR-091, BR-092 |
+| Findings Register | F-090, F-029, F-037 |
 | State Conflicts | STATE-CONFLICT-003 |
 | Invariant Findings | INVARIANT-FINDING-002 |
 | Authorization Findings | AUTHZ-FINDING-001 |
@@ -127,10 +146,10 @@ Architect source verification confirmed executable FLOW-035 behaviour: POST /boo
 | Variants | N/A |
 | Uncertainties | FLOW-035-UNCERTAINTY-001, FLOW-035-UNCERTAINTY-002, FLOW-035-UNCERTAINTY-003 |
 ### Observed Current Behaviour
-CONFIRMED EXECUTABLE ACCESS-CONTROL GAP: unauthenticated callers can invoke CONFIRMED -> CHECKED_IN for a known booking id. The only executable guard is current Booking.status == CONFIRMED; repeated CHECKED_IN calls are idempotent.
+CONFIRMED EXECUTABLE ACCESS-CONTROL GAP: unauthenticated callers can invoke CONFIRMED -> CHECKED_IN for a known booking id. The only executable guard is current Booking.status == CONFIRMED; repeated CHECKED_IN calls are idempotent. F-029 and F-037 establish that booking/internal identifiers are not treated as secret authorization material within the system, so knowledge or discovery of a booking id must not be interpreted as ownership authority. F-090 records that FLOW-035 exposes no corresponding supported API transition back to CONFIRMED; the resulting CHECKED_IN state can block the normal API cancellation/refund path where that path requires an eligible pre-check-in booking state.
 ### Decision Options
-A. Confirm current unauthenticated check-in mutation boundary
-B. Require business-defined authentication, tenant, ownership, role, and timing guards
+A. Define booking-owner check-in authorization and required tenant/branch/timing guards
+B. Define staff/admin check-in authorization and required tenant/branch/timing guards
 C. Business-defined alternative
 ### SME Decision
 PENDING
@@ -746,9 +765,9 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 |---|---|---|---|
 | STATE-CONFLICT-001 | VALIDATION-001 | YES | Capacity formula decision required |
 | STATE-CONFLICT-002 | VALIDATION-002, VALIDATION-003, VALIDATION-004 | YES | Confirmation/payment/hold semantics require SME decision |
-| STATE-CONFLICT-003 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation |
+| STATE-CONFLICT-003 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation; cross-linked to F-090 |
 | INVARIANT-FINDING-001 | VALIDATION-002, VALIDATION-003 | YES | Hold/payment confirmation invariant needs business validation |
-| INVARIANT-FINDING-002 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation |
+| INVARIANT-FINDING-002 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation; cross-linked to F-090 |
 | INVARIANT-FINDING-003 | VALIDATION-001, VALIDATION-009 | YES | Capacity and no-show semantics require validation |
 | INVARIANT-FINDING-004 | VALIDATION-011 | YES | Cancellation/refund continuation decision required |
 | INVARIANT-FINDING-005 | VALIDATION-004, VALIDATION-006 | YES | Payment-confirmation atomicity/retry decision required |
@@ -756,7 +775,7 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 | INVARIANT-FINDING-007 | VALIDATION-010, VALIDATION-015 | YES | Subscription identity and tenant authority require validation |
 | INVARIANT-FINDING-008 | VALIDATION-013 | YES | Notification guarantee decision required |
 | INVARIANT-FINDING-009 | VALIDATION-014, VALIDATION-016 | YES | Scheduler lease/time semantics require validation |
-| AUTHZ-FINDING-001 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation |
+| AUTHZ-FINDING-001 | VALIDATION-017 | YES | Confirmed executable check-in access-control gap requires business validation; cross-linked to F-090 |
 | AUTHZ-FINDING-002 | VALIDATION-005, VALIDATION-015 | YES | Direct verify ownership and tenant/ownership authority require validation |
 | AUTHZ-FINDING-003 | VALIDATION-010, VALIDATION-015 | YES | Subscription identity binding requires validation |
 | AUTHZ-FINDING-004 | VALIDATION-018, VALIDATION-015 | YES | Notification history ownership requires validation |
@@ -883,7 +902,7 @@ When SME answers a VALIDATION:
 | Scheduler/manual/dispatch | VALIDATION-014 | PENDING | XFLOW-FINDING-008, XFLOW-VARIANT-006 |
 | Tenant/ownership authority | VALIDATION-015 | PENDING | XFLOW-FINDING-009 |
 | Time basis | VALIDATION-016 | PENDING | XFLOW-FINDING-001, XFLOW-FINDING-008 |
-| Booking check-in access control | VALIDATION-017 | PENDING | STATE-CONFLICT-003, INVARIANT-FINDING-002, AUTHZ-FINDING-001 |
+| Booking check-in authorization | VALIDATION-017 | PENDING; P0; Register finding F-090 | FLOW-035 / F-090 / AUTHZ-FINDING-001 |
 
 ## Mechanical Validation
 | Check | Result |
@@ -913,6 +932,12 @@ When SME answers a VALIDATION:
 | Notification privacy validation | VALIDATION-018 |
 | Notification privacy priority | P0 |
 | VALIDATION-017 priority | P0 |
+| VALIDATION-017 references F-090 | YES |
+| VALIDATION-017 preserves FLOW-035 | YES |
+| VALIDATION-017 preserves STATE-CONFLICT-003 | YES |
+| VALIDATION-017 preserves INVARIANT-FINDING-002 | YES |
+| VALIDATION-017 preserves AUTHZ-FINDING-001 | YES |
+| F-090 register handback outstanding | NO |
 
 ## Completion Status
 RE-012 - BUSINESS VALIDATION & DECISION REGISTER
@@ -990,12 +1015,10 @@ PRESERVED
 | VALIDATION-014 recalibrated | YES - P1 |
 | VALIDATION-016 recalibrated/reframed | YES - P0 |
 | Notification privacy disposition | SPLIT to VALIDATION-018, P0 |
-| FLOW-035 equivalent register finding | NOT FOUND |
+| FLOW-035 findings-register identity | F-090 |
+| Register action | RESOLVED |
 | Mechanical validation result | PASS |
 | Lineage result | PRESERVED |
-
-REGISTER ACTION REQUIRED:
-Create a first-class security finding for confirmed unauthenticated FLOW-035 check-in mutation.
 
 Evidence:
 - POST /bookings/:id/check-in
@@ -1008,4 +1031,4 @@ Evidence:
 - mutation: CONFIRMED -> CHECKED_IN
 
 Outstanding:
-- findings_register.md still requires the FLOW-035 first-class security finding; it was intentionally not modified in this scoped delta.
+- None for FLOW-035 findings-register synchronization. F-091 and F-092 remain separate findings and are intentionally not attached to VALIDATION-017.
