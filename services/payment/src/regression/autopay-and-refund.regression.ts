@@ -85,9 +85,15 @@ export const autopayAndRefundSections: Section<PaymentContext>[] = [
       }
       console.log(`Booking cancelled in Slot Engine. Computed refundAmount: ${cancelledBooking.refundAmount}`);
 
+      // F-097: POST /refunds now authenticates (internal key OR owner/branch_manager JWT).
+      // This call takes the platform path, the same one an automated cancellation-to-refund
+      // continuation would use — and the same key this spec already sends to Slot Engine above.
       const refundRes = await fetch(`${paymentUrl}/refunds`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${internalKey}`,
+        },
         body: JSON.stringify({ bookingId: ctx.bookingConfirmed.id }),
       });
       const refund = ((await refundRes.json()) as any).data;

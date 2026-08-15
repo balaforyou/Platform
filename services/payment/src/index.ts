@@ -592,7 +592,24 @@ server.post('/webhooks/razorpay/autopay', async (request, reply) => {
 
 // Issue direct refund based on Slot-Engine calculation
 // WHY: Decoupled design. Reads booking.refundAmount from Slot Engine and triggers direct monetary refund.
+// WHY (F-097): this route had no caller authentication at all, while its sibling
+// POST /refunds/override below authenticates and role-checks. Anyone who knew a booking id
+// could force-create the local Refund row ahead of the intended approval flow, pre-empting
+// the override path — once a Refund row exists, the override handler's behaviour changes.
+//
+// It uses requirePaymentLinkAdmin (internal key OR owner/branch_manager JWT) rather than
+// the override route's JWT-only guard, because the two routes need different things. The
+// override records an accountable adminId taken from the token; this route records no
+// adminId and makes no discretionary decision — it hardcodes reason 'customer_cancellation'
+// and reads the amount from the booking — so the platform/internal path must stay open for
+// an automated cancellation-to-refund continuation. RE-003 lists both Admin and Platform as
+// initiators, which is exactly what the dual-path guard expresses.
+//
+// The helper is declared further down the module; that is fine at request time, since module
+// evaluation has completed long before any handler runs.
 server.post('/refunds', async (request, reply) => {
+  await requirePaymentLinkAdmin(request, reply);
+
   const { bookingId } = request.body as any;
   if (!bookingId) {
     reply.status(400);
