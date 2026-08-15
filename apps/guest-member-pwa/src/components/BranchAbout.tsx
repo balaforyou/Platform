@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiRequest } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { MapPin, Clock, Shield, ArrowLeft, Activity, Image as ImageIcon } from 'lucide-react';
+import { MapPin, Clock, Shield, ArrowLeft, Activity, Image as ImageIcon, Navigation, Star } from 'lucide-react';
 
 export default function BranchAbout() {
   const { branchId } = useParams();
@@ -54,6 +54,13 @@ export default function BranchAbout() {
     );
   }
 
+  // WHY an explicit null/NaN check rather than a truthiness test: 0 is a valid coordinate
+  // (lat 0, lng 0 is a real point in the Gulf of Guinea), so `aboutData.latitude && ...` would
+  // silently hide the directions link for any branch sitting on the equator or prime meridian.
+  const hasCoordinates =
+    typeof aboutData.latitude === 'number' && Number.isFinite(aboutData.latitude) &&
+    typeof aboutData.longitude === 'number' && Number.isFinite(aboutData.longitude);
+
   // Hotlinked photos list (fallbacks if empty)
   const photos = aboutData.photos && aboutData.photos.length > 0
     ? aboutData.photos
@@ -82,6 +89,39 @@ export default function BranchAbout() {
           <div className="flex items-center space-x-2 text-xs text-gray-400 font-medium">
             <MapPin className="h-4 w-4 text-[var(--brand-primary)]" />
             <span>{aboutData.address}</span>
+          </div>
+        )}
+
+        {/* Outbound location links. Each is gated on its own data rather than on `address`:
+            a branch can have a postal address without coordinates, and the Place ID is
+            independent of both. Rendering a button whose URL would carry `undefined` is worse
+            than showing nothing, so absent data means an absent button. */}
+        {(hasCoordinates || aboutData.googlePlaceId) && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {hasCoordinates && (
+              <a
+                id="branch-directions-link"
+                href={`https://www.google.com/maps/dir/?api=1&destination=${aboutData.latitude},${aboutData.longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-2 py-2 px-4 rounded-xl bg-[var(--brand-primary)] hover:opacity-95 text-white text-xs font-semibold transition-all shadow-lg"
+              >
+                <Navigation className="h-3.5 w-3.5" />
+                <span>Get Directions</span>
+              </a>
+            )}
+            {aboutData.googlePlaceId && (
+              <a
+                id="branch-review-link"
+                href={`https://search.google.com/local/writereview?placeid=${aboutData.googlePlaceId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-2 py-2 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white text-xs font-semibold transition-all"
+              >
+                <Star className="h-3.5 w-3.5" />
+                <span>Leave a Review</span>
+              </a>
+            )}
           </div>
         )}
       </div>

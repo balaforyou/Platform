@@ -200,6 +200,7 @@ server.post('/tenants/:id/branches', async (request, reply) => {
 
   const {
     name, address, timezone,
+    latitude, longitude, googlePlaceId,
     workingDays, workingHoursStart, workingHoursEnd,
     aboutDescription, facilities, photos,
   } = request.body as any;
@@ -217,6 +218,9 @@ server.post('/tenants/:id/branches', async (request, reply) => {
       tenantId: id,
       name,
       address,
+      latitude: latitude ?? null,
+      longitude: longitude ?? null,
+      googlePlaceId: googlePlaceId ?? null,
       timezone: timezone || 'UTC',
       status: BranchStatus.DRAFT,
       workingDays: workingDays ?? [],
@@ -248,6 +252,7 @@ server.patch('/branches/:id', async (request, reply) => {
 
   const {
     name, address, timezone, status,
+    latitude, longitude, googlePlaceId,
     workingDays, workingHoursStart, workingHoursEnd,
     aboutDescription, facilities, photos,
   } = request.body as any;
@@ -267,6 +272,13 @@ server.patch('/branches/:id', async (request, reply) => {
       address,
       timezone,
       status: status as BranchStatus,
+      // WHY the conditional spread, matching the fields below rather than the bare
+      // `name`/`address` above: an omitted coordinate must leave the stored value alone, while
+      // an explicit null must be able to clear it. Passing `latitude` directly would work for
+      // the first case (Prisma ignores undefined) but reads as if omission clears the field.
+      ...(latitude !== undefined ? { latitude } : {}),
+      ...(longitude !== undefined ? { longitude } : {}),
+      ...(googlePlaceId !== undefined ? { googlePlaceId } : {}),
       ...(workingDays !== undefined ? { workingDays } : {}),
       ...(workingHoursStart !== undefined ? { workingHoursStart } : {}),
       ...(workingHoursEnd !== undefined ? { workingHoursEnd } : {}),
@@ -299,6 +311,10 @@ server.get('/branches/:id/about', async (request, reply) => {
 
   // WHY: Fall back to tenant-level values when the branch has not set its own.
   // "Has not set" = null for string fields, empty array for list fields.
+  // WHY address is here (F-099): BranchAbout.tsx has rendered `aboutData.address` since it was
+  // built, but this object never carried an `address` key, so that block never displayed
+  // anything. Location fields are branch-only with no tenant fallback — a tenant-level address
+  // or coordinate would be wrong for every branch except one.
   const about = {
     description: branch.aboutDescription || branch.tenant.aboutDescription || null,
     facilities: branch.facilities.length > 0 ? branch.facilities : branch.tenant.facilities,
@@ -306,6 +322,10 @@ server.get('/branches/:id/about', async (request, reply) => {
     workingDays: branch.workingDays,
     workingHoursStart: branch.workingHoursStart,
     workingHoursEnd: branch.workingHoursEnd,
+    address: branch.address,
+    latitude: branch.latitude,
+    longitude: branch.longitude,
+    googlePlaceId: branch.googlePlaceId,
   };
 
   return about;

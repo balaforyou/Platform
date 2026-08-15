@@ -70,6 +70,16 @@ model Branch {
   tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name              String
   address           String?
+  // Location / outbound links. Coordinates are stored rather than derived from googlePlaceId:
+  // deriving would need a Google Places lookup (API key, billing, a network failure mode on the
+  // guest path) to recover two numbers we already hold.
+  // WHY Float and not Decimal: Prisma serialises Decimal as a *string* in JSON — the existing
+  // price/refundAmount fields already behave that way — which would force client-side parsing
+  // before a coordinate could go into a maps URL. Float maps to DOUBLE PRECISION and is exact
+  // far beyond the ~1cm these values carry.
+  latitude          Float?                          // decimal degrees, e.g. 11.0375013
+  longitude         Float?                          // decimal degrees, e.g. 76.9330389
+  googlePlaceId     String?                         // e.g. ChIJDeozArlYqDsRUA0SRJPRn1E
   timezone          String           @default("UTC")
   status            BranchStatus     @default(DRAFT)
   // Operating schedule
