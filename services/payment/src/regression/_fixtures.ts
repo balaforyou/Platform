@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { PrismaClient } from '@badminton/database';
-import { SERVICE_URLS, signJwt } from '@badminton/test-harness';
+import { SERVICE_URLS, signJwt, assertDisposableDatabase } from '@badminton/test-harness';
 
 export const db = new PrismaClient();
 
@@ -77,6 +77,9 @@ export function futureAlignedHour(hoursFromNow: number): Date {
 }
 
 export async function cleanDatabase() {
+  // F-101: fail closed before any unscoped delete. Everything below runs without a WHERE
+  // clause, so pointing DATABASE_URL at a database holding real data destroys it.
+  assertDisposableDatabase('cleanDatabase()');
   await db.webhookEvent.deleteMany();
   await db.refund.deleteMany();
   await db.paymentIntent.deleteMany();

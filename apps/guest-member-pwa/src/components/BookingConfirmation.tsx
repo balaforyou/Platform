@@ -9,6 +9,7 @@ export default function BookingConfirmation() {
   const { accessToken } = useAuth();
 
   const [booking, setBooking] = useState<any>(null);
+  const [branchName, setBranchName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +61,25 @@ export default function BookingConfirmation() {
       clearInterval(pollInterval);
     };
   }, [bookingId, accessToken]);
+
+  // F-102: resolve the real venue name. This screen previously rendered a hardcoded string, so
+  // every tenant's guests were told they had booked the same venue. A booking row carries
+  // branchId as a bare scalar with no relation, so the name comes from the branch endpoint.
+  //
+  // Deliberately a separate effect from the status poll: it must run once rather than every
+  // 1.5s, and a failure here has to leave the venue line absent rather than wrong, without
+  // disturbing confirmation polling.
+  useEffect(() => {
+    const branchId = booking?.branchId;
+    if (!branchId || branchName) return;
+
+    let isMounted = true;
+    apiRequest<any>(`/tenant/branches/${branchId}/about`, { token: accessToken })
+      .then((res) => { if (isMounted && res?.name) setBranchName(res.name); })
+      .catch(() => { /* leave the venue line absent — never show a venue we cannot confirm */ });
+
+    return () => { isMounted = false; };
+  }, [booking?.branchId, branchName, accessToken]);
 
   if (loading && !booking) {
     return (
@@ -139,10 +159,12 @@ export default function BookingConfirmation() {
               <Clock className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
               <span>{st} - {et}</span>
             </div>
-            <div className="flex items-start space-x-2.5">
-              <MapPin className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
-              <span>Coimbatore Badminton Hub</span>
-            </div>
+            {branchName && (
+              <div className="flex items-start space-x-2.5">
+                <MapPin className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                <span id="confirmation-venue-name">{branchName}</span>
+              </div>
+            )}
             <div className="flex items-start space-x-2.5">
               <Users className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
               <span>{1 + (booking.players?.length || 0)} Players ({booking.isMemberBooking ? 'Member' : 'Guest'})</span>

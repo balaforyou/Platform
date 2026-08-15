@@ -16,3 +16,4 @@ export * from './process';
 export * from './jwt';
 export * from './sections';
 export * from './assertions';
+export * from './database-guard';

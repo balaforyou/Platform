@@ -1,5 +1,5 @@
 import { PrismaClient } from '@badminton/database';
-import { SERVICE_URLS } from '@badminton/test-harness';
+import { SERVICE_URLS, assertDisposableDatabase } from '@badminton/test-harness';
 
 export const db = new PrismaClient();
 
@@ -35,6 +35,9 @@ export function decodeJwtPayload(token: string): any {
 }
 
 export async function cleanDatabase() {
+  // F-101: fail closed before any unscoped delete. Everything below runs without a WHERE
+  // clause, so pointing DATABASE_URL at a database holding real data destroys it.
+  assertDisposableDatabase('cleanDatabase()');
   await db.bookingPlayer.deleteMany();
   await db.booking.deleteMany();
   await db.availabilityWindow.deleteMany();

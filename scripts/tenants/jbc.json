@@ -1,0 +1,81 @@
+{
+  "_comment": [
+    "Japan Badminton Court — real customer tenant for the demo.",
+    "Coordinates and Place IDs are the venues' real Google Maps values.",
+    "timezone is deliberately UTC, not Asia/Kolkata: see F-100. Setting a real zone activates",
+    "F-087 (availability-window creation parses naive datetimes against the server clock while",
+    "judging boundaries against the branch clock). Correct it as part of F-087/F-088, not here."
+  ],
+  "tenant": {
+    "name": "Japan Badminton Court",
+    "subdomain": "jbc",
+    "appName": "JBC Courts",
+    "themeColor": "#c8102e"
+  },
+  "branches": [
+    {
+      "name": "Japan Badminton Court, Coimbatore",
+      "address": "Japan Badminton Court, Coimbatore, Tamil Nadu, India",
+      "latitude": 11.0375013,
+      "longitude": 76.9330389,
+      "googlePlaceId": "ChIJDeozArlYqDsRUA0SRJPRn1E",
+      "timezone": "UTC",
+      "pool": {
+        "name": "Japan Badminton Court, Coimbatore - Main Courts",
+        "allocationMode": "POOLED",
+        "capacity": 4,
+        "minOccupancy": 2,
+        "minBookingDurationMinutes": 60,
+        "pricingMode": "FLAT",
+        "defaultRate": 400,
+        "resources": ["Court 1", "Court 2", "Court 3", "Court 4"],
+        "bookingRule": {
+          "guestOpenWindowDays": 7,
+          "gracePeriodMinutes": 30,
+          "guestAccessCutoffMinutes": 120,
+          "lowOccupancyThresholdPct": 50,
+          "prepaymentRequired": true
+        },
+        "availabilityPattern": {
+          "daysOfWeek": "1,2,3,4,5,6,7",
+          "startTime": "06:00",
+          "endTime": "22:00",
+          "slotDurationMinutes": 60,
+          "capacity": 4
+        }
+      }
+    },
+    {
+      "name": "JBC – New Japan Badminton Court",
+      "address": "New Japan Badminton Court, Coimbatore, Tamil Nadu, India",
+      "latitude": 11.0394243,
+      "longitude": 76.9322431,
+      "googlePlaceId": "ChIJkUmLcoxZqDsRyCfPwg5PQrM",
+      "timezone": "UTC",
+      "pool": {
+        "name": "JBC - New Japan Badminton Court - Main Courts",
+        "allocationMode": "POOLED",
+        "capacity": 3,
+        "minOccupancy": 2,
+        "minBookingDurationMinutes": 60,
+        "pricingMode": "FLAT",
+        "defaultRate": 400,
+        "resources": ["Court A", "Court B", "Court C"],
+        "bookingRule": {
+          "guestOpenWindowDays": 7,
+          "gracePeriodMinutes": 30,
+          "guestAccessCutoffMinutes": 120,
+          "lowOccupancyThresholdPct": 50,
+          "prepaymentRequired": true
+        },
+        "availabilityPattern": {
+          "daysOfWeek": "1,2,3,4,5,6,7",
+          "startTime": "06:00",
+          "endTime": "22:00",
+          "slotDurationMinutes": 60,
+          "capacity": 3
+        }
+      }
+    }
+  ]
+}

@@ -316,6 +316,10 @@ server.get('/branches/:id/about', async (request, reply) => {
   // anything. Location fields are branch-only with no tenant fallback — a tenant-level address
   // or coordinate would be wrong for every branch except one.
   const about = {
+    // F-102: the branch's own name. BookingConfirmation had a hardcoded venue string because
+    // nothing exposed this — a booking row carries branchId as a bare scalar with no relation,
+    // and no other endpoint returns a single branch by id.
+    name: branch.name,
     description: branch.aboutDescription || branch.tenant.aboutDescription || null,
     facilities: branch.facilities.length > 0 ? branch.facilities : branch.tenant.facilities,
     photos: branch.photos.length > 0 ? branch.photos : branch.tenant.photos,
