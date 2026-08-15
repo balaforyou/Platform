@@ -21,7 +21,8 @@
     "test:e2e": "pnpm --filter @badminton/guest-member-pwa run test:e2e",
     "deploy:verify": "node scripts/verify-deployment.mjs",
     "diagram:flows": "node scripts/generate-flow-diagram.mjs",
-    "diagram:flows:check": "node scripts/generate-flow-diagram.mjs --check"
+    "diagram:flows:check": "node scripts/generate-flow-diagram.mjs --check",
+    "diagram:verify": "node scripts/generate-flow-diagram.mjs --verify-register"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

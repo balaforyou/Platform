@@ -32,11 +32,23 @@
  *   node scripts/generate-flow-diagram.mjs                      # default scope -> default out
  *   node scripts/generate-flow-diagram.mjs --scope v1-demo --out docs/map.drawio
  *   node scripts/generate-flow-diagram.mjs --list              # show scopes, caps, flows
- *   node scripts/generate-flow-diagram.mjs --check             # verify without writing
+ *   node scripts/generate-flow-diagram.mjs --check             # build without writing
+ *   node scripts/generate-flow-diagram.mjs --verify-register   # fail on diagram/register drift
+ *
+ * --verify-register is the enforcement half of the sync rule. It exits 1 when any finding
+ * tag on a drawn node disagrees with that finding's section in docs/findings_register.md:
+ * a tag that is Resolved but still shown open, a tag marked "(fixed)" that the register
+ * still has under Open, or a tag that is not in the register at all. Run it the way
+ * deploy:verify is run — as a gate, not a report nobody reads.
  */
 
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { argv, exit } from 'node:process';
+
+/** Repo root resolved from this file, so the register check works from any cwd. */
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // ===========================================================================
 // DATA — everything scope-specific lives here.
@@ -357,6 +369,115 @@ function build(scopeName) {
   return { scope, xml: `<mxfile host="app.diagrams.net" agent="generate-flow-diagram.mjs" version="24.0.0" type="device">${pages.join('')}</mxfile>`, pageCount: pages.length };
 }
 
+// ===========================================================================
+// REGISTER DRIFT CHECK
+//
+// WHY THIS EXISTS: the sync rule "regenerate whenever a tagged finding changes status"
+// depends on someone remembering at commit time — the same memory dependency that let
+// F-097 sit stale on the diagram for a whole commit before anyone inspected the raw file.
+// This makes it mechanical: the register is the source of truth for finding status, and
+// any disagreement with the diagram data is a hard failure.
+// ===========================================================================
+
+/** Parse the register into id -> section ('Open' | 'Resolved' | 'Backlog'). */
+function readRegister(path) {
+  const text = readFileSync(path, 'utf8');
+  const byId = new Map();
+  const rows = new Map();
+  let section = null;
+  for (const line of text.split(/\r?\n/)) {
+    const h = /^##\s+(\S+)/.exec(line);
+    if (h) section = h[1];
+    const m = /^\|\s*\*{0,2}(F-\d+)\*{0,2}\s*\|/.exec(line);
+    if (m) { byId.set(m[1], section); rows.set(m[1], line); }
+  }
+  if (byId.size === 0) throw new Error(`no finding rows parsed from ${path} — wrong file?`);
+  return { byId, rows };
+}
+
+/** A finding tag on a node is either "F-0xx" or "F-0xx (fixed)". Non-F tags are labels. */
+const parseTag = (tag) => {
+  const m = /^(F-\d+)(\s*\(fixed\))?$/.exec(tag.trim());
+  return m ? { id: m[1], claimsFixed: Boolean(m[2]) } : null;
+};
+
+function verifyRegister(scopeName, registerPath) {
+  const scope = SCOPES[scopeName];
+  if (!scope) throw new Error(`unknown scope '${scopeName}'`);
+  const { byId, rows } = readRegister(registerPath);
+
+  // Only the flows this scope actually draws.
+  const drawn = new Set();
+  for (const capId of scope.capabilities) {
+    const cap = CAPABILITIES[capId];
+    (cap.layout === 'groups' ? cap.groups.flatMap((g) => g.flows) : cap.flows).forEach((f) => drawn.add(f));
+  }
+  for (const jid of scope.journeys) JOURNEYS[jid].nodes.forEach(([f]) => drawn.add(f));
+
+  const results = [];
+  for (const fid of [...drawn].sort()) {
+    for (const tag of FLOWS[fid].findings ?? []) {
+      const p = parseTag(tag);
+      if (!p) continue; // e.g. "(test-only)" — a label, not a finding reference
+      const section = byId.get(p.id);
+      let ok = true, note = '';
+      if (!section) {
+        ok = false; note = 'referenced on the diagram but absent from the register';
+      } else if (section === 'Resolved' && !p.claimsFixed) {
+        ok = false; note = 'Resolved in the register, still shown as open on the diagram — regenerate';
+      } else if (section !== 'Resolved' && p.claimsFixed) {
+        ok = false; note = `diagram claims "(fixed)" but the register has it under ${section}`;
+      } else {
+        note = `${section}${p.claimsFixed ? ' / shown fixed' : ''}`;
+      }
+      results.push({ fid, tag, ok, note });
+    }
+  }
+
+  // Advisory only: a register entry naming an endpoint this scope draws, whose id is not
+  // on that node. Heuristic, so it never fails the run — short paths are too generic to
+  // match reliably, and the register indexes by endpoint and file, not by FLOW id.
+  const advisories = [];
+  for (const fid of drawn) {
+    const path = (FLOWS[fid].endpoint.match(/\/\S+/) ?? [''])[0];
+    if (path.length < 14) continue;
+    // WHY a trailing boundary rather than a substring test: "/resource-pools" is a prefix of
+    // "/resource-pools/:id/availability-windows", so a plain includes() reported every
+    // availability finding against FLOW-019. The path must end where it ends — the next
+    // character may not continue the route.
+    const boundary = new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w/:-])');
+    const listed = new Set((FLOWS[fid].findings ?? []).map((t) => parseTag(t)?.id).filter(Boolean));
+    for (const [id, line] of rows) {
+      if (byId.get(id) !== 'Open') continue;
+      if (boundary.test(line) && !listed.has(id)) advisories.push({ fid, id, path });
+    }
+  }
+
+  console.log(`\nDiagram/register drift check — scope ${scopeName}`);
+  console.log(`Register: ${registerPath}   flows drawn: ${drawn.size}   tags checked: ${results.length}\n`);
+  for (const r of results) {
+    console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${r.fid.padEnd(10)} ${r.tag.padEnd(16)} ${r.note}`);
+  }
+
+  if (advisories.length) {
+    console.log('\n  Advisory — open findings naming a drawn endpoint but not shown on its node:');
+    for (const a of advisories) console.log(`    ${a.id}  mentions ${a.path}  -> consider adding to ${a.fid}`);
+    console.log('    (heuristic, does not fail the check)');
+  }
+
+  const failed = results.filter((r) => !r.ok);
+  console.log('');
+  if (failed.length === 0) {
+    console.log(`  All ${results.length} finding tags agree with the register.\n`);
+    return 0;
+  }
+  // Naming the specific tags is the point — a generic failure would not distinguish
+  // "one finding was resolved" from "the diagram was built against a different register".
+  console.log(`  ${failed.length}/${results.length} tags disagree with the register: ${failed.map((f) => `${f.fid}:${f.tag}`).join(', ')}`);
+  console.log('  Update the FLOWS data in this script, then run: pnpm diagram:flows\n');
+  return 1;
+}
+
 // --- CLI ------------------------------------------------------------------
 const arg = (n, d) => { const i = argv.indexOf(n); return i > -1 && argv[i + 1] ? argv[i + 1] : d; };
 
@@ -369,6 +490,16 @@ if (argv.includes('--list')) {
 }
 
 const scopeName = arg('--scope', 'v1-demo');
+
+if (argv.includes('--verify-register')) {
+  try {
+    const reg = arg('--register', resolve(REPO_ROOT, 'docs/findings_register.md'));
+    process.exitCode = verifyRegister(scopeName, reg);
+  } catch (e) {
+    console.error(`generate-flow-diagram --verify-register: ${e.message}`);
+    process.exitCode = 2;
+  }
+} else {
 try {
   const { scope, xml, pageCount } = build(scopeName);
   const out = arg('--out', scope.out);
@@ -380,5 +511,6 @@ try {
   console.log(`wrote ${out}  (${xml.length.toLocaleString()} bytes, ${pageCount} pages, scope=${scopeName})`);
 } catch (e) {
   console.error(`generate-flow-diagram: ${e.message}`);
-  exit(1);
+  process.exitCode = 1;
+}
 }
