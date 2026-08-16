@@ -65,16 +65,16 @@ const AUTH = {
 };
 
 const FLOWS = {
-  'FLOW-019': { name: 'Create Resource Pool', endpoint: 'POST /resource-pools', auth: 'none', findings: ['F-091'] },
+  'FLOW-019': { name: 'Create Resource Pool', endpoint: 'POST /resource-pools', auth: 'authed', findings: ['F-091 (fixed)'] },
   'FLOW-020': { name: 'Update Resource Pool', endpoint: 'PATCH /resource-pools/:id', auth: 'authed', findings: [] },
-  'FLOW-021': { name: 'Add Resource to Pool', endpoint: 'POST /resource-pools/:id/resources', auth: 'none', findings: ['F-091'] },
-  'FLOW-022': { name: 'Browse Branch Resource Pools', endpoint: 'GET /branches/:id/resource-pools', auth: 'none', findings: ['F-091'] },
+  'FLOW-021': { name: 'Add Resource to Pool', endpoint: 'POST /resource-pools/:id/resources', auth: 'authed', findings: ['F-091 (fixed)'] },
+  'FLOW-022': { name: 'Browse Branch Resource Pools', endpoint: 'GET /branches/:id/resource-pools', auth: 'authed', findings: ['F-091 (fixed)'] },
 
-  'FLOW-023': { name: 'Create Availability Window', endpoint: 'POST /resource-pools/:id/availability-windows', auth: 'none', findings: ['F-043', 'F-087', 'F-088', 'F-091'] },
+  'FLOW-023': { name: 'Create Availability Window', endpoint: 'POST /resource-pools/:id/availability-windows', auth: 'authed', findings: ['F-043', 'F-087', 'F-088', 'F-091 (fixed)'] },
   'FLOW-024': { name: 'Browse Availability', endpoint: 'GET /resource-pools/:id/availability', auth: 'public', findings: ['F-051', 'F-080', 'F-088'] },
   'FLOW-025': { name: 'Manage Availability Patterns', endpoint: 'GET/POST/PATCH/DELETE .../availability-patterns', auth: 'authed', findings: ['F-043', 'F-088'] },
   'FLOW-026': { name: 'Manage Availability Overrides', endpoint: 'GET/POST/PATCH/DELETE .../availability-overrides', auth: 'authed', findings: ['F-043', 'F-088'] },
-  'FLOW-027': { name: 'Block Availability Window', endpoint: 'POST /blocked-windows', auth: 'none', findings: ['F-051', 'F-091'] },
+  'FLOW-027': { name: 'Block Availability Window', endpoint: 'POST /blocked-windows', auth: 'authed', findings: ['F-051', 'F-091 (fixed)'] },
   'FLOW-028': { name: 'Generate Availability', endpoint: '(no endpoint - availabilityGeneration.ts)', auth: 'module', findings: ['F-046', 'F-088'] },
 
   'FLOW-029': { name: 'Create Booking', endpoint: 'POST /bookings', auth: 'authed', findings: ['F-023', 'F-028', 'F-080'], transition: 'TRANSITION-BOOKING-001' },
@@ -91,7 +91,7 @@ const FLOWS = {
 
   'FLOW-045': { name: 'View Guest Occupancy', endpoint: 'GET /branches/:id/guest-occupancy', auth: 'authed', findings: ['F-063'] },
   'FLOW-046': { name: 'View Member Attendance', endpoint: 'GET /branches/:id/member-attendance', auth: 'authed', findings: ['F-042', 'F-063'] },
-  'FLOW-047': { name: 'View Resource Pool Occupancy', endpoint: 'GET /resource-pools/:id/occupancy', auth: 'none', findings: ['F-005', 'F-031', 'F-062', 'F-091'] },
+  'FLOW-047': { name: 'View Resource Pool Occupancy', endpoint: 'GET /resource-pools/:id/occupancy', auth: 'authed', findings: ['F-005', 'F-031', 'F-062', 'F-091 (fixed)'] },
   'FLOW-048': { name: 'Release Capacity', endpoint: 'POST /resource-pools/:id/windows/:windowId/release', auth: 'authed', findings: ['F-023', 'F-044', 'F-065'] },
   'FLOW-049': { name: 'Run Booking Sweep', endpoint: 'POST /bookings/sweep', auth: 'authed', findings: ['F-044', 'F-046', 'F-063', 'F-065', 'F-066', 'F-073'], transition: 'TRANSITION-BOOKING-009 / -012' },
 
@@ -115,8 +115,8 @@ const CAPABILITIES = {
       '<b>Gap flags</b><br>' +
       '&bull; <b>Zero RE-010 rule coverage</b> for all four flows — no rules, policies, invariants, authz rules or transitions.<br>' +
       '&bull; RE-003/RE-004 never state what fields FLOW-019 accepts, what FLOW-020 validates, or how FIXED_INSTANCE vs POOLED changes behaviour.<br>' +
-      "&bull; RE-004 called FLOW-019/021 'auth uncertainty in Phase 4'. That is now resolved as a <b>defect</b>, not an unknown: 3 of 4 flows have no auth (F-091).<br>" +
-      '&bull; <b>FLOW-019 and FLOW-021 have no admin UI at all</b> — ResourcesPage can only update an existing pool. Every pool in this project came from seed scripts.',
+      "&bull; RE-004 called FLOW-019/021 'auth uncertainty in Phase 4'. That resolved as a <b>defect</b>, not an unknown — 3 of 4 flows had no auth — and is now <b>fixed</b> (F-091, aea242f). FLOW-019 additionally derives tenantId from the token rather than the body, per F-045.<br>" +
+      '&bull; <b>FLOW-019 and FLOW-021 have no admin UI at all</b> (F-098) — ResourcesPage can only update an existing pool. Every pool in this project came from seed scripts or the provisioning script. Real scale is 17+ batch groups, so the eventual UI needs bulk creation, not a single-pool form.',
   },
   'CAP-006': {
     title: 'CAP-006 · Availability &amp; Scheduling',
@@ -126,7 +126,7 @@ const CAPABILITIES = {
     notes:
       '<b>Gap flags</b><br>' +
       '&bull; <b>FLOW-028 has no endpoint and no established flow boundary</b> (FLOW-DISCOVERY-UNCERTAINTY-001). It is a module invoked lazily by 024/045/047 — do not draw it with an initiator.<br>' +
-      '&bull; FLOW-024 is public <i>by design</i> (BR-048), unlike 023/027 which are unauthenticated by defect (F-091).<br>' +
+      '&bull; FLOW-024 remains public <i>by design</i> (BR-048). FLOW-023 and FLOW-027 were unauthenticated by defect and are now guarded (F-091, aea242f).<br>' +
       '&bull; Whole capability is downstream of F-088 (Branch.timezone unreachable; every branch reports UTC).<br>' +
       '&bull; Only FLOW-024 has RE-010 rule coverage; the other five have none.',
   },
