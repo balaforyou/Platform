@@ -14,24 +14,48 @@ This register is the SME-facing decision surface for the reconstructed AS-IS bas
 ## Validation Register
 | Validation | Category | Priority | Question Summary | Status | Decision |
 |---|---|---|---|---|---|
-| VALIDATION-001 | Availability / Capacity | P0 | Should browse, booking, member, automated release, and manual release use one capacity formula or context-specific formulas? | PENDING | PENDING |
-| VALIDATION-002 | Booking | P0 | Should booking confirmation enforce hold expiry and payment proof/state? | PENDING | PENDING |
-| VALIDATION-003 | Booking | P1 | What should happen when stale-hold release and confirmation race? | PENDING | PENDING |
-| VALIDATION-004 | Payment | P0 | What recovery is required when payment capture succeeds but booking confirmation fails? | PENDING | PENDING |
-| VALIDATION-005 | Payment | P1 | Should authenticated-user ownership be enforced in addition to provider-bound signed order identity? | PENDING | PENDING |
-| VALIDATION-006 | Payment | P1 | Should direct verify and webhook capture remain distinct variants or converge? | PENDING | PENDING |
-| VALIDATION-007 | Availability / Capacity | P2 | Should negotiated booking keep its distinct group-size/pricing treatment? | PENDING | PENDING |
-| VALIDATION-008 | Membership / Attendance | P1 | Should canConfirm and executable member confirmation use the same existing-booking semantics? | PENDING | PENDING |
-| VALIDATION-009 | Membership / Attendance | P1 | Should generated no-show records appear in member history as Booking/Expired entries? | PENDING | PENDING |
-| VALIDATION-010 | Membership / Attendance | P0 | Should subscription creation require authenticated identity binding before eligibility use? | PENDING | PENDING |
-| VALIDATION-011 | Cancellation / Refund | P1 | Should refund remain separate from cancellation or be business-required continuation? | PENDING | PENDING |
-| VALIDATION-012 | Cancellation / Refund | P1 | What does local Refund mean without evidenced provider refund execution? | PENDING | PENDING |
-| VALIDATION-013 | Notification | P1 | Should upstream producer success guarantee NotificationRequest persistence and delivery tracking? | PENDING | PENDING |
-| VALIDATION-014 | Scheduler / Dispatch | P1 | Should manual execution share the same lease semantics as due-job execution? | PENDING | PENDING |
-| VALIDATION-015 | Authorization / Tenant / Ownership | P0 | Which tenant/ownership authority is authoritative across JWT, body, stored entity, provider, and internal-key boundaries? | PENDING | PENDING |
-| VALIDATION-016 | Temporal Behaviour | P0 | Which business-local time semantics are intended across branch availability, booking cutoff, cancellation, attendance, retry, and leases? | PENDING | PENDING |
-| VALIDATION-017 | Authorization / Tenant / Ownership | P0 | Who is permitted to check in a booking, and what tenant/ownership/role/time conditions must govern that mutation? | PENDING | PENDING |
-| VALIDATION-018 | Notification | P0 | What stable tenant/user identity should authorize notification-history access, and should exact recipient strings ever be sufficient ownership authority? | PENDING | PENDING |
+| VALIDATION-001 | Availability / Capacity | P0 | Should browse, booking, member, automated release, and manual release use one capacity formula or context-specific formulas? | RESOLVED | DECISION-001 |
+| VALIDATION-002 | Booking | P0 | Should booking confirmation enforce hold expiry and payment proof/state? | RESOLVED | DECISION-002 |
+| VALIDATION-003 | Booking | P1 | What should happen when stale-hold release and confirmation race? | RESOLVED | DECISION-003 |
+| VALIDATION-004 | Payment | P0 | What recovery is required when payment capture succeeds but booking confirmation fails? | RESOLVED | DECISION-004 |
+| VALIDATION-005 | Payment | P1 | Should authenticated-user ownership be enforced in addition to provider-bound signed order identity? | RESOLVED | DECISION-005 |
+| VALIDATION-006 | Payment | P1 | Should direct verify and webhook capture remain distinct variants or converge? | RESOLVED | DECISION-006 |
+| VALIDATION-007 | Availability / Capacity | P2 | Should negotiated booking keep its distinct group-size treatment? | RESOLVED | DECISION-007 |
+| VALIDATION-008 | Membership / Attendance | P1 | Should canConfirm and executable member confirmation use the same existing-booking semantics? | RESOLVED | DECISION-008 |
+| VALIDATION-009 | Membership / Attendance | P1 | Should generated no-show records appear in member history as Booking/Expired entries? | RESOLVED | DECISION-009 |
+| VALIDATION-010 | Membership / Attendance | P0 | Should subscription creation require authenticated identity binding before eligibility use? | RESOLVED | DECISION-010 |
+| VALIDATION-011 | Cancellation / Refund | P1 | Should refund remain separate from cancellation or be business-required continuation? | RESOLVED | DECISION-011 |
+| VALIDATION-012 | Cancellation / Refund | P1 | What does local Refund mean without evidenced provider refund execution? | RESOLVED | DECISION-012 |
+| VALIDATION-013 | Notification | P1 | Should upstream producer success guarantee NotificationRequest persistence and delivery tracking? | RESOLVED | DECISION-013 |
+| VALIDATION-014 | Scheduler / Dispatch | P1 | Should manual execution share the same lease semantics as due-job execution? | RESOLVED | DECISION-014 |
+| VALIDATION-015 | Authorization / Tenant / Ownership | P0 | Which tenant/ownership authority is authoritative across JWT, body, stored entity, provider, and internal-key boundaries? | RESOLVED | DECISION-015 |
+| VALIDATION-016 | Temporal Behaviour | P0 | Which business-local time semantics are intended across branch availability, booking cutoff, cancellation, attendance, retry, and leases? | RESOLVED | DECISION-016 |
+| VALIDATION-017 | Authorization / Tenant / Ownership | P0 | Who is permitted to check in a booking, and what tenant/ownership/role/time conditions must govern that mutation? | RESOLVED | DECISION-017 |
+| VALIDATION-018 | Notification | P0 | What stable tenant/user identity should authorize notification-history access, and should exact recipient strings ever be sufficient ownership authority? | RESOLVED | DECISION-018 |
+
+## Approved Decision Register
+All decisions are approved by Bala — Product Owner on 16 Aug 2026. These decisions define intended business policy and do not rewrite the observed AS-IS evidence above.
+
+| Decision | Validation | Decision Status | Approved Business Decision |
+|---|---|---|---|
+| DECISION-001 | VALIDATION-001 | APPROVED | One canonical bookability/capacity-consumption formula applies across browse, standard booking, negotiated booking, and member booking. HELD and CONFIRMED consume capacity. Hold expiry, cancellation, no-show release, and authorized manual release release capacity. Bookability/capacity consumption is distinct from occupancy/attendance; guest occupancy and member attendance may use different calculations, preserving the F-035/F-041 distinction. |
+| DECISION-002 | VALIDATION-002 | APPROVED | Booking confirmation requires valid booking/payment correspondence and applicable business invariants. Internal-service trust does not bypass invariants. If genuine payment capture occurs in the hold-expiry race window, payment capture takes precedence over technical hold expiry and the booking remains confirmable; hold expiry protects inventory before successful capture and must not create a paid-but-unconfirmable booking after genuine capture. |
+| DECISION-003 | VALIDATION-003 | APPROVED | If expiry/release wins and no payment has captured, the booking cannot subsequently confirm. If genuine payment capture has occurred in the expiry race window, confirmation remains permitted according to DECISION-002. |
+| DECISION-004 | VALIDATION-004 | APPROVED | When payment has captured but booking confirmation fails, automatic reconciliation retries booking confirmation using the existing F-044 tick mechanism; no new independent polling interval is required. Customer state remains PROCESSING during reconciliation. If mismatch persists for 10 minutes, generate operator-visible escalation and route to manual operations/reconciliation. Do not blindly issue an automatic refund merely because initial confirmation failed. |
+| DECISION-005 | VALIDATION-005 | APPROVED | For customer-initiated payment verification, provider signature establishes payment authenticity but does not replace customer authorization. The authenticated caller must be authorized for the corresponding payment/booking, preserving alignment with F-061. |
+| DECISION-006 | VALIDATION-006 | APPROVED | Keep authenticated direct verification and provider webhook entry points. Both converge on one internal payment-capture operation with common capture semantics, idempotency, state transition, booking confirmation, retry, and recovery. Entry-point trust semantics may differ, but core capture semantics must converge. |
+| DECISION-007 | VALIDATION-007 | APPROVED | Negotiated booking is an intentional business variant. It may differ from standard booking for group-size and pricing rules, but must still use DECISION-001 canonical bookability/capacity semantics. Do not normalize negotiated pricing/group rules into standard booking. |
+| DECISION-008 | VALIDATION-008 | APPROVED | canConfirm read semantics must match executable confirmation eligibility. The read side must not report ineligible when the write side legitimately accepts the same condition, except where explicitly explained by idempotency. |
+| DECISION-009 | VALIDATION-009 | APPROVED | Automatically generated member no-show records must not appear to the member as ordinary bookings or Expired bookings. No-show is attendance/no-show history. Member-facing booking history must distinguish bookings actually made by the member from automatically generated attendance/no-show records. Preserve AS-IS evidence showing current synthetic Booking behaviour. |
+| DECISION-010 | VALIDATION-010 | APPROVED | Authorized subscription actors are authenticated member for self and trusted payment/internal service for appropriate provisioning/admin operations. Identity authority must derive from authenticated member identity or trusted internal-service identity. Request-body tenantId/userId alone cannot establish subscription ownership. |
+| DECISION-011 | VALIDATION-011 | APPROVED | Refund approval depends on whether the refund amount is deterministic. Standard cancellations governed by a tenant standard cancellation policy and deterministic amount automatically enqueue refund processing without human approval. Negotiated bookings always require human refund approval through FLOW-060 because negotiated/admin pricing is not governed by a standard formula that should be auto-approved. |
+| DECISION-012 | VALIDATION-012 | APPROVED | Refund requires an explicit provider-aware lifecycle. A local Refund row does not prove money moved. Model at least internal refund creation/request, provider submission, provider result/confirmation, and failure/reconciliation. Per-tenant provider routing remains dependent on F-026 without invalidating this business decision. |
+| DECISION-013 | VALIDATION-013 | APPROVED | For business-required notifications, successful business processing guarantees durable NotificationRequest creation. Provider delivery remains asynchronous and includes retry, failure tracking, and dead-letter/recovery handling. Durable queue/request persistence is not proof of provider delivery. Cross-reference F-025, F-054, and F-103 where applicable. |
+| DECISION-014 | VALIDATION-014 | APPROVED | Manual and automatic scheduled-job execution share concurrency/lease protection against duplicate execution. Trigger mechanisms may differ. FLOW-049-specific dedupe markers may remain distinct where their domain purpose differs from generic ScheduledJobDispatch, preserving alignment with F-044 Phase A and completed scheduler work. |
+| DECISION-015 | VALIDATION-015 | APPROVED | For user operations: authenticated identity -> authoritative tenant membership -> stored entity ownership. For internal operations: trusted internal identity -> explicit tenant context -> stored entity validation. For provider callbacks: verified provider identity/signature -> stored internal reference -> stored tenant/ownership context. Request/body/provider payload identity values alone do not establish authorization or ownership. |
+| DECISION-016 | VALIDATION-016 | APPROVED | Persisted/system timestamps use UTC. Branch-local timezone defines business meaning. Availability dates/times, booking cutoff, cancellation/refund eligibility, and member attendance/confirmation use branch-local semantics. Technical retry/lease durations use elapsed-time semantics. This ratifies the F-066/F-087/F-088 direction. |
+| DECISION-017 | VALIDATION-017 | APPROVED | Booking customer and authorized branch staff may check in a booking. Caller must be authenticated; tenant must match; customer check-in requires booking ownership; staff check-in requires authorization for the booking branch; Booking.status must be CONFIRMED; check-in must fall within the authoritative window. Earliest check-in is the same-day, <=2-hours-before-window.startTime rule currently implemented client-side in `BookingHistory.tsx:96-106` (recorded as F-094); BR-092 documents that this is not yet server-enforced. Latest check-in is window.endTime. Preserve F-090 and F-094 linkage. **Citation corrected 16 Aug 2026**: this originally read "the canonical BR-092 pre-slot rule". BR-092's actual statement is "Check-in timing is a client-side display condition in the PWA, not a server-side precondition in FLOW-035" — it records the *absence* of a server-side rule and contains no pre-slot bound. The decided values were transcribed correctly; only the source citation was wrong. Left uncorrected, an implementer building F-094's server-side enforcement would have looked up BR-092 for the canonical bound and found nothing there. |
+| DECISION-018 | VALIDATION-018 | APPROVED | Notification-history authorization must use stable tenantId + userId. Recipient strings such as phone number or email address are delivery attributes only and are never sufficient authorization/ownership identities. |
 
 ## Booking
 ## VALIDATION-002 - Confirmation expiry and payment proof
@@ -59,15 +83,17 @@ A. Keep current trusted internal confirmation behaviour
 B. Require hold-expiry and payment proof/state validation at confirmation
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-002
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 BUSINESS_RULE, STATE_MODEL, POLICY_INVARIANT, AUTHORIZATION, INTEGRATION, SERVICE_BOUNDARY, API_CONTRACT, TEST_EXPECTATION
 
@@ -96,15 +122,17 @@ A. Confirm current separate-operation semantics
 B. Define precedence between stale release and confirmation
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-003
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 BUSINESS_RULE, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
@@ -152,15 +180,17 @@ A. Define booking-owner check-in authorization and required tenant/branch/timing
 B. Define staff/admin check-in authorization and required tenant/branch/timing guards
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-017
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 AUTHORIZATION, STATE_MODEL, POLICY_INVARIANT, BUSINESS_RULE, API_CONTRACT, TEST_EXPECTATION
 
@@ -190,15 +220,17 @@ A. Keep context-specific capacity semantics
 B. Define one canonical capacity formula
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-001
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 BUSINESS_RULE, STATE_MODEL, POLICY_INVARIANT, DOMAIN_MODEL, TEST_EXPECTATION
 
@@ -227,15 +259,17 @@ A. Confirm current negotiated booking variant
 B. Align negotiated booking with standard booking rules
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-007
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 BUSINESS_RULE, POLICY_INVARIANT, AUTHORIZATION, INTEGRATION, API_CONTRACT, TEST_EXPECTATION
 
@@ -265,15 +299,17 @@ A. Confirm current non-atomic behaviour
 B. Define required recovery/compensation outcome
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-004
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 STATE_MODEL, INTEGRATION, SERVICE_BOUNDARY, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
@@ -302,15 +338,17 @@ A. Confirm current direct verification boundary
 B. Require ownership validation after signature
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-005
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 AUTHORIZATION, BUSINESS_RULE, API_CONTRACT, TEST_EXPECTATION
 
@@ -339,15 +377,17 @@ A. Confirm distinct capture variants
 B. Define one canonical capture/retry/idempotency model
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-006
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 BUSINESS_RULE, AUTHORIZATION, INTEGRATION, SERVICE_BOUNDARY, TEST_EXPECTATION
 
@@ -377,15 +417,17 @@ A. Confirm current read/write asymmetry
 B. Align canConfirm with executable confirmation semantics
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-008
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 BUSINESS_RULE, STATE_MODEL, DOMAIN_MODEL, API_CONTRACT, TEST_EXPECTATION
 
@@ -414,15 +456,17 @@ A. Confirm current member no-show creation semantics
 B. Define a different attendance/no-show interpretation
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-009
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 STATE_MODEL, DOMAIN_MODEL, POLICY_INVARIANT, TEST_EXPECTATION
 
@@ -451,15 +495,17 @@ A. Confirm current body-driven subscription creation boundary
 B. Require authenticated identity binding before eligibility use
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-010
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 AUTHORIZATION, DOMAIN_MODEL, BUSINESS_RULE, API_CONTRACT, TEST_EXPECTATION
 
@@ -489,15 +535,17 @@ A. Confirm separate cancellation and refund journeys
 B. Define refund creation as required continuation
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-011
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 BUSINESS_RULE, STATE_MODEL, INTEGRATION, SERVICE_BOUNDARY, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
@@ -526,15 +574,17 @@ A. Confirm local-only refund meaning
 B. Define provider-synced refund meaning
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-012
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 DOMAIN_MODEL, INTEGRATION, POLICY_INVARIANT, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
@@ -564,15 +614,17 @@ A. Confirm current best-effort notification persistence/delivery semantics
 B. Require producer persistence and delivery tracking guarantees
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-013
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 AUTHORIZATION, INTEGRATION, DOMAIN_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
@@ -601,15 +653,17 @@ A. Confirm exact-recipient history binding
 B. Require stable tenant/user identity authorization for notification history
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-018
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 AUTHORIZATION, DOMAIN_MODEL, API_CONTRACT, POLICY_INVARIANT, TEST_EXPECTATION
 
@@ -639,15 +693,17 @@ A. Confirm current scheduler/dispatch variants
 B. Define shared lease and dispatch semantics
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-014
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 STATE_MODEL, OPERATIONAL_PROCESS, INTEGRATION, TEST_EXPECTATION
 
@@ -677,15 +733,17 @@ A. Confirm current boundary-specific authority model
 B. Define a canonical tenant/ownership authority order
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-015
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 AUTHORIZATION, BUSINESS_RULE, DOMAIN_MODEL, SERVICE_BOUNDARY, API_CONTRACT, TEST_EXPECTATION
 
@@ -719,15 +777,17 @@ A. Confirm current context-specific time bases
 B. Define a canonical time basis per business operation
 C. Business-defined alternative
 ### SME Decision
-PENDING
+DECISION-016
+Decision Status: APPROVED
+Validation Status: RESOLVED
 ### Decision Notes
-PENDING
+APPROVED - see Approved Decision Register for final business policy. AS-IS evidence above remains historical implementation evidence.
 ### Decision Owner
-PENDING
+Bala — Product Owner
 ### Decision Date
-PENDING
+16 Aug 2026
 ### Resulting Impact
-PENDING
+APPROVED DECISION RECORDED; propagation to RE-005 through RE-011 is intentionally deferred to DECISION PROPAGATION DELTA.
 ### Potential Impact Areas
 BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTATION
 
@@ -848,26 +908,26 @@ BUSINESS_RULE, POLICY_INVARIANT, STATE_MODEL, OPERATIONAL_PROCESS, TEST_EXPECTAT
 | 10 | Scheduler / Dispatch | Scheduler semantics are cheaper to settle while the scheduler has few established dependents. |
 
 ## Decision Propagation Register
-| VALIDATION | Potentially Affected Artifacts |
-|---|---|
-| VALIDATION-001 | RE-005, RE-006, RE-007, RE-010, RE-011 |
-| VALIDATION-002 | RE-005, RE-006, RE-007, RE-008, RE-009, RE-010, RE-011 |
-| VALIDATION-003 | RE-006, RE-007, RE-010, RE-011 |
-| VALIDATION-004 | RE-006, RE-007, RE-009, RE-010, RE-011 |
-| VALIDATION-005 | RE-008, RE-010, RE-011 |
-| VALIDATION-006 | RE-007, RE-008, RE-009, RE-010, RE-011 |
-| VALIDATION-007 | RE-005, RE-007, RE-008, RE-009, RE-010, RE-011 |
-| VALIDATION-008 | RE-006, RE-007, RE-010, RE-011 |
-| VALIDATION-009 | RE-006, RE-007, RE-010, RE-011 |
-| VALIDATION-010 | RE-005, RE-007, RE-008, RE-010, RE-011 |
-| VALIDATION-011 | RE-006, RE-007, RE-009, RE-010, RE-011 |
-| VALIDATION-012 | RE-006, RE-007, RE-009, RE-010, RE-011 |
-| VALIDATION-013 | RE-006, RE-007, RE-008, RE-009, RE-010, RE-011 |
-| VALIDATION-014 | RE-006, RE-007, RE-009, RE-010, RE-011 |
-| VALIDATION-015 | RE-005, RE-007, RE-008, RE-009, RE-010, RE-011 |
-| VALIDATION-016 | RE-005, RE-006, RE-007, RE-010, RE-011 |
-| VALIDATION-017 | RE-006, RE-007, RE-008, RE-010, RE-011 |
-| VALIDATION-018 | RE-007, RE-008, RE-010, RE-011 |
+| Decision | Validation | Potentially Affected Artifacts |
+|---|---|---|
+| DECISION-001 | VALIDATION-001 | RE-005, RE-006, RE-007, RE-010, RE-011 |
+| DECISION-002 | VALIDATION-002 | RE-005, RE-006, RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-003 | VALIDATION-003 | RE-006, RE-007, RE-010, RE-011 |
+| DECISION-004 | VALIDATION-004 | RE-006, RE-007, RE-009, RE-010, RE-011 |
+| DECISION-005 | VALIDATION-005 | RE-008, RE-010, RE-011 |
+| DECISION-006 | VALIDATION-006 | RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-007 | VALIDATION-007 | RE-005, RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-008 | VALIDATION-008 | RE-006, RE-007, RE-010, RE-011 |
+| DECISION-009 | VALIDATION-009 | RE-006, RE-007, RE-010, RE-011 |
+| DECISION-010 | VALIDATION-010 | RE-005, RE-007, RE-008, RE-010, RE-011 |
+| DECISION-011 | VALIDATION-011 | RE-006, RE-007, RE-009, RE-010, RE-011 |
+| DECISION-012 | VALIDATION-012 | RE-006, RE-007, RE-009, RE-010, RE-011 |
+| DECISION-013 | VALIDATION-013 | RE-006, RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-014 | VALIDATION-014 | RE-006, RE-007, RE-009, RE-010, RE-011 |
+| DECISION-015 | VALIDATION-015 | RE-005, RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-016 | VALIDATION-016 | RE-005, RE-006, RE-007, RE-010, RE-011 |
+| DECISION-017 | VALIDATION-017 | RE-006, RE-007, RE-008, RE-010, RE-011 |
+| DECISION-018 | VALIDATION-018 | RE-007, RE-008, RE-010, RE-011 |
 
 ## Decision Processing Protocol
 When SME answers a VALIDATION:
@@ -885,24 +945,24 @@ When SME answers a VALIDATION:
 ## Agent Decision Lookup
 | Concern | Validation | Status | Evidence Entry Point |
 |---|---|---|---|
-| Capacity formula | VALIDATION-001 | PENDING | STATE-CONFLICT-001, XFLOW-FINDING-002 |
-| Booking confirmation trust | VALIDATION-002 | PENDING | STATE-CONFLICT-002, BR-083-BR-085 |
-| Stale hold race | VALIDATION-003 | PENDING | XFLOW-FINDING-001 |
-| Captured payment with unconfirmed booking | VALIDATION-004 | PENDING | INTEGRATION-FINDING-001, XFLOW-GAP-001 |
-| Direct verify ownership | VALIDATION-005 | PENDING | AUTHZ-FINDING-002 |
-| Direct verify/webhook variant | VALIDATION-006 | PENDING | XFLOW-VARIANT-002, INTEGRATION-FINDING-008 |
-| Negotiated booking variant | VALIDATION-007 | PENDING | XFLOW-VARIANT-001 |
-| Member canConfirm mismatch | VALIDATION-008 | PENDING | XFLOW-FINDING-003 |
-| Member no-show creation | VALIDATION-009 | PENDING | XFLOW-FINDING-004 |
-| Subscription identity | VALIDATION-010 | PENDING | INVARIANT-FINDING-007, AUTHZ-FINDING-003 |
-| Cancellation to refund | VALIDATION-011 | PENDING | INVARIANT-FINDING-004 |
-| Local refund meaning | VALIDATION-012 | PENDING | INTEGRATION-FINDING-004 |
-| Notification guarantee | VALIDATION-013 | PENDING | XFLOW-FINDING-007 |
-| Notification history identity binding | VALIDATION-018 | PENDING | AUTHZ-FINDING-004, FLOW-064, BR-218 |
-| Scheduler/manual/dispatch | VALIDATION-014 | PENDING | XFLOW-FINDING-008, XFLOW-VARIANT-006 |
-| Tenant/ownership authority | VALIDATION-015 | PENDING | XFLOW-FINDING-009 |
-| Time basis | VALIDATION-016 | PENDING | XFLOW-FINDING-001, XFLOW-FINDING-008 |
-| Booking check-in authorization | VALIDATION-017 | PENDING; P0; Register finding F-090 | FLOW-035 / F-090 / AUTHZ-FINDING-001 |
+| Capacity formula | VALIDATION-001 / DECISION-001 | RESOLVED | STATE-CONFLICT-001, XFLOW-FINDING-002 |
+| Booking confirmation trust | VALIDATION-002 / DECISION-002 | RESOLVED | STATE-CONFLICT-002, BR-083-BR-085 |
+| Stale hold race | VALIDATION-003 / DECISION-003 | RESOLVED | XFLOW-FINDING-001 |
+| Captured payment with unconfirmed booking | VALIDATION-004 / DECISION-004 | RESOLVED | INTEGRATION-FINDING-001, XFLOW-GAP-001 |
+| Direct verify ownership | VALIDATION-005 / DECISION-005 | RESOLVED | AUTHZ-FINDING-002 |
+| Direct verify/webhook variant | VALIDATION-006 / DECISION-006 | RESOLVED | XFLOW-VARIANT-002, INTEGRATION-FINDING-008 |
+| Negotiated booking variant | VALIDATION-007 / DECISION-007 | RESOLVED | XFLOW-VARIANT-001 |
+| Member canConfirm mismatch | VALIDATION-008 / DECISION-008 | RESOLVED | XFLOW-FINDING-003 |
+| Member no-show creation | VALIDATION-009 / DECISION-009 | RESOLVED | XFLOW-FINDING-004 |
+| Subscription identity | VALIDATION-010 / DECISION-010 | RESOLVED | INVARIANT-FINDING-007, AUTHZ-FINDING-003 |
+| Cancellation to refund | VALIDATION-011 / DECISION-011 | RESOLVED | INVARIANT-FINDING-004 |
+| Local refund meaning | VALIDATION-012 / DECISION-012 | RESOLVED | INTEGRATION-FINDING-004 |
+| Notification guarantee | VALIDATION-013 / DECISION-013 | RESOLVED | XFLOW-FINDING-007 |
+| Notification history identity binding | VALIDATION-018 / DECISION-018 | RESOLVED | AUTHZ-FINDING-004, FLOW-064, BR-218 |
+| Scheduler/manual/dispatch | VALIDATION-014 / DECISION-014 | RESOLVED | XFLOW-FINDING-008, XFLOW-VARIANT-006 |
+| Tenant/ownership authority | VALIDATION-015 / DECISION-015 | RESOLVED | XFLOW-FINDING-009 |
+| Time basis | VALIDATION-016 / DECISION-016 | RESOLVED | XFLOW-FINDING-001, XFLOW-FINDING-008 |
+| Booking check-in authorization | VALIDATION-017 / DECISION-017 | RESOLVED; P0; Register finding F-090 | FLOW-035 / F-090 / AUTHZ-FINDING-001 |
 
 ## Mechanical Validation
 | Check | Result |
@@ -910,10 +970,10 @@ When SME answers a VALIDATION:
 | RE-011 questions inspected | 20 |
 | RE-011 questions mapped | 20 |
 | Final VALIDATION IDs | 18 |
-| Pending validations | 18 |
-| Resolved validations | 0 |
+| Pending validations | 0 |
+| Resolved validations | 18 |
 | Deferred validations | 0 |
-| Decision IDs | 0 |
+| Decision IDs | 18 |
 | STATE-CONFLICT coverage | 3/3 |
 | INVARIANT-FINDING coverage | 9/9 |
 | AUTHZ-FINDING coverage | 7/7 |
@@ -924,7 +984,9 @@ When SME answers a VALIDATION:
 | Canonical uncertainties accounted | 86/86 |
 | Broken canonical references | 0 |
 | Duplicate VALIDATION IDs | 0 |
+| Duplicate DECISION IDs | 0 |
 | Validation entries without evidence | 0 |
+| Decisions without evidence | 0 |
 | RE-011 questions without validation mapping | 0 |
 | VALIDATION-001 includes FLOW-048 | YES |
 | VALIDATION-014 priority | P1 |
@@ -946,7 +1008,7 @@ DOCUMENT STATUS:
 COMPLETE
 
 BUSINESS VALIDATION STATUS:
-PENDING
+COMPLETE
 
 RE-011 QUESTIONS:
 20
@@ -958,16 +1020,19 @@ VALIDATIONS:
 18
 
 PENDING:
-18
+0
 
 RESOLVED:
-0
+18
 
 DEFERRED:
 0
 
 DECISIONS:
-0
+18
+
+DECISION OWNER:
+Bala — Product Owner
 
 STATE-CONFLICT COVERAGE:
 3/3
@@ -1002,8 +1067,44 @@ DUPLICATE VALIDATION IDS:
 VALIDATIONS WITHOUT EVIDENCE:
 0
 
+DECISIONS WITHOUT EVIDENCE:
+0
+
 LINEAGE:
 PRESERVED
+
+## Next Phase Boundary
+Do not perform decision propagation in this pass.
+
+Next operation:
+DECISION PROPAGATION DELTA
+
+Then:
+RE-010 mechanical integrity rerun
+RE-011 affected-journey rerun
+RE-012 closure verification
+
+## Propagation Impact Summary
+| Decision | Affected RE Artifacts |
+|---|---|
+| DECISION-001 | RE-005, RE-006, RE-007, RE-010, RE-011 |
+| DECISION-002 | RE-005, RE-006, RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-003 | RE-006, RE-007, RE-010, RE-011 |
+| DECISION-004 | RE-006, RE-007, RE-009, RE-010, RE-011 |
+| DECISION-005 | RE-008, RE-010, RE-011 |
+| DECISION-006 | RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-007 | RE-005, RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-008 | RE-006, RE-007, RE-010, RE-011 |
+| DECISION-009 | RE-006, RE-007, RE-010, RE-011 |
+| DECISION-010 | RE-005, RE-007, RE-008, RE-010, RE-011 |
+| DECISION-011 | RE-006, RE-007, RE-009, RE-010, RE-011 |
+| DECISION-012 | RE-006, RE-007, RE-009, RE-010, RE-011 |
+| DECISION-013 | RE-006, RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-014 | RE-006, RE-007, RE-009, RE-010, RE-011 |
+| DECISION-015 | RE-005, RE-007, RE-008, RE-009, RE-010, RE-011 |
+| DECISION-016 | RE-005, RE-006, RE-007, RE-010, RE-011 |
+| DECISION-017 | RE-006, RE-007, RE-008, RE-010, RE-011 |
+| DECISION-018 | RE-007, RE-008, RE-010, RE-011 |
 
 ## Architect Review Delta Closure
 | Item | Result |
