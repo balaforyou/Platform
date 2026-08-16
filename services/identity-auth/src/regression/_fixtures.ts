@@ -65,9 +65,29 @@ export async function cleanDatabase() {
 export async function setupBaseFixtures(): Promise<IdentityContext> {
   await cleanDatabase();
 
+  // F-091: POST /resource-pools now verifies that the branch exists and belongs to the tenant.
+  // These suites have always built pools against TENANT_ID and BRANCH_ID without ever creating
+  // those rows, so every fixture pool pointed at a tenant and branch that did not exist. The
+  // guard surfaced that; seeding them here makes the fixtures represent real data rather than
+  // dangling ids.
+  // upsert, not create: these suites share the same TENANT_ID and none of their cleanDatabase()
+  // helpers delete tenants, so the row survives from one suite into the next when the whole
+  // repo's regression runs in sequence.
+  await db.tenant.upsert({
+    where: { id: TENANT_ID },
+    update: {},
+    create: { id: TENANT_ID, name: 'Identity Auth Regression Tenant', subdomain: 'regr-identity' },
+  });
+  await db.branch.upsert({
+    where: { id: BRANCH_ID },
+    update: {},
+    create: { id: BRANCH_ID, tenantId: TENANT_ID, name: 'Regression Branch', status: 'ACTIVE', timezone: 'UTC' },
+  });
+
   const poolRes = await fetch(`${slotEngineUrl}/resource-pools`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // F-091: these routes now authenticate; the suite takes the internal-key path.
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       tenantId: TENANT_ID,
       branchId: BRANCH_ID,
@@ -82,7 +102,8 @@ export async function setupBaseFixtures(): Promise<IdentityContext> {
   const end = futureAlignedHour(3);
   const windowRes = await fetch(`${slotEngineUrl}/resource-pools/${pool.id}/availability-windows`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // F-091: these routes now authenticate; the suite takes the internal-key path.
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       startTime: start.toISOString(),
       endTime: end.toISOString(),

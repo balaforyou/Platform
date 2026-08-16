@@ -184,7 +184,11 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
       occupancyPoolId = occupancyPool.id;
       await addPattern(occupancyPool.id, '2026-08-09', '15:00', '17:00', 6);
       const occupancyBefore = await windowsForDate(occupancyPool.id, '2026-08-09');
-      const poolOccupancy = await api<any>(`/resource-pools/${occupancyPool.id}/occupancy?date=2026-08-09`);
+      // F-091: pool occupancy is now admin-scoped, matching the branch-level call below.
+      const poolOccupancy = await api<any>(
+        `/resource-pools/${occupancyPool.id}/occupancy?date=2026-08-09`,
+        { headers: { Authorization: `Bearer ${ownerJwt}` } },
+      );
 
       const branchOccupancyDate = '2026-08-10';
       await addPattern(occupancyPool.id, branchOccupancyDate, '18:00', '20:00', 7);

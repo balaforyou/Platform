@@ -253,7 +253,10 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
       // CONSEQUENCE 1: it counts as guest occupancy (a forged flag would hide it,
       // distorting the metric that drives low-occupancy release).
       await db.booking.update({ where: { id: created.id }, data: { status: BookingStatus.CONFIRMED } });
-      const occ = await inspect(await fetch(`${baseUrl}/resource-pools/${pool.id}/occupancy`));
+      // F-091: occupancy is now admin-scoped; this read takes the internal-key path.
+      const occ = await inspect(await fetch(`${baseUrl}/resource-pools/${pool.id}/occupancy`, {
+        headers: { Authorization: `Bearer ${internalKey}` },
+      }));
       const occData = occ.json?.data ?? occ.json;
       console.log(
         'BOOKING_MEMBERFLAG_EVIDENCE counted_as_guest_occupancy',

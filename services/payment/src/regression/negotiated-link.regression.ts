@@ -3,6 +3,7 @@ import {
   db,
   slotEngineUrl,
   paymentUrl,
+  internalKey,
   futureAlignedHour,
   paymentHeaders,
   PaymentContext,
@@ -27,7 +28,8 @@ export const negotiatedLinkSections: Section<PaymentContext>[] = [
         `${slotEngineUrl}/resource-pools/${ctx.pool.id}/availability-windows`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          // F-091: these routes now authenticate; the suite takes the internal-key path.
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
           body: JSON.stringify({
             startTime: futureAlignedHour(72).toISOString(),
             endTime: futureAlignedHour(73).toISOString(),

@@ -116,6 +116,10 @@ type AdminAuthContext = {
   isInternal: boolean;
   userId: string | null;
   roles: string[];
+  // F-091: the caller's tenant, when one is knowable. Null on the internal-key path, which is
+  // the platform/bootstrap caller and carries no token to derive a tenant from. Additive —
+  // existing consumers read isInternal/userId/roles and are unaffected.
+  tenantId: string | null;
 };
 
 // WHY: Guards admin-only endpoints using the same dual-path pattern established in
@@ -133,7 +137,7 @@ const getInternalOrAdminAuth = async (request: any, reply: any): Promise<AdminAu
 
   // Path 1: internal service key
   if (authHeader === `Bearer ${internalKey}`) {
-    return { isInternal: true, userId: null, roles: [] };
+    return { isInternal: true, userId: null, roles: [], tenantId: null };
   }
 
   // Path 2: admin JWT with owner or branch_manager role
@@ -154,6 +158,7 @@ const getInternalOrAdminAuth = async (request: any, reply: any): Promise<AdminAu
       isInternal: false,
       userId: decoded.userId || decoded.sub || decoded.id || null,
       roles,
+      tenantId: decoded.tenantId ?? null,
     };
   } catch (e: any) {
     if (e.statusCode) throw e;
@@ -237,7 +242,7 @@ const requireBookingAccess = (booking: any, decodedUser: any, reply: any) => {
   // Reuses the same helper the 14 correctly-guarded admin routes rely on: it already
   // understands `owner` and the real `branch_manager:<branchId>` format. The bug was never
   // in this helper — it was that these routes never called it.
-  const isScopedAdmin = isAuthorizedForBranch({ isInternal: false, userId, roles }, booking.branchId);
+  const isScopedAdmin = isAuthorizedForBranch({ isInternal: false, userId, roles, tenantId: decodedUser.tenantId ?? null }, booking.branchId);
 
   if (!isBookingOwner && !isScopedAdmin) {
     throw forbidden();
@@ -901,11 +906,61 @@ server.get('/health', async () => {
 
 // Create a Resource Pool.
 // Phase 9: accepts new pricing / occupancy fields.
-server.post('/resource-pools', async (request) => {
+// AUTH (F-091): this route had none, and a real unauthenticated request was shown creating a
+// pool. Authenticate first, then authorize against the branch — there is no pool yet, so
+// requirePoolScope has nothing to re-read and isAuthorizedForBranch is the branch-level
+// equivalent the file already uses.
+//
+// TENANT DERIVATION (F-091, following F-045): tenantId used to come straight from the body,
+// unvalidated. An admin JWT now supplies it and any body value is ignored — the body is never a
+// tenant authority. The internal key keeps the body value: it is the platform/bootstrap caller,
+// has no token to derive from, and is how scripts/provision-tenant.mjs onboards a new tenant.
+// This mirrors tenant-management's verifyTenantOwnerOrInternal treating the internal key as
+// trusted bootstrap. Safe to change because no JWT caller existed — admin-web has no create-pool
+// path at all, which is F-098.
+server.post('/resource-pools', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+
   const {
-    tenantId, branchId, name, allocationMode, capacity, basePrice,
+    tenantId: bodyTenantId, branchId, name, allocationMode, capacity, basePrice,
     minOccupancy, minBookingDurationMinutes, pricingMode, defaultRate,
   } = request.body as any;
+
+  if (!branchId) {
+    reply.status(400);
+    const err = new Error('branchId is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const tenantId = auth.isInternal ? bodyTenantId : auth.tenantId;
+  if (!tenantId) {
+    reply.status(400);
+    const err = new Error('tenantId could not be resolved');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  if (!isAuthorizedForBranch(auth, branchId)) {
+    reply.status(403);
+    const err = new Error('Forbidden: Not authorized for this branch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+
+  // The branch must belong to the resolved tenant, so a branch id from one tenant cannot be
+  // used to plant a pool under another.
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { tenantId: true } });
+  if (!branch || branch.tenantId !== tenantId) {
+    reply.status(403);
+    const err = new Error('Forbidden: Branch does not belong to this tenant');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
 
   // WHY: We create a resource pool. For POOLED allocation mode, capacity defines the total capacity size.
   const pool = await prisma.resourcePool.create({
@@ -1010,8 +1065,13 @@ server.patch('/resource-pools/:id', async (request, reply) => {
 });
 
 // Helper endpoint to add Resources to a pool.
-server.post('/resource-pools/:id/resources', async (request) => {
+// AUTH (F-091): same guard as every other pool-scoped admin route. requirePoolScope re-reads
+// pool.branchId from the database, so the path id cannot assert branch authority it does not have.
+server.post('/resource-pools/:id/resources', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
   const { id } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
   const { name } = request.body as any;
 
   // WHY: Resources are specific nameable assets (e.g. Court_3) tied to a FIXED_INSTANCE pool.
@@ -1028,8 +1088,14 @@ server.post('/resource-pools/:id/resources', async (request) => {
 // Phase 9: accepts optional pricingMode + price per-release override.
 // WHY: Both-or-neither validation — a partial pricing override (mode without rate or vice-versa)
 // would silently mis-price bookings. We reject instead.
+// AUTH (F-091): the worst-placed of the four — every sibling availability route (patterns and
+// overrides) already used exactly this guard, and only this one did not. It creates bookable
+// inventory, so an unauthenticated caller could put guest-sellable slots on any pool's calendar.
 server.post('/resource-pools/:id/availability-windows', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
   const { id } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
   const { resourceId, startTime, endTime, capacity, pricingMode, price } = request.body as any;
 
   const hasMode = pricingMode != null;
@@ -1106,9 +1172,19 @@ server.post('/resource-pools/:id/availability-windows', async (request, reply) =
 });
 
 // Occupancy for a pool (public, no auth).
-// WHY: Non-sensitive aggregate — guests and admins both need this for display.
+// AUTH (F-091): its branch-level equivalents, /branches/:id/guest-occupancy and
+// /branches/:id/member-attendance, were both already protected; only the pool-level one was not.
+//
+// The previous comment here claimed this was a non-sensitive aggregate that "guests and admins
+// both need for display". A caller sweep found no guest caller at all — admin-web's OccupancyPage
+// is the only product consumer, alongside two regression call sites. The guest apps never request
+// it. So the stated justification for leaving it open did not match how it is actually used, and
+// it is now scoped like the admin data it is.
 server.get('/resource-pools/:id/occupancy', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
   const { id } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
   const { date } = request.query as any;
 
   const pool = await prisma.resourcePool.findUnique({ where: { id } });
@@ -1428,11 +1504,52 @@ server.get('/branches/:id/member-attendance', async (request, reply) => {
   return computeBranchMemberAttendance(id, date, new Date());
 });
 
-// GET /branches/:id/resource-pools (public, no auth)
-// WHY: Browse courts/resource pools at a branch. Gathers all resource pools associated
-// with the specified branchId so the guest UI can list them.
-server.get('/branches/:id/resource-pools', async (request) => {
+// GET /branches/:id/resource-pools
+// WHY: Browse courts/resource pools at a branch, so the guest UI can list them.
+//
+// AUTH (F-091): the only guest-facing route of the six, called by BranchDashboard and
+// CourtBooking on the core booking path, so an admin-only guard would break guest booking.
+// Both callers already send the user's token, as does admin-web.
+//
+// A bare jwtVerify would not be enough. `:id` is a caller-supplied parameter naming any branch in
+// any tenant — unlike GET /bookings/my, where the token's own userId does the scoping. That is the
+// shape F-071 fixed for booking-scoped routes, so this reuses the same mechanism: read the tenant
+// from the resource, compare it against the token, and never trust the path id to assert scope.
+// Dual-path, matching GET /bookings/:id rather than inventing a shape: the internal service key
+// is a trusted platform caller and bypasses, a JWT is tenant-scoped against the resource.
+server.get('/branches/:id/resource-pools', async (request, reply) => {
+  let isInternal = false;
+  let decoded: any = null;
+  try {
+    requireInternalKey(request, reply);
+    isInternal = true;
+  } catch {
+    try {
+      decoded = await request.jwtVerify();
+    } catch {
+      reply.status(401);
+      const err = new Error('Unauthorized');
+      (err as any).statusCode = 401;
+      (err as any).code = 'UNAUTHORIZED';
+      throw err;
+    }
+  }
+
   const { id } = request.params as any;
+
+  // Tenant is the outer boundary, checked before anything is read or returned — so a caller
+  // cannot probe which branch ids exist in another tenant by comparing 403 against an empty list.
+  if (!isInternal) {
+    const branch = await prisma.branch.findUnique({ where: { id }, select: { tenantId: true } });
+    if (!decoded.tenantId || !branch || branch.tenantId !== decoded.tenantId) {
+      reply.status(403);
+      const err = new Error('Forbidden');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  }
+
   const pools = await prisma.resourcePool.findMany({
     where: { branchId: id },
     include: {
@@ -1723,8 +1840,22 @@ server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
 // Blocked Windows
 // ---------------------------------------------------------------------------
 
-server.post('/blocked-windows', async (request) => {
+// AUTH (F-091): copies POST /booking-rules exactly, including the ordering — the body id is
+// validated before requirePoolScope, because that helper would otherwise query on undefined.
+// Blocking a window removes real bookable capacity, so this is a mutation worth guarding.
+server.post('/blocked-windows', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+
   const { resourcePoolId, resourceId, startTime, endTime, reason } = request.body as any;
+
+  if (!resourcePoolId) {
+    reply.status(400);
+    const err = new Error('resourcePoolId is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  await requirePoolScope(auth, resourcePoolId, reply);
 
   // WHY: Creates a blocked slot where booking is prohibited (e.g. training sessions).
   const blocked = await prisma.blockedWindow.create({

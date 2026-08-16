@@ -1,5 +1,5 @@
 import { Section, signJwt } from '@badminton/test-harness';
-import { baseUrl, SlotEngineContext, TENANT_ID, BRANCH_ID } from './_fixtures';
+import { baseUrl, internalKey, SlotEngineContext, TENANT_ID, BRANCH_ID } from './_fixtures';
 
 /**
  * MIGRATED FROM PLAYWRIGHT (findings-verification.spec.ts).
@@ -76,7 +76,8 @@ export const coPlayerAndAlignmentSections: Section<SlotEngineContext>[] = [
       const createPool = async (name: string, minBookingDurationMinutes: number) => {
         const res = await fetch(`${baseUrl}/resource-pools`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          // F-091: these routes now authenticate; the suite takes the internal-key path.
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
           body: JSON.stringify({
             tenantId: TENANT_ID,
             branchId: BRANCH_ID,
@@ -92,7 +93,8 @@ export const coPlayerAndAlignmentSections: Section<SlotEngineContext>[] = [
       const postWindow = async (poolId: string, startTime: string, endTime: string) =>
         fetch(`${baseUrl}/resource-pools/${poolId}/availability-windows`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          // F-091: these routes now authenticate; the suite takes the internal-key path.
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
           body: JSON.stringify({ startTime, endTime, capacity: 1 }),
         });
 

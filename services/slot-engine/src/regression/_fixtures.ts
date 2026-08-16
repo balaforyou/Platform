@@ -122,10 +122,30 @@ export async function cleanDatabase() {
 export async function setupBaseFixtures(): Promise<SlotEngineContext> {
   await cleanDatabase();
 
+  // F-091: POST /resource-pools now verifies that the branch exists and belongs to the tenant.
+  // These suites have always built pools against TENANT_ID and BRANCH_ID without ever creating
+  // those rows, so every fixture pool pointed at a tenant and branch that did not exist. The
+  // guard surfaced that; seeding them here makes the fixtures represent real data rather than
+  // dangling ids.
+  // upsert, not create: these suites share the same TENANT_ID and none of their cleanDatabase()
+  // helpers delete tenants, so the row survives from one suite into the next when the whole
+  // repo's regression runs in sequence.
+  await db.tenant.upsert({
+    where: { id: TENANT_ID },
+    update: {},
+    create: { id: TENANT_ID, name: 'Slot Engine Regression Tenant', subdomain: 'regr-slot' },
+  });
+  await db.branch.upsert({
+    where: { id: BRANCH_ID },
+    update: {},
+    create: { id: BRANCH_ID, tenantId: TENANT_ID, name: 'Regression Branch', status: 'ACTIVE', timezone: 'UTC' },
+  });
+
   // FIXED_INSTANCE pool — one court, one bookable instance at a time.
   const fixedPoolRes = await fetch(`${baseUrl}/resource-pools`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // F-091: these routes now authenticate; the suite takes the internal-key path.
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       tenantId: TENANT_ID,
       branchId: BRANCH_ID,
@@ -154,7 +174,8 @@ export async function setupBaseFixtures(): Promise<SlotEngineContext> {
 
   const resourceRes = await fetch(`${baseUrl}/resource-pools/${fixedPool.id}/resources`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // F-091: these routes now authenticate; the suite takes the internal-key path.
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({ name: 'Court_1' }),
   });
   const resource = ((await resourceRes.json()) as any).data;
@@ -164,7 +185,8 @@ export async function setupBaseFixtures(): Promise<SlotEngineContext> {
 
   const windowRes = await fetch(`${baseUrl}/resource-pools/${fixedPool.id}/availability-windows`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // F-091: these routes now authenticate; the suite takes the internal-key path.
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       resourceId: resource.id,
       startTime: startTime.toISOString(),
@@ -176,7 +198,8 @@ export async function setupBaseFixtures(): Promise<SlotEngineContext> {
   // POOLED pool — capacity 2, so the third concurrent hold must be rejected.
   const pooledPoolRes = await fetch(`${baseUrl}/resource-pools`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // F-091: these routes now authenticate; the suite takes the internal-key path.
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       tenantId: TENANT_ID,
       branchId: BRANCH_ID,
@@ -189,7 +212,8 @@ export async function setupBaseFixtures(): Promise<SlotEngineContext> {
 
   const pooledWindowRes = await fetch(`${baseUrl}/resource-pools/${pooledPool.id}/availability-windows`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // F-091: these routes now authenticate; the suite takes the internal-key path.
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),

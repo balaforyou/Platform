@@ -30,7 +30,8 @@ export const adminOperationsSections: Section<SlotEngineContext>[] = [
 
       const adminPoolRes = await fetch(`${baseUrl}/resource-pools`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // F-091: these routes now authenticate; the suite takes the internal-key path.
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({
           tenantId: TENANT_ID,
           branchId: BRANCH_ID,
