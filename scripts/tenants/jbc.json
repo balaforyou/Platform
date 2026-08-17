@@ -4,7 +4,13 @@
     "Coordinates and Place IDs are the venues' real Google Maps values.",
     "timezone is deliberately UTC, not Asia/Kolkata: see F-100. Setting a real zone activates",
     "F-087 (availability-window creation parses naive datetimes against the server clock while",
-    "judging boundaries against the branch clock). Correct it as part of F-087/F-088, not here."
+    "judging boundaries against the branch clock). Correct it as part of F-087/F-088, not here.",
+    "",
+    "minOccupancy is deliberately 1, not 2: see F-125. Co-player collection was removed from the",
+    "guest booking UI for the MVP, so every guest booking sends groupSize 1 with no UI path to",
+    "raise it. With minOccupancy 2 the server rejected every guest booking with 400",
+    "INVALID_GROUP_SIZE. Do NOT raise this back to 2 until F-114's per-pool enforceMinOccupancy",
+    "toggle exists, or until co-players return to the booking UI."
   ],
   "tenant": {
     "name": "Japan Badminton Court",
@@ -24,7 +30,7 @@
         "name": "Japan Badminton Court, Coimbatore - Main Courts",
         "allocationMode": "POOLED",
         "capacity": 4,
-        "minOccupancy": 2,
+        "minOccupancy": 1,
         "minBookingDurationMinutes": 60,
         "pricingMode": "FLAT",
         "defaultRate": 400,
@@ -56,7 +62,7 @@
         "name": "JBC - New Japan Badminton Court - Main Courts",
         "allocationMode": "POOLED",
         "capacity": 3,
-        "minOccupancy": 2,
+        "minOccupancy": 1,
         "minBookingDurationMinutes": 60,
         "pricingMode": "FLAT",
         "defaultRate": 400,
