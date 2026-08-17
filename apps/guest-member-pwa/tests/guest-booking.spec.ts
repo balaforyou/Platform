@@ -54,17 +54,14 @@ test.describe('Guest Booking Flow E2E', () => {
     // Pick the time slot 1
     await page.click('[id^="slot-card-window-e2e-001"]');
 
-    // Add co-players
-    await page.click('#add-co-player-btn');
-    await page.fill('input[placeholder="e.g. 9876543210"]', '9876543211');
-    
-    await page.click('#add-co-player-btn');
-    const phoneInputs = page.locator('input[placeholder="e.g. 9876543210"]');
-    await phoneInputs.nth(1).fill('9876543212');
+    // Co-player collection was removed from this screen for the MVP (follows F-114 — nothing
+    // counts heads for pricing or capacity any more). The pool is PER_PERSON at ₹150, so the
+    // booker alone is ₹150 where three participants were previously ₹450.
+    // The API still accepts coPlayers; only the UI step is gone.
 
     // Verify computed price
     const priceText = await page.locator('#computed-price-display').textContent();
-    expect(priceText).toContain('₹450');
+    expect(priceText).toContain('₹150');
     console.log(`[ASSERT SUCCESS] Verified group size computed price is: ${priceText?.trim()}`);
 
     // Click Reserve Court / Hold Slot
@@ -73,7 +70,7 @@ test.describe('Guest Booking Flow E2E', () => {
     // 6. Complete payment checkout (Mock Simulation)
     await expect(page).toHaveURL(/\/bookings\/.*\/pay/);
     const amountToPay = await page.locator('#pay-amount-display').textContent();
-    expect(amountToPay).toContain('₹450');
+    expect(amountToPay).toContain('₹150');
     console.log(`[ASSERT SUCCESS] Verified checkout payment page amount is: ${amountToPay?.trim()}`);
 
     // Click the local dev simulate payment button

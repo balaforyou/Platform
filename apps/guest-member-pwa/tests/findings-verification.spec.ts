@@ -8,7 +8,22 @@ test.describe('Findings Verification (F-009 client-side rendering)', () => {
     execSync('npx tsx tests/seed-test-data.ts', { cwd: process.cwd() });
   });
 
-  test('F-009: Should reject malformed co-player phone number in the UI', async ({ page }) => {
+  // SKIPPED, NOT DELETED — MVP co-player UI removal.
+  //
+  // This test drives `#add-co-player-btn` and the participant phone input, both of which were
+  // removed from CourtBooking for the MVP (follows F-114). It cannot pass while there is no
+  // co-player UI to validate, and deleting it would lose the browser-level coverage of a real
+  // logged finding when the UI returns.
+  //
+  // WHAT THIS COSTS RIGHT NOW, STATED PLAINLY: F-009's client-side coverage lapses for as long as
+  // the UI is gone. Its server-side half is unaffected and still tested — `POST /bookings` still
+  // rejects malformed co-player phones, asserted in
+  // services/slot-engine/src/regression/co-player-and-alignment.regression.ts, which this change
+  // does not touch. So the protection still exists and is still proven; only the rendered-error
+  // assertion is dormant.
+  //
+  // Re-enable together with the participant list in CourtBooking.
+  test.skip('F-009: Should reject malformed co-player phone number in the UI', async ({ page }) => {
     // SCOPE NOTE: this spec covers ONLY the rendered client-side validation.
     // Two things moved out of this file into slot-engine's regression suite
     // (services/slot-engine/src/regression/co-player-and-alignment.regression.ts)

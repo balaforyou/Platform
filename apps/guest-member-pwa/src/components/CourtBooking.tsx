@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { ArrowLeft, Plus, Trash2, Calendar, Users, Activity, HelpCircle, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Calendar, Users, Activity, HelpCircle, ShieldAlert } from 'lucide-react';
 
 export default function CourtBooking() {
   const { branchId, poolId } = useParams();
@@ -23,7 +23,17 @@ export default function CourtBooking() {
     return `${yyyy}-${mm}-${dd}`;
   });
 
-  const [coPlayers, setCoPlayers] = useState<string[]>([]);
+  // MVP: co-player collection removed from this screen.
+  //
+  // WHY: this follows F-114 — with JBC on a flat rate and minimum-occupancy enforcement disabled,
+  // nobody is counting heads for pricing or capacity, so collecting co-player phone numbers at
+  // booking time buys nothing for the launch.
+  //
+  // DELIBERATELY UI-ONLY, NOT A DELETION OF THE CAPABILITY. `POST /bookings` still accepts
+  // `coPlayers` and still writes `BookingPlayer` rows; nothing server-side changed. This screen
+  // simply sends an empty list. To restore, reinstate the participant list and phone validation
+  // here and pass the collected numbers through — the API contract is unchanged and waiting.
+  // See also F-110's "Regular Playmates" roster, a larger successor feature.
   const [loading, setLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -87,55 +97,16 @@ export default function CourtBooking() {
     };
   }, [poolId, bookingDate, accessToken]);
 
-  const handleAddPlayer = () => {
-    if (pool && (1 + coPlayers.length >= pool.capacity)) {
-      setBookingError(`Maximum participant capacity of ${pool.capacity} reached.`);
-      return;
-    }
-    setCoPlayers([...coPlayers, '']);
-    setBookingError(null);
-  };
-
-  const handleRemovePlayer = (idx: number) => {
-    const next = [...coPlayers];
-    next.splice(idx, 1);
-    setCoPlayers(next);
-    setBookingError(null);
-  };
-
-  const normalizePhone = (phone: string): string => {
-    const cleaned = phone.replace(/[\s\-\(\)]/g, '');
-    if (cleaned.startsWith('+')) {
-      return '+' + cleaned.replace(/\D/g, '');
-    }
-    let digits = cleaned.replace(/\D/g, '');
-    if (digits.startsWith('0')) {
-      digits = digits.slice(1);
-    }
-    if (digits.length === 10) {
-      return '+91' + digits;
-    }
-    return '+' + digits;
-  };
-
-  const isValidIndianPhone = (phone: string): boolean => {
-    const normalized = normalizePhone(phone);
-    return /^\+91[6-9]\d{9}$/.test(normalized);
-  };
-
-  const handlePlayerPhoneChange = (idx: number, val: string) => {
-    const next = [...coPlayers];
-    next[idx] = val.replace(/[^\d\+\-\(\)\s]/g, '');
-    setCoPlayers(next);
-  };
-
-  // Real-time price helper
+  // Real-time price helper.
+  // Group size is the booker alone while co-player collection is removed (see the note above).
+  // PER_PERSON is retained rather than short-circuited: the server still prices authoritatively,
+  // and this stays correct on its own terms if participants are reinstated.
   const calculatePrice = () => {
     if (!pool || !selectedSlot) return 0;
     const { window } = selectedSlot;
     const mode = window.pricingMode || pool.pricingMode || 'FLAT';
     const rate = window.price != null ? Number(window.price) : Number(pool.defaultRate);
-    const size = 1 + coPlayers.length;
+    const size = 1;
 
     if (mode === 'PER_PERSON') {
       return rate * size;
@@ -145,16 +116,6 @@ export default function CourtBooking() {
 
   const handleReserve = async () => {
     if (!tenant || !branchId || !poolId || !selectedSlot || !user) return;
-    
-    // Real validation of player phone numbers matching Indian mobile format
-    const cleanPlayers = coPlayers.filter(p => p.trim() !== '');
-    for (const phone of cleanPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        setBookingError(`"${phone}" is not a valid Indian mobile number. Must be a 10-digit number starting with 6-9.`);
-        return;
-      }
-    }
-    const normalizedPlayers = cleanPlayers.map(normalizePhone);
 
     try {
       setSubmitting(true);
@@ -176,7 +137,9 @@ export default function CourtBooking() {
           resourceId: selectedSlot.window.resourceId || null,
           windowId: selectedSlot.window.id,
           userId: user.userId || user.id,
-          coPlayers: normalizedPlayers,
+          // Sent explicitly as empty rather than omitted: the field remains part of the contract
+          // and the server still supports it, so restoring the UI needs no API change.
+          coPlayers: [],
         }),
       });
 
@@ -310,55 +273,21 @@ export default function CourtBooking() {
             <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-6">
               <h3 className="text-sm font-bold font-outfit text-gray-300 uppercase tracking-wider flex items-center space-x-2">
                 <Users className="h-4 w-4 text-[var(--brand-primary)]" />
-                <span>3. Participants & Rates</span>
+                <span>3. Rate Summary</span>
               </h3>
 
-              {/* Co-players list */}
-              <div className="space-y-3">
-                <label className="text-xs text-gray-400 font-medium">Add participant mobile numbers:</label>
-                {coPlayers.map((phone, idx) => (
-                  <div key={idx} className="flex items-center space-x-2">
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => handlePlayerPhoneChange(idx, e.target.value)}
-                      placeholder="e.g. 9876543210"
-                      className="flex-1 bg-gray-900 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-[var(--brand-primary)]"
-                    />
-                    <button
-                      onClick={() => handleRemovePlayer(idx)}
-                      className="p-2 text-gray-500 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-
-                {1 + coPlayers.length < pool.capacity && (
-                  <button
-                    onClick={handleAddPlayer}
-                    className="w-full py-2 border border-dashed border-white/10 hover:border-white/20 rounded-xl text-xs text-gray-400 hover:text-white flex items-center justify-center space-x-1.5 transition-all font-semibold"
-                    id="add-co-player-btn"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add Participant</span>
-                  </button>
-                )}
-              </div>
+              {/* MVP: the participant-collection list was removed here — see the note at the top of
+                  this component. The API still accepts coPlayers; only this UI step is gone. */}
 
               {/* Price Calculation details */}
-              <div className="pt-4 border-t border-white/5 space-y-3">
+              <div className="space-y-3">
                 <div className="flex justify-between text-xs text-gray-400 font-medium">
                   <span>Pricing Mode:</span>
                   <span className="text-gray-200">
-                    {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON' 
-                      ? 'Per-person rate multiplication' 
+                    {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON'
+                      ? 'Per-person rate multiplication'
                       : 'Flat booking rate'}
                   </span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-400 font-medium">
-                  <span>Group Size:</span>
-                  <span className="text-gray-200">{1 + coPlayers.length} Participants</span>
                 </div>
                 <div className="flex justify-between items-end pt-2 border-t border-white/5">
                   <span className="text-sm font-bold text-white font-outfit">Total Estimate:</span>
