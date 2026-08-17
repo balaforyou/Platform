@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
@@ -418,17 +419,40 @@ server.post('/tenants/:id/roles', async (request, reply) => {
     }
   }
 
-  // Upsert the role assignment to avoid duplicate entries
-  const assignment = await prisma.roleAssignment.create({
-    data: {
-      userId,
-      tenantId: id,
-      branchId: branchId || null,
-      role: role as UserRole,
-    },
-  });
+  // F-115: this genuinely upserts now. It previously called `create` under a comment
+  // claiming to upsert, with no unique constraint behind it, so re-running an assignment
+  // inserted a second row instead of replacing the first — which is how correcting a
+  // wrong role, or swapping F-116's placeholder number for JBC's real one, would have
+  // silently produced duplicates.
+  //
+  // Keyed on (userId, tenantId, branchId), so re-assigning the same user at the same
+  // scope updates the role in place and still returns 200. The matching database index
+  // is NULLS NOT DISTINCT: OWNER rows carry branchId = null, and a plain unique index
+  // treats those nulls as distinct, so it would not catch a repeat owner assignment.
+  //
+  // Two different users may both hold OWNER on one tenant (F-117) — the key includes
+  // userId precisely so that stays possible.
+  //
+  // WHY RAW SQL AND NOT prisma.roleAssignment.upsert. The typed upsert was tried first and
+  // cannot serve the OWNER path. Prisma 5.14 generates the compound-unique input with
+  // `branchId: string`, not `string | null`, so passing the null branchId that every OWNER
+  // row carries throws PrismaClientValidationError at runtime — confirmed by running it,
+  // not inferred. It typechecks only because the body is read as `any`, which is precisely
+  // why this needed a runtime check. ON CONFLICT resolves against the NULLS NOT DISTINCT
+  // index, so the null-branch owner case dedupes correctly here.
+  //
+  // `id` and `updatedAt` are supplied explicitly: Prisma applies @default(uuid()) and
+  // @updatedAt in its own client layer, and neither column has a database-level default
+  // (see the Phase 3 migration), so a raw INSERT must provide both.
+  const rows = await prisma.$queryRaw<any[]>`
+    INSERT INTO "RoleAssignment" ("id", "userId", "tenantId", "branchId", "role", "createdAt", "updatedAt")
+    VALUES (${randomUUID()}, ${userId}, ${id}, ${branchId || null}, ${role}::"UserRole", now(), now())
+    ON CONFLICT ("userId", "tenantId", "branchId")
+    DO UPDATE SET "role" = EXCLUDED."role", "updatedAt" = now()
+    RETURNING *
+  `;
 
-  return assignment;
+  return rows[0];
 });
 
 // Retrieve User Roles (called by Identity service at login/refresh)

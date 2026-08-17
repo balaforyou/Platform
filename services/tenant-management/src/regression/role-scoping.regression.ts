@@ -1,5 +1,5 @@
 import { Section } from '@badminton/test-harness';
-import { identityUrl, tenantUrl, internalHeaders, decodeJwtPayload, TenantContext } from './_fixtures';
+import { db, identityUrl, tenantUrl, internalHeaders, decodeJwtPayload, TenantContext } from './_fixtures';
 
 /**
  * Role scoping enforcement and end-to-end JWT role embedding.
@@ -115,6 +115,74 @@ export const roleScopingSections: Section<TenantContext>[] = [
         );
       }
       console.log('End-to-End verification successful! JWT token successfully embedded the Tenant-assigned roles.');
+    },
+  },
+
+  {
+    // F-115 / F-117. These two invariants pull in opposite directions and only a test
+    // distinguishes the correct index from a plausible-looking wrong one: a plain
+    // UNIQUE(userId, tenantId, branchId) passes review but does NOT dedupe owners,
+    // because OWNER rows carry branchId = null and Postgres treats nulls as distinct.
+    // If someone regenerates the index from schema.prisma alone it comes back plain,
+    // and the first assertion below is what fails.
+    name: 'Role assignment is idempotent per scope (F-115) without blocking multiple owners (F-117)',
+    async run(ctx) {
+      const assign = (userId: string, role: string, branchId: string | null) =>
+        fetch(`${tenantUrl}/tenants/${ctx.tenant.id}/roles`, {
+          method: 'POST',
+          headers: internalHeaders,
+          body: JSON.stringify({ userId, role, branchId }),
+        });
+
+      const countFor = (userId: string, branchId: string | null) =>
+        db.roleAssignment.count({ where: { userId, tenantId: ctx.tenant.id, branchId } });
+
+      // 1. F-115: re-assigning the same user at the same scope must not add a row.
+      // owner-1 was already assigned OWNER by the role-scoping section above.
+      const repeatRes = await assign('owner-1', 'OWNER', null);
+      if (repeatRes.status !== 200) {
+        throw new Error(`Expected repeat owner assignment to return 200, got ${repeatRes.status}`);
+      }
+      const ownerRows = await countFor('owner-1', null);
+      if (ownerRows !== 1) {
+        throw new Error(
+          `F-115 regression: re-assigning owner-1 left ${ownerRows} rows, expected exactly 1. ` +
+            'A plain unique index (NULLS DISTINCT) would produce 2 here.',
+        );
+      }
+      console.log('F-115 verified: repeat owner assignment updated in place, still exactly 1 row.');
+
+      // 2. F-117: a different user must still be able to hold OWNER on the same tenant.
+      const secondOwnerRes = await assign('owner-2', 'OWNER', null);
+      if (secondOwnerRes.status !== 200) {
+        throw new Error(`Expected a second distinct owner to be allowed, got ${secondOwnerRes.status}`);
+      }
+      const tenantOwners = await db.roleAssignment.count({
+        where: { tenantId: ctx.tenant.id, role: 'OWNER' },
+      });
+      if (tenantOwners !== 2) {
+        throw new Error(
+          `F-117 regression: expected 2 owners on the tenant, found ${tenantOwners}. ` +
+            'The unique key must include userId so multi-owner stays possible.',
+        );
+      }
+      console.log('F-117 verified: two distinct owners coexist on one tenant.');
+
+      // 3. The upsert replaces the role at that scope rather than stacking a second row.
+      // Uses a throwaway user so no other section's expectations are disturbed.
+      if (!ctx.branchA) throw new Error('Branch lifecycle section must run before this section.');
+      await assign('f115-rotating-user', 'BRANCH_MANAGER', ctx.branchA.id);
+      await assign('f115-rotating-user', 'FRONT_DESK', ctx.branchA.id);
+      const rotated = await db.roleAssignment.findMany({
+        where: { userId: 'f115-rotating-user', tenantId: ctx.tenant.id, branchId: ctx.branchA.id },
+      });
+      if (rotated.length !== 1 || rotated[0].role !== 'FRONT_DESK') {
+        throw new Error(
+          `Expected one row updated to FRONT_DESK, got ${rotated.length} row(s): ` +
+            JSON.stringify(rotated.map((r) => r.role)),
+        );
+      }
+      console.log('Role rotation verified: re-assignment updates the existing row in place.');
     },
   },
 ];

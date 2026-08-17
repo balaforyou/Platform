@@ -108,6 +108,16 @@ model RoleAssignment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // WHY (F-115): one assignment per user per scope, so re-running an assignment updates
+  // the role in place instead of inserting a second row. The real index is created with
+  // NULLS NOT DISTINCT, which Prisma 5.14 cannot express here — see the F-115 migration.
+  // That matters because OWNER rows carry branchId = null, and a plain unique index would
+  // let the same owner be inserted twice, which is the exact bug this prevents.
+  // DO NOT regenerate this index from the schema alone: it would come back plain and
+  // silently lose owner-duplicate protection. The role-scoping regression catches that.
+  // WHY userId is in the key (F-117): multiple owners per tenant is a supported
+  // capability; keying on (tenantId, role) would break it.
+  @@unique([userId, tenantId, branchId])
   @@index([userId, tenantId])
 }
 
