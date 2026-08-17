@@ -137,9 +137,11 @@ export async function setupBaseFixtures(): Promise<IdentityContext> {
   const booking = ((await bookingRes.json()) as any).data;
   console.log(`Seeded group booking: ${booking.id} with invited co-player phone: ${PHONE}`);
 
+  // F-119: this endpoint is now internal-key-only. It is the only caller of it in the codebase,
+  // and it stands in for the production step that does not exist yet — see F-123.
   await fetch(`${identityUrl}/users/resolve-invite`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({ tenantId: TENANT_ID, phone: PHONE }),
   });
 

@@ -3,6 +3,7 @@ import {
   db,
   identityUrl,
   slotEngineUrl,
+  internalKey,
   IdentityContext,
   TENANT_ID,
   PHONE,
@@ -165,6 +166,58 @@ export const otpFlowSections: Section<IdentityContext>[] = [
         throw new Error(`Expected resolve-invites without key to return 401, got ${resolveUnauth.status}`);
       }
       console.log('Internal service endpoint resolve-invites rejected 401 unauthenticated requests correctly.');
+    },
+  },
+
+  {
+    // F-119. This route had no authentication at all, so an unauthenticated caller could write
+    // PendingInvite rows for any phone/tenant pair. Asserting the status code alone is not enough:
+    // a guard that returned 401 while still writing would pass that check, so every rejection here
+    // is confirmed by a database read-back proving no row was created.
+    name: 'F-119: /users/resolve-invite is internal-key-only (401 unauthenticated, no row written)',
+    async run() {
+      const PROBE = '+919000771199';
+      const scope = { phone: PROBE, tenantId: TENANT_ID };
+      const rows = () => db.pendingInvite.count({ where: scope });
+      const call = (headers: Record<string, string>) =>
+        fetch(`${identityUrl}/users/resolve-invite`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({ tenantId: TENANT_ID, phone: PROBE }),
+        });
+
+      await db.pendingInvite.deleteMany({ where: scope });
+
+      // 1. No credentials at all — the exact request that succeeded before the fix.
+      const unauth = await call({});
+      if (unauth.status !== 401) {
+        throw new Error(`Expected 401 without a key, got ${unauth.status}`);
+      }
+      if ((await rows()) !== 0) {
+        throw new Error('F-119 regression: rejected with 401 but the PendingInvite row was still written.');
+      }
+
+      // 2. Wrong key — rejected, and again nothing written.
+      const wrongKey = await call({ Authorization: 'Bearer not-the-internal-key' });
+      if (wrongKey.status !== 401) {
+        throw new Error(`Expected 401 with a wrong key, got ${wrongKey.status}`);
+      }
+      if ((await rows()) !== 0) {
+        throw new Error('F-119 regression: wrong key rejected but the row was still written.');
+      }
+      console.log('resolve-invite rejected unauthenticated and wrong-key requests, with no row written.');
+
+      // 3. The legitimate internal caller still works — this is the path the fixture uses.
+      const keyed = await call({ Authorization: `Bearer ${internalKey}` });
+      if (keyed.status !== 200) {
+        throw new Error(`Expected the internal key to succeed, got ${keyed.status}`);
+      }
+      if ((await rows()) !== 1) {
+        throw new Error('Expected exactly one PendingInvite row after the keyed request.');
+      }
+      console.log('resolve-invite still accepts the internal service key and writes exactly one row.');
+
+      await db.pendingInvite.deleteMany({ where: scope });
     },
   },
 ];

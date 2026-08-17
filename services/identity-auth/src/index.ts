@@ -36,6 +36,31 @@ function normalizePhone(phone: string): string {
   return '+' + digits;
 }
 
+/**
+ * Rejects anything that is not the platform-internal service key.
+ *
+ * WHY THIS IS A HELPER (F-119): this check was inlined in `PATCH /users/:id/type` and had to be
+ * applied to a second route, so it is extracted rather than copied — mirroring slot-engine's
+ * existing named `requireInternalKey` (`slot-engine/src/index.ts:105`) rather than introducing a
+ * third shape. Behaviour is deliberately identical to the inline version it replaces, including
+ * setting the reply status before throwing, so the 401 envelope callers already assert is unchanged.
+ *
+ * Call this BEFORE reading the body or normalizing input. F-090/F-045/F-071: authenticating after a
+ * parse or an existence check leaves a pre-auth code path an unauthenticated caller can still reach.
+ */
+function requireInternalKey(request: any, reply: any) {
+  const authHeader = request.headers['authorization'];
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+
+  if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
+    reply.status(401);
+    const err = new Error('Unauthorized internal service access');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+}
+
 // Helper endpoint for health checks
 server.get('/health', async () => {
   // F-077: BUILD_GIT_SHA is baked in at image build; the deploy verifier compares it
@@ -567,11 +592,26 @@ server.get('/users/:id', async (request, reply) => {
   return user;
 });
 
-// Endpoint to create a PendingInvite placeholder
-server.post('/users/resolve-invite', async (request) => {
+// Endpoint to create a PendingInvite placeholder — internal service-to-service only.
+//
+// F-119: this route previously had NO authentication of any kind, so any unauthenticated caller
+// could write PendingInvite rows for arbitrary phone/tenant pairs. That was an original omission
+// rather than a regression: the Phase 2 spec named only `POST /bookings/resolve-invites` and
+// `PATCH /users/:id/type` as internal routes and specified this one with no auth requirement at all.
+//
+// WHY INTERNAL-KEY AND NOT A USER JWT. The rows this writes are consumed at signup (see the invite
+// branch in /auth/otp/verify) to dispatch `POST /bookings/resolve-invites`, which is itself
+// internal-key-only (`slot-engine/src/index.ts:3120-3121`). Leaving the producer open while the
+// consumer is locked was the real inconsistency. There is also no production caller to preserve —
+// the only caller in the codebase is the identity-auth regression fixture — and the realistic
+// production wiring (slot-engine registering the invite from co-player data it already holds when a
+// booking is created) is service-to-service, so this is the guard that wiring will need too.
+server.post('/users/resolve-invite', async (request, reply) => {
+  requireInternalKey(request, reply);
+
   const { tenantId, phone: rawPhone } = request.body as any;
   const phone = normalizePhone(rawPhone);
-  
+
   // Upsert to prevent duplicate conflicts
   const invite = await prisma.pendingInvite.upsert({
     where: { phone_tenantId: { phone, tenantId } },
@@ -585,16 +625,10 @@ server.post('/users/resolve-invite', async (request) => {
 // Internal endpoint to update userType (Promotion to MEMBER or STAFF)
 // WHY: Requires secure internal service token authentication. Prevents clients from spoofing user types.
 server.patch('/users/:id/type', async (request, reply) => {
-  const authHeader = request.headers['authorization'];
-  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
-  
-  if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
-    reply.status(401);
-    const err = new Error('Unauthorized internal service access');
-    (err as any).statusCode = 401;
-    (err as any).code = 'UNAUTHORIZED';
-    throw err;
-  }
+  // F-119: extracted to the shared helper rather than left inlined, so this route and
+  // /users/resolve-invite cannot drift apart. Behaviour is unchanged — jwt-session.regression.ts
+  // (`:107`/`:116`) asserts both the 401 and the keyed success path.
+  requireInternalKey(request, reply);
 
   const { id } = request.params as any;
   const { userType } = request.body as any;
