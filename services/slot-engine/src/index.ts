@@ -918,12 +918,82 @@ server.get('/health', async () => {
 // This mirrors tenant-management's verifyTenantOwnerOrInternal treating the internal key as
 // trusted bootstrap. Safe to change because no JWT caller existed — admin-web has no create-pool
 // path at all, which is F-098.
+// Shared field validation for resource pools, used by BOTH create and update.
+//
+// WHY (SCREEN-002): POST previously validated none of these fields — it went straight from the
+// request body to `create` with `x ? Number(x) : default` coercion — while PATCH enforced the real
+// rules. So a form posting to POST could create a pool that the very next PATCH would refuse to
+// save: capacity below minOccupancy, a duration that does not divide a day, a negative rate. The
+// onboarding wizard is the first caller that would hit that split routinely.
+//
+// This is F-068's precedent applied to pools: that finding fixed the identical split for booking
+// rules by extracting `validateBookingRuleFields` and calling it from both verbs. One function is
+// what stops the two paths drifting again.
+//
+// `existing` present  => PATCH semantics: only supplied fields are validated and emitted, and
+//                        cross-field comparisons fall back to the stored row.
+// `existing` absent    => POST semantics: the full set is validated, with defaults applied.
+function validateResourcePoolFields(
+  body: any,
+  reply: any,
+  existing?: { capacity: number; minOccupancy: number },
+): Record<string, any> {
+  const data: any = {};
+  const isCreate = existing === undefined;
+  const fail = (message: string, code: string) => {
+    reply.status(400);
+    const err = new Error(message);
+    (err as any).statusCode = 400;
+    (err as any).code = code;
+    return err;
+  };
+
+  if (isCreate || body.name !== undefined) {
+    const name = String(body.name ?? '').trim();
+    if (!name) throw fail('name cannot be empty', 'BAD_REQUEST');
+    data.name = name;
+  }
+
+  // Cross-field, so it is evaluated even when only one side is supplied — the case that let a
+  // PATCH-invalid pool be created through POST.
+  const capacity = body.capacity !== undefined ? Number(body.capacity) : (existing ? existing.capacity : 1);
+  const minOccupancy = body.minOccupancy !== undefined ? Number(body.minOccupancy) : (existing ? existing.minOccupancy : 1);
+  if (!Number.isInteger(capacity) || capacity < 1 || !Number.isInteger(minOccupancy) || minOccupancy < 1 || capacity < minOccupancy) {
+    throw fail('capacity must be >= minOccupancy and both must be positive integers', 'INVALID_OCCUPANCY');
+  }
+  if (isCreate || body.capacity !== undefined) data.capacity = capacity;
+  if (isCreate || body.minOccupancy !== undefined) data.minOccupancy = minOccupancy;
+
+  if (isCreate || body.minBookingDurationMinutes !== undefined) {
+    const duration = body.minBookingDurationMinutes !== undefined ? Number(body.minBookingDurationMinutes) : 60;
+    if (!Number.isInteger(duration) || duration <= 0 || 1440 % duration !== 0) {
+      throw fail('minBookingDurationMinutes must be a positive slot increment that divides one day', 'INVALID_DURATION');
+    }
+    data.minBookingDurationMinutes = duration;
+  }
+
+  if (isCreate || body.pricingMode !== undefined) {
+    const mode = body.pricingMode ?? PricingMode.FLAT;
+    if (!Object.values(PricingMode).includes(mode)) throw fail('Invalid pricingMode', 'INVALID_PRICING_MODE');
+    data.pricingMode = mode as PricingMode;
+  }
+
+  if (isCreate || body.defaultRate !== undefined) {
+    const rate = body.defaultRate !== undefined ? Number(body.defaultRate) : 100.00;
+    if (Number.isNaN(rate) || rate < 0) throw fail('defaultRate must be a non-negative number', 'INVALID_RATE');
+    data.defaultRate = new Prisma.Decimal(rate);
+    // Kept in step with defaultRate, exactly as PATCH already did.
+    data.basePrice = new Prisma.Decimal(rate);
+  }
+
+  return data;
+}
+
 server.post('/resource-pools', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
 
   const {
-    tenantId: bodyTenantId, branchId, name, allocationMode, capacity, basePrice,
-    minOccupancy, minBookingDurationMinutes, pricingMode, defaultRate,
+    tenantId: bodyTenantId, branchId, allocationMode, basePrice,
   } = request.body as any;
 
   if (!branchId) {
@@ -962,21 +1032,24 @@ server.post('/resource-pools', async (request, reply) => {
     throw err;
   }
 
+  // SCREEN-002: the same validator PATCH uses, so this endpoint can no longer create a pool the
+  // edit screen would refuse to save. Runs after authorization, never before it.
+  const validated = validateResourcePoolFields(request.body, reply);
+
   // WHY: We create a resource pool. For POOLED allocation mode, capacity defines the total capacity size.
-  const pool = await prisma.resourcePool.create({
-    data: {
-      tenantId,
-      branchId,
-      name,
-      allocationMode: allocationMode as AllocationMode,
-      capacity: capacity ? Number(capacity) : 1,
-      basePrice: basePrice ? new Prisma.Decimal(basePrice) : new Prisma.Decimal(100.00),
-      minOccupancy: minOccupancy ? Number(minOccupancy) : 1,
-      minBookingDurationMinutes: minBookingDurationMinutes ? Number(minBookingDurationMinutes) : 60,
-      pricingMode: (pricingMode as PricingMode) ?? PricingMode.FLAT,
-      defaultRate: defaultRate ? new Prisma.Decimal(defaultRate) : new Prisma.Decimal(100.00),
-    },
-  });
+  // Assembled as `any` for the same reason PATCH does: the validator returns a field bag, and
+  // spreading it inline loses the compiler's view of the required keys it always sets.
+  const createData: any = {
+    tenantId,
+    branchId,
+    allocationMode: allocationMode as AllocationMode,
+    ...validated,
+  };
+  // An explicit basePrice still wins, preserving the pre-existing create contract that
+  // provisioning relies on; the validator otherwise keeps it in step with defaultRate.
+  if (basePrice !== undefined) createData.basePrice = new Prisma.Decimal(basePrice);
+
+  const pool = await prisma.resourcePool.create({ data: createData });
   return pool;
 });
 
@@ -997,65 +1070,11 @@ server.patch('/resource-pools/:id', async (request, reply) => {
     throw err;
   }
 
-  const data: any = {};
-  if (body.name !== undefined) {
-    if (!String(body.name).trim()) {
-      reply.status(400);
-      const err = new Error('name cannot be empty');
-      (err as any).statusCode = 400;
-      (err as any).code = 'BAD_REQUEST';
-      throw err;
-    }
-    data.name = String(body.name).trim();
-  }
-
-  const capacity = body.capacity !== undefined ? Number(body.capacity) : existing.capacity;
-  const minOccupancy = body.minOccupancy !== undefined ? Number(body.minOccupancy) : existing.minOccupancy;
-  if (!Number.isInteger(capacity) || capacity < 1 || !Number.isInteger(minOccupancy) || minOccupancy < 1 || capacity < minOccupancy) {
-    reply.status(400);
-    const err = new Error('capacity must be >= minOccupancy and both must be positive integers');
-    (err as any).statusCode = 400;
-    (err as any).code = 'INVALID_OCCUPANCY';
-    throw err;
-  }
-  if (body.capacity !== undefined) data.capacity = capacity;
-  if (body.minOccupancy !== undefined) data.minOccupancy = minOccupancy;
-
-  if (body.minBookingDurationMinutes !== undefined) {
-    const duration = Number(body.minBookingDurationMinutes);
-    if (!Number.isInteger(duration) || duration <= 0 || 1440 % duration !== 0) {
-      reply.status(400);
-      const err = new Error('minBookingDurationMinutes must be a positive slot increment that divides one day');
-      (err as any).statusCode = 400;
-      (err as any).code = 'INVALID_DURATION';
-      throw err;
-    }
-    data.minBookingDurationMinutes = duration;
-  }
-
-  if (body.pricingMode !== undefined) {
-    if (!Object.values(PricingMode).includes(body.pricingMode)) {
-      reply.status(400);
-      const err = new Error('Invalid pricingMode');
-      (err as any).statusCode = 400;
-      (err as any).code = 'INVALID_PRICING_MODE';
-      throw err;
-    }
-    data.pricingMode = body.pricingMode as PricingMode;
-  }
-
-  if (body.defaultRate !== undefined) {
-    const rate = Number(body.defaultRate);
-    if (Number.isNaN(rate) || rate < 0) {
-      reply.status(400);
-      const err = new Error('defaultRate must be a non-negative number');
-      (err as any).statusCode = 400;
-      (err as any).code = 'INVALID_RATE';
-      throw err;
-    }
-    data.defaultRate = new Prisma.Decimal(rate);
-    data.basePrice = new Prisma.Decimal(rate);
-  }
+  // SCREEN-002: extracted to validateResourcePoolFields so POST enforces exactly these rules too.
+  // Passing `existing` preserves this endpoint's partial-update semantics unchanged: only supplied
+  // fields are validated and written, and the capacity/minOccupancy comparison still falls back to
+  // the stored row when only one side is sent.
+  const data = validateResourcePoolFields(body, reply, existing);
 
   return await prisma.resourcePool.update({
     where: { id },

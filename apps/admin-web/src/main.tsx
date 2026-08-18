@@ -13,10 +13,12 @@ import {
   Link as LinkIcon,
   LogOut,
   Menu,
+  Plus,
   RefreshCw,
   Save,
   ShieldAlert,
   SlidersHorizontal,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -163,13 +165,24 @@ const queryClient = new QueryClient({
   },
 });
 
+// SCREEN-002: the server rejects a duration that does not divide a day (INVALID_DURATION), but
+// neither of these schemas checked it, so the only feedback was a round-trip error banner. Both
+// pool and pattern durations carry the rule, so it lives in one place.
+const dividesADay = (minutes: number) => 1440 % minutes === 0;
+const DIVIDES_A_DAY_MESSAGE = 'Must divide evenly into 24 hours (e.g. 30, 60, 90, 120)';
+
 const poolSchema = z.object({
   name: z.string().min(1),
   capacity: z.coerce.number().int().min(1),
   minOccupancy: z.coerce.number().int().min(1),
-  minBookingDurationMinutes: z.coerce.number().int().positive(),
+  minBookingDurationMinutes: z.coerce.number().int().positive().refine(dividesADay, DIVIDES_A_DAY_MESSAGE),
   pricingMode: z.enum(['FLAT', 'PER_PERSON']),
   defaultRate: z.coerce.number().min(0),
+}).refine((v) => v.capacity >= v.minOccupancy, {
+  // Mirrors the server's INVALID_OCCUPANCY cross-field rule so the wizard cannot submit a pool
+  // the server will refuse.
+  message: 'Capacity must be greater than or equal to minimum occupancy',
+  path: ['capacity'],
 });
 
 const ruleSchema = z.object({
@@ -186,7 +199,7 @@ const patternSchema = z.object({
   daysOfWeek: z.string().min(1),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
-  slotDurationMinutes: z.coerce.number().int().positive(),
+  slotDurationMinutes: z.coerce.number().int().positive().refine(dividesADay, DIVIDES_A_DAY_MESSAGE),
   capacity: z.coerce.number().int().positive(),
   pricingMode: z.enum(['FLAT', 'PER_PERSON']).optional(),
   price: z.coerce.number().min(0).optional(),
@@ -793,9 +806,22 @@ function ResourcesPage() {
       </section>
       <section className="panel">
         <h2>Resource Pools</h2>
-        <select value={selectedPool?.id || ''} onChange={(event) => setSelectedPoolId(event.target.value)}>
-          {(pools.data || []).map((pool) => <option value={pool.id} key={pool.id}>{pool.name}</option>)}
-        </select>
+        {/* SCREEN-002 / F-031: an empty <select> previously rendered as a silent dead control —
+            nothing to pick, no explanation, and no way to create the first pool from anywhere in
+            the app. This closes F-031's Resources half by making the empty state the entry point
+            to the onboarding wizard. */}
+        {!pools.isLoading && (pools.data || []).length === 0 ? (
+          <div className="form-grid compact">
+            <p className="empty-state">This branch has no court pools yet.</p>
+            <Link className="primary-btn" to="/resources/new" id="create-first-pool-btn">
+              <Plus size={16} />Create your first court pool
+            </Link>
+          </div>
+        ) : (
+          <select value={selectedPool?.id || ''} onChange={(event) => setSelectedPoolId(event.target.value)}>
+            {(pools.data || []).map((pool) => <option value={pool.id} key={pool.id}>{pool.name}</option>)}
+          </select>
+        )}
         {selectedPool && (
           <div className="form-grid compact">
             {['name', 'capacity', 'minOccupancy', 'minBookingDurationMinutes', 'defaultRate'].map((field) => (
@@ -1114,6 +1140,273 @@ function SchedulingPage() {
           </div>
         ) : null}
       </section>
+    </main>
+  );
+}
+
+// SCREEN-002 — Branch Court Onboarding Wizard.
+//
+// Closes F-098: standing up a bookable branch was only possible through internal-key API calls via
+// scripts/provision-tenant.mjs, because no admin UI existed. Five steps take a branch from nothing
+// to genuinely bookable — pool, courts, booking rule, availability pattern — ending on real
+// generated slots rather than a success message.
+//
+// Built against the frozen v4 spec (docs/screen_002_branch_court_onboarding_wizard.md). Reuses the
+// existing visual language exactly: form-grid compact, primary-btn/secondary-btn with a spinning
+// RefreshCw, label-wrapped inputs, and a single MutationFeedback banner per step. Per the spec,
+// per-field error display is deliberately NOT introduced here — no form in this app has it, and a
+// wizard is not the place to fork the convention.
+const WIZARD_STEPS = ['Court Type', 'Pool Details', 'Courts', 'Booking Rules', 'Scheduling'];
+
+function OnboardingWizardPage() {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  const branches = useBranches();
+  const [step, setStep] = useState(1);
+  const [branchId, setBranchId] = useState('');
+  const [allocationMode, setAllocationMode] = useState<'FIXED_INSTANCE' | 'POOLED' | ''>('');
+  const [pool, setPool] = useState<ResourcePool | null>(null);
+  const [courtNames, setCourtNames] = useState<string[]>(['']);
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  const [poolForm, setPoolForm] = useState({
+    name: '', capacity: '1', minOccupancy: '1',
+    minBookingDurationMinutes: '60', pricingMode: 'FLAT', defaultRate: '100',
+  });
+  const [ruleForm, setRuleForm] = useState({
+    guestOpenWindowDays: '7', memberWindowDays: '30', gracePeriodMinutes: '30',
+    guestAccessCutoffMinutes: '120', lowOccupancyThresholdPct: '50', prepaymentRequired: true,
+  });
+
+  React.useEffect(() => {
+    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
+  }, [branchId, branches.data]);
+
+  const isFixed = allocationMode === 'FIXED_INSTANCE';
+
+  const createPool = useMutation({
+    mutationFn: () => {
+      // capacity is meaningless for FIXED_INSTANCE — generation forces one window per resource —
+      // so it is not collected in that mode and is sent as 1 rather than as a hidden stale value.
+      const parsed = poolSchema.parse({
+        ...poolForm,
+        capacity: isFixed ? '1' : poolForm.capacity,
+      });
+      return api.post<ResourcePool>('/slot-engine/resource-pools', {
+        branchId, allocationMode, ...parsed,
+      });
+    },
+    onSuccess: (created) => {
+      setPool(created);
+      qc.invalidateQueries({ queryKey: ['pools'] });
+      setStep(3);
+    },
+  });
+
+  const addCourts = useMutation({
+    mutationFn: async () => {
+      const names = courtNames.map((n) => n.trim()).filter(Boolean);
+      // Caught here rather than server-side so the message names the duplicate. The database
+      // enforces this too (SCREEN-002's unique index) — this is the friendly half, not the guard.
+      const dupes = names.filter((n, i) => names.indexOf(n) !== i);
+      if (dupes.length) throw new Error(`Court names must be unique within a pool. Repeated: ${[...new Set(dupes)].join(', ')}`);
+      for (const name of names) {
+        await api.post(`/slot-engine/resource-pools/${pool!.id}/resources`, { name });
+      }
+      return names.length;
+    },
+    onSuccess: () => setStep(4),
+  });
+
+  const saveRule = useMutation({
+    mutationFn: async () => {
+      const body = {
+        resourcePoolId: pool!.id,
+        guestOpenWindowDays: Number(ruleForm.guestOpenWindowDays),
+        memberWindowDays: Number(ruleForm.memberWindowDays),
+        gracePeriodMinutes: Number(ruleForm.gracePeriodMinutes),
+        guestAccessCutoffMinutes: Number(ruleForm.guestAccessCutoffMinutes),
+        lowOccupancyThresholdPct: Number(ruleForm.lowOccupancyThresholdPct),
+        prepaymentRequired: ruleForm.prepaymentRequired,
+      };
+      // Idempotency: F-067's unique index makes a second POST return 409 BOOKING_RULE_EXISTS.
+      // Without this, any failure at step 5 would permanently brick re-entry at step 4 — the
+      // admin could never get past a step they had already completed. Detect and switch to PUT.
+      //
+      // Read through the branch listing rather than a per-pool GET: there is no
+      // GET /resource-pools/:id route, and this one already returns bookingRules (and resources),
+      // which is exactly where ResourcesPage and OccupancyPage read the current rule from.
+      const branchPools = await api.get<ResourcePool[]>(`/slot-engine/branches/${branchId}/resource-pools`);
+      const fresh = (branchPools || []).find((p) => p.id === pool!.id);
+      const hasRule = (fresh?.bookingRules?.length ?? 0) > 0;
+      return hasRule
+        ? api.put(`/slot-engine/resource-pools/${pool!.id}/booking-rule`, body)
+        : api.post('/slot-engine/booking-rules', body);
+    },
+    onSuccess: () => setStep(5),
+  });
+
+  const anyError = clientError || createPool.error || addCourts.error || saveRule.error;
+
+  return (
+    <main className="content-grid">
+      <section className="panel">
+        <h2>Set Up Courts for a Branch</h2>
+        <div className="table-list">
+          {WIZARD_STEPS.map((label, idx) => (
+            <div className="table-row" key={label}>
+              <div>
+                <strong>{idx + 1}. {label}</strong>
+                <span>{step > idx + 1 ? 'Done' : step === idx + 1 ? 'In progress' : 'Not started'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel">
+        {step === 1 && (
+          <>
+            <h2>1. Court Type</h2>
+            <div className="form-grid compact">
+              <label>Branch<select value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+                <option value="">Select branch</option>
+                {(branches.data || []).map((b) => <option value={b.id} key={b.id}>{b.name}</option>)}
+              </select></label>
+              <label className="check-row">
+                <input type="radio" name="mode" checked={allocationMode === 'FIXED_INSTANCE'}
+                  onChange={() => setAllocationMode('FIXED_INSTANCE')} />
+                Fixed Courts — each court is booked individually by name.
+              </label>
+              <label className="check-row">
+                <input type="radio" name="mode" checked={allocationMode === 'POOLED'}
+                  onChange={() => setAllocationMode('POOLED')} />
+                Shared Pool — guests book a seat, and courts are assigned by staff.
+              </label>
+              <p className="muted">
+                This cannot be changed later. Switching court type means deleting the pool and starting again.
+              </p>
+              <button className="primary-btn" disabled={!allocationMode || !branchId} onClick={() => setStep(2)}>
+                Continue
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <h2>2. Pool Details</h2>
+            <div className="form-grid compact">
+              <label>Pool Name<input value={poolForm.name}
+                onChange={(e) => setPoolForm({ ...poolForm, name: e.target.value })} /></label>
+              {!isFixed && (
+                <label>Capacity<input type="number" value={poolForm.capacity}
+                  onChange={(e) => setPoolForm({ ...poolForm, capacity: e.target.value })} /></label>
+              )}
+              <label>Min. Occupancy<input type="number" value={poolForm.minOccupancy}
+                onChange={(e) => setPoolForm({ ...poolForm, minOccupancy: e.target.value })} /></label>
+              <label>Min. Booking Duration (min)<input type="number" value={poolForm.minBookingDurationMinutes}
+                onChange={(e) => setPoolForm({ ...poolForm, minBookingDurationMinutes: e.target.value })} /></label>
+              <label>Pricing Mode<select value={poolForm.pricingMode}
+                onChange={(e) => setPoolForm({ ...poolForm, pricingMode: e.target.value })}>
+                <option value="FLAT">Flat</option>
+                <option value="PER_PERSON">Per Person</option>
+              </select></label>
+              <label>Default Rate (₹)<input type="number" value={poolForm.defaultRate}
+                onChange={(e) => setPoolForm({ ...poolForm, defaultRate: e.target.value })} /></label>
+              <button className="primary-btn" id="wizard-create-pool" disabled={createPool.isPending}
+                onClick={() => { setClientError(null); try { createPool.mutate(); } catch (e: any) { setClientError(e.message); } }}>
+                {createPool.isPending ? <RefreshCw className="spin" size={16} /> : <SlidersHorizontal size={16} />}
+                {createPool.isPending ? 'Creating…' : 'Create Pool'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <h2>3. Courts</h2>
+            <div className="form-grid compact">
+              <p className="muted">
+                {isFixed
+                  ? 'Each court is booked individually, so every court needs a name.'
+                  : 'Shared pools can still name their courts, so staff know which court a guest was given.'}
+              </p>
+              {courtNames.map((name, idx) => (
+                <div className="lookup-box" key={idx}>
+                  <label>Court {idx + 1}<input value={name} placeholder="e.g. Court 1"
+                    onChange={(e) => setCourtNames(courtNames.map((v, i) => (i === idx ? e.target.value : v)))} /></label>
+                  {courtNames.length > 1 && (
+                    <button className="secondary-btn" onClick={() => setCourtNames(courtNames.filter((_, i) => i !== idx))}>
+                      <Trash2 size={16} />Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button className="secondary-btn" onClick={() => setCourtNames([...courtNames, ''])}>
+                <Plus size={16} />Add another court
+              </button>
+              <button className="primary-btn" id="wizard-add-courts" disabled={addCourts.isPending || (isFixed && !courtNames.some((n) => n.trim()))}
+                onClick={() => addCourts.mutate()}>
+                {addCourts.isPending ? <RefreshCw className="spin" size={16} /> : <Plus size={16} />}
+                {isFixed ? 'Add Courts & Continue' : 'Add courts (optional for shared pools)'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 4 && (
+          <>
+            <h2>4. Booking Rules</h2>
+            <div className="form-grid compact">
+              <label>Guest Open Window (days)<input type="number" value={ruleForm.guestOpenWindowDays}
+                onChange={(e) => setRuleForm({ ...ruleForm, guestOpenWindowDays: e.target.value })} /></label>
+              <label>Member Booking Window (days)<input type="number" value={ruleForm.memberWindowDays}
+                onChange={(e) => setRuleForm({ ...ruleForm, memberWindowDays: e.target.value })} /></label>
+
+              <h3>Member Confirmation Window</h3>
+              <p className="muted">How many minutes before the session starts must a member confirm attendance?</p>
+              <label>Minutes<input type="number" value={ruleForm.gracePeriodMinutes}
+                onChange={(e) => setRuleForm({ ...ruleForm, gracePeriodMinutes: e.target.value })} /></label>
+
+              <h3>Staff Alerts</h3>
+              <p className="muted">
+                How many minutes before the session should staff be notified if it looks under-booked,
+                so there&apos;s time to fill it?
+              </p>
+              <label>Low-Occupancy Alert Lead Time (min)<input type="number" value={ruleForm.guestAccessCutoffMinutes}
+                onChange={(e) => setRuleForm({ ...ruleForm, guestAccessCutoffMinutes: e.target.value })} /></label>
+              <label>Low-Occupancy Threshold (%)<input type="number" value={ruleForm.lowOccupancyThresholdPct}
+                onChange={(e) => setRuleForm({ ...ruleForm, lowOccupancyThresholdPct: e.target.value })} /></label>
+              <label className="check-row">
+                <input type="checkbox" checked={ruleForm.prepaymentRequired}
+                  onChange={(e) => setRuleForm({ ...ruleForm, prepaymentRequired: e.target.checked })} />
+                Prepayment Required
+              </label>
+              <button className="primary-btn" id="wizard-set-rules" disabled={saveRule.isPending} onClick={() => saveRule.mutate()}>
+                {saveRule.isPending ? <RefreshCw className="spin" size={16} /> : <CalendarClock size={16} />}
+                Set Booking Rules
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 5 && (
+          <>
+            <h2>5. Scheduling</h2>
+            <p className="muted">
+              Add the weekly pattern for <strong>{pool?.name}</strong>. The preview below shows the real
+              slots this generates — that is the confirmation the branch is bookable.
+            </p>
+          </>
+        )}
+
+        <MutationFeedback error={anyError} />
+      </section>
+
+      {/* Step 5 IS SchedulingPage (FLOW-025), reused rather than rebuilt — including its live
+          availability preview, which serves as the closing confirmation. */}
+      {step === 5 && <SchedulingPage />}
     </main>
   );
 }
@@ -1484,6 +1777,9 @@ function AppRoutes() {
         <Route element={<Shell />}>
           <Route index element={<Overview />} />
           <Route path="/resources" element={<ResourcesPage />} />
+          {/* SCREEN-002: launched from ResourcesPage rather than the nav — it is a task you start
+              from where the gap is felt, not a standing destination. */}
+          <Route path="/resources/new" element={<OnboardingWizardPage />} />
           <Route path="/scheduling" element={<SchedulingPage />} />
           <Route path="/assignments" element={<AssignmentsPage />} />
           <Route path="/occupancy" element={<OccupancyPage />} />

@@ -158,6 +158,13 @@ model Resource {
   blockedWindows      BlockedWindow[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+
+  // WHY (SCREEN-002): generation emits one availability window per resource, so two courts
+  // sharing a name in one pool produce two indistinguishable sets of bookable slots. The
+  // onboarding wizard collects these names as free text, which makes a duplicate one stray
+  // keystroke away. Unlike F-115's index this needs no NULLS NOT DISTINCT — both columns are
+  // NOT NULL, so there is no null case for it to cover.
+  @@unique([resourcePoolId, name])
 }
 
 model AvailabilityWindow {
