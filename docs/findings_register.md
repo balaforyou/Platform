@@ -13,6 +13,13 @@
 
 Going forward, a gap in the sequence is retired by default. If a number is skipped, note it here rather than leaving it silently reusable.
 
+**Process note, added 15 Aug 2026 — retiring two more unused IDs.** F-136 and F-137 were reserved during the same business-discussion batch that produced F-129–F-135 and F-138–F-139, then never issued. Both are **retired permanently and must not be reissued**, under the default rule stated directly above:
+
+- **F-136** — reserved for a concept that did not survive as a standalone finding: on investigation it folded into **F-133's corrected scope**, which changed from a notification-targeting feature into generic group-hierarchy data modelling.
+- **F-137** — same origin and same outcome, absorbed into the same corrected F-133 scope recorded in `docs/discovery/f133_group_hierarchy.md`.
+
+Retired rather than recycled because the ideas behind them now live inside another finding — reissuing either number would attach a second meaning to an ID that already carries one, which is exactly the F-018/F-019 incident this register opens with.
+
 **Process note, added 6 Aug 2026:** F-043 (no admin UI existed for guest-slot scheduling at all) traces back to a real methodology gap flagged at the very start of this project — the BCC "Application Models" stage (wireframes/prototypes before code) was largely skipped, going from written business discovery straight to implementation kickoffs. A written requirement can read as "covered" while still being invisible in practice, because nobody had to visualize where it would actually live on a screen. F-043 was only found because the user personally tried to use the missing capability by hand, not because any review process caught it earlier. Lesson: for genuinely new capability (not a fix to something existing), a rough wireframe pass before the Technical Design kickoff is worth trying deliberately, specifically to surface "where does this actually appear on a screen" questions while they're still cheap to answer.
 
 ---
