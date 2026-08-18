@@ -456,13 +456,48 @@ server.post('/tenants/:id/roles', async (request, reply) => {
 });
 
 // Retrieve User Roles (called by Identity service at login/refresh)
+//
+// F-076: this previously queried by `userId` alone, with no tenant filter. Every issued JWT's
+// `roles` claim comes from here, so an unfiltered result meant a token's role list was not
+// tenant-scoped at source. That was contained only by `User` being @@unique([phone, tenantId]) —
+// an assumption `RoleAssignment.userId` does not enforce, since it is a scalar with no foreign key
+// and `POST /tenants/:id/roles` never checks that the target user belongs to the tenant (F-141).
+//
+// WHY THE TENANT IS RESOLVED FROM THE USER, NOT ACCEPTED FROM THE CALLER. A `?tenantId=` parameter
+// was the obvious alternative and is deliberately rejected: this route has no authentication at all
+// (F-140), so a caller-supplied tenant would be trivially spoofable and the filter would be
+// decorative. Resolving it from the user row cannot be influenced by the caller, needs no change at
+// any of the three call sites, and is exactly what the sibling twenty lines below already does —
+// `/users/:userId/branches/:branchId/check` resolves the tenant from the branch, then filters.
 server.get('/users/:id/roles', async (request) => {
   const { id } = request.params as any;
-  const assignments = await prisma.roleAssignment.findMany({
-    where: { userId: id },
+
+  // Resolve the owning tenant from the user itself, before any role data is read.
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { tenantId: true },
   });
 
-  // Flat string tokens format, e.g. "owner", "branch_manager:branch-uuid"
+  // No user row means no roles can be legitimately scoped to anything. Returning an empty set
+  // rather than 404 is deliberate: a login must not hard-fail over a missing role record, and all
+  // three callers already fall back to `roles = []` on any non-OK response, so this preserves
+  // their existing behaviour instead of changing it.
+  const assignments = user
+    ? await prisma.roleAssignment.findMany({
+        where: { userId: id, tenantId: user.tenantId },
+      })
+    : [];
+
+  // Flat string tokens format, e.g. "owner", "branch_manager:branch-uuid".
+  //
+  // WHY `OWNER` IS STILL A BARE 'owner' AND NOT 'owner:<tenantId>'. Encoding the tenant into the
+  // token was considered and rejected on evidence: F-117 established that every consumer tests
+  // membership with `roles.includes('owner')` — slot-engine `:179`/`:2775`, payment `:992`,
+  // identity-auth `:76`, admin-web `:220`/`:513`, tenant-management `:50` — so changing the format
+  // breaks six call sites across four services and admin-web at once. It would also buy nothing:
+  // now that the query is tenant-filtered, every assignment returned is by construction from the
+  // resolved tenant, so there is no ambiguity left for the string to resolve. The tenant is instead
+  // surfaced explicitly below, which is strictly more informative than encoding it in a token.
   const roles = assignments.map((ra) => {
     if (ra.role === UserRole.OWNER) {
       return 'owner';
@@ -472,6 +507,9 @@ server.get('/users/:id/roles', async (request) => {
 
   return {
     userId: id,
+    // F-076: the tenant these roles were resolved against, so callers never have to infer it.
+    // Null when the user does not exist, which is also when `roles` is empty.
+    tenantId: user?.tenantId ?? null,
     roles,
     roleAssignments: assignments,
   };
