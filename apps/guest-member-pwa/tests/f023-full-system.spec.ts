@@ -83,7 +83,21 @@ async function loginByOtp(page: any, phone: string, appPrefix = '') {
   await page.click('button[type="submit"]');
 }
 
-async function seedF023() {
+/**
+ * Removes everything this spec seeds.
+ *
+ * F-073 / F-046: this delete list already existed, but only ever ran at the START of `seedF023`,
+ * so it cleared the PREVIOUS run's residue and left the current run's fixtures behind — `afterAll`
+ * did nothing but `prisma.$disconnect()`. F-046 records the consequence: F-023 fixtures accumulate
+ * in whatever database this runs against, and were a direct contributor to cross-spec collisions.
+ *
+ * Extracted unchanged and now called from BOTH ends: `beforeAll` keeps the pre-seed behaviour (a
+ * previous crashed run must not block this one), and `afterAll` closes the leak.
+ *
+ * Deletes are scoped to this spec's own ids and phones — never unscoped — so it cannot become the
+ * F-101 hazard that a bare `deleteMany()` was.
+ */
+async function cleanupF023() {
   const userIds = [ownerId, memberAId, memberBId, memberNoSessionId, guestCId];
   const phones = [ownerPhone, memberAPhone, memberBPhone, memberNoSessionPhone, guestCPhone];
   const existingPhoneUsers = await prisma.user.findMany({
@@ -115,6 +129,10 @@ async function seedF023() {
   await prisma.availabilityWindow.deleteMany({ where: { resourcePoolId: { in: [poolAId, poolBId] } } });
   await prisma.bookingRule.deleteMany({ where: { resourcePoolId: { in: [poolAId, poolBId] } } });
   await prisma.resourcePool.deleteMany({ where: { id: { in: [poolAId, poolBId] } } });
+}
+
+async function seedF023() {
+  await cleanupF023();
 
   await prisma.tenant.upsert({
     where: { id: tenantId },
@@ -208,6 +226,9 @@ test.describe('F-023 cross-system integration', () => {
   });
 
   test.afterAll(async () => {
+    // F-073 / F-046: actually remove what this spec seeded, rather than only closing the
+    // connection and leaving the fixtures behind for the next spec to collide with.
+    await cleanupF023();
     await prisma.$disconnect();
   });
 
@@ -295,10 +316,36 @@ test.describe('F-023 cross-system integration', () => {
     const adminPage = await adminContext.newPage();
     await loginByOtp(adminPage, ownerPhone, '/admin');
     await expect(adminPage).toHaveURL(/\/admin\/?(\?tenant=courtowner1)?$/);
+
+    // F-073: this asserted `1 of 4 confirmed` on the Low Occupancy card after a MEMBER confirmed.
+    // That card is fed by computePoolGuestOccupancy, which filters `isMemberBooking: false` by
+    // design (F-035/F-041) — so a confirmed member contributes ZERO to it and the assertion
+    // expected the opposite of what the code does. It is now asserted both ways round:
+    //
+    //   1. the guest card reads 0 — which is CORRECT for that metric, and turns a wrong assertion
+    //      into positive proof that the member/guest separation actually holds;
+    //   2. the member confirmation is asserted where member data genuinely renders — the Overview
+    //      page's Member Attendance panel, backed by computeBranchMemberAttendance.
+    //
+    // The Low Occupancy route has no member-attendance panel at all, which is why the original
+    // assertion had nowhere correct to read from.
     await adminPage.goto('/admin/occupancy?tenant=courtowner1');
     await adminPage.locator('label:has-text("Branch") select').selectOption(branchId);
     await adminPage.locator('label:has-text("Resource pool") select').selectOption(poolAId);
-    await expect(adminPage.locator('.metric-card')).toContainText('1 of 4 confirmed');
+    await expect(adminPage.locator('.metric-card')).toContainText('0 of 4 confirmed');
+    console.log('F023_ASSERT guest_occupancy_excludes_member', JSON.stringify({
+      poolId: poolAId, expected: '0 of 4 confirmed', reason: 'computePoolGuestOccupancy filters isMemberBooking:false',
+    }));
+
+    await adminPage.goto('/admin/?tenant=courtowner1');
+    await adminPage.locator('label:has-text("Branch") select').selectOption(branchId);
+    // `.attendance-row`, not `.table-row` — the Member Attendance panel has its own row class
+    // (admin-web/src/main.tsx:702); `.table-row` belongs to the Assignments page.
+    const memberAttendanceRow = adminPage.locator('.attendance-row', { hasText: memberAPhone });
+    await expect(memberAttendanceRow).toContainText('Confirmed');
+    console.log('F023_ASSERT member_attendance_confirmed', JSON.stringify({
+      memberPhone: memberAPhone, expectedStatusLabel: 'Confirmed', source: 'computeBranchMemberAttendance',
+    }));
     await adminPage.screenshot({ path: 'test-results/f023-admin-low-occupancy-confirmed-seat.png', fullPage: true });
 
     const scenarioBCutoffShift = await prisma.bookingRule.updateMany({
@@ -323,6 +370,11 @@ test.describe('F-023 cross-system integration', () => {
     }));
     expect(scenarioBMemberBooking.status).toBe(BookingStatus.RELEASED_NO_SHOW);
 
+    // F-073: the member-attendance assertion above navigated this page to Overview, so return to
+    // Low Occupancy before driving its selects. Previously this block inherited the page state
+    // from the assertion it followed.
+    await adminPage.goto('/admin/occupancy?tenant=courtowner1');
+    await adminPage.locator('label:has-text("Branch") select').selectOption(branchId);
     await adminPage.locator('label:has-text("Resource pool") select').selectOption(poolBId);
     await expect(adminPage.locator('.metric-card')).toContainText('0 of 4 confirmed');
     await adminPage.screenshot({ path: 'test-results/f023-admin-low-occupancy-alert.png', fullPage: true });

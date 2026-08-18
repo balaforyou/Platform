@@ -93,7 +93,7 @@ const FLOWS = {
   'FLOW-046': { name: 'View Member Attendance', endpoint: 'GET /branches/:id/member-attendance', auth: 'authed', findings: ['F-042', 'F-063'] },
   'FLOW-047': { name: 'View Resource Pool Occupancy', endpoint: 'GET /resource-pools/:id/occupancy', auth: 'authed', findings: ['F-005', 'F-031', 'F-062', 'F-091 (fixed)'] },
   'FLOW-048': { name: 'Release Capacity', endpoint: 'POST /resource-pools/:id/windows/:windowId/release', auth: 'authed', findings: ['F-023', 'F-044', 'F-065 (fixed)'] },
-  'FLOW-049': { name: 'Run Booking Sweep', endpoint: 'POST /bookings/sweep', auth: 'authed', findings: ['F-044', 'F-046', 'F-063', 'F-065 (fixed)', 'F-066', 'F-073'], transition: 'TRANSITION-BOOKING-009 / -012' },
+  'FLOW-049': { name: 'Run Booking Sweep', endpoint: 'POST /bookings/sweep', auth: 'authed', findings: ['F-044', 'F-046', 'F-063', 'F-065 (fixed)', 'F-066', 'F-073 (fixed)'], transition: 'TRANSITION-BOOKING-009 / -012' },
 
   'FLOW-050': { name: 'Create Payment Intent', endpoint: 'POST /payments/intents', auth: 'authed', findings: ['F-026', 'F-037 (fixed)', 'F-081'] },
   'FLOW-051': { name: 'Create Payment Order', endpoint: 'POST /payments/create-order', auth: 'authed', findings: ['F-026', 'F-027', 'F-038', 'F-081'], transition: 'TRANSITION-PAYMENT-INTENT-003' },
