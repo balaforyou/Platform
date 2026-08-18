@@ -437,6 +437,45 @@ server.post('/tenants/:id/roles', async (request, reply) => {
     }
   }
 
+  // F-141: the target user must actually belong to this tenant.
+  //
+  // This is the WRITE side of the leak F-076 closed on the read side. `RoleAssignment.userId` is a
+  // scalar with no foreign key, and this route previously checked only that the field was present —
+  // so a tenant-A owner could grant a role against a tenant-B user, or against a userId belonging to
+  // nobody at all. F-076 then had to filter those rows out at read time; this stops them existing.
+  //
+  // WHY THE STRICT RULE IS CORRECT, established from data rather than assumed: across both databases
+  // there were **zero** cross-tenant grants, so no workflow depends on them. Dangling grants did
+  // exist, but they were regression residue (synthetic ids like `owner-1`), not a real pattern — and
+  // the real flow is user-first, since a user is created by OTP before any role is granted. The
+  // platform has no mechanism for pre-assigning a role to someone unregistered, so there is no
+  // invite path this would break.
+  //
+  // WHY THE INTERNAL KEY GETS NO EXEMPTION. Bootstrap creates the user first (that is how JBC's
+  // owner was provisioned), so the key buys nothing here — and exempting it would leave open exactly
+  // the hole F-076 had to defend against, which is the same reasoning F-090 and F-119 applied.
+  const targetUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { tenantId: true },
+  });
+  if (!targetUser) {
+    reply.status(404);
+    const err = new Error('User not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'USER_NOT_FOUND';
+    throw err;
+  }
+  if (targetUser.tenantId !== id) {
+    // 403 rather than 404: the user exists, and saying so is not a leak to a caller who already
+    // holds this tenant's credentials. Reporting 404 here would be a lie that makes a real
+    // misconfiguration look like a typo.
+    reply.status(403);
+    const err = new Error('Forbidden: user does not belong to this tenant');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+
   // F-115: this genuinely upserts now. It previously called `create` under a comment
   // claiming to upsert, with no unique constraint behind it, so re-running an assignment
   // inserted a second row instead of replacing the first — which is how correcting a

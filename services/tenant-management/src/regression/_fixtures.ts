@@ -76,5 +76,22 @@ export async function setupBaseFixtures(): Promise<TenantContext> {
   const tenant = ((await tenantRes.json()) as any).data;
   console.log(`Seeded tenant: ${tenant.name} (${tenant.id})`);
 
+  // F-141: POST /tenants/:id/roles now requires the target user to exist AND belong to the tenant.
+  // These sections previously granted roles to bare strings — 'owner-1', 'manager-1' — that were
+  // never user rows, which is exactly the dangling-grant pattern the check exists to stop. The
+  // fixtures are corrected rather than the rule weakened, the same remedy F-091 used when its
+  // branch-belongs-to-tenant check exposed fixtures pointing at non-existent tenants.
+  //
+  // Distinct phones because User is @@unique([phone, tenantId]).
+  await db.user.createMany({
+    data: [
+      { id: 'owner-1', tenantId: tenant.id, phone: '+919000000101', userType: 'MEMBER' },
+      { id: 'owner-2', tenantId: tenant.id, phone: '+919000000102', userType: 'MEMBER' },
+      { id: 'manager-1', tenantId: tenant.id, phone: '+919000000103', userType: 'MEMBER' },
+      { id: 'f115-rotating-user', tenantId: tenant.id, phone: '+919000000104', userType: 'MEMBER' },
+    ],
+  });
+  console.log('Seeded 4 role-holder users (F-141: grants now require real tenant members).');
+
   return { tenant };
 }
