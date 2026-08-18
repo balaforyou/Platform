@@ -30,6 +30,30 @@ function dateOnly(date: string) {
   return new Date(`${date}T00:00:00.000Z`);
 }
 
+/**
+ * F-142: dates in this file were hardcoded calendar days (2026-08-07 … 2026-08-20).
+ *
+ * That made one section expire silently. `Browse-ahead limit` asked for 2026-08-20 against a pool
+ * with guestOpenWindowDays = 2 and asserted a 400; once real time reached 2026-08-18 that date sat
+ * exactly on the boundary, became legitimately browsable, and returned 200. The suite went red for
+ * a reason unrelated to any code change — the worst kind of failure, because whoever is mid-change
+ * when the clock rolls over reasonably assumes they caused it.
+ *
+ * The remaining dates were not failing, but they were only safe by accident: they had drifted into
+ * the past, and `GET /availability` rejects only dates BEYOND the browse window
+ * (`index.ts:1940`), never past ones. A test that passes because its fixture date happens to be
+ * behind us is one past-date guard away from breaking for the same non-reason.
+ *
+ * All of them are now anchored to execution time. Offsets stay well inside the 30-day default
+ * window from `createPool`, except the browse-ahead case, which deliberately reaches past its own
+ * pool's 2-day window so the 400 it asserts is the rule firing rather than the calendar.
+ */
+function daysFromToday(offset: number): string {
+  const now = new Date();
+  const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return new Date(utcMidnight + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function isoWeekdayCsv(date: string) {
   const day = dateOnly(date).getUTCDay();
   return String(day === 0 ? 7 : day);
@@ -123,10 +147,10 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
       await cleanup();
 
       const guestPool = await createPool('Phase B Guest Trigger Pool');
-      const guestPattern = await addPattern(guestPool.id, '2026-08-07', '09:00', '11:00', 4);
-      const guestBefore = await windowsForDate(guestPool.id, '2026-08-07');
-      const guestAvailability = await api<any[]>(`/resource-pools/${guestPool.id}/availability?date=2026-08-07`);
-      const guestAfter = await windowsForDate(guestPool.id, '2026-08-07');
+      const guestPattern = await addPattern(guestPool.id, daysFromToday(1), '09:00', '11:00', 4);
+      const guestBefore = await windowsForDate(guestPool.id, daysFromToday(1));
+      const guestAvailability = await api<any[]>(`/resource-pools/${guestPool.id}/availability?date=${daysFromToday(1)}`);
+      const guestAfter = await windowsForDate(guestPool.id, daysFromToday(1));
       assert(guestAvailability.response.ok, 'guest availability request must succeed');
       assert(guestBefore.length === 0, 'guest trigger must start with zero windows');
       assert(guestAfter.length === 2, 'guest trigger must create windows');
@@ -151,12 +175,12 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
     async run() {
       const ownerJwt = signJwt({ userId: 'phase-b-owner', roles: ['owner'] });
       const adminPool = await createPool('Phase B Admin Trigger Pool');
-      const adminPattern = await addPattern(adminPool.id, '2026-08-08', '12:00', '14:00', 3);
-      const adminBefore = await windowsForDate(adminPool.id, '2026-08-08');
-      const adminAvailability = await api<any[]>(`/resource-pools/${adminPool.id}/availability?date=2026-08-08`, {
+      const adminPattern = await addPattern(adminPool.id, daysFromToday(2), '12:00', '14:00', 3);
+      const adminBefore = await windowsForDate(adminPool.id, daysFromToday(2));
+      const adminAvailability = await api<any[]>(`/resource-pools/${adminPool.id}/availability?date=${daysFromToday(2)}`, {
         headers: { Authorization: `Bearer ${ownerJwt}` },
       });
-      const adminAfter = await windowsForDate(adminPool.id, '2026-08-08');
+      const adminAfter = await windowsForDate(adminPool.id, daysFromToday(2));
       assert(adminAvailability.response.ok, 'admin availability request must succeed');
       assert(adminBefore.length === 0, 'admin trigger must start with zero windows');
       assert(adminAfter.length === 2, 'admin trigger must create windows on a different date');
@@ -182,22 +206,22 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
       const ownerJwt = signJwt({ userId: 'phase-b-owner', roles: ['owner'] });
       const occupancyPool = await createPool('Phase B Occupancy Trigger Pool');
       occupancyPoolId = occupancyPool.id;
-      await addPattern(occupancyPool.id, '2026-08-09', '15:00', '17:00', 6);
-      const occupancyBefore = await windowsForDate(occupancyPool.id, '2026-08-09');
+      await addPattern(occupancyPool.id, daysFromToday(3), '15:00', '17:00', 6);
+      const occupancyBefore = await windowsForDate(occupancyPool.id, daysFromToday(3));
       // F-091: pool occupancy is now admin-scoped, matching the branch-level call below.
       const poolOccupancy = await api<any>(
-        `/resource-pools/${occupancyPool.id}/occupancy?date=2026-08-09`,
+        `/resource-pools/${occupancyPool.id}/occupancy?date=${daysFromToday(3)}`,
         { headers: { Authorization: `Bearer ${ownerJwt}` } },
       );
 
-      const branchOccupancyDate = '2026-08-10';
+      const branchOccupancyDate = daysFromToday(4);
       await addPattern(occupancyPool.id, branchOccupancyDate, '18:00', '20:00', 7);
       const branchBefore = await windowsForDate(occupancyPool.id, branchOccupancyDate);
       const branchOccupancy = await api<any[]>(
         `/branches/${branchId}/guest-occupancy?date=${branchOccupancyDate}`,
         { headers: { Authorization: `Bearer ${ownerJwt}` } },
       );
-      const occupancyAfter = await windowsForDate(occupancyPool.id, '2026-08-09');
+      const occupancyAfter = await windowsForDate(occupancyPool.id, daysFromToday(3));
       const branchAfter = await windowsForDate(occupancyPool.id, branchOccupancyDate);
 
       assert(poolOccupancy.response.ok, 'pool occupancy request must succeed');
@@ -224,8 +248,8 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
     name: 'Browse-ahead limit — requesting beyond guestOpenWindowDays returns 400',
     async run() {
       const limitPool = await createPool('Phase B Limit Pool', branchId, 2);
-      await addPattern(limitPool.id, '2026-08-20', '09:00', '10:00', 1);
-      const limitResponse = await api<any>(`/resource-pools/${limitPool.id}/availability?date=2026-08-20`);
+      await addPattern(limitPool.id, daysFromToday(10), '09:00', '10:00', 1);
+      const limitResponse = await api<any>(`/resource-pools/${limitPool.id}/availability?date=${daysFromToday(10)}`);
       assert(limitResponse.response.status === 400, 'browse-ahead limit must return 400');
       console.log('BROWSE_AHEAD_LIMIT', { status: limitResponse.response.status, body: limitResponse.body });
     },
@@ -235,17 +259,17 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
     name: 'Override precedence via live API (CLOSED → empty, MODIFIED → override-shaped windows only)',
     async run() {
       const closedPool = await createPool('Phase B Closed Override Pool');
-      await addPattern(closedPool.id, '2026-08-11', '10:00', '12:00', 4);
+      await addPattern(closedPool.id, daysFromToday(5), '10:00', '12:00', 4);
       await db.availabilityOverride.create({
         data: {
           resourcePoolId: closedPool.id,
-          date: dateOnly('2026-08-11'),
+          date: dateOnly(daysFromToday(5)),
           type: 'CLOSED',
           reason: 'Phase B closed',
         },
       });
-      const closedAvailability = await api<any[]>(`/resource-pools/${closedPool.id}/availability?date=2026-08-11`);
-      const closedWindows = await windowsForDate(closedPool.id, '2026-08-11');
+      const closedAvailability = await api<any[]>(`/resource-pools/${closedPool.id}/availability?date=${daysFromToday(5)}`);
+      const closedWindows = await windowsForDate(closedPool.id, daysFromToday(5));
       assert(closedAvailability.response.ok, 'closed override availability request must succeed');
       assert(
         closedAvailability.data.length === 0 && closedWindows.length === 0,
@@ -253,11 +277,11 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
       );
 
       const modifiedPool = await createPool('Phase B Modified Override Pool');
-      await addPattern(modifiedPool.id, '2026-08-12', '08:00', '11:00', 2);
+      await addPattern(modifiedPool.id, daysFromToday(6), '08:00', '11:00', 2);
       await db.availabilityOverride.create({
         data: {
           resourcePoolId: modifiedPool.id,
-          date: dateOnly('2026-08-12'),
+          date: dateOnly(daysFromToday(6)),
           type: 'MODIFIED',
           startTime: '14:00',
           endTime: '15:00',
@@ -268,8 +292,8 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
           reason: 'Phase B modified',
         },
       });
-      const modifiedAvailability = await api<any[]>(`/resource-pools/${modifiedPool.id}/availability?date=2026-08-12`);
-      const modifiedWindows = await windowsForDate(modifiedPool.id, '2026-08-12');
+      const modifiedAvailability = await api<any[]>(`/resource-pools/${modifiedPool.id}/availability?date=${daysFromToday(6)}`);
+      const modifiedWindows = await windowsForDate(modifiedPool.id, daysFromToday(6));
       assert(modifiedAvailability.response.ok, 'modified override availability request must succeed');
       assert(modifiedWindows.length === 2, 'modified override must generate override windows only');
       assert(
@@ -299,8 +323,8 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
         method: 'POST',
         headers: { Authorization: `Bearer ${ownerJwt}` },
         body: JSON.stringify({
-          fromDate: '2026-08-13',
-          toDate: '2026-08-15',
+          fromDate: daysFromToday(7),
+          toDate: daysFromToday(9),
           type: 'CLOSED',
           reason: 'Phase B range closure',
         }),
