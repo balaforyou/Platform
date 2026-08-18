@@ -16,6 +16,31 @@ server.register(fastifyJwt, {
 
 const prisma = new PrismaClient();
 
+/**
+ * Rejects anything that is not the platform-internal service key.
+ *
+ * WHY THIS IS A HELPER (F-140). This service had internal-key logic in two spellings already — the
+ * internal-or-owner branch inside `verifyTenantOwnerOrInternal` below, and an inlined copy in
+ * `POST /tenants` — and F-140 needed it on two more routes. Four copies of one security rule is how
+ * they drift apart, so it is extracted once here, mirroring the `requireInternalKey` that F-119
+ * extracted in identity-auth and the one slot-engine already had. Same shape, third service.
+ *
+ * Call this BEFORE reading params or touching the database: F-090/F-045/F-071 all turned on the same
+ * lesson, that authenticating after a lookup leaves a pre-auth path an unauthenticated caller reaches.
+ */
+function requireInternalKey(request: any, reply: any) {
+  const authHeader = request.headers['authorization'];
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+
+  if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
+    reply.status(401);
+    const err = new Error('Unauthorized internal service access');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+}
+
 // Helper to verify authorization (internal service key OR owner JWT matching tenantId)
 // WHY: Authenticates operations securely, separating platform admin scripts (INTERNAL_SERVICE_KEY)
 // from self-service tenant owner operations (JWT OWNER).
@@ -75,16 +100,9 @@ server.get('/health', async () => {
 // Platform endpoint to create a Tenant
 // WHY: Gated to INTERNAL_SERVICE_KEY for platform-managed onboarding.
 server.post('/tenants', async (request, reply) => {
-  const authHeader = request.headers['authorization'];
-  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
-  
-  if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
-    reply.status(401);
-    const err = new Error('Unauthorized platform access');
-    (err as any).statusCode = 401;
-    (err as any).code = 'UNAUTHORIZED';
-    throw err;
-  }
+  // F-140: folded into the shared helper so this service carries one spelling of the rule rather
+  // than three. Behaviour-neutral — same 401, same code — and covered by existing regression.
+  requireInternalKey(request, reply);
 
   const { name, subdomain, logo, themeColor, appName, plan, contactInfo, billingInfo } = request.body as any;
   if (!name || !subdomain) {
@@ -469,7 +487,14 @@ server.post('/tenants/:id/roles', async (request, reply) => {
 // decorative. Resolving it from the user row cannot be influenced by the caller, needs no change at
 // any of the three call sites, and is exactly what the sibling twenty lines below already does —
 // `/users/:userId/branches/:branchId/check` resolves the tenant from the branch, then filters.
-server.get('/users/:id/roles', async (request) => {
+// F-140: this had no authentication of any kind — anyone able to reach the service could read any
+// user's full role set by id. F-076 tenant-filtered it, which scopes WHAT is returned but says
+// nothing about WHO may ask; that is this guard's job. Internal-key-only because all three callers
+// are service-to-service (identity-auth's otp-verify, google-verify and refresh) and there is no
+// user-facing consumer.
+server.get('/users/:id/roles', async (request, reply) => {
+  requireInternalKey(request, reply);
+
   const { id } = request.params as any;
 
   // Resolve the owning tenant from the user itself, before any role data is read.
@@ -517,7 +542,16 @@ server.get('/users/:id/roles', async (request) => {
 
 // Scoped Branch Access Verification Endpoint
 // WHY: Performs tenant-level owner scoping (null branchId matches all branch requests).
+//
+// F-140: also had zero authentication, and unlike its sibling it has **no production caller at all**
+// — verified, its only callers are the regression suite, and slot-engine merely cites it in a comment
+// as the convention `requireBookingAccess` follows rather than calling it. Guarded anyway: an
+// unauthenticated caller could otherwise probe whether an arbitrary user can reach an arbitrary
+// branch. Whether a route with no callers should exist is a separate question, deliberately not
+// answered here.
 server.get('/users/:userId/branches/:branchId/check', async (request, reply) => {
+  requireInternalKey(request, reply);
+
   const { userId, branchId } = request.params as any;
 
   // Resolve branch tenantId

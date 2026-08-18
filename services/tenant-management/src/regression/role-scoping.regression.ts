@@ -27,13 +27,13 @@ export const roleScopingSections: Section<TenantContext>[] = [
         body: JSON.stringify({ userId: 'manager-1', role: 'BRANCH_MANAGER', branchId: ctx.branchA.id }),
       });
 
-      const checkARes = await fetch(`${tenantUrl}/users/manager-1/branches/${ctx.branchA.id}/check`);
+      const checkARes = await fetch(`${tenantUrl}/users/manager-1/branches/${ctx.branchA.id}/check`, { headers: internalHeaders });
       const checkA = ((await checkARes.json()) as any).data;
       if (checkA.hasAccess !== true) {
         throw new Error('Expected manager to have access to Branch A.');
       }
 
-      const checkBRes = await fetch(`${tenantUrl}/users/manager-1/branches/${branchB.id}/check`);
+      const checkBRes = await fetch(`${tenantUrl}/users/manager-1/branches/${branchB.id}/check`, { headers: internalHeaders });
       const checkB = ((await checkBRes.json()) as any).data;
       if (checkB.hasAccess !== false) {
         throw new Error('Scoping bypass! Scoped manager was granted access to Branch B.');
@@ -47,7 +47,7 @@ export const roleScopingSections: Section<TenantContext>[] = [
       });
 
       // A null branchId on an OWNER row is the documented access-all bypass.
-      const checkOwnerRes = await fetch(`${tenantUrl}/users/owner-1/branches/${branchB.id}/check`);
+      const checkOwnerRes = await fetch(`${tenantUrl}/users/owner-1/branches/${branchB.id}/check`, { headers: internalHeaders });
       const checkOwner = ((await checkOwnerRes.json()) as any).data;
       if (checkOwner.hasAccess !== true) {
         throw new Error('Expected OWNER (null branchId) to access Branch B.');

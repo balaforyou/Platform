@@ -360,7 +360,12 @@ server.post('/auth/otp/verify', async (request, reply) => {
   let roles: string[] = [];
   const tenantServiceUrl = process.env.TENANT_SERVICE_URL || 'http://localhost:3003';
   try {
-    const res = await fetch(`${tenantServiceUrl}/users/${user.id}/roles`);
+    // F-140: this endpoint is now internal-key-only. Read the key here rather than relying on
+    // an outer binding, so each call site is self-contained.
+    const roleKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+    const res = await fetch(`${tenantServiceUrl}/users/${user.id}/roles`, {
+      headers: { Authorization: `Bearer ${roleKey}` },
+    });
     if (res.ok) {
       const body = await res.json() as any;
       roles = body?.data?.roles || [];
@@ -463,7 +468,12 @@ server.post('/auth/google/verify', async (request, reply) => {
   let roles: string[] = [];
   const tenantServiceUrl = process.env.TENANT_SERVICE_URL || 'http://localhost:3003';
   try {
-    const res = await fetch(`${tenantServiceUrl}/users/${user.id}/roles`);
+    // F-140: this endpoint is now internal-key-only. Read the key here rather than relying on
+    // an outer binding, so each call site is self-contained.
+    const roleKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+    const res = await fetch(`${tenantServiceUrl}/users/${user.id}/roles`, {
+      headers: { Authorization: `Bearer ${roleKey}` },
+    });
     if (res.ok) {
       const body = await res.json() as any;
       roles = body?.data?.roles || [];
@@ -532,7 +542,11 @@ server.post('/auth/refresh', async (request, reply) => {
   let roles: string[] = [];
   const tenantServiceUrl = process.env.TENANT_SERVICE_URL || 'http://localhost:3003';
   try {
-    const res = await fetch(`${tenantServiceUrl}/users/${session.userId}/roles`);
+    // F-140: internal-key-only, as above.
+    const roleKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+    const res = await fetch(`${tenantServiceUrl}/users/${session.userId}/roles`, {
+      headers: { Authorization: `Bearer ${roleKey}` },
+    });
     if (res.ok) {
       const body = await res.json() as any;
       roles = body?.data?.roles || [];
