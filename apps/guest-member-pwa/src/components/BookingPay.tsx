@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { apiRequest } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
 import { Smartphone, Activity, HelpCircle, ShieldCheck } from 'lucide-react';
 
@@ -213,9 +213,14 @@ export default function BookingPay() {
         </h3>
         
         <div className="space-y-2 text-xs text-gray-400 font-mono">
+          {/* F-037: this showed `booking.id.slice(0, 8)` under the label "Booking ID" — a truncated
+              raw UUID, which is meaningless to the customer AND incomplete to quote back. The label
+              changes with it: calling the value an "ID" is what made showing a raw identifier feel
+              appropriate. Display only — booking.id is unchanged in the URL and in every API call
+              below. */}
           <div className="flex justify-between">
-            <span>Booking ID:</span>
-            <span className="text-gray-200">{booking.id.slice(0, 8)}...</span>
+            <span>Booking Reference:</span>
+            <span className="text-gray-200">{formatBookingReference(booking.id)}</span>
           </div>
           <div className="flex justify-between">
             <span>Slot Date:</span>

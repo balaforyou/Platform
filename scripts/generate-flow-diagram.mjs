@@ -78,7 +78,7 @@ const FLOWS = {
   'FLOW-028': { name: 'Generate Availability', endpoint: '(no endpoint - availabilityGeneration.ts)', auth: 'module', findings: ['F-046', 'F-088'] },
 
   'FLOW-029': { name: 'Create Booking', endpoint: 'POST /bookings', auth: 'authed', findings: ['F-023', 'F-028', 'F-080'], transition: 'TRANSITION-BOOKING-001' },
-  'FLOW-031': { name: 'View Booking', endpoint: 'GET /bookings/:id', auth: 'authed', findings: ['F-037'] },
+  'FLOW-031': { name: 'View Booking', endpoint: 'GET /bookings/:id', auth: 'authed', findings: ['F-037 (fixed)'] },
   'FLOW-032': { name: 'View My Bookings', endpoint: 'GET /bookings/my', auth: 'authed', findings: ['F-093', 'F-094'] },
   'FLOW-033': { name: 'View Admin Bookings', endpoint: 'GET /bookings/admin', auth: 'authed', findings: [] },
   'FLOW-034': { name: 'Confirm Booking', endpoint: 'POST /bookings/:id/confirm', auth: 'authed', findings: [], transition: 'TRANSITION-BOOKING-003 / -004' },
@@ -95,7 +95,7 @@ const FLOWS = {
   'FLOW-048': { name: 'Release Capacity', endpoint: 'POST /resource-pools/:id/windows/:windowId/release', auth: 'authed', findings: ['F-023', 'F-044', 'F-065 (fixed)'] },
   'FLOW-049': { name: 'Run Booking Sweep', endpoint: 'POST /bookings/sweep', auth: 'authed', findings: ['F-044', 'F-046', 'F-063', 'F-065 (fixed)', 'F-066', 'F-073'], transition: 'TRANSITION-BOOKING-009 / -012' },
 
-  'FLOW-050': { name: 'Create Payment Intent', endpoint: 'POST /payments/intents', auth: 'authed', findings: ['F-026', 'F-037', 'F-081'] },
+  'FLOW-050': { name: 'Create Payment Intent', endpoint: 'POST /payments/intents', auth: 'authed', findings: ['F-026', 'F-037 (fixed)', 'F-081'] },
   'FLOW-051': { name: 'Create Payment Order', endpoint: 'POST /payments/create-order', auth: 'authed', findings: ['F-026', 'F-027', 'F-038', 'F-081'], transition: 'TRANSITION-PAYMENT-INTENT-003' },
   'FLOW-052': { name: 'Verify Payment', endpoint: 'POST /payments/verify-payment', auth: 'authed', findings: ['F-034', 'F-038', 'F-050', 'F-081'], transition: 'TRANSITION-PAYMENT-INTENT-001' },
   'FLOW-054': { name: 'Process Razorpay Payment Webhook', endpoint: 'POST /webhooks/razorpay', auth: 'provider', findings: ['F-026', 'F-033', 'F-081', 'F-082'], transition: 'TRANSITION-PAYMENT-INTENT-002' },
