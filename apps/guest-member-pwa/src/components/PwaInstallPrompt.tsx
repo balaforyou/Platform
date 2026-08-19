@@ -143,7 +143,7 @@ export default function PwaInstallPrompt() {
 
   return (
     <div className="fixed bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-96 z-[100] animate-bounce-in">
-      <div className="bg-gray-900 border border-white/10 rounded-2xl p-5 shadow-2xl backdrop-blur-lg flex flex-col space-y-4">
+      <div className="bg-surface border border-edge-strong rounded-2xl p-5 shadow-2xl backdrop-blur-lg flex flex-col space-y-4">
         
         {/* Header Block */}
         <div className="flex items-start justify-between">
@@ -156,10 +156,10 @@ export default function PwaInstallPrompt() {
               )}
             </div>
             <div className="space-y-0.5">
-              <h4 className="text-sm font-bold text-white font-outfit">
+              <h4 className="text-sm font-bold text-ink font-outfit">
                 Install {tenant?.appName || 'App'}
               </h4>
-              <p className="text-xs text-gray-400 leading-normal">
+              <p className="text-xs text-ink-muted leading-normal">
                 {deviceType === 'ios' 
                   ? 'Add to your Home Screen for fast booking access.'
                   : 'Install on your device for a native, fast booking experience.'
@@ -169,7 +169,7 @@ export default function PwaInstallPrompt() {
           </div>
           <button 
             onClick={handleDismiss}
-            className="p-1 rounded-full text-gray-500 hover:text-white hover:bg-white/5 transition-colors"
+            className="p-1 rounded-full text-ink-muted hover:text-ink hover:bg-surface-mint transition-colors"
             title="Dismiss"
           >
             <X className="h-4 w-4" />
@@ -178,15 +178,15 @@ export default function PwaInstallPrompt() {
 
         {/* Action Content / Instructions */}
         {deviceType === 'ios' ? (
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5 text-xs text-gray-300 space-y-2">
+          <div className="bg-surface-mint rounded-xl p-3 border border-edge text-xs text-ink-muted space-y-2">
             <p className="font-semibold text-brand-primary flex items-center gap-1.5">
               <Share className="h-3.5 w-3.5" />
               Safari Instructions:
             </p>
-            <ol className="list-decimal list-inside space-y-1 text-gray-400 pl-1">
-              <li>Tap the <span className="text-white font-medium">Share</span> button at the bottom.</li>
+            <ol className="list-decimal list-inside space-y-1 text-ink-muted pl-1">
+              <li>Tap the <span className="text-ink font-medium">Share</span> button at the bottom.</li>
               <li>Scroll down the list of options.</li>
-              <li>Select <span className="text-white font-medium">Add to Home Screen</span>.</li>
+              <li>Select <span className="text-ink font-medium">Add to Home Screen</span>.</li>
             </ol>
           </div>
         ) : (
@@ -200,7 +200,7 @@ export default function PwaInstallPrompt() {
             </button>
             <button
               onClick={handleDismiss}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 text-xs font-semibold transition-all"
+              className="flex-1 py-2.5 px-4 rounded-xl bg-surface-mint hover:bg-edge text-ink-muted border border-edge-strong text-xs font-semibold transition-all"
             >
               Later
             </button>

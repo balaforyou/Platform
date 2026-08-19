@@ -170,22 +170,22 @@ export default function BookingPay() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
         <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-gray-400 text-sm font-medium">Securing payment gateway...</p>
+        <p className="text-ink-muted text-sm font-medium">Securing payment gateway...</p>
       </div>
     );
   }
 
   if (error || !booking) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white p-4">
-        <HelpCircle className="h-12 w-12 text-red-500 mb-4" />
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
+        <HelpCircle className="h-12 w-12 text-red-600 mb-4" />
         <h3 className="text-lg font-bold">Failed to load booking details</h3>
-        <p className="text-gray-400 text-sm mt-1 text-center max-w-md">{error}</p>
+        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error}</p>
         <button
           onClick={() => navigate('/bookings/my')}
-          className="mt-4 py-2 px-6 bg-white/5 border border-white/10 rounded-xl text-xs hover:bg-white/10"
+          className="mt-4 py-2 px-6 bg-surface-mint border border-edge-strong rounded-xl text-xs hover:bg-edge"
         >
           View Bookings
         </button>
@@ -196,23 +196,23 @@ export default function BookingPay() {
   const isDev = import.meta.env.DEV;
 
   return (
-    <div className="flex-1 max-w-md w-full mx-auto px-4 py-10 space-y-6 text-white">
+    <div className="flex-1 max-w-md w-full mx-auto px-4 py-10 space-y-6 text-ink">
       <div className="space-y-1 text-center">
         <h2 className="text-3xl font-extrabold tracking-tight font-outfit">
           Complete <span className="text-[var(--brand-primary)]">Checkout</span>
         </h2>
-        <p className="text-gray-400 text-xs">
+        <p className="text-ink-muted text-xs">
           Your court slot is held for 5 minutes. Select a payment method below.
         </p>
       </div>
 
       {/* Booking Summary */}
-      <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-4">
-        <h3 className="text-sm font-bold font-outfit text-gray-300 uppercase tracking-wider">
+      <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
+        <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider">
           Booking Summary
         </h3>
         
-        <div className="space-y-2 text-xs text-gray-400 font-mono">
+        <div className="space-y-2 text-xs text-ink-muted font-mono">
           {/* F-037: this showed `booking.id.slice(0, 8)` under the label "Booking ID" — a truncated
               raw UUID, which is meaningless to the customer AND incomplete to quote back. The label
               changes with it: calling the value an "ID" is what made showing a raw identifier feel
@@ -220,28 +220,28 @@ export default function BookingPay() {
               below. */}
           <div className="flex justify-between">
             <span>Booking Reference:</span>
-            <span className="text-gray-200">{formatBookingReference(booking.id)}</span>
+            <span className="text-ink">{formatBookingReference(booking.id)}</span>
           </div>
           <div className="flex justify-between">
             <span>Slot Date:</span>
-            <span className="text-gray-200">
+            <span className="text-ink">
               {new Date(booking.window?.startTime).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Slot Time:</span>
-            <span className="text-gray-200">
+            <span className="text-ink">
               {new Date(booking.window?.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(booking.window?.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Total Players:</span>
-            <span className="text-gray-200">{1 + (booking.players?.length || 0)} Players</span>
+            <span className="text-ink">{1 + (booking.players?.length || 0)} Players</span>
           </div>
         </div>
 
-        <div className="pt-4 border-t border-white/5 flex justify-between items-end">
-          <span className="text-sm font-bold text-gray-300 font-outfit">Amount to Pay:</span>
+        <div className="pt-4 border-t border-edge flex justify-between items-end">
+          <span className="text-sm font-bold text-ink-muted font-outfit">Amount to Pay:</span>
           <span className="text-2xl font-extrabold text-[var(--brand-primary)] font-mono" id="pay-amount-display">
             ₹{Number(booking.price)}
           </span>
@@ -255,22 +255,22 @@ export default function BookingPay() {
           <button
             onClick={handleMockPayment}
             disabled={paying}
-            className="w-full bg-emerald-950/20 hover:bg-emerald-950/40 border border-emerald-500/30 p-4 rounded-xl flex items-center justify-between text-left group transition-all"
+            className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 p-4 rounded-xl flex items-center justify-between text-left group transition-all"
             id="simulate-success-pay-btn"
           >
             <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+              <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700">
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
-                <div className="text-sm font-bold text-white">Simulate Payment (Dev)</div>
-                <div className="text-[10px] text-gray-400">Triggers secure server-side signature webhook</div>
+                <div className="text-sm font-bold text-ink">Simulate Payment (Dev)</div>
+                <div className="text-[10px] text-ink-muted">Triggers secure server-side signature webhook</div>
               </div>
             </div>
             {paying ? (
-              <Activity className="h-4 w-4 animate-spin text-emerald-400" />
+              <Activity className="h-4 w-4 animate-spin text-emerald-700" />
             ) : (
-              <span className="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono font-bold">Local</span>
+              <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">Local</span>
             )}
           </button>
         )}
@@ -278,19 +278,19 @@ export default function BookingPay() {
         {/* Real SDK trigger */}
         <button
           onClick={handleRazorpayCheckout}
-          className="w-full bg-white/5 hover:bg-white/10 border border-white/5 p-4 rounded-xl flex items-center justify-between text-left group transition-all"
+          className="w-full bg-surface-mint hover:bg-edge border border-edge p-4 rounded-xl flex items-center justify-between text-left group transition-all"
           id="real-razorpay-btn"
         >
           <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-400">
+            <div className="h-10 w-10 rounded-lg bg-rose-50 flex items-center justify-center text-rose-700">
               <Smartphone className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-sm font-bold text-white">Razorpay Standard checkout</div>
-              <div className="text-[10px] text-gray-400 font-medium">UPI / Card / Netbanking</div>
+              <div className="text-sm font-bold text-ink">Razorpay Standard checkout</div>
+              <div className="text-[10px] text-ink-muted font-medium">UPI / Card / Netbanking</div>
             </div>
           </div>
-          <span className="text-xs bg-white/5 text-gray-400 group-hover:text-white px-2 py-0.5 rounded font-semibold transition-colors">SDK</span>
+          <span className="text-xs bg-surface-mint text-ink-muted group-hover:text-ink px-2 py-0.5 rounded font-semibold transition-colors">SDK</span>
         </button>
       </div>
     </div>

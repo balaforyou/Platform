@@ -83,20 +83,20 @@ export default function BookingConfirmation() {
 
   if (loading && !booking) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
         <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-gray-400 text-sm font-medium">Verifying payment confirmation...</p>
+        <p className="text-ink-muted text-sm font-medium">Verifying payment confirmation...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white p-4">
-        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
+        <AlertCircle className="h-12 w-12 text-red-600 mb-4" />
         <h3 className="text-lg font-bold">Verification Error</h3>
-        <p className="text-gray-400 text-sm mt-1 text-center max-w-md">{error}</p>
-        <Link to="/bookings/my" className="mt-4 py-2.5 px-6 bg-white/5 border border-white/10 rounded-xl text-xs hover:bg-white/10">
+        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error}</p>
+        <Link to="/bookings/my" className="mt-4 py-2.5 px-6 bg-surface-mint border border-edge-strong rounded-xl text-xs hover:bg-edge">
           Check My Bookings
         </Link>
       </div>
@@ -109,33 +109,33 @@ export default function BookingConfirmation() {
   const sDate = booking?.window ? new Date(booking.window.startTime).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
   return (
-    <div className="flex-1 max-w-md w-full mx-auto px-4 py-10 space-y-8 text-white">
+    <div className="flex-1 max-w-md w-full mx-auto px-4 py-10 space-y-8 text-ink">
       {/* Visual Indicator */}
       <div className="flex flex-col items-center justify-center text-center space-y-4">
         {isConfirmed ? (
           <>
-            <div className="h-20 w-20 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/10">
+            <div className="h-20 w-20 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/10">
               <CheckCircle className="h-10 w-10 animate-pulse" />
             </div>
             <div className="space-y-1">
               <h2 className="text-3xl font-extrabold tracking-tight font-outfit" id="confirmation-title">
                 Booking Confirmed!
               </h2>
-              <p className="text-gray-400 text-xs font-semibold leading-relaxed">
+              <p className="text-ink-muted text-xs font-semibold leading-relaxed">
                 Payment captured successfully. Your court slot is reserved and ready.
               </p>
             </div>
           </>
         ) : (
           <>
-            <div className="h-20 w-20 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/10">
+            <div className="h-20 w-20 bg-amber-50 border border-amber-200 text-amber-700 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/10">
               <Activity className="h-10 w-10 animate-spin" />
             </div>
             <div className="space-y-1">
               <h2 className="text-3xl font-extrabold tracking-tight font-outfit" id="confirmation-title">
                 Confirming Payment...
               </h2>
-              <p className="text-gray-400 text-xs font-semibold leading-relaxed">
+              <p className="text-ink-muted text-xs font-semibold leading-relaxed">
                 We are validating the signature with the bank. Please hold on.
               </p>
             </div>
@@ -145,34 +145,34 @@ export default function BookingConfirmation() {
 
       {/* Booking Summary */}
       {booking && (
-        <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-4">
-          <h3 className="text-xs font-bold font-outfit text-gray-300 uppercase tracking-wider">
+        <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
+          <h3 className="text-xs font-bold font-outfit text-ink-muted uppercase tracking-wider">
             Match Details
           </h3>
           
-          <div className="space-y-3 font-mono text-xs text-gray-400 pt-1">
+          <div className="space-y-3 font-mono text-xs text-ink-muted pt-1">
             <div className="flex items-start space-x-2.5">
               <Calendar className="h-4 w-4 text-[var(--brand-primary)] shrink-0 mt-0.5" />
               <span>{sDate}</span>
             </div>
             <div className="flex items-start space-x-2.5">
-              <Clock className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+              <Clock className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>{st} - {et}</span>
             </div>
             {branchName && (
               <div className="flex items-start space-x-2.5">
-                <MapPin className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                <MapPin className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
                 <span id="confirmation-venue-name">{branchName}</span>
               </div>
             )}
             <div className="flex items-start space-x-2.5">
-              <Users className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+              <Users className="h-4 w-4 text-ink-muted shrink-0 mt-0.5" />
               <span>{1 + (booking.players?.length || 0)} Players ({booking.isMemberBooking ? 'Member' : 'Guest'})</span>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-white/5 flex justify-between items-end">
-            <span className="text-xs font-bold text-gray-300 font-outfit">Total Price:</span>
+          <div className="pt-4 border-t border-edge flex justify-between items-end">
+            <span className="text-xs font-bold text-ink-muted font-outfit">Total Price:</span>
             <span className="text-xl font-extrabold text-[var(--brand-primary)] font-mono">
               ₹{Number(booking.price)}
             </span>
@@ -192,7 +192,7 @@ export default function BookingConfirmation() {
         </Link>
         <Link
           to="/"
-          className="w-full py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-gray-200 border border-white/10 font-semibold text-center transition-all text-xs"
+          className="w-full py-3 rounded-2xl bg-surface-mint hover:bg-edge text-ink border border-edge-strong font-semibold text-center transition-all text-xs"
         >
           Go to Dashboard
         </Link>

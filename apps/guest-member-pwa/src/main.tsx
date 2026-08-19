@@ -57,9 +57,9 @@ function Layout() {
   const { user, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="min-h-screen bg-surface-alt text-ink flex flex-col">
       {/* Header / Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-gray-950/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 w-full border-b border-edge bg-surface-header backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-3 group">
             {tenant?.logo ? (
@@ -75,16 +75,16 @@ function Layout() {
           </Link>
 
           <div className="flex items-center space-x-4">
-            <Link to="/bookings/my" className="text-xs text-gray-400 hover:text-white transition-colors font-semibold" id="nav-my-bookings-btn">
+            <Link to="/bookings/my" className="text-xs text-ink-muted hover:text-ink transition-colors font-semibold" id="nav-my-bookings-btn">
               My Bookings
             </Link>
-            <div className="flex items-center space-x-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/5 text-xs text-gray-300">
+            <div className="flex items-center space-x-2 bg-surface-mint px-3 py-1.5 rounded-full border border-edge text-xs text-ink-muted">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
               <span>{user?.roles?.join(', ') || 'member'}</span>
             </div>
             <button
               onClick={logout}
-              className="p-2 rounded-full bg-white/5 hover:bg-red-950/30 text-gray-400 hover:text-red-400 border border-white/5 transition-all"
+              className="p-2 rounded-full bg-surface-mint hover:bg-red-50 text-ink-muted hover:text-red-700 border border-edge transition-all"
               title="Logout"
               id="logout-btn"
             >
@@ -100,7 +100,7 @@ function Layout() {
       </main>
 
       {/* Footer */}
-      <footer className="py-6 border-t border-white/5 bg-gray-950 text-center text-xs text-gray-500 font-medium">
+      <footer className="py-6 border-t border-edge bg-surface-alt text-center text-xs text-ink-muted font-medium">
         &copy; 2026 {tenant?.name}. Powered by Whitelabel Badminton Platform.
       </footer>
       <PwaInstallPrompt />
@@ -174,11 +174,11 @@ function MainDashboard() {
     const poolName = memberSession?.assignment?.resourcePool?.name;
 
     return (
-      <section className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-4" id="member-session-card">
+      <section className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4" id="member-session-card">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wider text-[var(--brand-primary)] font-bold">Member Attendance</p>
-            <h3 className="text-xl font-extrabold font-outfit text-white">Today&apos;s Member Session</h3>
+            <h3 className="text-xl font-extrabold font-outfit text-ink">Today&apos;s Member Session</h3>
           </div>
           <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
             <Clock className="h-5 w-5" />
@@ -186,28 +186,28 @@ function MainDashboard() {
         </div>
 
         {memberSessionLoading ? (
-          <div className="flex items-center gap-2 text-sm text-gray-300"><RefreshCw className="h-4 w-4 animate-spin" />Loading today&apos;s session</div>
+          <div className="flex items-center gap-2 text-sm text-ink-muted"><RefreshCw className="h-4 w-4 animate-spin" />Loading today&apos;s session</div>
         ) : null}
 
         {memberSessionError ? (
-          <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
             <AlertTriangle className="h-4 w-4" />{memberSessionError}
           </div>
         ) : null}
 
         {memberSession?.state === 'HAS_SESSION' ? (
           <div className="space-y-4">
-            <div className="grid gap-2 text-sm text-gray-300">
-              <div className="flex justify-between gap-4"><span>Slot</span><span className="text-white font-semibold">{poolName}</span></div>
-              <div className="flex justify-between gap-4"><span>Time</span><span className="text-white font-semibold">{windowStart ? windowStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : memberSession.assignment?.startTime}</span></div>
-              {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="text-white font-semibold">{new Date(memberSession.cutoffTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
+            <div className="grid gap-2 text-sm text-ink-muted">
+              <div className="flex justify-between gap-4"><span>Slot</span><span className="text-ink font-semibold">{poolName}</span></div>
+              <div className="flex justify-between gap-4"><span>Time</span><span className="text-ink font-semibold">{windowStart ? windowStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : memberSession.assignment?.startTime}</span></div>
+              {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="text-ink font-semibold">{new Date(memberSession.cutoffTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
             </div>
             {booking?.memberAttendanceConfirmedAt ? (
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                 <CheckCircle className="h-4 w-4" />Attendance confirmed
               </div>
             ) : booking?.status === 'RELEASED_NO_SHOW' ? (
-              <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-200">
+              <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                 <AlertTriangle className="h-4 w-4" />Confirmation cutoff passed
               </div>
             ) : (
@@ -224,16 +224,16 @@ function MainDashboard() {
         ) : null}
 
         {memberSession?.state === 'NO_SESSION_TODAY' ? (
-          <p className="text-sm text-gray-300">No recurring member session is scheduled for you today.</p>
+          <p className="text-sm text-ink-muted">No recurring member session is scheduled for you today.</p>
         ) : null}
         {memberSession?.state === 'NO_ACTIVE_ASSIGNMENT' ? (
-          <p className="text-sm text-gray-300">No active recurring member assignment is linked to this account.</p>
+          <p className="text-sm text-ink-muted">No active recurring member assignment is linked to this account.</p>
         ) : null}
         {memberSession?.state === 'SUBSCRIPTION_INACTIVE' ? (
-          <p className="text-sm text-amber-200">Your recurring slot is paused because the subscription is not active.</p>
+          <p className="text-sm text-amber-800">Your recurring slot is paused because the subscription is not active.</p>
         ) : null}
         {memberSession?.state === 'WINDOW_NOT_FOUND' ? (
-          <p className="text-sm text-amber-200">Today&apos;s recurring slot has not been opened on the court schedule yet.</p>
+          <p className="text-sm text-amber-800">Today&apos;s recurring slot has not been opened on the court schedule yet.</p>
         ) : null}
       </section>
     );
@@ -242,7 +242,7 @@ function MainDashboard() {
   return (
     <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
       {/* Hero content */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-tr from-gray-900 to-gray-950 p-8 border border-white/5 shadow-2xl">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-tr from-surface-mint to-surface p-8 border border-edge shadow-2xl">
         <div className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 opacity-10">
           <Activity className="h-96 w-96 text-[var(--brand-primary)]" />
         </div>
@@ -255,7 +255,7 @@ function MainDashboard() {
           <h2 className="text-4xl font-extrabold tracking-tight font-outfit md:text-5xl">
             Welcome back to <span className="text-[var(--brand-primary)]">{tenant?.appName}</span>
           </h2>
-          <p className="text-gray-400 text-sm md:text-base leading-relaxed font-medium">
+          <p className="text-ink-muted text-sm md:text-base leading-relaxed font-medium">
             Coimbatore's premium court booking platform. Find slots, book courts, and manage your matches.
           </p>
           <div className="pt-2 flex flex-wrap gap-4">
@@ -269,7 +269,7 @@ function MainDashboard() {
             </button>
             <button
               onClick={() => navigate('/bookings/my')}
-              className="py-3 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-gray-200 border border-white/10 font-semibold transition-all"
+              className="py-3 px-6 rounded-2xl bg-surface-mint hover:bg-edge text-ink border border-edge-strong font-semibold transition-all"
               id="view-my-bookings-btn"
             >
               View My Bookings
@@ -282,25 +282,25 @@ function MainDashboard() {
 
       {/* Dashboard Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-4">
+        <div className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4">
           <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
             <Calendar className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-bold font-outfit text-white">Upcoming Slots</h3>
-          <p className="text-xs text-gray-400">
+          <h3 className="text-lg font-bold font-outfit text-ink">Upcoming Slots</h3>
+          <p className="text-xs text-ink-muted">
             No pre-scheduled matches today. Click "Book Court Now" to search for court times.
           </p>
         </div>
 
-        <div className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-4">
+        <div className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4">
           <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
             <User className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-bold font-outfit text-white">Profile Details</h3>
-          <div className="text-xs text-gray-400 space-y-2 font-mono">
+          <h3 className="text-lg font-bold font-outfit text-ink">Profile Details</h3>
+          <div className="text-xs text-ink-muted space-y-2 font-mono">
             <div className="flex justify-between">
               <span>Signed in as:</span>
-              <span className="text-gray-200">{formatUserContact(user)}</span>
+              <span className="text-ink">{formatUserContact(user)}</span>
             </div>
             <div className="flex justify-between">
               <span>Account type:</span>
@@ -309,12 +309,12 @@ function MainDashboard() {
           </div>
         </div>
 
-        <div className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-4">
+        <div className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4">
           <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
             <Phone className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-bold font-outfit text-white">Support & Info</h3>
-          <p className="text-xs text-gray-400 leading-relaxed">
+          <h3 className="text-lg font-bold font-outfit text-ink">Support & Info</h3>
+          <p className="text-xs text-ink-muted leading-relaxed">
             If you have any feedback or require front desk support, reach out using the in-app chat or call our Coimbatore venue manager directly.
           </p>
         </div>
@@ -331,7 +331,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="h-screen w-screen bg-gray-950 flex items-center justify-center">
+      <div className="h-screen w-screen bg-surface-alt flex items-center justify-center">
         <RefreshCw className="h-8 w-8 animate-spin text-[var(--brand-primary)]" />
       </div>
     );

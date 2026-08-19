@@ -154,19 +154,19 @@ export default function CourtBooking() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
         <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-gray-400 text-sm font-medium">Loading booking workspace...</p>
+        <p className="text-ink-muted text-sm font-medium">Loading booking workspace...</p>
       </div>
     );
   }
 
   if (error || !pool) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white p-4">
-        <HelpCircle className="h-12 w-12 text-red-500 mb-4" />
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
+        <HelpCircle className="h-12 w-12 text-red-600 mb-4" />
         <h3 className="text-lg font-bold">Failed to load booking details</h3>
-        <p className="text-gray-400 text-sm mt-1 text-center max-w-md">{error}</p>
+        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error}</p>
         <Link to={`/branches/${branchId}`} className="mt-4 text-xs text-[var(--brand-primary)] hover:underline">
           Back to Dashboard
         </Link>
@@ -175,11 +175,11 @@ export default function CourtBooking() {
   }
 
   return (
-    <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-white">
+    <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-ink">
       {/* Back Button */}
       <Link
         to={`/branches/${branchId}`}
-        className="inline-flex items-center space-x-2 text-xs text-gray-400 hover:text-white transition-colors"
+        className="inline-flex items-center space-x-2 text-xs text-ink-muted hover:text-ink transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         <span>Back to Branch Dashboard</span>
@@ -189,7 +189,7 @@ export default function CourtBooking() {
         <h2 className="text-3xl font-extrabold tracking-tight font-outfit">
           Book <span className="text-[var(--brand-primary)]">{pool.name}</span>
         </h2>
-        <p className="text-gray-400 text-xs">
+        <p className="text-ink-muted text-xs">
           Select date, choose an available slot, and enter participants to compute the total rate.
         </p>
       </div>
@@ -197,8 +197,8 @@ export default function CourtBooking() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column: Date & Slots */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-4">
-            <h3 className="text-sm font-bold font-outfit text-gray-300 uppercase tracking-wider flex items-center space-x-2">
+          <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
+            <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider flex items-center space-x-2">
               <Calendar className="h-4 w-4 text-[var(--brand-primary)]" />
               <span>1. Choose Date</span>
             </h3>
@@ -208,12 +208,12 @@ export default function CourtBooking() {
               value={bookingDate}
               onChange={(e) => setBookingDate(e.target.value)}
               min={new Date().toISOString().split('T')[0]}
-              className="w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[var(--brand-primary)] font-mono"
+              className="w-full bg-surface border border-edge-strong rounded-xl px-4 py-3 text-sm text-ink focus:outline-none focus:border-[var(--brand-primary)] font-mono"
             />
           </div>
 
-          <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-4">
-            <h3 className="text-sm font-bold font-outfit text-gray-300 uppercase tracking-wider">
+          <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
+            <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider">
               2. Available Time Slots
             </h3>
 
@@ -222,7 +222,7 @@ export default function CourtBooking() {
                 <Activity className="h-8 w-8 animate-spin text-[var(--brand-primary)]" />
               </div>
             ) : slots.length === 0 ? (
-              <p className="text-xs text-gray-400 py-8 text-center bg-gray-900/50 rounded-xl border border-white/5">
+              <p className="text-xs text-ink-muted py-8 text-center bg-surface rounded-xl border border-edge">
                 No slots available on this date. Try another date.
               </p>
             ) : (
@@ -270,17 +270,17 @@ export default function CourtBooking() {
                       id={`slot-card-${slot.window.id}`}
                     >
                       <div className="flex justify-between items-start">
-                        <span className="text-white font-mono" style={{ font: 'var(--font-slot-time)' }}>{st} - {et}</span>
-                        <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded-full font-mono font-bold">
+                        <span className="text-ink font-mono" style={{ font: 'var(--font-slot-time)' }}>{st} - {et}</span>
+                        <span className="text-[10px] bg-surface-mint text-ink-muted px-2 py-0.5 rounded-full font-mono font-bold">
                           {pricingMode === 'PER_PERSON' ? 'Per-Person' : 'Flat-Rate'}
                         </span>
                       </div>
 
-                      <div className="flex justify-between items-center text-xs pt-1 border-t border-white/5 font-mono">
+                      <div className="flex justify-between items-center text-xs pt-1 border-t border-edge font-mono">
                         <span style={{ color: isAlmostFull ? 'var(--slot-almostfull-text)' : 'var(--slot-available-accent)' }}>
                           {isAlmostFull ? `Almost full — ${slot.remainingCapacity} left` : `Left: ${slot.remainingCapacity} seats`}
                         </span>
-                        <span className="font-bold text-white">₹{rate}</span>
+                        <span className="font-bold text-ink">₹{rate}</span>
                       </div>
                     </div>
                   );
@@ -293,8 +293,8 @@ export default function CourtBooking() {
         {/* Right column: Players & Price Summary */}
         <div className="space-y-6">
           {selectedSlot ? (
-            <div className="bg-white/5 border border-white/5 p-6 rounded-2xl space-y-6">
-              <h3 className="text-sm font-bold font-outfit text-gray-300 uppercase tracking-wider flex items-center space-x-2">
+            <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-6">
+              <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider flex items-center space-x-2">
                 <Users className="h-4 w-4 text-[var(--brand-primary)]" />
                 <span>3. Rate Summary</span>
               </h3>
@@ -304,16 +304,16 @@ export default function CourtBooking() {
 
               {/* Price Calculation details */}
               <div className="space-y-3">
-                <div className="flex justify-between text-xs text-gray-400 font-medium">
+                <div className="flex justify-between text-xs text-ink-muted font-medium">
                   <span>Pricing Mode:</span>
-                  <span className="text-gray-200">
+                  <span className="text-ink">
                     {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON'
                       ? 'Per-person rate multiplication'
                       : 'Flat booking rate'}
                   </span>
                 </div>
-                <div className="flex justify-between items-end pt-2 border-t border-white/5">
-                  <span className="text-sm font-bold text-white font-outfit">Total Estimate:</span>
+                <div className="flex justify-between items-end pt-2 border-t border-edge">
+                  <span className="text-sm font-bold text-ink font-outfit">Total Estimate:</span>
                   <span className="text-2xl font-extrabold text-[var(--brand-primary)] font-mono" id="computed-price-display">
                     ₹{calculatePrice()}
                   </span>
@@ -321,7 +321,7 @@ export default function CourtBooking() {
               </div>
 
               {bookingError && (
-                <div className="bg-red-950/20 border border-red-900/50 p-3 rounded-xl flex items-start space-x-2 text-xs text-red-400">
+                <div className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-start space-x-2 text-xs text-red-700">
                   <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{bookingError}</span>
                 </div>
@@ -345,7 +345,7 @@ export default function CourtBooking() {
               </button>
             </div>
           ) : (
-            <div className="bg-white/5 border border-white/5 p-6 rounded-2xl text-center text-gray-400 py-16 text-xs font-semibold">
+            <div className="bg-surface-mint border border-edge p-6 rounded-2xl text-center text-ink-muted py-16 text-xs font-semibold">
               Select an availability slot to display participant setup and pricing details.
             </div>
           )}

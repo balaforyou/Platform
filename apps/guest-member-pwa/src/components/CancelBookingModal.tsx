@@ -61,17 +61,17 @@ export default function CancelBookingModal({ bookingId, onClose, onSuccess }: Ca
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
 
       {/* Modal Card */}
-      <div className="relative w-full max-w-md bg-gray-900 border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6 text-white overflow-hidden">
+      <div className="relative w-full max-w-md bg-surface border border-edge-strong rounded-3xl p-6 shadow-2xl space-y-6 text-ink overflow-hidden">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-full bg-surface-mint hover:bg-edge text-ink-muted hover:text-ink transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
 
         <div className="flex items-center space-x-3">
-          <div className="h-10 w-10 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-400 shrink-0">
+          <div className="h-10 w-10 rounded-lg bg-rose-50 flex items-center justify-center text-rose-700 shrink-0">
             <ShieldAlert className="h-5 w-5" />
           </div>
           <h3 className="text-xl font-bold font-outfit">Cancel Your Match</h3>
@@ -80,30 +80,30 @@ export default function CancelBookingModal({ bookingId, onClose, onSuccess }: Ca
         {loading ? (
           <div className="py-12 flex flex-col items-center justify-center">
             <Activity className="h-8 w-8 animate-spin text-[var(--brand-primary)] mb-2" />
-            <p className="text-xs text-gray-400">Computing refund amount...</p>
+            <p className="text-xs text-ink-muted">Computing refund amount...</p>
           </div>
         ) : error ? (
-          <div className="bg-red-950/20 border border-red-900/50 p-4 rounded-xl text-xs text-red-400">
+          <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-xs text-red-700">
             {error}
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-xs text-gray-400 leading-relaxed">
+            <p className="text-xs text-ink-muted leading-relaxed">
               cancellations are subject to the court booking rules. Below is a preview of your calculated refund according to current policies.
             </p>
 
-            <div className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3 font-mono text-xs">
-              <div className="flex justify-between text-gray-400">
+            <div className="bg-surface-mint border border-edge p-4 rounded-xl space-y-3 font-mono text-xs">
+              <div className="flex justify-between text-ink-muted">
                 <span>Original Price:</span>
-                <span className="text-gray-200">₹{preview?.originalPrice}</span>
+                <span className="text-ink">₹{preview?.originalPrice}</span>
               </div>
-              <div className="flex justify-between text-gray-400">
+              <div className="flex justify-between text-ink-muted">
                 <span>Policy Refund %:</span>
-                <span className="text-emerald-400 font-bold">{preview?.refundPercent}%</span>
+                <span className="text-emerald-700 font-bold">{preview?.refundPercent}%</span>
               </div>
-              <div className="flex justify-between items-center pt-2.5 border-t border-white/5 text-sm">
-                <span className="text-white font-semibold">Calculated Refund:</span>
-                <span className="text-emerald-400 font-extrabold text-base" id="refund-preview-display">
+              <div className="flex justify-between items-center pt-2.5 border-t border-edge text-sm">
+                <span className="text-ink font-semibold">Calculated Refund:</span>
+                <span className="text-emerald-700 font-extrabold text-base" id="refund-preview-display">
                   ₹{preview?.refundAmount}
                 </span>
               </div>
@@ -112,7 +112,7 @@ export default function CancelBookingModal({ bookingId, onClose, onSuccess }: Ca
             <div className="flex space-x-3 pt-2">
               <button
                 onClick={onClose}
-                className="flex-1 py-3 border border-white/10 rounded-xl hover:bg-white/5 font-semibold text-xs transition-all text-gray-300"
+                className="flex-1 py-3 border border-edge-strong rounded-xl hover:bg-surface-mint font-semibold text-xs transition-all text-ink-muted"
               >
                 Go Back
               </button>

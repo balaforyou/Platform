@@ -35,21 +35,21 @@ export default function BranchAbout() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
         <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-gray-400 text-sm font-medium">Loading branch information...</p>
+        <p className="text-ink-muted text-sm font-medium">Loading branch information...</p>
       </div>
     );
   }
 
   if (error || !aboutData) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white p-4">
-        <div className="h-12 w-12 text-red-500 mb-4 flex items-center justify-center rounded-full bg-red-950/20">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
+        <div className="h-12 w-12 text-red-600 mb-4 flex items-center justify-center rounded-full bg-red-50">
           <Shield className="h-6 w-6" />
         </div>
         <h3 className="text-lg font-bold">Failed to load branch about information</h3>
-        <p className="text-gray-400 text-sm mt-1 text-center max-w-md">{error || 'About data is missing.'}</p>
+        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error || 'About data is missing.'}</p>
       </div>
     );
   }
@@ -70,11 +70,11 @@ export default function BranchAbout() {
       ];
 
   return (
-    <div className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-white">
+    <div className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-ink">
       {/* Back Button */}
       <button
         onClick={() => navigate(-1)}
-        className="inline-flex items-center space-x-2 text-xs text-gray-400 hover:text-white transition-colors"
+        className="inline-flex items-center space-x-2 text-xs text-ink-muted hover:text-ink transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         <span>Back to Court Dashboard</span>
@@ -86,7 +86,7 @@ export default function BranchAbout() {
           About the <span className="text-[var(--brand-primary)]">Venue</span>
         </h2>
         {aboutData.address && (
-          <div className="flex items-center space-x-2 text-xs text-gray-400 font-medium">
+          <div className="flex items-center space-x-2 text-xs text-ink-muted font-medium">
             <MapPin className="h-4 w-4 text-[var(--brand-primary)]" />
             <span>{aboutData.address}</span>
           </div>
@@ -116,7 +116,7 @@ export default function BranchAbout() {
                 href={`https://search.google.com/local/writereview?placeid=${aboutData.googlePlaceId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center space-x-2 py-2 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white text-xs font-semibold transition-all"
+                className="inline-flex items-center space-x-2 py-2 px-4 rounded-xl bg-surface-mint hover:bg-edge border border-edge-strong text-ink-muted hover:text-ink text-xs font-semibold transition-all"
               >
                 <Star className="h-3.5 w-3.5" />
                 <span>Leave a Review</span>
@@ -127,32 +127,32 @@ export default function BranchAbout() {
       </div>
 
       {/* Description Panel */}
-      <div className="bg-white/5 border border-white/5 p-8 rounded-3xl space-y-6">
+      <div className="bg-surface-mint border border-edge p-8 rounded-3xl space-y-6">
         {aboutData.description && (
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider font-outfit">
+            <h3 className="text-sm font-semibold text-ink-muted uppercase tracking-wider font-outfit">
               Our Vision & Mission
             </h3>
-            <p className="text-sm text-gray-400 leading-relaxed">
+            <p className="text-sm text-ink-muted leading-relaxed">
               {aboutData.description}
             </p>
           </div>
         )}
 
         {/* Schedule */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-edge">
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider font-outfit flex items-center space-x-2">
-              <Clock className="h-4 w-4 text-emerald-500" />
+            <h3 className="text-sm font-semibold text-ink-muted uppercase tracking-wider font-outfit flex items-center space-x-2">
+              <Clock className="h-4 w-4 text-emerald-600" />
               <span>Working Schedule</span>
             </h3>
-            <div className="text-xs text-gray-400 space-y-1 font-mono">
+            <div className="text-xs text-ink-muted space-y-1 font-mono">
               <div>
-                Days: <span className="text-gray-200">{aboutData.workingDays?.join(', ') || 'All Days'}</span>
+                Days: <span className="text-ink">{aboutData.workingDays?.join(', ') || 'All Days'}</span>
               </div>
               {aboutData.workingHoursStart && aboutData.workingHoursEnd && (
                 <div>
-                  Hours: <span className="text-gray-200">{aboutData.workingHoursStart} - {aboutData.workingHoursEnd}</span>
+                  Hours: <span className="text-ink">{aboutData.workingHoursStart} - {aboutData.workingHoursEnd}</span>
                 </div>
               )}
             </div>
@@ -161,7 +161,7 @@ export default function BranchAbout() {
           {/* Facilities list */}
           {aboutData.facilities && aboutData.facilities.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider font-outfit flex items-center space-x-2">
+              <h3 className="text-sm font-semibold text-ink-muted uppercase tracking-wider font-outfit flex items-center space-x-2">
                 <Shield className="h-4 w-4 text-[var(--brand-primary)]" />
                 <span>Facilities & Amenities</span>
               </h3>
@@ -169,7 +169,7 @@ export default function BranchAbout() {
                 {aboutData.facilities.map((fac: string, idx: number) => (
                   <span
                     key={idx}
-                    className="bg-white/5 text-gray-300 text-xs px-3 py-1 rounded-full border border-white/5 font-semibold"
+                    className="bg-surface-mint text-ink-muted text-xs px-3 py-1 rounded-full border border-edge font-semibold"
                   >
                     {fac}
                   </span>
@@ -182,7 +182,7 @@ export default function BranchAbout() {
 
       {/* Gallery Section */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider font-outfit flex items-center space-x-2">
+        <h3 className="text-sm font-semibold text-ink-muted uppercase tracking-wider font-outfit flex items-center space-x-2">
           <ImageIcon className="h-4 w-4 text-[var(--brand-primary)]" />
           <span>Photo Gallery</span>
         </h3>
@@ -190,7 +190,7 @@ export default function BranchAbout() {
           {photos.map((photoUrl: string, idx: number) => (
             <div
               key={idx}
-              className="relative aspect-video overflow-hidden rounded-2xl border border-white/5 bg-gray-900 shadow-lg group"
+              className="relative aspect-video overflow-hidden rounded-2xl border border-edge bg-surface shadow-lg group"
             >
               <img
                 src={photoUrl}

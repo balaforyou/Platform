@@ -10,12 +10,10 @@
  * The tenant theming data model is deliberately unchanged: one tenant-derived colour, everything
  * else universal.
  *
- * SCOPE NOTE. Defining these changes no pixels on its own — components are not repainted here.
- * The light palette below is the agreed target, but the app is currently dark in all 11 of its
- * files (348 dark-class uses), so repainting is sequenced as its own piece of work. The slot-state
- * tokens are the exception: they are consumed today (CourtBooking), and therefore carry values that
- * read correctly on the CURRENT dark surface. The re-theme flips those values to the light palette
- * without touching component code again.
+ * These are consumed throughout the app. The guest PWA was dark in all 11 of its files; F-146
+ * converted it to this light palette via semantic Tailwind tokens (see tailwind.config.js), so
+ * components reference `bg-surface` / `text-ink` / `border-edge` rather than literal colours.
+ * Re-theming from here is a matter of changing values below, not of touching components again.
  */
 
 :root {
@@ -29,6 +27,7 @@
   --mint-surface: #f0fdf4;     /* cards, availability areas */
   --surface-background: #f8faf9;
   --surface-white: #ffffff;
+  --surface-header: rgba(255, 255, 255, 0.82); /* sticky header; keeps backdrop-blur legible */
   --text-primary: #17211b;
   --text-secondary: #647067;
   --border-subtle: #dde7e0;
@@ -50,26 +49,28 @@
   /*
    * --- slot-state tokens ---
    *
-   * These ARE consumed today, so their values match the current dark surface rather than the light
-   * palette above. Selected intentionally resolves to --brand-primary: CourtBooking already rendered
-   * the selected slot that way before this work, so a selected slot follows whatever a tenant's brand
-   * colour is instead of a second fixed green that could clash for a non-green tenant.
+   * Values now target the light surface. Selected still resolves to --brand-primary so a selected
+   * slot follows the tenant's brand colour rather than a second fixed green that could clash for a
+   * non-green tenant. Almost Full uses amber-on-cream rather than a red: it is a scarcity signal,
+   * not an error, and must not read as a failure state.
    */
   --slot-selected-border: var(--brand-primary);
-  --slot-selected-surface: color-mix(in srgb, var(--brand-primary) 12%, transparent);
+  --slot-selected-surface: color-mix(in srgb, var(--brand-primary) 10%, #ffffff);
 
-  --slot-available-border: rgba(255, 255, 255, 0.06);
-  --slot-available-surface: rgba(17, 24, 39, 0.5);
-  --slot-available-accent: #4ade80;
+  --slot-available-border: var(--border-card);
+  --slot-available-surface: var(--surface-white);
+  --slot-available-accent: #15803d;
 
-  --slot-almostfull-border: rgba(194, 65, 12, 0.45);
-  --slot-almostfull-surface: rgba(124, 45, 18, 0.28);
-  --slot-almostfull-text: #fdba74;
+  --slot-almostfull-border: #fed7aa;
+  --slot-almostfull-surface: #fff7ed;
+  --slot-almostfull-text: #c2410c;
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--surface-background);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

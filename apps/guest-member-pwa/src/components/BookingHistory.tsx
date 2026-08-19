@@ -54,37 +54,37 @@ export default function BookingHistory() {
     switch (status) {
       case 'HELD':
         return (
-          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
             Hold Pending
           </span>
         );
       case 'CONFIRMED':
         return (
-          <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
             Confirmed
           </span>
         );
       case 'CHECKED_IN':
         return (
-          <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
             Checked In
           </span>
         );
       case 'CANCELLED':
         return (
-          <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span className="bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
             Cancelled
           </span>
         );
       case 'RELEASED_NO_SHOW':
         return (
-          <span className="bg-gray-500/10 text-gray-400 border border-white/5 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span className="bg-surface-mint text-ink-muted border border-edge px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
             Expired
           </span>
         );
       default:
         return (
-          <span className="bg-white/5 text-gray-400 border border-white/5 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span className="bg-surface-mint text-ink-muted border border-edge px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
             {status}
           </span>
         );
@@ -107,22 +107,22 @@ export default function BookingHistory() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
         <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-gray-400 text-sm font-medium">Retrieving your bookings...</p>
+        <p className="text-ink-muted text-sm font-medium">Retrieving your bookings...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-white p-4">
-        <HelpCircle className="h-12 w-12 text-red-500 mb-4" />
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
+        <HelpCircle className="h-12 w-12 text-red-600 mb-4" />
         <h3 className="text-lg font-bold">Failed to load bookings</h3>
-        <p className="text-gray-400 text-sm mt-1 text-center max-w-md">{error}</p>
+        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error}</p>
         <button
           onClick={fetchBookings}
-          className="mt-4 py-2 px-6 bg-white/5 border border-white/10 rounded-xl text-xs hover:bg-white/10"
+          className="mt-4 py-2 px-6 bg-surface-mint border border-edge-strong rounded-xl text-xs hover:bg-edge"
         >
           Retry Load
         </button>
@@ -131,29 +131,29 @@ export default function BookingHistory() {
   }
 
   return (
-    <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-white">
+    <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-ink">
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h2 className="text-3xl font-extrabold tracking-tight font-outfit">
             My <span className="text-[var(--brand-primary)]">Bookings</span>
           </h2>
-          <p className="text-gray-400 text-xs">
+          <p className="text-ink-muted text-xs">
             Manage your scheduled court matches, complete checkout, check-in, or request cancellations.
           </p>
         </div>
         <Link
           to="/"
-          className="py-2.5 px-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-xs font-semibold transition-all"
+          className="py-2.5 px-5 bg-surface-mint hover:bg-edge border border-edge-strong rounded-2xl text-xs font-semibold transition-all"
         >
           Go Dashboard
         </Link>
       </div>
 
       {bookings.length === 0 ? (
-        <div className="bg-white/5 border border-white/5 p-16 rounded-3xl text-center space-y-4">
-          <Calendar className="h-10 w-10 text-gray-500 mx-auto" />
+        <div className="bg-surface-mint border border-edge p-16 rounded-3xl text-center space-y-4">
+          <Calendar className="h-10 w-10 text-ink-muted mx-auto" />
           <h3 className="text-lg font-bold">No bookings found</h3>
-          <p className="text-gray-400 text-xs max-w-xs mx-auto">
+          <p className="text-ink-muted text-xs max-w-xs mx-auto">
             You don't have any booking reservations recorded. Reserve a court slot now to start playing!
           </p>
           <Link
@@ -173,32 +173,32 @@ export default function BookingHistory() {
             return (
               <div
                 key={booking.id}
-                className="bg-white/5 border border-white/5 rounded-2xl p-6 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between gap-6"
+                className="bg-surface-mint border border-edge rounded-2xl p-6 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between gap-6"
                 id={`booking-card-${booking.id}`}
               >
                 <div className="space-y-3">
                   <div className="flex items-center space-x-3">
-                    <h4 className="text-lg font-bold font-outfit text-white">
+                    <h4 className="text-lg font-bold font-outfit text-ink">
                       {booking.window.resourcePool.name}
                     </h4>
                     {getStatusBadge(booking.status)}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-gray-400 font-mono">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-ink-muted font-mono">
                     <div className="flex items-center space-x-1.5">
                       <Calendar className="h-3.5 w-3.5 text-[var(--brand-primary)] shrink-0" />
                       <span>{sDate}</span>
                     </div>
                     <div className="flex items-center space-x-1.5">
-                      <Clock className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <Clock className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                       <span>{st} - {et}</span>
                     </div>
                     <div className="flex items-center space-x-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      <MapPin className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                       <span>Coimbatore Hub</span>
                     </div>
                     <div className="flex items-center space-x-1.5">
-                      <Users className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                      <Users className="h-3.5 w-3.5 text-ink-muted shrink-0" />
                       <span>{1 + (booking.players?.length || 0)} Players</span>
                     </div>
                   </div>
@@ -208,7 +208,7 @@ export default function BookingHistory() {
                       {booking.players.map((player: any, idx: number) => (
                         <span
                           key={idx}
-                          className="bg-white/5 text-gray-400 text-[10px] px-2 py-0.5 rounded border border-white/5 font-mono"
+                          className="bg-surface-mint text-ink-muted text-[10px] px-2 py-0.5 rounded border border-edge font-mono"
                         >
                           {player.phone}
                         </span>
@@ -217,10 +217,10 @@ export default function BookingHistory() {
                   )}
                 </div>
 
-                <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-4 shrink-0 border-t md:border-t-0 md:border-l border-white/5 pt-4 md:pt-0 md:pl-6">
+                <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-4 shrink-0 border-t md:border-t-0 md:border-l border-edge pt-4 md:pt-0 md:pl-6">
                   <div className="flex flex-col md:items-end text-left md:text-right font-mono">
-                    <span className="text-[10px] text-gray-500">Paid Amount</span>
-                    <span className="text-xl font-extrabold text-white">₹{Number(booking.price)}</span>
+                    <span className="text-[10px] text-ink-muted">Paid Amount</span>
+                    <span className="text-xl font-extrabold text-ink">₹{Number(booking.price)}</span>
                   </div>
 
                   <div className="flex space-x-2">
@@ -239,7 +239,7 @@ export default function BookingHistory() {
                     {isCheckInOpen(booking) && (
                       <button
                         onClick={() => handleCheckIn(booking.id)}
-                        className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-lg shadow-emerald-900/20"
+                        className="py-2 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl transition-all shadow-lg shadow-emerald-900/20"
                         id={`check-in-btn-${booking.id}`}
                       >
                         I'm Here
@@ -250,7 +250,7 @@ export default function BookingHistory() {
                     {(booking.status === 'CONFIRMED' || booking.status === 'HELD') && (
                       <button
                         onClick={() => setSelectedCancelId(booking.id)}
-                        className="py-2 px-4 bg-white/5 hover:bg-red-950/30 text-gray-300 hover:text-red-400 border border-white/10 hover:border-red-900/30 text-xs font-semibold rounded-xl transition-all"
+                        className="py-2 px-4 bg-surface-mint hover:bg-red-50 text-ink-muted hover:text-red-700 border border-edge-strong hover:border-red-200 text-xs font-semibold rounded-xl transition-all"
                         id={`cancel-booking-btn-${booking.id}`}
                       >
                         Cancel Match
