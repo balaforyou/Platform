@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { Smartphone, Activity, HelpCircle, ShieldCheck } from 'lucide-react';
+import { Smartphone, Activity, HelpCircle, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 export default function BookingPay() {
   const { bookingId } = useParams();
@@ -12,8 +12,28 @@ export default function BookingPay() {
   const [booking, setBooking] = useState<any>(null);
   const [intent, setIntent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+
+  // F-163: two genuinely different failures were previously funnelled into one state, and the
+  // render guard below turns any non-null value into a full-page takeover.
+  //
+  //   error        FATAL. The booking or the payment intent could not be loaded, so there is
+  //                nothing to pay for and the page cannot proceed. Taking over the page is right.
+  //   paymentError RECOVERABLE. An attempt failed but the customer can simply try again. Razorpay
+  //                emits payment.failed for a failed ATTEMPT while its checkout stays open, so
+  //                replacing the page here removed the retry button out from under a customer who
+  //                was still mid-payment, and the page only "recovered" because a later success
+  //                navigated away. Proven on the deployed app before this change.
+  //
+  // Splitting them also fixes the copy defect without rewording anything: once only genuine load
+  // failures reach the screen below, its "Failed to load booking details" heading is accurate. It
+  // previously sat above messages like "Your payment was declined by the bank".
+  //
+  // Shape and clearing discipline are copied from CourtBooking's bookingError (CourtBooking.tsx:323
+  // for the banner, :122 for clearing on each new attempt) rather than invented, so the app has one
+  // way of showing a recoverable error instead of two subtly different ones.
+  const [error, setError] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -48,6 +68,7 @@ export default function BookingPay() {
     try {
       setPaying(true);
       setError(null);
+      setPaymentError(null);
 
       // Call secure server-side webhook simulation endpoint
       await apiRequest('/payment/payments/test/simulate-capture', {
@@ -59,7 +80,7 @@ export default function BookingPay() {
       // Optimistic redirect to confirmation screen
       navigate(`/bookings/${bookingId}/confirmation`);
     } catch (err: any) {
-      setError(err.message || 'Simulation payment capture failed.');
+      setPaymentError(err.message || 'Simulation payment capture failed.');
     } finally {
       setPaying(false);
     }
@@ -82,11 +103,14 @@ export default function BookingPay() {
   const handleRazorpayCheckout = async () => {
     if (!intent || !booking) return;
     setPaying(true);
-    setError(null);
+    // F-163: clearing on each new attempt is the half CourtBooking has (:122) and this screen did
+    // not. Without it a banner from a previous failed attempt would still be on screen during the
+    // retry that succeeds.
+    setPaymentError(null);
 
     const scriptLoaded = await loadRazorpayScript();
     if (!scriptLoaded) {
-      setError('Failed to load Razorpay SDK. Please check your internet connection.');
+      setPaymentError('Failed to load Razorpay SDK. Please check your internet connection.');
       setPaying(false);
       return;
     }
@@ -137,6 +161,13 @@ export default function BookingPay() {
             // Navigate to confirmation page
             navigate(`/bookings/${bookingId}/confirmation`);
           } catch (err: any) {
+            // F-165, deliberately UNCHANGED here. This fires when our own verify call fails, by
+            // which point Razorpay's checkout has already closed and the payment may well have
+            // been captured by the webhook regardless — DECISION-006 makes those two paths
+            // independent. So this message can be shown for a payment that actually succeeded.
+            // Whether it should instead route to the confirmation screen and let its poll resolve
+            // the truth is a real behaviour change, unreported and unproven, so it is left exactly
+            // as it was rather than riding along with F-163.
             setError(err.message || 'Signature verification failed.');
           } finally {
             setPaying(false);
@@ -158,12 +189,16 @@ export default function BookingPay() {
 
       const rzp = new (window as any).Razorpay(options);
       rzp.on('payment.failed', function (resp: any) {
-        setError(resp.error?.description || 'Payment failed. Please try again.');
+        // F-163: this is the event that caused the reported flicker. Razorpay emits it for a failed
+        // ATTEMPT and leaves its checkout open so the customer can pick another method, so it must
+        // never take over the page. It is recoverable by definition.
+        setPaymentError(resp.error?.description || 'Payment failed. Please try again.');
         setPaying(false);
       });
       rzp.open();
     } catch (err: any) {
-      setError(err.message || 'Failed to create payment order.');
+      // Recoverable: the order call failed, the customer can press pay again.
+      setPaymentError(err.message || 'Failed to create payment order.');
       setPaying(false);
     }
   };
@@ -273,6 +308,19 @@ export default function BookingPay() {
               <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">Local</span>
             )}
           </button>
+        )}
+
+        {/* F-163: recoverable failures render here, beside the payment methods that can be retried,
+            instead of replacing the page. Markup matches CourtBooking.tsx:323 so the app shows a
+            recoverable error one way rather than two. */}
+        {paymentError && (
+          <div
+            className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-start space-x-2 text-xs text-red-700"
+            id="payment-error-banner"
+          >
+            <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>{paymentError}</span>
+          </div>
         )}
 
         {/* Real SDK trigger */}
