@@ -1958,7 +1958,20 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
 
   const availableSlots = [];
 
+  // F-155: filtered here as well as rejected at POST /bookings, so a guest never sees a slot
+  // they cannot book. The rejection is the authoritative guard; this is the display half.
+  //
+  // Unconditional by decision. This endpoint is unauthenticated, so it cannot tell an admin
+  // caller from a guest, and admin-web reads the very same route
+  // (apps/admin-web/src/main.tsx:545) — meaning admins also stop seeing today's already-started
+  // slots. That consequence was accepted rather than overlooked: differentiating the two was
+  // judged speculative scope on an urgent fix. F-162 tracks whether admins actually need that
+  // visibility for reconciliation, to be settled with real evidence if it turns out to matter.
+  const nowInstant = new Date();
+
   for (const window of windows) {
+    if (window.startTime <= nowInstant) continue;
+
     const isBlocked = await prisma.blockedWindow.findFirst({
       where: {
         resourcePoolId: id,
@@ -2128,6 +2141,30 @@ server.post('/bookings', async (request, reply) => {
         const err = new Error('Booking window is not open yet');
         (err as any).statusCode = 400;
         (err as any).code = 'BOOKING_WINDOW_CLOSED';
+        throw err;
+      }
+
+      // F-155: the horizon check above is only an UPPER bound. There was no lower bound at
+      // all, so a slot that had already started stayed bookable — proven on the deployed
+      // stack, where a booking was accepted for a slot 392 minutes after it began.
+      //
+      // WHY NO TIME ZONE MATHS HERE, deliberately. `startTime` is an absolute instant, so
+      // comparing it to `now` is correct in every zone and needs none of F-087/F-088's
+      // branch-clock handling. This is NOT the timezone defect it was first reported as:
+      // the same bug exists with the branch set to IST, and F-100's UTC setting affects
+      // day-boundary maths rather than this. Keeping the comparison instant-to-instant is
+      // what stops this fix from quietly becoming the timezone rollout.
+      //
+      // The boundary is deliberately startTime, not endTime: a court time that has begun
+      // cannot be sold, even though part of it remains. Slots still in the future are
+      // untouched, so booking a slot minutes away keeps working — no lead-time policy is
+      // introduced here, and none exists today.
+      //
+      // This sits inside the FOR UPDATE transaction above, so it cannot be raced.
+      if (new Date(window.startTime) <= new Date()) {
+        const err = new Error('This slot has already started and can no longer be booked');
+        (err as any).statusCode = 400;
+        (err as any).code = 'SLOT_ALREADY_STARTED';
         throw err;
       }
 
