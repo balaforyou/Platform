@@ -155,3 +155,33 @@ docker compose --env-file .env logs caddy | grep -c "listening only on the HTTP 
 | `fetch failed` on every component in the verify script | Site unreachable — check firewall/DNS first | `curl -i https://elitecourts.duckdns.org/...` directly; confirm `gcloud compute firewall-rules list` still has `allow-https` |
 | Verify script passes, but site "feels wrong" / HTTPS suspect | Script can't detect scheme-level failure (F-084) | Always run the Caddy log grep (Step 10) as a second, independent check |
 | `docker push`/`pull` for one image fails with a manifest error others didn't hit | Often transient registry-side | Simple retry of just that one command usually resolves it |
+
+---
+
+## Multi-tenant hostnames (added 19 Aug 2026, F-149)
+
+`SITE_ADDRESS` now carries **every** tenant hostname, comma-separated — Caddy provisions a separate
+Let's Encrypt certificate for each:
+
+```
+SITE_ADDRESS=elitecourts.duckdns.org, jbc.elitecourts.duckdns.org, courtowner1.elitecourts.duckdns.org
+```
+
+DuckDNS resolves arbitrary sub-subdomains to the same A record, so **adding a tenant needs no DNS
+work** — append its hostname here and recreate caddy. Tenant resolution then works from the hostname
+alone, with no `?tenant=` parameter, and survives refreshes and deep links.
+
+**Config drift found and corrected the same day — check this before assuming a `.env` change works.**
+The VM's `docker-compose.yml` had no `environment:` block for caddy at all, and its `Caddyfile`
+hardcoded `elitecourts.duckdns.org {` instead of using the `{$SITE_ADDRESS::80}` placeholder. Both
+predated the F-083 work in the repo. The symptom was silent and misleading: `docker compose config`
+resolved `SITE_ADDRESS` correctly, so everything looked right, while the container never received the
+variable and Caddy kept serving the single hardcoded name. Confirmed with
+`docker exec <caddy> printenv`, which showed the variable simply absent.
+
+Both files on the VM were replaced with the repo versions (backed up as `*.bak.<epoch>` alongside
+them). **The VM's copies of `docker-compose.yml` and `Caddyfile` are not automatically in sync with
+the repo — verify them, rather than trusting that a repo change reached the VM.**
+
+Recreating caddy after an `.env` change needs `--force-recreate`; a plain `up -d` will report
+`Started` without applying the new environment.
