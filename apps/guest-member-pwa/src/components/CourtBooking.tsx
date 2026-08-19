@@ -234,6 +234,21 @@ export default function CourtBooking() {
                   const pricingMode = slot.window.pricingMode || pool.pricingMode || 'FLAT';
                   const rate = slot.window.price != null ? slot.window.price : pool.defaultRate;
 
+                  // Slot state, derived from the REAL capacity the server returned — never assigned
+                  // per-slot by hand. `remainingCapacity` is computed server-side as
+                  // `window.capacity - activeBookings.length` (slot-engine/src/index.ts:1989), so a
+                  // slot filling up drives this on its own.
+                  //
+                  // Only three of the five designed states are reachable here, and deliberately so:
+                  // FULL never arrives (the endpoint drops slots at zero remaining, F-147) and MEMBER
+                  // is not distinguishable (isMemberBooking is absent from the response, F-148).
+                  // Member bookings still consume capacity, so they push a slot toward ALMOST_FULL —
+                  // the effect is real even though the cause is not visible.
+                  const totalCapacity = Number(slot.window.capacity) || 0;
+                  const remaining = Number(slot.remainingCapacity) || 0;
+                  const isAlmostFull = totalCapacity > 0 && remaining > 0 && remaining / totalCapacity <= 0.25;
+                  const slotState = isSelected ? 'selected' : isAlmostFull ? 'almost-full' : 'available';
+
                   return (
                     <div
                       key={slot.window.id}
@@ -241,22 +256,30 @@ export default function CourtBooking() {
                         setSelectedSlot(slot);
                         setBookingError(null);
                       }}
-                      className={`cursor-pointer p-4 rounded-xl border transition-all flex flex-col justify-between space-y-2 ${
-                        isSelected
-                          ? 'bg-[var(--brand-primary)]/10 border-[var(--brand-primary)]'
-                          : 'bg-gray-900/50 border-white/5 hover:border-white/15'
-                      }`}
+                      className="cursor-pointer p-4 border transition-all flex flex-col justify-between space-y-2"
+                      style={{
+                        borderRadius: 'var(--radius-card)',
+                        background: isSelected
+                          ? 'var(--slot-selected-surface)'
+                          : isAlmostFull ? 'var(--slot-almostfull-surface)' : 'var(--slot-available-surface)',
+                        borderColor: isSelected
+                          ? 'var(--slot-selected-border)'
+                          : isAlmostFull ? 'var(--slot-almostfull-border)' : 'var(--slot-available-border)',
+                      }}
+                      data-slot-state={slotState}
                       id={`slot-card-${slot.window.id}`}
                     >
                       <div className="flex justify-between items-start">
-                        <span className="font-bold text-sm text-white font-mono">{st} - {et}</span>
+                        <span className="text-white font-mono" style={{ font: 'var(--font-slot-time)' }}>{st} - {et}</span>
                         <span className="text-[10px] bg-white/5 text-gray-400 px-2 py-0.5 rounded-full font-mono font-bold">
                           {pricingMode === 'PER_PERSON' ? 'Per-Person' : 'Flat-Rate'}
                         </span>
                       </div>
-                      
-                      <div className="flex justify-between items-center text-xs pt-1 border-t border-white/5 text-gray-400 font-mono">
-                        <span>Left: {slot.remainingCapacity} seats</span>
+
+                      <div className="flex justify-between items-center text-xs pt-1 border-t border-white/5 font-mono">
+                        <span style={{ color: isAlmostFull ? 'var(--slot-almostfull-text)' : 'var(--slot-available-accent)' }}>
+                          {isAlmostFull ? `Almost full — ${slot.remainingCapacity} left` : `Left: ${slot.remainingCapacity} seats`}
+                        </span>
                         <span className="font-bold text-white">₹{rate}</span>
                       </div>
                     </div>

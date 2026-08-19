@@ -6,6 +6,12 @@
     "F-087 (availability-window creation parses naive datetimes against the server clock while",
     "judging boundaries against the branch clock). Correct it as part of F-087/F-088, not here.",
     "",
+    "themeColor is JBC's real brand green (#166534), not the earlier #c8102e placeholder, and logo",
+    "points at the 512x512 PNG served from the guest PWA's public/ directory. Both live here as well",
+    "as in the database because provisioning only sends this block on CREATE - an existing tenant is",
+    "reused untouched - so a config left stale would silently restore the placeholder the next time",
+    "the tenant is rebuilt after a wipe. Same reasoning as the minOccupancy note below.",
+    "",
     "minOccupancy is deliberately 1, not 2: see F-125. Co-player collection was removed from the",
     "guest booking UI for the MVP, so every guest booking sends groupSize 1 with no UI path to",
     "raise it. With minOccupancy 2 the server rejected every guest booking with 400",
@@ -16,7 +22,8 @@
     "name": "Japan Badminton Court",
     "subdomain": "jbc",
     "appName": "JBC Courts",
-    "themeColor": "#c8102e"
+    "themeColor": "#166534",
+    "logo": "/logo-jbc.png"
   },
   "branches": [
     {

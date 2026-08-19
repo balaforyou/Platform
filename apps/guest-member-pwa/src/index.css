@@ -2,9 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens.
+ *
+ * Everything here is a FIXED, app-wide value except --brand-primary, which continues to be set at
+ * runtime from `Tenant.themeColor` by TenantContext (packages/ui-shared/src/context/TenantContext.tsx:115).
+ * The tenant theming data model is deliberately unchanged: one tenant-derived colour, everything
+ * else universal.
+ *
+ * SCOPE NOTE. Defining these changes no pixels on its own — components are not repainted here.
+ * The light palette below is the agreed target, but the app is currently dark in all 11 of its
+ * files (348 dark-class uses), so repainting is sequenced as its own piece of work. The slot-state
+ * tokens are the exception: they are consumed today (CourtBooking), and therefore carry values that
+ * read correctly on the CURRENT dark surface. The re-theme flips those values to the light palette
+ * without touching component code again.
+ */
+
 :root {
-  --brand-primary: #e11d48; /* default brand color: rose-600 */
-  --brand-secondary: #f3f4f6; /* default brand secondary */
+  /* --- tenant-derived: the only per-tenant value --- */
+  --brand-primary: #e11d48; /* overwritten at runtime from Tenant.themeColor */
+  --brand-secondary: #f3f4f6;
+
+  /* --- universal palette (fixed, target light theme) --- */
+  --fresh-green: #22c55e;      /* success / available */
+  --lime-accent: #84cc16;      /* tiny highlights only */
+  --mint-surface: #f0fdf4;     /* cards, availability areas */
+  --surface-background: #f8faf9;
+  --surface-white: #ffffff;
+  --text-primary: #17211b;
+  --text-secondary: #647067;
+  --border-subtle: #dde7e0;
+  --border-card: #e2e9e4;
+
+  /* --- radii --- */
+  --radius-card: 16px;         /* 14-16px range; deliberately not pill-round */
+  --radius-button: 12px;
+
+  /* --- typography scale (Inter; loaded in index.html) --- */
+  --font-page-title: 700 28px/1.25 'Inter', system-ui, sans-serif;
+  --font-section-title: 700 18px/1.3 'Inter', system-ui, sans-serif;
+  --font-card-title: 600 16px/1.4 'Inter', system-ui, sans-serif;
+  --font-body: 400 14px/1.5 'Inter', system-ui, sans-serif;
+  --font-metadata: 500 12px/1.4 'Inter', system-ui, sans-serif;
+  --font-button: 600 15px/1 'Inter', system-ui, sans-serif;
+  --font-slot-time: 700 15px/1 'Inter', system-ui, sans-serif;
+
+  /*
+   * --- slot-state tokens ---
+   *
+   * These ARE consumed today, so their values match the current dark surface rather than the light
+   * palette above. Selected intentionally resolves to --brand-primary: CourtBooking already rendered
+   * the selected slot that way before this work, so a selected slot follows whatever a tenant's brand
+   * colour is instead of a second fixed green that could clash for a non-green tenant.
+   */
+  --slot-selected-border: var(--brand-primary);
+  --slot-selected-surface: color-mix(in srgb, var(--brand-primary) 12%, transparent);
+
+  --slot-available-border: rgba(255, 255, 255, 0.06);
+  --slot-available-surface: rgba(17, 24, 39, 0.5);
+  --slot-available-accent: #4ade80;
+
+  --slot-almostfull-border: rgba(194, 65, 12, 0.45);
+  --slot-almostfull-surface: rgba(124, 45, 18, 0.28);
+  --slot-almostfull-text: #fdba74;
 }
 
 body {
