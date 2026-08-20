@@ -119,6 +119,9 @@ function MainDashboard() {
   const [memberSessionLoading, setMemberSessionLoading] = useState(false);
   const [memberSessionError, setMemberSessionError] = useState<string | null>(null);
   const [confirmingAttendance, setConfirmingAttendance] = useState(false);
+  const [upcoming, setUpcoming] = useState<any[]>([]);
+  const [upcomingLoading, setUpcomingLoading] = useState(false);
+  const [upcomingError, setUpcomingError] = useState<string | null>(null);
 
   const loadMemberSession = async () => {
     if (user?.userType !== 'MEMBER' || !accessToken) return;
@@ -139,6 +142,50 @@ function MainDashboard() {
   useEffect(() => {
     loadMemberSession();
   }, [accessToken, user?.userType]);
+
+  // F-156: the "Upcoming Slots" card below rendered a hardcoded paragraph from the baseline commit
+  // onward — it had never been wired to booking data, so it read "No pre-scheduled matches today"
+  // even with a live booking on the books, and the booking only became visible on My Bookings.
+  //
+  // The register originally described this as a cache or query-invalidation gap. It was not: there
+  // was no cache, no query and no fetch. Measured on the deployed dashboard before this change,
+  // with a real upcoming booking held: zero requests to /bookings/my from this screen.
+  //
+  // No invalidation call is needed and none is added. MainDashboard is the `/` route element, so it
+  // unmounts on navigation and this effect re-runs on every return to the dashboard.
+  const loadUpcoming = async () => {
+    if (!accessToken) return;
+    try {
+      setUpcomingLoading(true);
+      setUpcomingError(null);
+      const res = await apiRequest<any[]>('/slot-engine/bookings/my', { token: accessToken });
+      setUpcoming(Array.isArray(res) ? res : []);
+    } catch (err: any) {
+      setUpcomingError(err.message || 'Unable to load your upcoming slots.');
+    } finally {
+      setUpcomingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUpcoming();
+  }, [accessToken]);
+
+  // Upcoming = has not started yet, and is still a live booking. CANCELLED and RELEASED_NO_SHOW are
+  // excluded. HELD is deliberately included: a hold carries a 5-minute TTL swept server-side
+  // (slot-engine/src/index.ts:2944), so a HELD row here is genuinely in flight. Dropping it would
+  // blank this card for the seconds between payment and capture — reproducing F-156's exact symptom
+  // on a fresh cause.
+  const upcomingSlots = upcoming
+    .filter((b) => b?.window?.startTime && ['HELD', 'CONFIRMED', 'CHECKED_IN'].includes(b.status))
+    .filter((b) => new Date(b.window.startTime).getTime() > Date.now())
+    .sort((a, b) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime());
+
+  const upcomingBadge = (status: string) => {
+    if (status === 'HELD') return { label: 'Payment pending', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
+    if (status === 'CHECKED_IN') return { label: 'Checked in', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
+    return { label: 'Confirmed', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+  };
 
   const handleBookNow = () => {
     const savedBranch = localStorage.getItem('selected_branch_id');
@@ -287,9 +334,58 @@ function MainDashboard() {
             <Calendar className="h-5 w-5" />
           </div>
           <h3 className="text-lg font-bold font-outfit text-ink">Upcoming Slots</h3>
-          <p className="text-xs text-ink-muted">
-            No pre-scheduled matches today. Click "Book Court Now" to search for court times.
-          </p>
+
+          {upcomingLoading ? (
+            <div className="flex items-center gap-2 text-xs text-ink-muted">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />Loading your upcoming slots
+            </div>
+          ) : upcomingError ? (
+            <p className="text-xs text-red-700" id="upcoming-slots-error">{upcomingError}</p>
+          ) : upcomingSlots.length === 0 ? (
+            <p className="text-xs text-ink-muted" id="upcoming-slots-empty">
+              No pre-scheduled matches today. Click "Book Court Now" to search for court times.
+            </p>
+          ) : (
+            <div className="space-y-2" id="upcoming-slots-list">
+              {upcomingSlots.slice(0, 3).map((b) => {
+                const start = new Date(b.window.startTime);
+                const end = new Date(b.window.endTime);
+                const badge = upcomingBadge(b.status);
+                return (
+                  <div
+                    key={b.id}
+                    id={`upcoming-slot-${b.id}`}
+                    className="rounded-xl border border-edge bg-surface p-3 space-y-1"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-ink truncate">
+                        {b.window.resourcePool?.name || 'Court booking'}
+                      </span>
+                      <span className={`shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-ink-muted font-mono">
+                      {start.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {' · '}
+                      {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {' - '}
+                      {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                );
+              })}
+              {upcomingSlots.length > 3 && (
+                <Link
+                  to="/bookings/my"
+                  className="block text-[11px] font-semibold text-[var(--brand-primary)] hover:underline pt-1"
+                  id="upcoming-slots-view-all"
+                >
+                  View all {upcomingSlots.length} upcoming slots
+                </Link>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4">

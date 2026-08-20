@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
@@ -39,6 +39,7 @@ export default function CourtBooking() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
 
   // 1. Fetch resource pool on mount
   useEffect(() => {
@@ -96,6 +97,36 @@ export default function CourtBooking() {
       isCurrentRequest = false;
     };
   }, [poolId, bookingDate, accessToken]);
+
+  // F-153: make the consequence of a slot tap reachable on a phone.
+  //
+  // The selected-slot styling F-146 added is real and applies immediately — but below the `lg`
+  // breakpoint this page collapses to a single column, so the rate summary and the pay button
+  // render after the entire slot list. Measured on the deployed JBC screen at 375x812 against a
+  // real 15-slot day: tapping a mid-list slot left `scrollY` unchanged at 722 and placed the pay
+  // button 676px below the fold, so nothing about the tap was observable without scrolling.
+  //
+  // This runs as an effect, not inside the click handler, because the summary MOUNTS on selection
+  // — `summaryRef` is still null while the handler runs. One scroll, after one render, so there is
+  // no double-scroll when selection re-renders the column.
+  useEffect(() => {
+    const el = summaryRef.current;
+    if (!selectedSlot || !el) return;
+
+    // `block: 'nearest'` is chosen for its native semantics: it is a no-op when the element is
+    // already fully visible. That covers both no-regression cases with one rule, without
+    // duplicating the `lg` breakpoint in JS where it could drift from the Tailwind class — no jump
+    // on desktop, where the summary already sits in the right-hand column, and no jump when the
+    // tapped slot is above the fold. When the summary is below the viewport, `nearest` aligns its
+    // bottom edge with the viewport bottom, which is exactly what brings the pay button on screen.
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+  }, [selectedSlot?.window?.id]);
+
+  // Shared by the slot cards and the rate summary so both render a slot's time the same way.
+  const formatTimeRange = (win: any) =>
+    `${new Date(win.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ` +
+    `${new Date(win.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
   // Real-time price helper.
   // Group size is the booker alone while co-player collection is removed (see the note above).
@@ -229,8 +260,7 @@ export default function CourtBooking() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {slots.map((slot) => {
                   const isSelected = selectedSlot?.window?.id === slot.window.id;
-                  const st = new Date(slot.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                  const et = new Date(slot.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const timeRange = formatTimeRange(slot.window);
                   const pricingMode = slot.window.pricingMode || pool.pricingMode || 'FLAT';
                   const rate = slot.window.price != null ? slot.window.price : pool.defaultRate;
 
@@ -270,7 +300,7 @@ export default function CourtBooking() {
                       id={`slot-card-${slot.window.id}`}
                     >
                       <div className="flex justify-between items-start">
-                        <span className="text-ink font-mono" style={{ font: 'var(--font-slot-time)' }}>{st} - {et}</span>
+                        <span className="text-ink font-mono" style={{ font: 'var(--font-slot-time)' }}>{timeRange}</span>
                         <span className="text-[10px] bg-surface-mint text-ink-muted px-2 py-0.5 rounded-full font-mono font-bold">
                           {pricingMode === 'PER_PERSON' ? 'Per-Person' : 'Flat-Rate'}
                         </span>
@@ -293,7 +323,7 @@ export default function CourtBooking() {
         {/* Right column: Players & Price Summary */}
         <div className="space-y-6">
           {selectedSlot ? (
-            <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-6">
+            <div ref={summaryRef} id="rate-summary-panel" className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-6">
               <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider flex items-center space-x-2">
                 <Users className="h-4 w-4 text-[var(--brand-primary)]" />
                 <span>3. Rate Summary</span>
@@ -304,6 +334,17 @@ export default function CourtBooking() {
 
               {/* Price Calculation details */}
               <div className="space-y-3">
+                {/* F-153: echo which slot was picked. On a long list the tapped card necessarily
+                    leaves the viewport when this panel scrolls into view — a 375px screen cannot
+                    hold both — so the confirmation of WHAT was selected has to exist here too, not
+                    only as the highlight in the list. Deliberately additive: F-146's selected-slot
+                    styling is untouched. */}
+                <div className="flex justify-between text-xs text-ink-muted font-medium">
+                  <span>Selected Slot:</span>
+                  <span className="text-ink font-mono font-bold" id="selected-slot-echo">
+                    {formatTimeRange(selectedSlot.window)}
+                  </span>
+                </div>
                 <div className="flex justify-between text-xs text-ink-muted font-medium">
                   <span>Pricing Mode:</span>
                   <span className="text-ink">
