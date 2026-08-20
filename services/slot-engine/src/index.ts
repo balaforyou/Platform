@@ -10,6 +10,7 @@ import {
   branchHHMM,
   branchIsoWeekday,
   branchLocalToUtc,
+  parseBranchLocalDateTime,
   branchMinutesOfDay,
   safeTimeZone,
 } from './branchTime.js';
@@ -1142,8 +1143,22 @@ server.post('/resource-pools/:id/availability-windows', async (request, reply) =
   // F-066: slot boundaries and the "did you mean 10:00 or 11:00?" hint are stated on the
   // branch's clock, not the server's.
   const poolTimeZone = await getBranchTimeZone(pool.branchId);
-  const start = new Date(startTime);
-  const end = new Date(endTime);
+  // F-087: parse on the same clock the boundary check below judges against. This line used to be
+  // `new Date(startTime)`, which resolved a naive datetime on the SERVER's clock while
+  // `isAlignedToBoundary` immediately judged it on the branch's — two clocks, agreeing only by the
+  // coincidence that both are currently UTC.
+  let start: Date;
+  let end: Date;
+  try {
+    start = parseBranchLocalDateTime(startTime, poolTimeZone, 'startTime');
+    end = parseBranchLocalDateTime(endTime, poolTimeZone, 'endTime');
+  } catch (e: any) {
+    reply.status(400);
+    const err = new Error(e.message);
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
 
   if (!isAlignedToBoundary(start, duration, poolTimeZone)) {
     const enteredStr = formatHHMM(start, poolTimeZone);
@@ -1876,13 +1891,44 @@ server.post('/blocked-windows', async (request, reply) => {
   }
   await requirePoolScope(auth, resourcePoolId, reply);
 
+  // F-087: the sibling the finding's text did not name. This route had the same naive
+  // `new Date(startTime)` parse and, unlike availability-windows, resolved no branch timezone at
+  // all — so it was naive in, naive out. Nothing in `apps/admin-web` calls it today, which made it
+  // latent rather than live, and is exactly why it would have been missed until a branch flipped.
+  // Same rule as its sibling, resolved through the pool so the two cannot drift apart again.
+  const blockedPool = await prisma.resourcePool.findUnique({
+    where: { id: resourcePoolId },
+    select: { branchId: true },
+  });
+  if (!blockedPool) {
+    reply.status(404);
+    const err = new Error('Resource pool not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+  const blockedTimeZone = await getBranchTimeZone(blockedPool.branchId);
+
+  let blockedStart: Date;
+  let blockedEnd: Date;
+  try {
+    blockedStart = parseBranchLocalDateTime(startTime, blockedTimeZone, 'startTime');
+    blockedEnd = parseBranchLocalDateTime(endTime, blockedTimeZone, 'endTime');
+  } catch (e: any) {
+    reply.status(400);
+    const err = new Error(e.message);
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
   // WHY: Creates a blocked slot where booking is prohibited (e.g. training sessions).
   const blocked = await prisma.blockedWindow.create({
     data: {
       resourcePoolId,
       resourceId,
-      startTime: new Date(startTime),
-      endTime: new Date(endTime),
+      startTime: blockedStart,
+      endTime: blockedEnd,
       reason,
     },
   });

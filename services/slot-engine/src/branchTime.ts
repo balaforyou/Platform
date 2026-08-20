@@ -183,3 +183,37 @@ export function addBranchDays(instant: Date, days: number, timeZone: string): Da
   const dateString = `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`;
   return branchLocalToUtc(dateString, `${pad(p.hour)}:${pad(p.minute)}`, timeZone);
 }
+
+/**
+ * F-087: resolve a caller-supplied datetime, interpreting a naive one on the BRANCH's clock.
+ *
+ * `new Date("2026-07-31T22:16:00")` — no offset, no `Z` — is parsed by Node as process-local
+ * time, so the instant a caller creates depended on how the container happened to be configured
+ * rather than on anything the caller said. That was invisible while every layer was naive-local
+ * together, and stayed harmless only because the server and every branch are both `UTC`. It
+ * becomes a real defect the moment a branch carries a real timezone (F-088): an admin entering
+ * `22:16` would have it stored as 22:16 UTC and then judged, displayed and aligned as 03:46 IST.
+ *
+ * The decision, stated rather than left to fall out of the parser: **naive input means branch
+ * local time**, which is what an admin typing a time on a venue's schedule actually means, and
+ * matches the schema's own "branch local time" convention. Input carrying an explicit offset is
+ * unchanged — it already says exactly which instant it means.
+ *
+ * A branch on `UTC` is unaffected, which is what makes this safe to land before any flip.
+ */
+const NAIVE_LOCAL = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/;
+
+export function parseBranchLocalDateTime(value: unknown, timeZone: string, field: string): Date {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`${field} is required and must be a datetime string`);
+  }
+  const naive = NAIVE_LOCAL.exec(value.trim());
+  const parsed = naive
+    ? branchLocalToUtc(naive[1], naive[2], timeZone)
+    : new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`${field} is not a valid datetime: "${value}"`);
+  }
+  return parsed;
+}
