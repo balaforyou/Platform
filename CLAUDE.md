@@ -65,6 +65,27 @@ export DATABASE_URL="$(grep -E '^DATABASE_URL' .env | sed -E 's/^DATABASE_URL=//
 
 Stop any manually-started dev services first, or the suite silently exercises them against the demo database (see the port-collision trap above — this has written real test rows into demo data).
 
+**Running the e2e suite, and the three databases.** There are three, all in the same `badminton_postgres` container on port 65432:
+
+| Database | Used by | Notes |
+|---|---|---|
+| `badminton_db` | the demo / dev stack | Holds JBC and `courtowner1`. **Never a test target.** |
+| `badminton_db_test` | the five regression suites | Wiped unscoped by `cleanDatabase()` |
+| `badminton_db_e2e` | Playwright (`test:e2e`) | Separate from `_test` because the regression suites and the specs collide over shared fixture rows (F-046) |
+
+`apps/guest-member-pwa/playwright.config.ts` loads the repo `.env` itself and rewrites a `badminton_db` target to `badminton_db_e2e` (F-047), so **`pnpm test:e2e` and a bare `npx playwright test <spec>` both work with no exported `DATABASE_URL`** and neither can reach the demo database by default. An explicitly exported target other than `badminton_db` is respected untouched.
+
+**Provisioning `badminton_db_e2e` from scratch** — it is not created by any script, so a fresh machine needs this once:
+
+```bash
+docker exec -i badminton_postgres psql -U postgres -c "CREATE DATABASE badminton_db_e2e;"
+cd packages/database && DATABASE_URL="postgresql://postgres:postgrespassword@localhost:65432/badminton_db_e2e?schema=public" npx prisma migrate deploy
+```
+
+`badminton_db_test` has the same requirement and has never been documented; it was presumably created the same way.
+
+**The e2e suite does not pass, and that is pre-existing.** The baseline is **2 passed, 6 failed, 1 skipped**, identical before and after F-047 and identical on a completely fresh database. The failures are F-046: `seed-test-data.ts` and `f023-full-system.spec.ts` both claim `+919999999999` under the same tenant with different ids, and the seed upserts on `id` while the constraint is on `(phone, tenantId)`. Specs pass individually and fail as a suite. Do not read a red e2e run as a regression without checking against this baseline first.
+
 **The deployed demo runs `NODE_ENV=development`.** Consequences worth knowing before designing or testing anything against it:
 
 - **OTP is always `123456`**, and any phone number self-registers as a `GUEST` on first verify. That means a fixed, guessable code on a public URL — fine for a driven demo, not for leaving unattended.
