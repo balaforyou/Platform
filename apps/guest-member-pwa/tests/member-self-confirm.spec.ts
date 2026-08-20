@@ -10,8 +10,8 @@ const noSessionMemberId = 'member-ui-confirm-no-session';
 const raceMemberId = 'member-ui-confirm-race';
 const inactiveMemberId = 'member-ui-confirm-inactive';
 const cutoffMemberId = 'member-ui-confirm-cutoff';
-const activePhone = '+919811111111';
-const noSessionPhone = '+919822222222';
+const activePhone = '+919902000001';
+const noSessionPhone = '+919902000002';
 const activePoolId = 'member-ui-confirm-pool';
 const activeWindowId = 'member-ui-confirm-window';
 
@@ -80,9 +80,9 @@ test.describe('Member self-confirm attendance', () => {
 
     await upsertMember(activeMemberId, activePhone);
     await upsertMember(noSessionMemberId, noSessionPhone);
-    await upsertMember(raceMemberId, '+919833333333');
-    await upsertMember(inactiveMemberId, '+919844444444');
-    await upsertMember(cutoffMemberId, '+919855555555');
+    await upsertMember(raceMemberId, '+919902000003');
+    await upsertMember(inactiveMemberId, '+919902000004');
+    await upsertMember(cutoffMemberId, '+919902000005');
 
     const activeStart = alignFutureStart(4);
     await prisma.resourcePool.create({

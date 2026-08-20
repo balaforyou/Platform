@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { execSync } from 'child_process';
 import { PrismaClient } from '@badminton/database';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -16,6 +17,21 @@ const verificationDate = new Date().toISOString().slice(0, 10);
 test.describe('F-041 Independent Verification', () => {
 
   test.beforeAll(async () => {
+    // F-046: seed before logging in, not after.
+    //
+    // This spec signs in as `ownerPhone` but seeded nothing, so identity-auth's dev-mode
+    // self-registration created that user with a generated UUID. `seed-test-data.ts` then could
+    // not create its own row for the same phone and tenant — `User` is unique on
+    // `(phone, tenantId)` while the seed upserts on `id` — and took `guest-booking` and
+    // `findings-verification` down with it. Proven live: a fresh database ran f023, then this
+    // spec, and was left holding `24d849ba-…` for `+919999999999`.
+    //
+    // Running the shared seed here is the fix rather than giving this spec a private number: it
+    // needs an OWNER, and a private phone would self-register a GUEST with no admin rights and
+    // break the admin login below.
+    console.log('Running test database seed...');
+    execSync('npx tsx tests/seed-test-data.ts', { cwd: process.cwd() });
+
     // Delete all bookings for f041-member-pending to clean up from previous test runs
     // and restore the pending confirmation state.
     console.log('Cleaning up all bookings for f041-member-pending...');

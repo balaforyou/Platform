@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { execSync } from 'child_process';
 
 /**
  * F-061 TIER 1 CLOSURE CONDITION — real rendered evidence for the three paths that
@@ -32,6 +33,16 @@ async function loginByOtp(page: any, phone: string, appPrefix = '') {
 
 test.describe('F-061 browser verification', () => {
   test.setTimeout(180000);
+
+  // F-046: seed before logging in. This spec signs in as OWNER_PHONE but seeded nothing, so
+  // identity-auth's dev-mode self-registration claimed that phone with a generated UUID and
+  // `seed-test-data.ts` could not then create its own row for it — `User` is unique on
+  // `(phone, tenantId)` while the seed upserts on `id`. Running the shared seed rather than
+  // taking a private number, because this spec needs the seeded OWNER for its admin login.
+  test.beforeAll(async () => {
+    console.log('Running test database seed...');
+    execSync('npx tsx tests/seed-test-data.ts', { cwd: process.cwd() });
+  });
 
   test('Paths 1 and 2 — Admin Web booking-rule save and refund preview', async ({ page }) => {
     await loginByOtp(page, OWNER_PHONE, '/admin');
