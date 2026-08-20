@@ -22,7 +22,8 @@
     "deploy:verify": "node scripts/verify-deployment.mjs",
     "diagram:flows": "node scripts/generate-flow-diagram.mjs",
     "diagram:flows:check": "node scripts/generate-flow-diagram.mjs --check",
-    "diagram:verify": "node scripts/generate-flow-diagram.mjs --verify-register"
+    "diagram:verify": "node scripts/generate-flow-diagram.mjs --verify-register",
+    "register:check": "node scripts/check-register.mjs"
   },
   "devDependencies": {
     "typescript": "^5.4.5",
