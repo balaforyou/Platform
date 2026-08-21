@@ -87,9 +87,10 @@ the deployed database uses role **`badminton`**, not `postgres`, in container
 
 ## Batch 5 — F-169 / F-170 (assignment matching defects, from F-088's audit)
 
-**Findings:** F-169, F-170
+**Findings:** F-169, F-170 — both Resolved
 **Status:** Done
-**Commits:** `73e24d0` (logged both findings; also locked F-088's part-3/4 coupling), `5c2a118` (F-169 fix), `b2de974` (F-170 fix)
+**Closed:** 21 Aug 2026
+**Commits:** `73e24d0` (logged both findings; also locked F-088's part-3/4 coupling), `5c2a118` (F-169), `b2de974` (F-170), `d9e4809` (register + batch-log)
 **Notes:** Both are **independent of F-088 and of timezone** — reproduced on a UTC branch, and neither
 mechanism involves a conversion. F-170 folds in the sweep's silent `continue`; no separate finding for
 that. **F-170's reproduction is re-runnable**, and the probe choice matters: use the **member-attendance
@@ -99,7 +100,18 @@ simply not due yet — that misread cost a cycle. The fixture seeds three assign
 18:00 and 19:00 windows: one declaring 19:00 (matches), one declaring 17:30 (silently rebinds to 18:00
 and is reported as 18:00), and one on a pool with no windows (`WINDOW_NOT_FOUND`).
 
-**Outcome (21 Aug 2026).** Both shipped. **F-170 resolved as Option A — the one-hour tolerance removed entirely, exact match only — chosen on a real production read, not assumption.** The Step 0 pre-check found **zero** near-miss rebinds: the whole deployment holds **exactly one** ACTIVE `MemberGroupAssignment`, a seed row on a pool with no `AvailabilityPattern` of any status and no window in a 14-day span, so it already resolved to nothing and its behaviour is unchanged. JBC holds none. **Two corrections to the batch's own assumptions, both established against code:** (1) the tolerance is **forward-only**, not symmetric — a window earlier than the declared time never matched; (2) a pool-level "has a pattern" check is **not sufficient**, because patterns are weekday-scoped and a pool may hold several (`availabilityGeneration.ts:247-258`), so F-169's check is per declared weekday. `PATCH /member-group-assignments/:id` was confirmed **not** to inherit the gap — it accepts only `status` — so no finding was needed there. Two new findings came out of the work: **F-171** (the admin UI's start-time dropdown derives from branch working hours, not patterns, so it can now offer times F-169 rejects — medium priority) and **F-172** (admin attendance and the member view lack the sweep's try/catch on a malformed stored `startTime` — low priority, deferred). The re-runnable reproduction noted above held up exactly as described and was used for F-170's RED/GREEN across all three consumers.
+**Closure (21 Aug 2026).** **Shipped:** F-169 adds creation-time validation (**pattern-existence** check, per the prior investigation's correct judgment call — **not** window-count, since generation is lazy/on-access). F-170 **removed the ±1h tolerance entirely** (exact match, "Option A") rather than keeping tolerance with better reporting — justified because **Step 0's production pre-check found zero near-miss rebinds platform-wide**, so the more conservative fallback (Option B, tolerance kept with transparent reporting) was never needed. **Three approved deviations from original plan text:** `INVALID_DAYS_OF_WEEK` added as a real dependency of the alignment check, per-weekday (not pool-level) pattern strictness to match actual generation semantics, `INVALID_TIME` reused over a new error code.
+
+**Honest framing, worth repeating if this comes up later:** production held **exactly one** ACTIVE `MemberGroupAssignment` (a seed row), **already `WINDOW_NOT_FOUND` before either fix**. F-170 closed a real defect, but **not one any live customer data was actually hitting at the time**. Don't let this get overstated as "fixed a live customer issue" in any future summary.
+
+**New findings surfaced:** F-171, F-172. Both real, **IDs assigned by the Technical Lead thread directly rather than routed through Chief first — a process deviation from the handoff brief's explicit instruction.** No actual register collision resulted (the "F-171" informally referenced earlier in the Chief thread was deliberately never committed to the register — redirected to `CLAUDE.md` instead), so the numbers stand, but this is flagged as a process note for future batches: Technical Lead threads should hold new-finding IDs for Chief confirmation **even when next-in-sequence seems obvious**. Now recorded as a standing rule in `CLAUDE.md`.
+
+  * **F-171** — admin UI's start-time dropdown sources from branch hours, not the pool's own pattern, so it will now produce F-169's new validation 400s on submit. **Medium priority** — worth picking up before assignment creation sees real use, not left to drift.
+  * **F-172** — admin-attendance/member view lack the sweep's malformed-`startTime` guard. Pre-existing, low priority, deferred.
+
+**Caveats carried forward:** F-169 is creation-time validation only — legacy rows are unmigrated by design. Step 0's production pre-check is a snapshot; re-run before any real rollout if assignment volume changes between now and then.
+
+**Gates:** `register:check` PASS, `diagram:verify` PASS, regression **5/5** re-run post-commit.
 
 ---
 

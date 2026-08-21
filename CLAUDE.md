@@ -12,6 +12,8 @@ Multi-tenant sports court booking SaaS. 5 backend services (`services/slot-engin
 
 **If a referenced ID isn't actually in the register, don't invent content and don't silently skip it.** Say so plainly, and log under that number only when the reviewer supplied the content. This has happened for real: an ID was described as "already logged, just merge into it" when nothing existed under it.
 
+**New findings surfaced during batch work get described, not numbered.** Report them to Chief with evidence and let Chief assign the ID before it is written into the register — **even when the next-in-sequence number seems obvious and nothing else could plausibly be using it**. This is not the same rule as "never self-assign": it also covers a number handed over inside a Technical Lead thread. Established after Batch 5, where F-171 and F-172 were numbered in-thread rather than routed through Chief. No register collision resulted that time — an informally-referenced "F-171" had deliberately never been committed, so the numbers stood — but the near miss is the point.
+
 ## Standing workflow — every task
 
 1. **Plan mode first.** Investigate → write a real plan → wait for explicit approval → implement → real evidence → wait for sign-off. Never skip to implementation.
