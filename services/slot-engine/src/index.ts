@@ -700,12 +700,16 @@ async function computeBranchMemberAttendance(branchId: string, date: string | un
   const windowByAssignment = new Map<string, any>();
 
   for (const assignment of matchingAssignments) {
+    // F-170: exact match, no tolerance. This previously accepted any window starting
+    // within a forward 1-hour span of the declared time, so an assignment declaring 17:30
+    // silently rebound to an 18:00 window and was then reported as 18:00 — the declared
+    // time was never shown again. Exact match cannot spuriously fail for an assignment
+    // created after F-169, whose alignment check guarantees a real boundary; a near-miss
+    // now surfaces as WINDOW_NOT_FOUND, which all three consumers already handle.
     const expectedStart = slotStartForDate(dateString, assignment.startTime, timeZone);
-    const expectedEnd = new Date(expectedStart.getTime() + 60 * 60 * 1000);
     const matchingWindow = windows.find((window) => (
       window.resourcePoolId === assignment.resourcePoolId &&
-      window.startTime >= expectedStart &&
-      window.startTime <= expectedEnd
+      window.startTime.getTime() === expectedStart.getTime()
     ));
     if (matchingWindow) {
       windowByAssignment.set(assignment.id, matchingWindow);
@@ -909,12 +913,12 @@ async function resolveTodayMemberAssignment(userId: string, tenantId: string, no
 
   // F-066: `startTime` is documented as branch local time in the schema, and is now read
   // as such instead of being pasted into a UTC ISO string.
+  // F-170: exact match, no tolerance — see the note on the admin attendance path.
   const windowStart = branchLocalToUtc(todayDateString(now, timeZone), assignment.startTime, timeZone);
-  const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
   const matchingWindow = await prisma.availabilityWindow.findFirst({
     where: {
       resourcePoolId: assignment.resourcePoolId,
-      startTime: { gte: windowStart, lte: windowEnd },
+      startTime: windowStart,
     },
   });
   if (!matchingWindow) return { state: 'WINDOW_NOT_FOUND', weekday, assignment };
@@ -3174,15 +3178,23 @@ server.post('/bookings/sweep', async (request, reply) => {
       );
       continue;
     }
-    const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000); // search 1-hour span
-
+    // F-170: exact match, no tolerance — see the note on the admin attendance path.
     const matchingWindow = await prisma.availabilityWindow.findFirst({
       where: {
         resourcePoolId: assignment.resourcePoolId,
-        startTime: { gte: windowStart, lte: windowEnd },
+        startTime: windowStart,
       },
     });
-    if (!matchingWindow) continue;
+    if (!matchingWindow) {
+      // F-170: previously a silent `continue`. The unparseable-startTime case above
+      // already warns; a parseable time that simply finds no window was invisible, so the
+      // three consumers reported inconsistently. Both now say why nothing happened.
+      console.warn(
+        `[sweep] skipping assignment ${assignment.id}: no window for pool ` +
+          `${assignment.resourcePoolId} at ${assignment.startTime} on ${todayDateStr}`,
+      );
+      continue;
+    }
 
     // Check if a booking already exists for this member + window (any non-cancelled status).
     const existingBooking = await prisma.booking.findFirst({
