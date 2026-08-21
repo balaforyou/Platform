@@ -70,11 +70,11 @@ const FLOWS = {
   'FLOW-021': { name: 'Add Resource to Pool', endpoint: 'POST /resource-pools/:id/resources', auth: 'authed', findings: ['F-091 (fixed)'] },
   'FLOW-022': { name: 'Browse Branch Resource Pools', endpoint: 'GET /branches/:id/resource-pools', auth: 'authed', findings: ['F-091 (fixed)'] },
 
-  'FLOW-023': { name: 'Create Availability Window', endpoint: 'POST /resource-pools/:id/availability-windows', auth: 'authed', findings: ['F-043', 'F-087', 'F-088', 'F-091 (fixed)'] },
+  'FLOW-023': { name: 'Create Availability Window', endpoint: 'POST /resource-pools/:id/availability-windows', auth: 'authed', findings: ['F-043', 'F-087 (fixed)', 'F-088', 'F-091 (fixed)'] },
   'FLOW-024': { name: 'Browse Availability', endpoint: 'GET /resource-pools/:id/availability', auth: 'public', findings: ['F-051', 'F-080', 'F-088'] },
   'FLOW-025': { name: 'Manage Availability Patterns', endpoint: 'GET/POST/PATCH/DELETE .../availability-patterns', auth: 'authed', findings: ['F-043', 'F-088'] },
   'FLOW-026': { name: 'Manage Availability Overrides', endpoint: 'GET/POST/PATCH/DELETE .../availability-overrides', auth: 'authed', findings: ['F-043', 'F-088'] },
-  'FLOW-027': { name: 'Block Availability Window', endpoint: 'POST /blocked-windows', auth: 'authed', findings: ['F-051', 'F-091 (fixed)'] },
+  'FLOW-027': { name: 'Block Availability Window', endpoint: 'POST /blocked-windows', auth: 'authed', findings: ['F-051', 'F-087 (fixed)', 'F-091 (fixed)'] },
   'FLOW-028': { name: 'Generate Availability', endpoint: '(no endpoint - availabilityGeneration.ts)', auth: 'module', findings: ['F-046', 'F-088'] },
 
   'FLOW-029': { name: 'Create Booking', endpoint: 'POST /bookings', auth: 'authed', findings: ['F-023', 'F-028', 'F-080'], transition: 'TRANSITION-BOOKING-001' },
