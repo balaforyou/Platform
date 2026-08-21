@@ -88,8 +88,8 @@ the deployed database uses role **`badminton`**, not `postgres`, in container
 ## Batch 5 — F-169 / F-170 (assignment matching defects, from F-088's audit)
 
 **Findings:** F-169, F-170
-**Status:** Handed off, awaiting Technical Lead thread
-**Commits:** `73e24d0` (logged both findings; also locked F-088's part-3/4 coupling)
+**Status:** Done
+**Commits:** `73e24d0` (logged both findings; also locked F-088's part-3/4 coupling), `5c2a118` (F-169 fix), `b2de974` (F-170 fix)
 **Notes:** Both are **independent of F-088 and of timezone** — reproduced on a UTC branch, and neither
 mechanism involves a conversion. F-170 folds in the sweep's silent `continue`; no separate finding for
 that. **F-170's reproduction is re-runnable**, and the probe choice matters: use the **member-attendance
@@ -98,6 +98,8 @@ outside that band it returns nothing for every assignment and looks like a null 
 simply not due yet — that misread cost a cycle. The fixture seeds three assignments against a pool with
 18:00 and 19:00 windows: one declaring 19:00 (matches), one declaring 17:30 (silently rebinds to 18:00
 and is reported as 18:00), and one on a pool with no windows (`WINDOW_NOT_FOUND`).
+
+**Outcome (21 Aug 2026).** Both shipped. **F-170 resolved as Option A — the one-hour tolerance removed entirely, exact match only — chosen on a real production read, not assumption.** The Step 0 pre-check found **zero** near-miss rebinds: the whole deployment holds **exactly one** ACTIVE `MemberGroupAssignment`, a seed row on a pool with no `AvailabilityPattern` of any status and no window in a 14-day span, so it already resolved to nothing and its behaviour is unchanged. JBC holds none. **Two corrections to the batch's own assumptions, both established against code:** (1) the tolerance is **forward-only**, not symmetric — a window earlier than the declared time never matched; (2) a pool-level "has a pattern" check is **not sufficient**, because patterns are weekday-scoped and a pool may hold several (`availabilityGeneration.ts:247-258`), so F-169's check is per declared weekday. `PATCH /member-group-assignments/:id` was confirmed **not** to inherit the gap — it accepts only `status` — so no finding was needed there. Two new findings came out of the work: **F-171** (the admin UI's start-time dropdown derives from branch working hours, not patterns, so it can now offer times F-169 rejects — medium priority) and **F-172** (admin attendance and the member view lack the sweep's try/catch on a malformed stored `startTime` — low priority, deferred). The re-runnable reproduction noted above held up exactly as described and was used for F-170's RED/GREEN across all three consumers.
 
 ---
 
