@@ -279,16 +279,46 @@ function minutesToTime(totalMinutes: number) {
   return `${hours}:${minutes}`;
 }
 
-function assignmentStartTimes(branch?: Branch, pool?: ResourcePool) {
-  const start = timeToMinutes(branch?.workingHoursStart || '06:00');
-  const end = timeToMinutes(branch?.workingHoursEnd || '22:00');
-  const step = pool?.minBookingDurationMinutes || 60;
-  const latestStart = end - step;
-  const slots: string[] = [];
-  for (let minute = start; minute <= latestStart; minute += step) {
-    slots.push(minutesToTime(minute));
+// F-171: mirrors `patternBoundaries` in `services/slot-engine/src/index.ts`. F-169 validates a
+// declared startTime against exactly these boundaries, so any divergence between the two
+// implementations shows up as a button the server rejects on submit. Change them together.
+function patternBoundaries(pattern: AvailabilityPattern) {
+  const start = timeToMinutes(pattern.startTime);
+  const end = timeToMinutes(pattern.endTime);
+  const boundaries: number[] = [];
+  for (let cursor = start; cursor < end; cursor += pattern.slotDurationMinutes) {
+    boundaries.push(cursor);
   }
-  return slots;
+  return boundaries;
+}
+
+// F-171: start times are derived from the pool's own ACTIVE availability patterns, NOT from
+// branch working hours. The two are unrelated by construction — working hours are a
+// branch-level display range, while patterns are what generation actually steps through — so
+// the old version could offer a time F-169 now rejects with START_TIME_NOT_ALIGNED.
+//
+// This is an INTERSECTION across the selected weekdays, not a union: F-169 rejects the whole
+// assignment if any single selected day misaligns, so a union would put back exactly the
+// buttons the server refuses. An empty result is a legitimate outcome (patterns disagree
+// across the chosen days, or a chosen day has no ACTIVE pattern), and the caller reports it.
+function assignmentStartTimes(patterns: AvailabilityPattern[] | undefined, daysOfWeek: string[]) {
+  if (!patterns || daysOfWeek.length === 0) return [];
+  const active = patterns.filter((pattern) => pattern.status === 'ACTIVE');
+  const dayBoundarySets = daysOfWeek.map((day) => {
+    const forDay = active.filter((pattern) => (
+      pattern.daysOfWeek.split(',').map((entry) => entry.trim()).includes(day)
+    ));
+    const minutes = new Set<number>();
+    for (const pattern of forDay) {
+      for (const boundary of patternBoundaries(pattern)) minutes.add(boundary);
+    }
+    return minutes;
+  });
+  const [first, ...rest] = dayBoundarySets;
+  return [...first]
+    .filter((minute) => rest.every((set) => set.has(minute)))
+    .sort((a, b) => a - b)
+    .map(minutesToTime);
 }
 
 function formatMemberContact(member?: UserLookupResult | null) {
@@ -1418,11 +1448,21 @@ function AssignmentsPage() {
   const [branchId, setBranchId] = useState('');
   const [resourcePoolId, setResourcePoolId] = useState('');
   const pools = usePools(branchId);
-  const selectedBranch = branches.data?.find((branch) => branch.id === branchId);
-  const selectedPool = pools.data?.find((pool) => pool.id === resourcePoolId);
-  const startTimes = assignmentStartTimes(selectedBranch, selectedPool);
   const [selectedUser, setSelectedUser] = useState<UserLookupResult | null>(null);
   const [form, setForm] = useState({ daysOfWeek: ['1', '2', '3', '4', '5'], startTime: '10:00' });
+
+  // F-171: same endpoint and cache key SchedulingPage already uses, so the two panels share
+  // one cached result rather than introducing a second source of pattern truth.
+  const patterns = useQuery({
+    queryKey: ['availability-patterns', resourcePoolId],
+    enabled: !!resourcePoolId,
+    queryFn: () => api.get<AvailabilityPattern[]>(`/slot-engine/resource-pools/${resourcePoolId}/availability-patterns`),
+  });
+  // Recomputed on every daysOfWeek change, not just branch/pool — the valid set shrinks and
+  // grows as days are toggled.
+  const startTimes = assignmentStartTimes(patterns.data, form.daysOfWeek);
+  const noSharedStartTime = !!resourcePoolId && !patterns.isLoading && !patterns.error
+    && form.daysOfWeek.length > 0 && startTimes.length === 0;
 
   React.useEffect(() => {
     if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
@@ -1503,8 +1543,14 @@ function AssignmentsPage() {
                 </button>
               ))}
             </div>
+            {/* F-171: a pattern-derived set can legitimately be empty, unlike the old
+                working-hours range. Explain it and disable the action rather than leaving an
+                empty grid and inviting a doomed click (same shape as F-031). */}
+            {noSharedStartTime && (
+              <MutationFeedback error={{ message: "No shared start time for these days — check each day's availability pattern." }} />
+            )}
           </div>
-          <button className="primary-btn" disabled={create.isPending || !selectedUser || !resourcePoolId || form.daysOfWeek.length === 0} onClick={() => create.mutate()}>
+          <button className="primary-btn" disabled={create.isPending || !selectedUser || !resourcePoolId || form.daysOfWeek.length === 0 || noSharedStartTime} onClick={() => create.mutate()}>
             {create.isPending ? <RefreshCw className="spin" size={16} /> : <Users size={16} />}
             {create.isPending ? 'Assigning...' : 'Assign member'}
           </button>
