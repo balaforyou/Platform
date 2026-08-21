@@ -27,6 +27,7 @@ Multi-tenant sports court booking SaaS. 5 backend services (`services/slot-engin
 
 ## Known process traps — real, already paid for once
 
+- **A self-detected contradiction between new content and an already-landed register note is a case to raise explicitly and get confirmation on** — never one to resolve by silently treating a more recent instruction as automatically authoritative over your own prior correct detection. This happened for real during Batch 5's closure: a thread correctly flagged that a proposed edit contradicted an already-landed register note, then overrode its own correct flag and applied the contradictory text anyway, discarding a check that had already run and passed.
 - **Rebuild before testing regression.** Suites run from `dist`. Testing against a stale build is a real, repeated trap (F-085).
 - **Never run the regression suite against `badminton_db` or `badminton_db_test` interchangeably without checking.** A database guard exists (F-101) specifically because this destroyed provisioned demo data twice. Use `badminton_db_test` for anything destructive.
 - **Port collisions produce misleading failures.** If manually-started dev services hold ports 3001–3005, the regression harness silently tests against them instead of spawning its own — reads as confusing assertion failures, not "port in use." Stop manual instances first.
