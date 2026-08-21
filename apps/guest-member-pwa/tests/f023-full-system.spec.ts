@@ -1,5 +1,6 @@
 import { test, expect, request as playwrightRequest } from '@playwright/test';
 import { PrismaClient, BookingStatus } from '@badminton/database';
+import { assertDisposableDatabase } from '@badminton/test-harness';
 
 const prisma = new PrismaClient();
 
@@ -222,6 +223,11 @@ test.describe('F-023 cross-system integration', () => {
   test.setTimeout(180000);
 
   test.beforeAll(async () => {
+    // F-101 guard (Change B): refuse a run aimed at a database that is not provably
+    // disposable. F-047's config rewrite only catches the literal `badminton_db`; an
+    // explicitly exported target of any other name reaches these deletes unguarded.
+    assertDisposableDatabase('f023-full-system.spec.ts');
+
     await seedF023();
   });
 

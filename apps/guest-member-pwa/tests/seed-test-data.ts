@@ -1,9 +1,22 @@
 import { PrismaClient } from '@badminton/database';
+import { assertDisposableDatabase } from '@badminton/test-harness';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('--- Playwright E2E Test Seeding ---');
+
+  // F-101 guard, extended to the e2e suite by Change B.
+  //
+  // This file is the choke point for every spec that seeds through `execSync` — guest-booking,
+  // findings-verification, f061 and f041 — and it is also the realistic bypass: run directly as
+  // `npx tsx tests/seed-test-data.ts`, it never loads `playwright.config.ts`, so F-047's rewrite
+  // of a `badminton_db` target to `badminton_db_e2e` does not apply. That rewrite is also
+  // name-specific, so a `badminton_db_demo` or a remote deployed URL passes through it untouched.
+  //
+  // Verified rather than assumed: unguarded, this seed wrote a tenant, a user and a pool into a
+  // non-disposable database in a single command.
+  assertDisposableDatabase('seed-test-data.ts');
 
   const tenantId = '11111111-1111-1111-1111-111111111111';
   const branchId = '22222222-2222-2222-2222-222222222222';

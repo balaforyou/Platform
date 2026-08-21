@@ -17,8 +17,16 @@
  * false permit is somebody's provisioned data.
  */
 
-/** Database names that are disposable by construction. */
-const DISPOSABLE_NAME = /(^|[_-])(test|tests|testing|ci|shadow|scratch|throwaway)([_-]|$)/i;
+/**
+ * Database names that are disposable by construction.
+ *
+ * `e2e` was added when `badminton_db_e2e` was created (F-047): the Playwright suite needed a
+ * database of its own, because the regression suites wipe and reseed `_test` and collide with the
+ * specs over shared fixture rows (F-046). It belongs on this list for the same reason every other
+ * entry does — the name advertises that the contents are disposable — and was absent only because
+ * no e2e-specific database existed until then.
+ */
+const DISPOSABLE_NAME = /(^|[_-])(test|tests|testing|e2e|ci|shadow|scratch|throwaway)([_-]|$)/i;
 
 /** Explicit opt-in for a database whose name does not advertise that it is disposable. */
 const OVERRIDE_ENV = 'ALLOW_DESTRUCTIVE_DB_RESET';
@@ -73,8 +81,8 @@ export function assertDisposableDatabase(context = 'destructive test reset'): st
     `  database holding provisioned tenants, branches or bookings destroys them irrecoverably —\n` +
     `  which is exactly what happened to a real customer demo on 15 Aug 2026.\n` +
     `\n` +
-    `  Point DATABASE_URL at a disposable database (a name containing "test", "ci", "shadow" or\n` +
-    `  "scratch" is accepted automatically), or, if you genuinely mean to wipe "${name}",\n` +
-    `  re-run with ${OVERRIDE_ENV}=true.\n`,
+    `  Point DATABASE_URL at a disposable database (a name containing "test", "e2e", "ci",\n` +
+    `  "shadow" or "scratch" is accepted automatically), or, if you genuinely mean to wipe\n` +
+    `  "${name}", re-run with ${OVERRIDE_ENV}=true.\n`,
   );
 }

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { execSync } from 'child_process';
 import { PrismaClient } from '@badminton/database';
+import { assertDisposableDatabase } from '@badminton/test-harness';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -17,6 +18,11 @@ const verificationDate = new Date().toISOString().slice(0, 10);
 test.describe('F-041 Independent Verification', () => {
 
   test.beforeAll(async () => {
+    // F-101 guard (Change B): refuse a run aimed at a database that is not provably
+    // disposable. F-047's config rewrite only catches the literal `badminton_db`; an
+    // explicitly exported target of any other name reaches these deletes unguarded.
+    assertDisposableDatabase('f041-verification.spec.ts');
+
     // F-046: seed before logging in, not after.
     //
     // This spec signs in as `ownerPhone` but seeded nothing, so identity-auth's dev-mode

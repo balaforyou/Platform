@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { PrismaClient, BookingStatus } from '@badminton/database';
+import { assertDisposableDatabase } from '@badminton/test-harness';
 
 const prisma = new PrismaClient();
 
@@ -51,6 +52,11 @@ async function loginAs(page: any, phone: string) {
 
 test.describe('Member self-confirm attendance', () => {
   test.beforeAll(async () => {
+    // F-101 guard (Change B): refuse a run aimed at a database that is not provably
+    // disposable. F-047's config rewrite only catches the literal `badminton_db`; an
+    // explicitly exported target of any other name reaches these deletes unguarded.
+    assertDisposableDatabase('member-self-confirm.spec.ts');
+
     await prisma.booking.deleteMany({
       where: {
         OR: [

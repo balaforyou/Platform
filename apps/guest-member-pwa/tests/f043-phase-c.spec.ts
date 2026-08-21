@@ -4,6 +4,7 @@ import fs from 'fs';
 import http, { type IncomingMessage, type ServerResponse } from 'http';
 import path from 'path';
 import { PrismaClient } from '@badminton/database';
+import { assertDisposableDatabase } from '@badminton/test-harness';
 
 function loadRootEnv() {
   const envPath = path.resolve(process.cwd(), '..', '..', '.env');
@@ -194,6 +195,11 @@ test.describe('F-043 Phase C scheduling UI', () => {
   let proxyServer: http.Server;
 
   test.beforeAll(async () => {
+    // F-101 guard (Change B): refuse a run aimed at a database that is not provably
+    // disposable. F-047's config rewrite only catches the literal `badminton_db`; an
+    // explicitly exported target of any other name reaches these deletes unguarded.
+    assertDisposableDatabase('f043-phase-c.spec.ts');
+
     await seedF043();
     const root = process.cwd().replace(/\\apps\\guest-member-pwa$/, '');
     processes = [
