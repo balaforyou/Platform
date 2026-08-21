@@ -706,7 +706,21 @@ async function computeBranchMemberAttendance(branchId: string, date: string | un
     // time was never shown again. Exact match cannot spuriously fail for an assignment
     // created after F-169, whose alignment check guarantees a real boundary; a near-miss
     // now surfaces as WINDOW_NOT_FOUND, which all three consumers already handle.
-    const expectedStart = slotStartForDate(dateString, assignment.startTime, timeZone);
+    // F-172: a malformed stored `startTime` must not fail the whole branch view. The sweep
+    // has guarded this since F-066; this path did not, so a single unparseable row threw out
+    // of the request and 500'd the attendance screen for *every* member at the branch, not
+    // just the bad one. Skipping leaves this assignment's map entry unset, which the roster
+    // below already reports as WINDOW_NOT_FOUND — the same state a genuine non-match yields.
+    let expectedStart: Date;
+    try {
+      expectedStart = slotStartForDate(dateString, assignment.startTime, timeZone);
+    } catch (err: any) {
+      console.warn(
+        `[attendance] skipping assignment ${assignment.id}: unusable startTime ` +
+          `${JSON.stringify(assignment.startTime)} — ${err.message}`,
+      );
+      continue;
+    }
     const matchingWindow = windows.find((window) => (
       window.resourcePoolId === assignment.resourcePoolId &&
       window.startTime.getTime() === expectedStart.getTime()
@@ -913,8 +927,20 @@ async function resolveTodayMemberAssignment(userId: string, tenantId: string, no
 
   // F-066: `startTime` is documented as branch local time in the schema, and is now read
   // as such instead of being pasted into a UTC ISO string.
+  // F-172: guard the conversion, matching the sweep and the admin attendance path. A
+  // malformed stored `startTime` previously threw out of this request; it now resolves to
+  // WINDOW_NOT_FOUND, the identical state returned just below for an ordinary non-match.
+  let windowStart: Date;
+  try {
+    windowStart = branchLocalToUtc(todayDateString(now, timeZone), assignment.startTime, timeZone);
+  } catch (err: any) {
+    console.warn(
+      `[memberView] assignment ${assignment.id}: unusable startTime ` +
+        `${JSON.stringify(assignment.startTime)} — ${err.message}`,
+    );
+    return { state: 'WINDOW_NOT_FOUND', weekday, assignment };
+  }
   // F-170: exact match, no tolerance — see the note on the admin attendance path.
-  const windowStart = branchLocalToUtc(todayDateString(now, timeZone), assignment.startTime, timeZone);
   const matchingWindow = await prisma.availabilityWindow.findFirst({
     where: {
       resourcePoolId: assignment.resourcePoolId,
