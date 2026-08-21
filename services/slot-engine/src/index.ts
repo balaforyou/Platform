@@ -368,6 +368,126 @@ function validateWholeSlotRange(startTime: string, endTime: string, slotDuration
   }
 }
 
+// ---------------------------------------------------------------------------
+// F-169: creation-time validation for member group assignments
+// ---------------------------------------------------------------------------
+// WHY: `MemberGroupAssignment.startTime` is a free-form String and the create route
+// checked only presence. A declared time no generated window can ever match produces a
+// silently inert assignment — it yields no booking, and all three consumers (admin
+// attendance, member view, sweep) simply find nothing. Rejecting at creation is the only
+// point where the caller can still act on the error.
+//
+// Deliberately timezone-free: the declared startTime and the pattern's startTime/endTime
+// are all branch-local HH:mm strings, so minute-of-day arithmetic on the strings is exact
+// and involves no conversion. This keeps F-169 independent of F-088 parts (3)/(4), which
+// must not gate it.
+function minutesOfDay(hhmm: string): number {
+  const [hour, minute] = hhmm.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+function timeFromMinutes(total: number): string {
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// Valid window starts for a pattern are start + k*slot while < end — mirroring
+// buildCandidatesFromDefinition's `cursor < end` loop exactly, so this predicate accepts
+// precisely the times generation can produce.
+function patternBoundaries(pattern: { startTime: string; endTime: string; slotDurationMinutes: number }): number[] {
+  const start = minutesOfDay(pattern.startTime);
+  const end = minutesOfDay(pattern.endTime);
+  const boundaries: number[] = [];
+  for (let cursor = start; cursor < end; cursor += pattern.slotDurationMinutes) {
+    boundaries.push(cursor);
+  }
+  return boundaries;
+}
+
+function parseIsoDays(daysOfWeek: unknown): string[] {
+  const raw = typeof daysOfWeek === 'string' ? daysOfWeek.split(',').map((day) => day.trim()) : [];
+  const days = raw.filter((day) => day.length > 0);
+  // An unparseable daysOfWeek is itself an inert assignment — it can never match a weekday —
+  // and the alignment check below is unsound without a trustworthy day list.
+  if (days.length === 0 || days.some((day) => !/^[1-7]$/.test(day))) {
+    const err = new Error('daysOfWeek must be a comma-separated list of ISO weekdays (1=Mon … 7=Sun)');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_DAYS_OF_WEEK';
+    throw err;
+  }
+  return Array.from(new Set(days));
+}
+
+// Checks are ordered cheapest/most-decisive first so a bad request fails on the most
+// useful error rather than the first one a lazier order would reach.
+async function validateAssignmentSchedule(resourcePoolId: string, daysOfWeek: unknown, startTime: unknown) {
+  validateTimeString(startTime, 'startTime');
+  const declared = startTime as string;
+  const days = parseIsoDays(daysOfWeek);
+
+  // Pattern existence, NOT window existence: generation is lazy/on-access, so a correctly
+  // configured pool legitimately has zero windows right now. Checking windows would reject
+  // valid pools (confirmed via F-126/F-127's withdrawal).
+  const patterns = await prisma.availabilityPattern.findMany({
+    where: { resourcePoolId, status: 'ACTIVE' },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (patterns.length === 0) {
+    const err = new Error('Resource pool has no active availability pattern, so this assignment could never produce a booking');
+    (err as any).statusCode = 400;
+    (err as any).code = 'NO_AVAILABILITY_PATTERN';
+    throw err;
+  }
+
+  // Patterns are weekday-scoped and a pool may hold several (generation findMany's every
+  // ACTIVE one and filters by weekday), so each declared day is checked against the
+  // patterns that actually cover it. A pool-wide check would accept an assignment whose
+  // Thursday half is inert because only its Tuesday pattern exists.
+  const declaredMinutes = minutesOfDay(declared);
+  const uncoveredDays: string[] = [];
+  const misalignedDays: string[] = [];
+  const suggestions = new Set<number>();
+
+  for (const day of days) {
+    const dayPatterns = patterns.filter((pattern: any) =>
+      pattern.daysOfWeek.split(',').map((entry: string) => entry.trim()).includes(day),
+    );
+    if (dayPatterns.length === 0) {
+      uncoveredDays.push(day);
+      continue;
+    }
+    const aligned = dayPatterns.some((pattern: any) => patternBoundaries(pattern).includes(declaredMinutes));
+    if (!aligned) {
+      misalignedDays.push(day);
+      for (const pattern of dayPatterns) {
+        for (const boundary of patternBoundaries(pattern)) suggestions.add(boundary);
+      }
+    }
+  }
+
+  if (uncoveredDays.length > 0) {
+    const err = new Error(
+      `No active availability pattern covers weekday(s) ${uncoveredDays.join(',')}, so this assignment could never produce a booking on ${uncoveredDays.length > 1 ? 'those days' : 'that day'}`,
+    );
+    (err as any).statusCode = 400;
+    (err as any).code = 'NO_AVAILABILITY_PATTERN';
+    throw err;
+  }
+
+  if (misalignedDays.length > 0) {
+    // Actionable suggestion, following the pattern F-010 established for availability windows.
+    const nearest = Array.from(suggestions).sort(
+      (a, b) => Math.abs(a - declaredMinutes) - Math.abs(b - declaredMinutes) || a - b,
+    )[0];
+    const suffix = nearest === undefined ? '' : ` Nearest valid start time is ${timeFromMinutes(nearest)}.`;
+    const err = new Error(
+      `startTime ${declared} does not fall on a slot boundary for weekday(s) ${misalignedDays.join(',')}.${suffix}`,
+    );
+    (err as any).statusCode = 400;
+    (err as any).code = 'START_TIME_NOT_ALIGNED';
+    throw err;
+  }
+}
+
 function patternDataFromBody(body: any, reply: any, partial = false) {
   const data: any = {};
   const required = ['daysOfWeek', 'startTime', 'endTime', 'slotDurationMinutes', 'capacity'];
@@ -2844,6 +2964,10 @@ server.post('/member-group-assignments', async (request, reply) => {
   }
 
   await requirePoolScope(auth, resourcePoolId, reply);
+
+  // F-169: reject a schedule that no generated window could ever match, instead of
+  // persisting an assignment that is silently inert.
+  await validateAssignmentSchedule(resourcePoolId, daysOfWeek, startTime);
 
   try {
     const assignment = await prisma.memberGroupAssignment.create({

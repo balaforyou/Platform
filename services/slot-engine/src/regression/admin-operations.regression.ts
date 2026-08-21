@@ -84,6 +84,21 @@ export const adminOperationsSections: Section<SlotEngineContext>[] = [
         throw new Error('Rule upsert did not persist expected fields.');
       }
 
+      // F-169: assignment create now rejects a schedule no generated window could match,
+      // so this pool needs a real ACTIVE pattern for the 10:00 assignment below to be
+      // legitimate. Mon-Wed 10:00-12:00 in 60-minute slots puts 10:00 on a boundary.
+      await db.availabilityPattern.create({
+        data: {
+          resourcePoolId: adminPool.id,
+          daysOfWeek: '1,2,3',
+          startTime: '10:00',
+          endTime: '12:00',
+          slotDurationMinutes: 60,
+          capacity: 3,
+          status: 'ACTIVE',
+        },
+      });
+
       const assignmentRes = await fetch(`${baseUrl}/member-group-assignments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${branchManagerJwt}` },
@@ -96,6 +111,35 @@ export const adminOperationsSections: Section<SlotEngineContext>[] = [
       });
       if (assignmentRes.status !== 201) {
         throw new Error(`Expected assignment create 201, got ${assignmentRes.status}`);
+      }
+
+      // F-169: the three rejection paths, each with a distinct code, and none may persist
+      // a row. Guards the exact gap that let a silently-inert assignment be created.
+      const rejectionCases = [
+        { label: 'unparseable startTime', code: 'INVALID_TIME',
+          body: { userId: 'f169-reject-1', resourcePoolId: adminPool.id, daysOfWeek: '1,2,3', startTime: '25:99' } },
+        { label: 'misaligned startTime', code: 'START_TIME_NOT_ALIGNED',
+          body: { userId: 'f169-reject-2', resourcePoolId: adminPool.id, daysOfWeek: '1,2,3', startTime: '10:15' } },
+        { label: 'weekday no pattern covers', code: 'NO_AVAILABILITY_PATTERN',
+          body: { userId: 'f169-reject-3', resourcePoolId: adminPool.id, daysOfWeek: '6', startTime: '10:00' } },
+      ];
+      for (const testCase of rejectionCases) {
+        const rejectRes = await fetch(`${baseUrl}/member-group-assignments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${branchManagerJwt}` },
+          body: JSON.stringify(testCase.body),
+        });
+        if (rejectRes.status !== 400) {
+          throw new Error(`F-169 ${testCase.label}: expected 400, got ${rejectRes.status}`);
+        }
+        const rejectCode = ((await rejectRes.json()) as any)?.error?.code;
+        if (rejectCode !== testCase.code) {
+          throw new Error(`F-169 ${testCase.label}: expected code ${testCase.code}, got ${rejectCode}`);
+        }
+        const persisted = await db.memberGroupAssignment.findFirst({ where: { userId: testCase.body.userId } });
+        if (persisted) {
+          throw new Error(`F-169 ${testCase.label}: rejected request still persisted a row`);
+        }
       }
 
       const listRes = await fetch(`${baseUrl}/member-group-assignments?resourcePoolId=${adminPool.id}`, {
