@@ -158,6 +158,50 @@ F-171's key claim — **client and server boundary logic agree** — proven by e
 
 ---
 
+## Batch 8 — CLAUDE.md restructuring (root + per-service split) + ID-assignment enforcement
+
+**Status:** Done
+**Closed:** 22 Aug 2026
+**Commits:** (added below once pushed)
+
+**Split root `CLAUDE.md` (109 → 95 lines) into root plus four nested files**, each justified by
+content genuinely exclusive to it — nothing invented, verified via grep against actual file
+locations before moving anything: `scripts/CLAUDE.md` (mutator-naming convention, deferred-parser
+note), `deploy/gcp-vm/CLAUDE.md` (5 VM/Caddy/SSH traps — a warranted addition beyond the original
+brief's list, since that's where the Caddyfile and docker-compose.yml the traps reference actually
+live), `packages/database/CLAUDE.md` (F-067/F-115 migration precedent), `apps/guest-member-pwa/
+CLAUDE.md` (CourtBooking.tsx precedent, e2e time-of-day seed bug, e2e-suite specifics). Eight other
+directories from the original brief's list got **no file**, reported plainly rather than forced:
+current CLAUDE.md had zero content genuinely exclusive to any of them. Added a "Core principle"
+section (generic-framework/reusable-component mindset) — the one deliberate new-content addition,
+per the original brief. Content-loss audit: every original line traced to exactly one destination,
+verified by phrase-grep across the full new file set, not asserted from memory.
+
+**Two self-detected gaps between "established practice" and what CLAUDE.md actually said**, found
+via an explicit audit before finishing (not five, not zero): the push-verification rule ("batch not
+Done until pushed to origin, independently verified") existed nowhere in the repo despite being
+treated as standing practice; the register-status-must-match-reality rule existed for *starting*
+work (item 6) but not for the *closing* obligation that let F-047/F-087 sit `Open` for days after
+being fixed. Both added as new standing-workflow items (6 and 7), explicitly flagged as new content
+rather than silently folded in.
+
+**Built the ID-assignment enforcement mechanism**, approved for same-batch build rather than deferred:
+new `docs/plans/pending-findings.md` (findings staged there described-not-numbered; Chief confirms
+by writing a `Confirmed-ID:` line) plus a new rule 6 in `scripts/check-register.mjs` — every register
+ID at or above **F-179** must have a matching `Confirmed-ID:` entry there, or the check fails.
+Floor set at F-179 since the existing 174 findings predate the mechanism and aren't retroactively
+enforced. **Proven red/green on scratch copies, real register never touched**: an unconfirmed F-179
+scratch row failed with exactly one violation (`unconfirmed-id`); adding a matching `Confirmed-ID:`
+to a scratch pending file made the same register pass clean. Re-ran `pnpm register:check` against
+the real, unmodified `docs/findings_register.md` before and after the script change — still 174
+rows, still clean (the real file has nothing at or above F-179 yet, so the new rule is a no-op on
+real data until the next finding).
+
+**Gates:** `register:check` PASS (174 rows, Open 107 / Resolved 67, unaffected — this batch never
+touched the register itself), `diagram:verify` PASS.
+
+---
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

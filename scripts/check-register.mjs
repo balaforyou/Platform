@@ -29,12 +29,19 @@
  *     to F-156's correction note. Such notes belong in Description, which survives. Both note
  *     forms the register uses are recognised — bracketed and bold-keyword — see DATED_NOTE.
  *  5. Every Resolved row carries a resolution date, so "when was this fixed" is answerable.
+ *  6. ID-assignment enforcement (added Batch 8). Every register ID at or above PENDING_ENFORCED_FROM
+ *     must have a matching `Confirmed-ID:` entry in docs/plans/pending-findings.md. The written rule
+ *     ("new findings get described, not numbered, until Chief confirms") failed twice despite being
+ *     documented — F-173, then F-174 through F-178 — both times because an implementing thread
+ *     assigned and committed an ID before Chief actually saw the content. This makes that
+ *     confirmation a checkable file instead of an in-conversation habit. The floor exists because
+ *     the existing 174 findings predate the mechanism and cannot be retroactively confirmed.
  *
  * NOTE ON DUPLICATION: the row/section parsing below overlaps `readRegister` in
  * generate-flow-diagram.mjs. That script runs its CLI at module scope, so importing it to
  * share the parser would execute it and write the .drawio as a side effect. Extracting a
  * shared scripts/lib/register.mjs is the cleaner answer and is deliberately deferred — see
- * the note in CLAUDE.md.
+ * scripts/CLAUDE.md.
  */
 
 import { readFileSync } from 'node:fs';
@@ -51,6 +58,12 @@ const ROW = /^\|\s*\*{0,2}(F-\d{3})\*{0,2}\s*\|/;
 
 /** Retired permanently by the register's process note of 15 Aug 2026. Must never be reissued. */
 const RETIRED_IDS = ['F-021', 'F-089'];
+
+/** First ID the pending-findings confirmation gate governs. Set at Batch 8's close (max was F-178). */
+const PENDING_ENFORCED_FROM = 179;
+
+/** A promoted, Chief-confirmed entry in pending-findings.md. */
+const CONFIRMED_ID = /^Confirmed-ID:\s*(F-\d{3})\b/;
 
 /** Cells that split a well-formed row, by section. Leading/trailing empties included. */
 const SHAPE = {
@@ -93,8 +106,25 @@ function parse(path) {
   return rows;
 }
 
-function check(path) {
+/** Set of IDs with a `Confirmed-ID:` line anywhere in pending-findings.md. Missing file = empty set. */
+function parseConfirmed(path) {
+  let text;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch {
+    return new Set();
+  }
+  const confirmed = new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const m = CONFIRMED_ID.exec(line.trim());
+    if (m) confirmed.add(m[1]);
+  }
+  return confirmed;
+}
+
+function check(path, pendingPath) {
   const rows = parse(path);
+  const confirmed = parseConfirmed(pendingPath);
   const violations = [];
   const v = (rule, id, lineNo, detail) => violations.push({ rule, id, lineNo, detail });
 
@@ -148,15 +178,27 @@ function check(path) {
     if (!(cells[3] ?? '').trim()) v('missing-date', r.id, r.lineNo, 'Resolved row has an empty Resolved date');
   }
 
+  // 6. IDs at or above PENDING_ENFORCED_FROM must be Chief-confirmed in pending-findings.md.
+  for (const r of rows) {
+    const n = Number(r.id.slice(2));
+    if (n < PENDING_ENFORCED_FROM) continue;
+    if (!confirmed.has(r.id)) {
+      v('unconfirmed-id', r.id, r.lineNo,
+        `no "Confirmed-ID: ${r.id}" entry found in ${pendingPath} — new findings from F-${PENDING_ENFORCED_FROM} ` +
+        `onward must be Chief-confirmed there before the register row is written`);
+    }
+  }
+
   return { rows, violations };
 }
 
 // --- CLI ------------------------------------------------------------------
 const registerPath = arg('--register', resolve(REPO_ROOT, 'docs/findings_register.md'));
+const pendingPath = arg('--pending', resolve(REPO_ROOT, 'docs/plans/pending-findings.md'));
 const quiet = argv.includes('--quiet');
 
 try {
-  const { rows, violations } = check(registerPath);
+  const { rows, violations } = check(registerPath, pendingPath);
   const open = rows.filter((r) => r.section === 'Open').length;
   const resolved = rows.filter((r) => r.section === 'Resolved').length;
 
@@ -166,7 +208,7 @@ try {
   }
 
   if (violations.length === 0) {
-    console.log(`  PASS  all ${rows.length} rows well-formed: shapes, unique IDs, retired IDs absent, no stranded notes, resolution dates present\n`);
+    console.log(`  PASS  all ${rows.length} rows well-formed: shapes, unique IDs, retired IDs absent, no stranded notes, resolution dates present, pending-findings confirmations present (>= F-${PENDING_ENFORCED_FROM})\n`);
     exit(0);
   }
 
