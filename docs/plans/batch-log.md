@@ -154,7 +154,7 @@ F-171's key claim — **client and server boundary logic agree** — proven by e
 
 **Gates:** `register:check` PASS (178 rows counted including headers/dividers; 174 findings total, Open 107 / Resolved 67), `diagram:verify` PASS. Verified independently on origin, SHA-pinned.
 
-**Next up:** F-176's plan-mode kickoff, then the walkthrough checklist (Groups 1–3, already committed and ready) once the sweep's findings are triaged into fix batches.
+**Next up:** Batch 8 — CLAUDE.md restructuring (root + per-service split) plus a real enforcement mechanism for the ID-assignment rule (written-only version has failed twice: F-173, F-174–F-178). Decided directly with Chief, 21 Aug 2026 — not reflected in this log until now. F-176's kickoff (highest-priority finding from Batch 7's domain sweep) is sequenced to follow Batch 8's close, not run in parallel. Walkthrough Groups 1–3 remain queued behind the domain sweep's fix work.
 
 ---
 
