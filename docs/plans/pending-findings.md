@@ -62,3 +62,22 @@ deliberately not fixed as part of that pass — described here for Chief to assi
 separately.
 Confirmed-ID: F-179
 Confirmed: 22 Aug 2026
+
+### production-db-credential-exposure-two-mechanisms
+Batch: 13-15 close-out
+Surfaced: 22 Aug 2026
+Description: Production DB credential exposure via two independent mechanisms during a
+deployment close-out. A `sed` mask searching for `postgres://` against the real
+`postgresql://` scheme silently failed to match, allowing plaintext passthrough; separately,
+`sudo`'s command-line audit logging to `/var/log/auth.log` captured inline secrets regardless
+of the command's own output — two distinct leak vectors, not one. Resolved via a third
+rotation using heredoc/stdin exclusively, confirmed clean end-to-end across sed-mask,
+sudo-log, and session-transcript surfaces by tracing the real log/transcript data directly.
+Tracing itself surfaced a third incident (`sed -i` orphaning `rsyslogd`'s open file
+descriptor, recovered via `/proc/<pid>/fd/` and a `SIGHUP`). Two `deploy/gcp-vm/CLAUDE.md`
+traps added for the original vectors (7, 8), a third (9) for the `sed -i`/rsyslog incident.
+Residual: two dead passwords remain in the local session transcript and the systemd journal,
+both inert and accepted as reasonable residual risk given genuine technical constraints
+against safe per-entry scrubbing.
+Confirmed-ID: F-180
+Confirmed: 22 Aug 2026
