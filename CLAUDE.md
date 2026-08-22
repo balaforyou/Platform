@@ -34,6 +34,8 @@ This project is built as generic, reusable services and components across its mi
 9. **Don't let one fix silently absorb an adjacent finding.** Flag related-but-different issues as their own findings.
 10. **Capture the failing "before" state on the deployed stack before deploying the fix.** Once the fix ships the defect cannot be reproduced, and rule 2 becomes unsatisfiable. When "commit only after proof" collides with "proof needs a deployed build", resolve it in the open rather than breaking either rule: deploy an honestly-labelled provisional image (`GIT_SHA=<sha>-<finding>-preproof`), capture the proof, then commit and redeploy with the real SHA and re-verify.
 
+**The review flow below is standard practice, not an experiment — future handoff briefs don't need to re-explain it.** Claude Code investigates and drafts the plan using real execution access (live-fire proof, database read-backs, real callers, not reasoning from code alone) → the Technical Lead thread reviews, spot-checks, and gatekeeps before implementation begins → Claude Code implements and reports back in full depth, raw evidence rather than a summary of it → the Technical Lead thread does a final independent-verification pass (a real SHA-pinned or remote check, not a relayed claim) before consolidating for Chief.
+
 ## Known process traps — real, already paid for once
 
 - **Investigating one finding in a shared file surfaces the next one, one layer at a time, across separate batches, unless the blast radius is checked up front.** F-171, F-172, and F-173 all came from the same three files F-169/F-170 already had open — `main.tsx`'s `AssignmentsPage`, and `slot-engine/src/index.ts`'s three assignment-resolution consumers — discovered one investigation layer at a time across two separate batches instead of surfaced together in one pass. None of this was scope creep (each was correctly logged as its own finding, not silently folded in) — it was a genuine gap in how early the investigation looked at neighboring code. The blast-radius check above is the fix: list every caller/consumer of the touched files up front, before implementation, not as it's incidentally discovered.
@@ -57,6 +59,10 @@ Each of these cost several failed attempts before the cause was obvious. None ar
 - **Frozen CSS transitions.** When the browser pane isn't compositing, transitions stick at `currentTime: 0` and computed styles report the *pre-transition* value. This read as a broken selected-slot state that was actually correct. Inject `* { transition: none !important }` before reading computed styles.
 - **Gradients are invisible to contrast checks.** `getComputedStyle().backgroundColor` is transparent on a gradient-painted element, so a background walker climbs to a light ancestor and reports a **false pass**. This hid four dark gradients behind 333 passing measurements — a login screen scored 15.78:1 while rendering dark-on-dark. Check `background-image` and the `from-`/`via-`/`to-` classes separately.
 - **Verify against the built artifact, not the source.** A misspelled Tailwind token emits no CSS at all rather than erroring, and `bg-gray-950` on `<body>` in `index.html` beat an element-level `body {}` rule. Both were only caught by grepping the compiled output.
+
+## Deferred technical debt
+
+Day/time validation logic now exists in two places (`slot-engine`'s `branchTime.ts` and tenant-management's F-175/F-177 fix) rather than one shared location. Deliberate short-term call to avoid introducing the platform's first direct service-to-service dependency — but it sits against this file's own generic-framework/reusable-component principle. A `packages/` extraction (alongside `packages/database`, `packages/test-harness`) is the likely right answer if this logic needs a third consumer, or as part of the same post-demo technical-debt pass as the other deferred items. Not urgent now.
 
 ## Environment facts
 
