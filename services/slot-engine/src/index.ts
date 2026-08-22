@@ -12,6 +12,7 @@ import {
   branchLocalToUtc,
   parseBranchLocalDateTime,
   branchMinutesOfDay,
+  daysInMonth,
   safeTimeZone,
 } from './branchTime.js';
 
@@ -300,7 +301,27 @@ function branchDayBounds(dateString: string, timeZone: string) {
   return { startOfDay, endOfDay: new Date(nextDay.getTime() - 1) };
 }
 
+// F-179: digit-count-only parsing let an invalid calendar date (Feb 30, Apr 31) silently
+// normalise into a different real date via native Date rollover instead of being rejected —
+// same root cause and remedy shape as F-173/F-176 in branchTime.ts, reusing daysInMonth rather
+// than re-deriving it.
+const CALENDAR_DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 function dateOnly(value: string | Date) {
+  if (typeof value === 'string') {
+    const m = CALENDAR_DATE_ONLY.exec(value);
+    if (m) {
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      const d = Number(m[3]);
+      if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth(y, mo)) {
+        const err = new Error('Invalid date');
+        (err as any).statusCode = 400;
+        (err as any).code = 'INVALID_DATE';
+        throw err;
+      }
+    }
+  }
   const date = typeof value === 'string' ? new Date(`${value}T00:00:00.000Z`) : new Date(value);
   if (Number.isNaN(date.getTime())) {
     const err = new Error('Invalid date');

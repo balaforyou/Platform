@@ -150,7 +150,7 @@ export function branchMinutesOfDay(instant: Date, timeZone: string): number {
  * because "region-agnostic" is a stated goal of this platform.
  */
 /** Number of real days in `month` (1-indexed) of `year`, accounting for leap years. */
-function daysInMonth(year: number, month: number): number {
+export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
