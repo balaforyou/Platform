@@ -162,7 +162,7 @@ F-171's key claim — **client and server boundary logic agree** — proven by e
 
 **Status:** Done
 **Closed:** 22 Aug 2026
-**Commits:** (added below once pushed)
+**Commits:** `7cea90b`
 
 **Split root `CLAUDE.md` (109 → 95 lines) into root plus four nested files**, each justified by
 content genuinely exclusive to it — nothing invented, verified via grep against actual file
