@@ -101,3 +101,22 @@ that should have caught it first. Fix direction: `/health` (or a companion readi
 should exercise a real DB query, not just process liveness.
 Confirmed-ID: F-181
 Confirmed: 22 Aug 2026
+
+### branch-schedule-schema-weak-client-regex
+Batch: 16
+Surfaced: 22 Aug 2026
+Description: `branchScheduleSchema`'s `workingHoursStart`/`workingHoursEnd`
+(`apps/admin-web/src/main.tsx:193-196`) validate with the same digit-count-only regex
+(`/^\d{2}:\d{2}$/`) F-174 fixed on `patternSchema`/`overrideSchema` — accepts out-of-range values
+like `25:99` client-side. Same file, immediately adjacent to F-174's two schemas, single consumer
+(`main.tsx:817`, `PATCH /tenant/branches/:id` via `saveBranch`). Now correctly backstopped
+server-side by `tenant-management`'s `WORKING_HOURS_RE` (`services/tenant-management/src/index.ts:219`,
+added under F-175/F-177 in Batch 11) — `/^([01]\d|2[0-3]):([0-5]\d)$/`, explicitly commented as
+mirroring `slot-engine`'s `validateTimeString`. Natural continuation of the domain sweep's own
+pattern: F-175 tightened the server side of this exact field back in Batch 11, but the client-side
+regex was never revisited to match — same class of cosmetic papercut as F-174 itself, just surfacing
+on a field that only recently got its own server-side backstop. Surfaced during F-174's investigation
+(Batch 16), deliberately not folded into that fix or self-numbered — described for Chief to assign an
+ID separately.
+Confirmed-ID: F-182
+Confirmed: 22 Aug 2026
