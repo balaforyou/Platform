@@ -136,6 +136,28 @@ F-171's key claim — **client and server boundary logic agree** — proven by e
 
 ---
 
+## Batch 7 — domain sweep (F-174 / F-175 / F-176 / F-177 / F-178)
+
+**Investigation closed, logged, 21 Aug 2026 (`ab70166b137922d227507e7aa58747a550e30431`).** Scoped in response to F-171/F-172/F-173 all surfacing from the same three files across two batches — this sweep applied the new blast-radius rule (CLAUDE.md item 3a) to its own boundary up front, listing every file/function in the scheduling/assignment/attendance domain before investigation started, rather than trickling a third time.
+
+**Five findings, all Open, none implemented — this batch was investigation and logging only.** The approved first target (`patternSchema`/`branchScheduleSchema`'s weak client-side time regex) split into two genuinely different outcomes: `patternSchema` is correctly backstopped server-side (**F-174**, papercut), but `branchScheduleSchema` posts to tenant-management, which has **no server-side validation at all** — confirmed live, `workingHoursStart: "25:99"` persists (**F-175**, real data-integrity gap, currently bounded since F-171 already removed the only scheduling consumer of working hours).
+
+**Strongest finding: F-176.** `parseBranchLocalDateTime` silently normalizes out-of-range dates and times into a different day/month/year and **persists** the result — unlike F-173, which merely resolves to a harmless non-match. `2026-08-25T24:00` persists as the next day; `2026-13-01T10:00` persists as the next year. A plausible admin typo silently mis-dates a real availability or blocked window.
+
+**F-177 surfaced mid-sweep, not in the original inventory** — `Branch.timezone`'s own unvalidated persistence, caught by the schema audit rather than the initial file list, a real instance of the blast-radius rule doing its job. Sits directly adjacent to F-088 part (1) but ruled distinct by Chief: F-088 part (1) is "no UI path exists to set it," this is "the API path that already exists accepts anything." Related, not merged; the two should be sequenced with that dependency in mind.
+
+**F-178** closes the sweep's PWA inventory item: the member session card's `WINDOW_NOT_FOUND` copy asserts a single cause that F-170 and F-172 have since made one of three.
+
+**F-088's timezone-flip coupling was deliberately out of this sweep's scope and was not folded in**, stated explicitly per the agreed boundary — even where F-177 sits directly against it. Every result in this batch reproduces on a UTC branch with no timezone conversion involved.
+
+**Sequencing set by Chief for follow-on fix work:** F-176 alone first (highest severity, ordinary trigger, no dependency); F-175 + F-177 together second (same tenant-management handler, same missing-validation root cause, different fields — one implementation pass); F-178 third (standalone, cheap); F-174 last (zero data-integrity stakes, already backstopped both places it appears).
+
+**Gates:** `register:check` PASS (178 rows counted including headers/dividers; 174 findings total, Open 107 / Resolved 67), `diagram:verify` PASS. Verified independently on origin, SHA-pinned.
+
+**Next up:** F-176's plan-mode kickoff, then the walkthrough checklist (Groups 1–3, already committed and ready) once the sweep's findings are triaged into fix batches.
+
+---
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
