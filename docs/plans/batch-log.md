@@ -250,6 +250,28 @@ and 15 Done.**
 
 ---
 
+Batch 16 (22 Aug 2026): F-174 resolved — `admin-web`'s `patternSchema` and `overrideSchema`
+(`main.tsx`) tightened from a digit-count-only regex (`patternSchema`, accepted `25:99`) and no
+format check at all (`overrideSchema`) to the server's own `validateTimeString` regex, reused
+verbatim rather than reinvented. Chief handed over a reference sketch from an isolated sandbox pass
+(never pushed); re-verified fresh against real HEAD `88d4a6f` before implementing, per the standing
+"don't trust the diff, confirm current code" rule — line numbers had drifted slightly, logic was
+identical. Blast radius confirmed exactly two consumers each (own schema definition, own `.parse()`
+call), no `z.infer` type consumer. RED/GREEN proven at the regex level (extracted verbatim into a
+scratch script, no exported module boundary to import from): pre-fix, `25:99`/`24:00`/`00:60` wrongly
+accepted; post-fix, all rejected and legitimate values still pass. Typecheck and build clean, new
+regex fragment confirmed present in the compiled `dist` bundle. Backend regression suite explicitly
+not run (zero backend files touched). Accepted verification gap stated up front: no `admin-web`
+component-test or browser click-through infrastructure exists, same gap already accepted for F-171
+and F-178. Commits `4fc37d5` (fix), `6bf248b` (register) — both push-verified against `origin/main`
+(`git fetch` + empty diff) and the fix additionally SHA-pinned raw-fetched to confirm the exact regex
+landed on origin, independent of the local checkout. **New candidate finding surfaced, not folded
+in**: `branchScheduleSchema` (`main.tsx:193-196`) carries the identical weak regex, same file, same
+server-backstop shape (`tenant-management`'s `WORKING_HOURS_RE`) — described to Chief for a real ID,
+not self-numbered or fixed here.
+
+---
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
