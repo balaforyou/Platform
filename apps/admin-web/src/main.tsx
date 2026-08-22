@@ -197,8 +197,8 @@ const branchScheduleSchema = z.object({
 
 const patternSchema = z.object({
   daysOfWeek: z.string().min(1),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
   slotDurationMinutes: z.coerce.number().int().positive().refine(dividesADay, DIVIDES_A_DAY_MESSAGE),
   capacity: z.coerce.number().int().positive(),
   pricingMode: z.enum(['FLAT', 'PER_PERSON']).optional(),
@@ -210,8 +210,8 @@ const overrideSchema = z.object({
   fromDate: z.string().min(1),
   toDate: z.string().min(1),
   type: z.enum(['CLOSED', 'MODIFIED']),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
   slotDurationMinutes: z.coerce.number().int().positive().optional(),
   capacity: z.coerce.number().int().positive().optional(),
   pricingMode: z.enum(['FLAT', 'PER_PERSON']).optional(),
