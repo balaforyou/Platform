@@ -206,18 +206,11 @@ Batch 9 (22 Aug 2026): F-173+F-176 resolved together — calendar/clock range va
 
 ---
 
-## Batch — F-179 (dateOnly() fix)
-Findings: F-179
-Status: Done
-Commits: 68bd648, f526d0e
-Notes: Backfilled 22 Aug 2026 — register entry was always correct (Resolved, dated,
-live RED/GREEN evidence); only the batch-log line was missing. Same gap shape as
-the Batch 8 placeholder miss. Worth a standing habit: when a finding moves to
-Resolved, check batch-log gets its line in the same sitting, not after the fact.
+Batch 10 (22 Aug 2026): F-179 resolved — `dateOnly()` (`services/slot-engine/src/index.ts`) now regex-validates `YYYY-MM-DD` and range-checks month/day against `daysInMonth` before parsing, closing the same vulnerability class as F-176 (`POST`/`GET /resource-pools/:id/availability-overrides`). Commits `68bd648` (fix), `f526d0e` (register). RED/GREEN proven live against `badminton_db_test` with `psql` read-backs; full regression 5/5.
 
 ---
 
-Batch 10 (22 Aug 2026): F-175+F-177 resolved together — `workingHoursStart`/`workingHoursEnd` and `Branch.timezone` now validated on `POST /tenants/:id/branches` and `PATCH /branches/:id`, mirroring `slot-engine`'s `validateTimeString`/`isValidTimeZone` locally rather than adding the platform's first cross-service dependency. Commits `07a8c08` (fix), `78b9843` (register). The batch's real find wasn't in either finding's original text: `scripts/provision-tenant.mjs`, not `admin-web`, is the actual currently-active creator of both fields on both endpoints — confirmed with a real (non-`--dry-run`) run against `badminton_db_test`, which also caught that `--dry-run` fakes every response locally and would never have exercised the new validation at all. No new candidate findings staged. Sequencing per Batch 7's domain sweep: **F-178 next.**
+Batch 11 (22 Aug 2026): F-175+F-177 resolved together — `workingHoursStart`/`workingHoursEnd` and `Branch.timezone` now validated on `POST /tenants/:id/branches` and `PATCH /branches/:id`, mirroring `slot-engine`'s `validateTimeString`/`isValidTimeZone` locally rather than adding the platform's first cross-service dependency. Commits `07a8c08` (fix), `78b9843` (register). The batch's real find wasn't in either finding's original text: `scripts/provision-tenant.mjs`, not `admin-web`, is the actual currently-active creator of both fields on both endpoints — confirmed with a real (non-`--dry-run`) run against `badminton_db_test`, which also caught that `--dry-run` fakes every response locally and would never have exercised the new validation at all. No new candidate findings staged. Sequencing per Batch 7's domain sweep: **F-178 next.**
 
 ---
 
