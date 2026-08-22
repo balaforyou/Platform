@@ -37,6 +37,10 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
+*(none yet)*
+
+## Promoted (audit trail)
+
 ### dateOnly-silent-calendar-overflow
 Batch: F-176/F-173 fix pass
 Surfaced: 22 Aug 2026
@@ -56,9 +60,5 @@ a `Date` object; `index.ts:2136`, also a `Date` object by that point) go through
 object-input branch and are not affected. Surfaced during F-176/F-173's blast-radius investigation;
 deliberately not fixed as part of that pass — described here for Chief to assign an ID and prioritize
 separately.
-Confirmed-ID:
-Confirmed:
-
-## Promoted (audit trail)
-
-*(none yet)*
+Confirmed-ID: F-179
+Confirmed: 22 Aug 2026
