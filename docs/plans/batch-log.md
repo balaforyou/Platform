@@ -228,6 +228,26 @@ Batch 14 (22 Aug 2026): rotated the `badminton` Postgres role's password on `bad
 
 Batch 15 (22 Aug 2026): exposure close-out for Batch 13/14's plaintext password. Located the original `sed`-mask failure's root cause with a real test: the pattern searched for `postgres://`, the actual scheme is `postgresql://` — no error, no warning, `sed` just passed the line through unmatched. Checked every plausible capture surface: local Claude Code session transcript (contains it, 6 occurrences, actively-written file I judged unsafe to edit live — flagged, not silently marked resolved); gcloud's local debug logs (checked and confirmed by design they never capture remote command output, not just a lucky non-match); VM `.bash_history` (clean — non-interactive `--command=` invocations don't populate it); `/var/log/auth.log` (contained it — a **second, independent exposure mechanism**: `sudo` logs full command lines including inline secrets, which is how Batch 14's `-e PGPASSWORD=value` verification calls leaked both the old and, by the same structural mechanism, the rotated password — redacted via a script whose own `sudo` invocation carried no secret in its argv); the systemd journal (same content, independently stored in binary form — **no safe per-entry redaction exists**, flagged as genuinely unresolved rather than force a destructive vacuum). Rotated a third time using only heredoc/stdin methods, zero secrets as command-line arguments anywhere; both the new password and a known-dead one verified against the real `scram-sha-256`-enforced network path, not the loopback trust-bypass Batch 14 initially and unknowingly used. **One real mistake during this very cleanup**: an intended structural check (`grep 'PGPASSWORD=' auth.log`) wasn't redacted and printed the second password in plaintext into this session's output — caught immediately, redacted, disclosed rather than absorbed quietly. `deploy/gcp-vm/CLAUDE.md` gained two new traps (the scheme-mismatch mask failure, the sudo command-line audit logging) and root `CLAUDE.md`'s register-status rule now explicitly names the batch-log line as part of the same close-out step, after this exact gap recurred a third time. Commit `107ca38`.
 
+**[22 Aug 2026 — addendum, final close-out for Batches 13/14/15]** Two items surfaced after the
+paragraph above was written, both resolved before Chief's sign-off. First, tracing rotation #3 (the
+currently-live password) directly against the *recovered* log data — not the design intent of the
+heredoc/stdin approach — confirmed it never touched the sed-mask, sudo-log, or session-transcript
+surfaces; methodology validated by first confirming it correctly detects the already-known password-#2
+leak before trusting a clean result. Second, redacting the sudo-log exposure via `sudo sed -i
+'s/<secret>/[REDACTED]/g' /var/log/auth.log` — trap 8's own suggested fix — silently broke `rsyslogd`'s
+logging: `sed -i`'s default write-new-then-rename orphaned the daemon's open file descriptor on the
+old inode, halting all new entries to the visible path for 22 minutes with no error. Caught via a
+suspicious timestamp gap, confirmed via `/proc/<pid>/fd/` showing `(deleted)`, recovered by reading the
+still-open orphaned fd while the process stayed alive, fixed via `SIGHUP` to force `rsyslogd` to reopen
+the current path. `deploy/gcp-vm/CLAUDE.md` gained a third trap (9) documenting this as a worked
+example, commit `748a1e1`. journald retention checked directly and reported as-is rather than assumed:
+144MB used, no time-based retention configured, size-based defaults only, oldest entry 19 days old —
+no bounded "ages out in N days" answer exists, so the residual copy there stays flagged as genuinely
+unresolved, not implicitly time-limited. Chief reviewed both findings, assigned and confirmed **F-180**
+(`docs/plans/pending-findings.md`, register commit `fc78508`) covering the two original exposure
+vectors plus the rsyslog incident surfaced while tracing them, and signed off marking **Batches 13, 14,
+and 15 Done.**
+
 ---
 
 ## Queued, not yet batched
