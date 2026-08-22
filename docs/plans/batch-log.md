@@ -222,6 +222,10 @@ Batch 13 (22 Aug 2026): production deploy to `badminton-demo-vm`, HEAD (`8ec1d85
 
 ---
 
+Batch 14 (22 Aug 2026): rotated the `badminton` Postgres role's password on `badminton-demo-vm`, following Batch 13's plaintext-password mistake. New value generated locally (hex, not base64 — avoids `/`/`+`/`=` needing URI-escaping inside `DATABASE_URL`), never printed; `ALTER USER` and the `.env` update both ran via file-based/heredoc methods with query output discarded, not inlined through `gcloud compute ssh --command`. The five `DATABASE_URL`-consuming services recreated (not `caddy`, not `migrate`); all five confirmed healthy via live `/health`, plus one real DB-dependent request (tenant lookup) proving the new credential actually works end-to-end. **First verification attempt was invalid, not just the rotation** — testing over `127.0.0.1` passed for both the new *and* old password, which read as a false success until `pg_hba.conf` was read directly and showed `host all all 127.0.0.1/32 trust`: loopback bypasses password auth entirely on the stock Postgres image. Re-tested against the container's real Docker-network IP (the path `scram-sha-256`-gates, matching what the actual services use) — new password succeeds, old password now cleanly rejected (`password authentication failed`). No repo commit (`.env` is gitignored); all local and VM-side scratch files holding either password value deleted after use. No credential value appears in any tool output this session, verified by construction — every command either discarded query output entirely or printed only fixed OK/FAILED markers and a non-secret row count.
+
+---
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
