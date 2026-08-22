@@ -202,6 +202,10 @@ touched the register itself), `diagram:verify` PASS.
 
 ---
 
+Batch 9 (22 Aug 2026): F-173+F-176 resolved together — calendar/clock range validation added to `branchLocalToUtc`/`parseBranchLocalDateTime`, plus adjacent guard on `/branches/:id/member-attendance`. Commits `de60d61` (fix), `66aa641` (register). New candidate `dateOnly()` staged in `pending-findings.md`, confirmed as F-179.
+
+---
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
