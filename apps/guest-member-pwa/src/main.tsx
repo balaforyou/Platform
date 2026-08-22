@@ -280,7 +280,11 @@ function MainDashboard() {
           <p className="text-sm text-amber-800">Your recurring slot is paused because the subscription is not active.</p>
         ) : null}
         {memberSession?.state === 'WINDOW_NOT_FOUND' ? (
-          <p className="text-sm text-amber-800">Today&apos;s recurring slot has not been opened on the court schedule yet.</p>
+          // F-178: no longer a single cause (F-170/F-172 route two more into this state), and the
+          // server doesn't distinguish them at this state — see resolveTodayMemberAssignment in
+          // slot-engine's index.ts. Neutral copy, matching the admin attendance view's identical
+          // 'Window not found' answer to the same ambiguity (index.ts:797).
+          <p className="text-sm text-amber-800">No session found for today.</p>
         ) : null}
       </section>
     );
