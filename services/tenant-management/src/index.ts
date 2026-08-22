@@ -211,6 +211,48 @@ server.get('/tenants/:id/manifest.json', async (request, reply) => {
   return reply;
 });
 
+// F-175/F-177: workingHoursStart/workingHoursEnd/timezone flowed straight into Prisma on both
+// branch endpoints with no format/range check at all. Mirrored locally rather than imported from
+// slot-engine — no backend service currently depends on another in this codebase, and both checks
+// are small and self-contained enough that adding the first cross-service dependency to avoid
+// duplicating ~15 lines isn't worth the coupling.
+const WORKING_HOURS_RE = /^([01]\d|2[0-3]):([0-5]\d)$/; // mirrors slot-engine's validateTimeString
+
+// Mirrors slot-engine's branchTime.ts isValidTimeZone byte-for-byte, deliberately: that function is
+// what safeTimeZone uses to decide what to trust downstream, so validating against a different check
+// here (e.g. Intl.supportedValuesOf('timeZone')'s stricter canonical-only list) could let a value
+// pass this gate and still silently fall back to UTC in slot-engine — the exact failure mode F-177
+// is about, one layer later. Keep both in sync if either changes.
+function isValidTimeZone(timeZone: unknown): boolean {
+  if (typeof timeZone !== 'string' || timeZone.length === 0) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validateBranchFields(fields: { workingHoursStart?: unknown; workingHoursEnd?: unknown; timezone?: unknown }) {
+  for (const [field, value] of [
+    ['workingHoursStart', fields.workingHoursStart],
+    ['workingHoursEnd', fields.workingHoursEnd],
+  ] as const) {
+    if (value != null && !WORKING_HOURS_RE.test(value as string)) {
+      const err = new Error(`${field} must be HH:mm`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_TIME';
+      throw err;
+    }
+  }
+  if (fields.timezone != null && !isValidTimeZone(fields.timezone)) {
+    const err = new Error(`timezone is not a recognised IANA zone: "${fields.timezone}"`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_TIMEZONE';
+    throw err;
+  }
+}
+
 // Add new branch (defaults to DRAFT)
 // Phase 9: accepts working schedule and about/facilities/photos fields.
 server.post('/tenants/:id/branches', async (request, reply) => {
@@ -231,6 +273,8 @@ server.post('/tenants/:id/branches', async (request, reply) => {
     (err as any).code = 'BAD_REQUEST';
     throw err;
   }
+
+  validateBranchFields({ workingHoursStart, workingHoursEnd, timezone });
 
   const branch = await prisma.branch.create({
     data: {
@@ -283,6 +327,8 @@ server.patch('/branches/:id', async (request, reply) => {
     (err as any).code = 'BAD_REQUEST';
     throw err;
   }
+
+  validateBranchFields({ workingHoursStart, workingHoursEnd, timezone });
 
   const updated = await prisma.branch.update({
     where: { id },
