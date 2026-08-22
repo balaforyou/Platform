@@ -151,4 +151,105 @@ export const coPlayerAndAlignmentSections: Section<SlotEngineContext>[] = [
       });
     },
   },
+
+  {
+    name: 'F-173/F-176: out-of-range calendar/clock components are rejected, not silently normalised to a different real day',
+    async run() {
+      const createPool = async (name: string) => {
+        const res = await fetch(`${baseUrl}/resource-pools`, {
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+          method: 'POST',
+          body: JSON.stringify({
+            tenantId: TENANT_ID,
+            branchId: BRANCH_ID,
+            name,
+            allocationMode: 'POOLED',
+            minBookingDurationMinutes: 60,
+          }),
+        });
+        if (!res.ok) throw new Error(`Failed to create ${name}: ${res.status}`);
+        return ((await res.json()) as any).data;
+      };
+
+      const postWindow = async (poolId: string, startTime: string, endTime: string) =>
+        fetch(`${baseUrl}/resource-pools/${poolId}/availability-windows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+          body: JSON.stringify({ startTime, endTime, capacity: 1 }),
+        });
+
+      const postBlocked = async (resourcePoolId: string, startTime: string, endTime: string) =>
+        fetch(`${baseUrl}/blocked-windows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+          body: JSON.stringify({ resourcePoolId, startTime, endTime, reason: 'F-173/F-176 regression probe' }),
+        });
+
+      const expectRejected = async (label: string, res: Response, expectedSubstring: string) => {
+        if (res.status !== 400) {
+          throw new Error(`${label}: expected 400, got ${res.status} — ${await res.text()}`);
+        }
+        const text = await res.text();
+        if (!text.includes(expectedSubstring)) {
+          throw new Error(`${label}: expected message containing "${expectedSubstring}", got: ${text}`);
+        }
+      };
+
+      const pool = await createPool('Pool F173-F176 Regression Test');
+
+      // Naive input: NAIVE_LOCAL matches, routes through branchLocalToUtc (F-173's function).
+      await expectRejected(
+        'availability-windows: naive hour 24:00',
+        await postWindow(pool.id, '2026-08-25T24:00', '2026-08-25T23:00'),
+        'hour 24 is out of range (0-23)',
+      );
+      await expectRejected(
+        'availability-windows: naive month 13',
+        await postWindow(pool.id, '2026-13-01T10:00', '2026-13-01T11:00'),
+        'month 13 is out of range (1-12)',
+      );
+      await expectRejected(
+        'availability-windows: naive Feb 30 (month-specific day overflow)',
+        await postWindow(pool.id, '2026-02-30T10:00', '2026-02-30T11:00'),
+        'day 30 is out of range for 2026-02',
+      );
+
+      // Offset-carrying input: OFFSET_LOCAL matches, validated before the native Date parse runs.
+      await expectRejected(
+        'availability-windows: offset-carrying hour 24:00',
+        await postWindow(pool.id, '2026-08-25T24:00+05:30', '2026-08-25T23:00+05:30'),
+        'hour 24 is out of range (0-23)',
+      );
+      await expectRejected(
+        'availability-windows: offset-carrying Feb 30',
+        await postWindow(pool.id, '2026-02-30T10:00+05:30', '2026-02-30T11:00+05:30'),
+        'day 30 is out of range for 2026-02',
+      );
+
+      // blocked-windows shares parseBranchLocalDateTime — confirm it inherits the same check.
+      await expectRejected(
+        'blocked-windows: naive hour 24:00',
+        await postBlocked(pool.id, '2026-08-25T24:00', '2026-08-25T23:00'),
+        'hour 24 is out of range (0-23)',
+      );
+      await expectRejected(
+        'blocked-windows: offset-carrying Feb 30',
+        await postBlocked(pool.id, '2026-02-30T10:00+05:30', '2026-02-30T11:00+05:30'),
+        'day 30 is out of range for 2026-02',
+      );
+
+      // Valid input on both endpoints must still succeed — this is a strict tightening, not a
+      // behavior change for real data.
+      const validWindow = await postWindow(pool.id, '2026-08-25T10:00', '2026-08-25T11:00');
+      if (!validWindow.ok) {
+        throw new Error(`Expected valid window to succeed, got ${validWindow.status} — ${await validWindow.text()}`);
+      }
+      const validBlocked = await postBlocked(pool.id, '2026-08-25T14:00', '2026-08-25T15:00');
+      if (!validBlocked.ok) {
+        throw new Error(`Expected valid blocked window to succeed, got ${validBlocked.status} — ${await validBlocked.text()}`);
+      }
+
+      console.log('F173_F176_CALENDAR_RANGE_VALIDATION', { poolId: pool.id, allChecksPassed: true });
+    },
+  },
 ];

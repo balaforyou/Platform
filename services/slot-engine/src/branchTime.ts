@@ -149,12 +149,32 @@ export function branchMinutesOfDay(instant: Date, timeZone: string): number {
  * deployment — but the behaviour is asserted in the regression suite rather than assumed,
  * because "region-agnostic" is a stated goal of this platform.
  */
+/** Number of real days in `month` (1-indexed) of `year`, accounting for leap years. */
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * F-173/F-176: a digit-count-only parse accepts "25:99" or "2026-13-45" as finite numbers and lets
+ * `Date.UTC` silently normalise them into a different real day — the value that were rejected is not
+ * "not a datetime", it is "not a REAL datetime", and only this check tells the two apart.
+ */
+function assertValidCalendarParts(
+  y: number, mo: number, d: number, hh: number, mi: number, context: string,
+): void {
+  if (mo < 1 || mo > 12) throw new Error(`${context}: month ${mo} is out of range (1-12)`);
+  if (d < 1 || d > daysInMonth(y, mo)) throw new Error(`${context}: day ${d} is out of range for ${y}-${String(mo).padStart(2, '0')}`);
+  if (hh < 0 || hh > 23) throw new Error(`${context}: hour ${hh} is out of range (0-23)`);
+  if (mi < 0 || mi > 59) throw new Error(`${context}: minute ${mi} is out of range (0-59)`);
+}
+
 export function branchLocalToUtc(dateString: string, hhmm: string, timeZone: string): Date {
   const [y, m, d] = dateString.split('-').map(Number);
   const [hh, mi] = hhmm.split(':').map(Number);
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || !Number.isFinite(hh) || !Number.isFinite(mi)) {
     throw new Error(`branchLocalToUtc: invalid date "${dateString}" or time "${hhmm}"`);
   }
+  assertValidCalendarParts(y, m, d, hh, mi, `branchLocalToUtc: date "${dateString}" time "${hhmm}"`);
   const wantUtcMs = Date.UTC(y, m - 1, d, hh, mi, 0);
 
   const matchesRequest = (candidate: Date) => {
@@ -203,15 +223,33 @@ export function addBranchDays(instant: Date, days: number, timeZone: string): Da
  */
 const NAIVE_LOCAL = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/;
 
+/**
+ * F-176: an input carrying an explicit offset already says exactly which instant it means, so it is
+ * parsed natively rather than resolved on the branch's clock — but native parsing alone still lets an
+ * out-of-range hour (`24:00`) or a month-specific day overflow (`Feb 30`) roll over silently under an
+ * offset, even though it correctly rejects an out-of-range month/day count. This regex exists only to
+ * extract the components for a range check before that native parse runs; the offset itself is passed
+ * through unchanged.
+ */
+const OFFSET_LOCAL = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
 export function parseBranchLocalDateTime(value: unknown, timeZone: string, field: string): Date {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${field} is required and must be a datetime string`);
   }
-  const naive = NAIVE_LOCAL.exec(value.trim());
-  const parsed = naive
-    ? branchLocalToUtc(naive[1], naive[2], timeZone)
-    : new Date(value);
+  const trimmed = value.trim();
+  const naive = NAIVE_LOCAL.exec(trimmed);
+  if (naive) {
+    return branchLocalToUtc(naive[1], naive[2], timeZone);
+  }
 
+  const offset = OFFSET_LOCAL.exec(trimmed);
+  if (offset) {
+    const [, y, mo, d, hh, mi] = offset;
+    assertValidCalendarParts(Number(y), Number(mo), Number(d), Number(hh), Number(mi), `${field} "${value}"`);
+  }
+
+  const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) {
     throw new Error(`${field} is not a valid datetime: "${value}"`);
   }

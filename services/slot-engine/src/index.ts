@@ -652,10 +652,23 @@ async function computeBranchMemberAttendance(branchId: string, date: string | un
   // local clock, so the roster could be built for one calendar day and filtered by another.
   const timeZone = await getBranchTimeZone(branchId);
   const dateString = date || todayDateString(now, timeZone);
-  // Midday anchor: any instant inside the branch's day names that day, and noon is the one
-  // choice no DST transition can move across a date boundary.
-  const weekday = branchIsoWeekday(branchLocalToUtc(dateString, '12:00', timeZone), timeZone);
-  const { startOfDay, endOfDay } = branchDayBounds(dateString, timeZone);
+  // F-176: `date` is a raw, unvalidated query param, and neither call below was guarded — a
+  // malformed value would 500 via Fastify's default handler instead of the clean 400 every other
+  // malformed-input path in this file returns. Same guard shape as F-172's three other call sites.
+  let weekday: string;
+  let startOfDay: Date;
+  let endOfDay: Date;
+  try {
+    // Midday anchor: any instant inside the branch's day names that day, and noon is the one
+    // choice no DST transition can move across a date boundary.
+    weekday = branchIsoWeekday(branchLocalToUtc(dateString, '12:00', timeZone), timeZone);
+    ({ startOfDay, endOfDay } = branchDayBounds(dateString, timeZone));
+  } catch (err: any) {
+    const e = new Error(`Invalid date "${dateString}": ${err.message}`);
+    (e as any).statusCode = 400;
+    (e as any).code = 'INVALID_DATE';
+    throw e;
+  }
 
   const assignments = await prisma.memberGroupAssignment.findMany({
     where: {
