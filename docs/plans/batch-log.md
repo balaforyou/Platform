@@ -214,6 +214,14 @@ Batch 11 (22 Aug 2026): F-175+F-177 resolved together — `workingHoursStart`/`w
 
 ---
 
+Batch 12 (22 Aug 2026): F-178 resolved — the member session card's `WINDOW_NOT_FOUND` copy neutralized to "No session found for today," reusing the admin attendance view's own already-shipped answer to the identical ambiguity rather than inventing cause-specific copy. Commits `95e9626` (fix), `8ec1d85` (register, with a dated correction: the finding's "three states already correctly distinguished server-side" claim overstated it — two of the three real-world causes share one code branch). Last item from Batch 7's domain sweep before F-174. **This entry was itself backfilled** — missed at the time, same gap shape as Batch 8's placeholder and F-179's missing entry, now the third instance; caught and flagged before Batch 13 rather than let ride.
+
+---
+
+Batch 13 (22 Aug 2026): production deploy to `badminton-demo-vm`, HEAD (`8ec1d85`) across all seven components. Two-checkpoint process (read-only audit, then a plan, each signed off separately before any execution) — Step 1 found the live stack split across three different stale SHAs (F-146/F-155/F-163), not the single deployed commit assumed going in; schema was already current, 15/15 migrations applied, zero divergence. Deployed backend-5 first, `caddy` (frontend bundles) second, per the plan's asymmetric-safety reasoning — verified via live `/health`/`version.json` on the real HTTPS URL, not container status alone. Real live spot-checks post-deploy: F-156's `/bookings/my` fetch confirmed firing (real login, real network request, `200`); F-153's mobile slot list confirmed fully reachable at 375px viewport (post-selection click-through not completed — a browser-pane tooling limitation this session, flagged rather than silently skipped). One real mistake during verification: a `sed` mask pattern failed and printed the production DB password in plaintext to this session's logs — flagged immediately, password not repeated, rotation recommended. Rollback plan (captured pre-deploy image IDs, per-service local re-tag) stayed unused — no rollback triggered.
+
+---
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
