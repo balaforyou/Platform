@@ -272,6 +272,42 @@ not self-numbered or fixed here.
 
 ---
 
+Batch 17 (22 Aug 2026): P0 outage response — `jbc.elitecourts.duckdns.org` reported "tenant not
+found" live. **Root cause: exact repeat of `deploy/gcp-vm/CLAUDE.md` trap 10.** Batch 15's third
+Postgres password rotation updated `.env` on `badminton-demo-vm` (11:38 UTC) but never recreated the
+5 `DATABASE_URL`-consuming app containers afterward, unlike Batch 14's rotation, which explicitly did
+— the containers (started 11:07 UTC, before the `.env` write) kept the stale credential in memory
+while Postgres began enforcing the new one, so every DB-backed request failed with Prisma `P1000`
+platform-wide (`courtowner1` reproduced identically, ruling out a tenant-specific cause) for roughly
+2 hours. The "tenant not found" symptom was a red herring: `TenantContext.tsx`
+(`packages/ui-shared/src/context/TenantContext.tsx:136`) shows that generic message for *any* failed
+API call, masking the real `500`/`P1000` underneath. **Diagnosis, not assumption**: confirmed via the
+real API call the SPA actually makes (`/api/tenant/tenants/by-subdomain/jbc`, found by reading
+`apiRequest`'s `/api` path-prefixing), the same version SHA (`8ec1d85`) deployed on all 7 components
+ruling out a bad code deploy (so Batch 13's prepared rollback was correctly judged the wrong tool —
+it can't fix an external `.env` credential mismatch), and a real SHA-256 fingerprint/mtime comparison
+between the on-disk `.env` and each container's actual injected environment (`docker inspect
+--format '{{json .Config.Env}}'`) — no credential value ever printed. **Fix**: `docker compose up -d
+--force-recreate` on the 5 backend services only (`tenant-management`, `identity-auth`,
+`slot-engine`, `payment`, `notification` — not `caddy`, not `postgres`), the same operation Batch 14
+already used. **Restoration confirmed via real evidence, not `/health`**: `/health` stayed green on
+all 7 components throughout the entire outage (masked it completely — see **F-181** below), so the
+real proof was the live tenant-resolution API returning `200` with the actual JBC tenant row
+(`Japan Badminton Court`, unchanged `createdAt`) and the same call succeeding on `courtowner1`,
+confirmed platform-wide, not JBC-only. No code changed, no data touched — container recreate only.
+**Timeline**: outage reported → root cause confirmed (real API call, fingerprint/mtime comparison) →
+fix executed (user-confirmed force-recreate) → restoration confirmed (real API calls, both tenants) —
+approximately 2 hours end to end, matching the outage window itself since diagnosis and fix were
+immediate once the investigation started. **F-181 opened** (`docs/findings_register.md`): `/health`
+across all 5 `DATABASE_URL`-consuming services checks process liveness only, not a real DB query, so
+it cannot detect — and did not detect — this exact class of failure. Chief-confirmed via
+`docs/plans/pending-findings.md`. `deploy/gcp-vm/CLAUDE.md` trap 10 updated with a cross-reference to
+this incident, making the force-recreate step explicitly mandatory on every rotation regardless of
+which prior batch happened to include it. `pnpm register:check` passes (177 rows, Open 102 /
+Resolved 75).
+
+---
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

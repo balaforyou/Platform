@@ -81,3 +81,23 @@ both inert and accepted as reasonable residual risk given genuine technical cons
 against safe per-entry scrubbing.
 Confirmed-ID: F-180
 Confirmed: 22 Aug 2026
+
+### health-endpoint-liveness-not-readiness
+Batch: 17
+Surfaced: 22 Aug 2026
+Description: `/health` on all 7 components reports `{status:"ok"}` while database
+authentication is actively failing platform-wide. Discovered during the 22 Aug 2026
+`jbc.elitecourts.duckdns.org` outage: for roughly 2 hours, every DB-backed request on
+`tenant-management` (and, by the same mechanism, the other 4 `DATABASE_URL`-consuming
+services) failed with Prisma `P1000` — a stale credential left in the running containers'
+environment after Batch 15's third Postgres rotation updated `.env` without recreating
+them (exact repeat of `deploy/gcp-vm/CLAUDE.md` trap 10). `/health` on every affected
+service kept returning `200 {"status":"ok"}` throughout, confirmed live at the same moment
+`/api/tenant/tenants/by-subdomain/jbc` was returning `500` with the raw Prisma auth-failure
+message. The check verifies the service process is running and answering HTTP, not that
+its actual dependencies — here, database authentication — are functional, so it masked a
+platform-wide P0 for its full duration; discovery was a user report, not the health check
+that should have caught it first. Fix direction: `/health` (or a companion readiness check)
+should exercise a real DB query, not just process liveness.
+Confirmed-ID: F-181
+Confirmed: 22 Aug 2026
