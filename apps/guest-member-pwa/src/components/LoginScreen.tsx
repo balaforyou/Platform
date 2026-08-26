@@ -77,7 +77,17 @@ export default function LoginScreen() {
       await verifyGoogleMock(mockEmail);
       console.log('Login successful via mock Google Account.');
     } catch (err: any) {
-      setError(err.message || 'Google mock login failed.');
+      // F-187: identity-auth already returns a readable err.message for both codes
+      // (e.g. "Google authentication is restricted to members only.") — these two branches
+      // exist to redirect the guest toward a path that actually works, not to reword an
+      // otherwise-raw string.
+      if (err.code === 'GOOGLE_LOGIN_ONLY_FOR_MEMBERS') {
+        setError('Google sign-in is for members only. Please use phone verification below instead.');
+      } else if (err.code === 'PHONE_VERIFICATION_REQUIRED') {
+        setError('This Google account needs phone verification first. Please sign in with your phone number below.');
+      } else {
+        setError(err.message || 'Google mock login failed.');
+      }
     } finally {
       setLoading(false);
       setShowGoogleMockInput(false);
@@ -250,7 +260,9 @@ export default function LoginScreen() {
                 onClick={() => setShowGoogleMockInput(true)}
                 className="w-full py-3.5 px-4 rounded-2xl bg-surface-mint border border-edge-strong hover:bg-edge text-ink hover:text-ink font-medium flex items-center justify-center space-x-3 transition-all active:scale-[0.98]"
               >
-                <Mail className="h-5 w-5 text-rose-700" />
+                <span className="h-8 w-8 rounded-lg bg-surface flex items-center justify-center text-brand-primary shrink-0">
+                  <Mail className="h-4 w-4" />
+                </span>
                 <span className="text-sm font-semibold">[Dev Mock] Sign in with Google</span>
               </button>
             </div>
@@ -258,20 +270,25 @@ export default function LoginScreen() {
         ) : (
           // Stage 3: Google Login Mock Input Form
           <form onSubmit={handleGoogleMockLogin} className="space-y-6">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-bold text-ink">Google OAuth Simulation</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowGoogleMockInput(false);
-                  setError(null);
-                }}
-                className="text-xs text-brand-primary hover:underline font-semibold"
-              >
-                Back
-              </button>
+            <div className="flex items-center space-x-3 mb-2">
+              <span className="h-10 w-10 rounded-xl bg-surface-mint flex items-center justify-center text-brand-primary shrink-0">
+                <Mail className="h-5 w-5" />
+              </span>
+              <div className="flex-1 flex justify-between items-center">
+                <h2 className="text-lg font-bold text-ink">Google OAuth Simulation</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowGoogleMockInput(false);
+                    setError(null);
+                  }}
+                  className="text-xs text-brand-primary hover:underline font-semibold"
+                >
+                  Back
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-ink-muted">
+            <p className="text-xs text-ink-muted bg-surface-mint border border-edge rounded-xl p-3">
               Simulates Google Single Sign-On (OAuth). Enter an email to verify membership or link phone.
             </p>
 

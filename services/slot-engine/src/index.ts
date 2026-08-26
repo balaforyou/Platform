@@ -3808,6 +3808,11 @@ server.get('/bookings/:id', async (request, reply) => {
         }
       },
       players: true,
+      // F-187: guest-facing multi-window display (BookingConfirmation.tsx, BookingPay.tsx)
+      // needs every additional hour's time range, not just the parent's own window.
+      childBookings: {
+        include: { window: true },
+      },
     },
   });
 
@@ -3863,6 +3868,13 @@ server.get('/bookings/my', async (request, reply) => {
         }
       },
       players: true,
+      // F-187: guest-facing multi-window display (BookingHistory.tsx) needs every
+      // additional hour's time range, not just the parent's own window. The
+      // parentBookingId: null filter above is unchanged and still governs which rows
+      // are top-level — this only adds what's nested under each of those rows.
+      childBookings: {
+        include: { window: true },
+      },
     },
     orderBy: { heldAt: 'desc' },
   });

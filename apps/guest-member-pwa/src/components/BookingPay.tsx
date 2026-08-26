@@ -265,9 +265,29 @@ export default function BookingPay() {
           </div>
           <div className="flex justify-between">
             <span>Slot Time:</span>
-            <span className="text-ink">
-              {new Date(booking.window?.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(booking.window?.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            <div className="text-ink text-right">
+              <div>
+                {new Date(booking.window?.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(booking.window?.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              {/* F-187: this is the screen shown immediately before payment, right after the
+                  duration stepper — showing only the first hour here next to a price that
+                  already correctly sums every hour (F-183's resolvedPrice) would read as being
+                  charged double for a single hour, worse than the same gap on the confirmation
+                  screen since it sits directly on the pay decision. */}
+              {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
+                <div id="pay-additional-windows">
+                  {booking.childBookings
+                    .slice()
+                    .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
+                    .map((child: any) => (
+                      <div key={child.id}>
+                        + {new Date(child.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
+                        {new Date(child.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex justify-between">
             <span>Total Players:</span>

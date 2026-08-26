@@ -13,7 +13,17 @@ export default function CourtBooking() {
   const [pool, setPool] = useState<any>(null);
   const [slots, setSlots] = useState<any[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
-  
+
+  // F-187: Fast Grid period grouping (Morning/Afternoon/Evening), matching the wireframe's
+  // periodsDef() bucketing. Half-open ranges so every slot lands in exactly one bucket, with
+  // no gap for very early/late hours.
+  const [activePeriod, setActivePeriod] = useState<'morning' | 'afternoon' | 'evening'>('morning');
+
+  // F-187: duration stepper. Counts ADDITIONAL contiguous hours beyond the selected slot's own
+  // hour (0 = just the selected slot, matching today's behavior). Reset to 0 whenever a new
+  // base slot is selected.
+  const [additionalWindowsCount, setAdditionalWindowsCount] = useState(0);
+
   // Date picker state - default to local date YYYY-MM-DD
   const [bookingDate, setBookingDate] = useState(() => {
     const today = new Date();
@@ -40,6 +50,43 @@ export default function CourtBooking() {
   const [error, setError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
+
+  // F-187: Morning/Afternoon/Evening buckets. `test` ranges are half-open and together cover
+  // every hour of the day (morning also catches the small-hours case, evening catches anything
+  // at or after 17:00) so no slot is ever silently dropped from every tab.
+  const periodsDef: { key: 'morning' | 'afternoon' | 'evening'; label: string; test: (hour: number) => boolean }[] = [
+    { key: 'morning', label: 'Morning', test: (h) => h < 12 },
+    { key: 'afternoon', label: 'Afternoon', test: (h) => h >= 12 && h < 17 },
+    { key: 'evening', label: 'Evening', test: (h) => h >= 17 },
+  ];
+
+  const sortedSlots = [...slots].sort(
+    (a, b) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime(),
+  );
+  const groupedSlots = periodsDef.map((p) => ({
+    ...p,
+    slots: sortedSlots.filter((s) => p.test(new Date(s.window.startTime).getHours())),
+  }));
+  const visibleSlots = groupedSlots.find((g) => g.key === activePeriod)?.slots ?? [];
+
+  // F-187: how many additional contiguous hours are actually available after `slot`, capped by
+  // the pool's real maxAdditionalWindows — never re-implements the server's own contiguity/
+  // resource-match validation, just bounds the stepper so it doesn't offer a count the server
+  // would reject purely for lack of a next window to send.
+  const maxAdditionalAvailable = (slot: any): number => {
+    if (!slot) return 0;
+    const startIndex = sortedSlots.findIndex((s) => s.window.id === slot.window.id);
+    if (startIndex === -1) return 0;
+    let count = 0;
+    for (let i = startIndex + 1; i < sortedSlots.length; i++) {
+      const prevEnd = new Date(sortedSlots[i - 1].window.endTime).getTime();
+      const thisStart = new Date(sortedSlots[i].window.startTime).getTime();
+      if (thisStart !== prevEnd) break;
+      count++;
+    }
+    const ruleMax = pool?.bookingRules?.[0]?.maxAdditionalWindows ?? 1;
+    return Math.min(count, ruleMax);
+  };
 
   // 1. Fetch resource pool on mount
   useEffect(() => {
@@ -77,6 +124,7 @@ export default function CourtBooking() {
         setSlotsLoading(true);
         setSlots([]);
         setSelectedSlot(null);
+        setAdditionalWindowsCount(0);
         setBookingError(null);
         // GET /resource-pools/:id/availability?date=YYYY-MM-DD
         const res = await apiRequest<any[]>(`/slot-engine/resource-pools/${poolId}/availability?date=${bookingDate}`, {
@@ -97,6 +145,18 @@ export default function CourtBooking() {
       isCurrentRequest = false;
     };
   }, [poolId, bookingDate, accessToken]);
+
+  // F-187: land on whichever period actually has slots rather than always defaulting to a
+  // possibly-empty Morning tab. Only runs when the CURRENT tab is empty, so a guest who has
+  // already switched tabs manually is never yanked back.
+  useEffect(() => {
+    const current = groupedSlots.find((g) => g.key === activePeriod);
+    if (current && current.slots.length === 0) {
+      const firstNonEmpty = groupedSlots.find((g) => g.slots.length > 0);
+      if (firstNonEmpty) setActivePeriod(firstNonEmpty.key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slots]);
 
   // F-153: make the consequence of a slot tap reachable on a phone.
   //
@@ -128,21 +188,44 @@ export default function CourtBooking() {
     `${new Date(win.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ` +
     `${new Date(win.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
+  // F-187: the selected base slot plus `additionalWindowsCount` contiguous hours after it,
+  // sourced from the same sorted list `maxAdditionalAvailable` walks — so the chain the guest
+  // sees priced here is exactly the chain `handleReserve` submits as additionalWindowIds.
+  const getSelectedChain = (): any[] => {
+    if (!selectedSlot) return [];
+    const startIndex = sortedSlots.findIndex((s) => s.window.id === selectedSlot.window.id);
+    if (startIndex === -1) return [selectedSlot];
+    return sortedSlots.slice(startIndex, startIndex + 1 + additionalWindowsCount);
+  };
+
   // Real-time price helper.
   // Group size is the booker alone while co-player collection is removed (see the note above).
   // PER_PERSON is retained rather than short-circuited: the server still prices authoritatively,
-  // and this stays correct on its own terms if participants are reinstated.
+  // and this stays correct on its own terms if participants are reinstated (F-183: this estimate
+  // is always advisory, the server sums authoritatively per window regardless).
   const calculatePrice = () => {
     if (!pool || !selectedSlot) return 0;
-    const { window } = selectedSlot;
-    const mode = window.pricingMode || pool.pricingMode || 'FLAT';
-    const rate = window.price != null ? Number(window.price) : Number(pool.defaultRate);
     const size = 1;
 
-    if (mode === 'PER_PERSON') {
-      return rate * size;
-    }
-    return rate;
+    return getSelectedChain().reduce((sum, slot) => {
+      const { window } = slot;
+      const mode = window.pricingMode || pool.pricingMode || 'FLAT';
+      const rate = window.price != null ? Number(window.price) : Number(pool.defaultRate);
+      return sum + (mode === 'PER_PERSON' ? rate * size : rate);
+    }, 0);
+  };
+
+  // F-187: renders BookingRule.cancellationPolicyJson's real tiers instead of hardcoded copy.
+  // Shape: { type: 'tiered', tiers: [{ min_hours_before_slot, refund_percent }] }.
+  const formatCancellationPolicy = (policy: any): string[] => {
+    if (!policy || policy.type !== 'tiered' || !Array.isArray(policy.tiers)) return [];
+    return [...policy.tiers]
+      .sort((a, b) => b.min_hours_before_slot - a.min_hours_before_slot)
+      .map((tier) =>
+        tier.min_hours_before_slot > 0
+          ? `${tier.refund_percent}% refund if cancelled ${tier.min_hours_before_slot}h+ before the slot`
+          : `${tier.refund_percent}% refund after that`,
+      );
   };
 
   const handleReserve = async () => {
@@ -153,6 +236,15 @@ export default function CourtBooking() {
       setBookingError(null);
       
       const idempotencyKey = crypto.randomUUID();
+
+      // F-187: everything after the base slot in the current chain, sent as additionalWindowIds
+      // (F-183, previously accepted server-side but never populated from this screen). Server
+      // re-validates count/contiguity/resource-match independently (INVALID_WINDOW_COUNT,
+      // NON_CONTIGUOUS_WINDOWS, RESOURCE_MISMATCH) — this is a convenience for the happy path,
+      // not the source of truth for whether the request is valid.
+      const additionalWindowIds = getSelectedChain()
+        .slice(1)
+        .map((slot) => slot.window.id);
 
       // POST /bookings
       const booking = await apiRequest<any>('/slot-engine/bookings', {
@@ -171,6 +263,7 @@ export default function CourtBooking() {
           // Sent explicitly as empty rather than omitted: the field remains part of the contract
           // and the server still supports it, so restoring the UI needs no API change.
           coPlayers: [],
+          ...(additionalWindowIds.length > 0 ? { additionalWindowIds } : {}),
         }),
       });
 
@@ -185,9 +278,12 @@ export default function CourtBooking() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
-        <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-ink-muted text-sm font-medium">Loading booking workspace...</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink gap-1">
+        <div className="p-4 rounded-full bg-surface-mint mb-2">
+          <Activity className="h-8 w-8 animate-spin text-[var(--brand-primary)]" />
+        </div>
+        <p className="text-ink font-outfit font-bold text-sm">Setting up your booking</p>
+        <p className="text-ink-muted text-xs">Loading real-time availability…</p>
       </div>
     );
   }
@@ -248,6 +344,31 @@ export default function CourtBooking() {
               2. Available Time Slots
             </h3>
 
+            {/* F-187: Fast Grid period tabs — 44px tall (slide 4a correction over the wireframe's
+                drawn 33-38px), so the tap target stays comfortable on a phone. */}
+            {!slotsLoading && slots.length > 0 && (
+              <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="Time of day">
+                {groupedSlots.map((g) => (
+                  <button
+                    key={g.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={activePeriod === g.key}
+                    onClick={() => setActivePeriod(g.key)}
+                    disabled={g.slots.length === 0}
+                    className="h-11 rounded-xl text-xs font-bold font-outfit transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{
+                      background: activePeriod === g.key ? 'var(--brand-primary)' : 'var(--surface-white)',
+                      color: activePeriod === g.key ? '#ffffff' : 'var(--text-primary)',
+                      border: `1px solid ${activePeriod === g.key ? 'var(--brand-primary)' : 'var(--border-card)'}`,
+                    }}
+                  >
+                    {g.label} <span className="opacity-70 font-mono">({g.slots.length})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {slotsLoading ? (
               <div className="py-12 flex justify-center">
                 <Activity className="h-8 w-8 animate-spin text-[var(--brand-primary)]" />
@@ -256,9 +377,13 @@ export default function CourtBooking() {
               <p className="text-xs text-ink-muted py-8 text-center bg-surface rounded-xl border border-edge">
                 No slots available on this date. Try another date.
               </p>
+            ) : visibleSlots.length === 0 ? (
+              <p className="text-xs text-ink-muted py-8 text-center bg-surface rounded-xl border border-edge">
+                No {activePeriod} slots on this date. Try another period or date.
+              </p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {slots.map((slot) => {
+                {visibleSlots.map((slot) => {
                   const isSelected = selectedSlot?.window?.id === slot.window.id;
                   const timeRange = formatTimeRange(slot.window);
                   const pricingMode = slot.window.pricingMode || pool.pricingMode || 'FLAT';
@@ -284,6 +409,7 @@ export default function CourtBooking() {
                       key={slot.window.id}
                       onClick={() => {
                         setSelectedSlot(slot);
+                        setAdditionalWindowsCount(0);
                         setBookingError(null);
                       }}
                       className="cursor-pointer p-4 border transition-all flex flex-col justify-between space-y-2"
@@ -342,7 +468,11 @@ export default function CourtBooking() {
                 <div className="flex justify-between text-xs text-ink-muted font-medium">
                   <span>Selected Slot:</span>
                   <span className="text-ink font-mono font-bold" id="selected-slot-echo">
-                    {formatTimeRange(selectedSlot.window)}
+                    {(() => {
+                      const chain = getSelectedChain();
+                      const last = chain[chain.length - 1] ?? selectedSlot;
+                      return `${formatTimeRange(selectedSlot.window).split(' - ')[0]} - ${formatTimeRange(last.window).split(' - ')[1]}`;
+                    })()}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs text-ink-muted font-medium">
@@ -353,6 +483,40 @@ export default function CourtBooking() {
                       : 'Flat booking rate'}
                   </span>
                 </div>
+
+                {/* F-187: duration stepper. Whole-hour increments only (not the wireframe's drawn
+                    30-min steps — the pool's own minBookingDurationMinutes/AvailabilityWindow grain
+                    is hourly here), capped by maxAdditionalWindows AND by how many contiguous hours
+                    actually exist after the selected slot. */}
+                <div className="flex justify-between items-center text-xs text-ink-muted font-medium pt-1">
+                  <span>Duration:</span>
+                  <div className="flex items-center space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => setAdditionalWindowsCount((c) => Math.max(0, c - 1))}
+                      disabled={additionalWindowsCount === 0}
+                      className="h-7 w-7 rounded-lg border border-edge-strong bg-surface text-ink font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                      id="duration-decrement-btn"
+                      aria-label="Decrease duration"
+                    >
+                      −
+                    </button>
+                    <span className="text-ink font-mono font-bold w-16 text-center" id="duration-display">
+                      {additionalWindowsCount + 1} hr{additionalWindowsCount + 1 > 1 ? 's' : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAdditionalWindowsCount((c) => Math.min(maxAdditionalAvailable(selectedSlot), c + 1))}
+                      disabled={additionalWindowsCount >= maxAdditionalAvailable(selectedSlot)}
+                      className="h-7 w-7 rounded-lg border border-edge-strong bg-surface text-ink font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                      id="duration-increment-btn"
+                      aria-label="Increase duration"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex justify-between items-end pt-2 border-t border-edge">
                   <span className="text-sm font-bold text-ink font-outfit">Total Estimate:</span>
                   <span className="text-2xl font-extrabold text-[var(--brand-primary)] font-mono" id="computed-price-display">
@@ -360,6 +524,19 @@ export default function CourtBooking() {
                   </span>
                 </div>
               </div>
+
+              {/* F-187: daily-cap / cancellation-policy copy, read directly off the pool's own
+                  BookingRule — no new fetch, this is the same `pool` state already loaded above. */}
+              {(pool.bookingRules?.[0]?.maxDailyBookingsPerGuest != null || pool.bookingRules?.[0]?.cancellationPolicyJson) && (
+                <div className="text-[11px] text-ink-muted bg-surface border border-edge rounded-xl p-3 space-y-1">
+                  <p>
+                    Up to <span className="font-bold text-ink">{pool.bookingRules?.[0]?.maxDailyBookingsPerGuest ?? 3}</span> booking(s) per day per guest.
+                  </p>
+                  {formatCancellationPolicy(pool.bookingRules?.[0]?.cancellationPolicyJson).map((line, i) => (
+                    <p key={i}>{line}</p>
+                  ))}
+                </div>
+              )}
 
               {bookingError && (
                 <div className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-start space-x-2 text-xs text-red-700">

@@ -189,9 +189,27 @@ export default function BookingHistory() {
                       <Calendar className="h-3.5 w-3.5 text-[var(--brand-primary)] shrink-0" />
                       <span>{sDate}</span>
                     </div>
-                    <div className="flex items-center space-x-1.5">
-                      <Clock className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                      <span>{st} - {et}</span>
+                    <div className="flex items-start space-x-1.5">
+                      <Clock className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-px" />
+                      <div className="space-y-0.5">
+                        <div>{st} - {et}</div>
+                        {/* F-187: a multi-window (F-183) booking's extra hours live on separate
+                            child rows — without this, a guest who booked 2+ hours would see only
+                            the first hour here despite paying for all of them. */}
+                        {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
+                          <div id={`booking-additional-windows-${booking.id}`}>
+                            {booking.childBookings
+                              .slice()
+                              .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
+                              .map((child: any) => (
+                                <div key={child.id}>
+                                  + {new Date(child.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
+                                  {new Date(child.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center space-x-1.5">
                       <MapPin className="h-3.5 w-3.5 text-blue-600 shrink-0" />
