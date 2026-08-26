@@ -6,7 +6,7 @@ import { Smartphone, Activity, HelpCircle, ShieldCheck, ShieldAlert } from 'luci
 
 export default function BookingPay() {
   const { bookingId } = useParams();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const navigate = useNavigate();
 
   const [booking, setBooking] = useState<any>(null);
@@ -229,137 +229,181 @@ export default function BookingPay() {
   }
 
   const isDev = import.meta.env.DEV;
+  const payAmount = Number(intent?.amount ? intent.amount / 100 : booking.price);
 
   return (
-    <div className="flex-1 max-w-md w-full mx-auto px-4 py-10 space-y-6 text-ink">
-      <div className="space-y-1 text-center">
-        <h2 className="text-3xl font-extrabold tracking-tight font-outfit">
-          Complete <span className="text-[var(--brand-primary)]">Checkout</span>
-        </h2>
-        <p className="text-ink-muted text-xs">
-          Your court slot is held for 5 minutes. Select a payment method below.
-        </p>
+    <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '480px' }}>
+      {/* F-190 Slice 3: header shell (JBC Booking.dc.html:260-263), matching 3b's established
+          pattern. navigate(-1) is plain browser-back semantics -- there's no other real "back"
+          destination from a payment screen to invent. */}
+      <div className="flex items-center gap-3.5 px-5 py-5" style={{ background: 'var(--color-neutral-900)' }}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="Back"
+          className="h-11 w-11 flex items-center justify-center rounded-full border-none cursor-pointer bg-transparent"
+        >
+          <span
+            className="h-[38px] w-[38px] rounded-full flex items-center justify-center text-[17px]"
+            style={{ background: 'var(--color-neutral-800)', color: 'var(--color-neutral-100)' }}
+          >
+            ←
+          </span>
+        </button>
+        <div className="text-base font-bold" style={{ color: 'var(--color-neutral-100)' }}>
+          Confirm and pay
+        </div>
       </div>
 
-      {/* Booking Summary */}
-      <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
-        <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider">
-          Booking Summary
-        </h3>
-        
-        <div className="space-y-2 text-xs text-ink-muted font-mono">
-          {/* F-037: this showed `booking.id.slice(0, 8)` under the label "Booking ID" — a truncated
-              raw UUID, which is meaningless to the customer AND incomplete to quote back. The label
-              changes with it: calling the value an "ID" is what made showing a raw identifier feel
-              appropriate. Display only — booking.id is unchanged in the URL and in every API call
-              below. */}
-          <div className="flex justify-between">
-            <span>Booking Reference:</span>
-            <span className="text-ink">{formatBookingReference(booking.id)}</span>
+      <div className="px-5 py-6 space-y-6">
+        {/* Booking Summary */}
+        <div style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}>
+          <div className="p-4" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+            {/* F-037: this showed `booking.id.slice(0, 8)` under the label "Booking ID" — a
+                truncated raw UUID, meaningless to the customer AND incomplete to quote back.
+                Display only — booking.id is unchanged in the URL and in every API call below. */}
+            <div className="text-[15px] font-bold" style={{ color: 'var(--color-text)' }}>
+              {formatBookingReference(booking.id)}
+            </div>
+            <div className="text-[12.5px]" style={{ color: 'var(--color-neutral-700)' }}>
+              {new Date(booking.window?.startTime).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })} &middot;{' '}
+              {new Date(booking.window?.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
+              {new Date(booking.window?.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
+            {/* F-187: this is the screen shown immediately before payment, right after the
+                duration stepper — showing only the first hour here next to a price that already
+                correctly sums every hour (F-183's resolvedPrice) would read as being charged
+                double for a single hour, worse than the same gap on the confirmation screen since
+                it sits directly on the pay decision. Court row deliberately skipped -- F-189's own
+                decision on courtSlotIndex display, not this slice's. */}
+            {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
+              <div id="pay-additional-windows" className="text-[12.5px]" style={{ color: 'var(--color-neutral-700)' }}>
+                {booking.childBookings
+                  .slice()
+                  .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
+                  .map((child: any) => (
+                    <div key={child.id}>
+                      + {new Date(child.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
+                      {new Date(child.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
-          <div className="flex justify-between">
-            <span>Slot Date:</span>
-            <span className="text-ink">
-              {new Date(booking.window?.startTime).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+            <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Players</span>
+            <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>{1 + (booking.players?.length || 0)}</span>
+          </div>
+          <div className="flex justify-between items-center px-4 py-3">
+            <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-neutral-700)' }}>Amount to Pay</span>
+            <span className="text-xl font-extrabold font-mono" style={{ color: 'var(--color-accent-700)' }} id="pay-amount-display">
+              ₹{Number(booking.price)}
             </span>
           </div>
-          <div className="flex justify-between">
-            <span>Slot Time:</span>
-            <div className="text-ink text-right">
-              <div>
-                {new Date(booking.window?.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(booking.window?.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-              {/* F-187: this is the screen shown immediately before payment, right after the
-                  duration stepper — showing only the first hour here next to a price that
-                  already correctly sums every hour (F-183's resolvedPrice) would read as being
-                  charged double for a single hour, worse than the same gap on the confirmation
-                  screen since it sits directly on the pay decision. */}
-              {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
-                <div id="pay-additional-windows">
-                  {booking.childBookings
-                    .slice()
-                    .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                    .map((child: any) => (
-                      <div key={child.id}>
-                        + {new Date(child.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
-                        {new Date(child.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    ))}
+        </div>
+
+        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. booking.phone (used below in
+            Razorpay's prefill.contact) is confirmed dead: Booking has no phone column and
+            GET /bookings/:id never joins one in, so that reference has always silently resolved to
+            undefined. useAuth().user.phone is the JWT's own phone claim, already decoded into
+            AuthContext -- real, already-available, no new request. "Verified" is accurate, not
+            decorative: every path to an access token requires phone OTP first (direct phone login,
+            or Google-mock login's own PHONE_VERIFICATION_REQUIRED gate). */}
+        {user?.phone && (
+          <div className="flex flex-col gap-2">
+            <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
+              YOUR NUMBER
+            </div>
+            <div
+              className="flex items-center gap-2.5 px-4"
+              style={{ border: '1px solid var(--color-neutral-300)', background: '#fff', borderRadius: '14px', minHeight: '52px' }}
+            >
+              <span className="text-[14px] font-bold" style={{ color: 'var(--color-text)' }}>{user.phone}</span>
+              <span
+                className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full"
+                style={{ color: 'var(--color-accent-2-800)', background: 'var(--color-accent-2-200)' }}
+              >
+                Verified
+              </span>
+            </div>
+            {/* Generic, non-numeric -- not the wireframe's hardcoded "Free cancellation until 3:00
+                PM today". The real tiered policy was already shown one screen earlier on
+                CourtBooking.tsx; re-fetching pool/BookingRule here for a value the guest just saw
+                seconds ago isn't worth a new fetch for this slice. */}
+            <p className="text-[11.5px]" style={{ color: 'var(--color-neutral-700)' }}>
+              Your booking confirmation and cancellation link go to this number.
+            </p>
+          </div>
+        )}
+
+        {/* Payment methods */}
+        <div className="space-y-3">
+          {/* Mock Dev Method -- restyle only, unchanged position/behavior/dev-gating. */}
+          {isDev && (
+            <button
+              onClick={handleMockPayment}
+              disabled={paying}
+              className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 p-4 rounded-xl flex items-center justify-between text-left group transition-all"
+              id="simulate-success-pay-btn"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700">
+                  <ShieldCheck className="h-5 w-5" />
                 </div>
+                <div>
+                  <div className="text-sm font-bold text-ink">Simulate Payment (Dev)</div>
+                  <div className="text-[10px] text-ink-muted">Triggers secure server-side signature webhook</div>
+                </div>
+              </div>
+              {paying ? (
+                <Activity className="h-4 w-4 animate-spin text-emerald-700" />
+              ) : (
+                <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">Local</span>
               )}
+            </button>
+          )}
+
+          {/* F-163: recoverable failures render here, beside the payment methods that can be
+              retried, instead of replacing the page. Markup matches CourtBooking.tsx's bookingError
+              banner so the app shows a recoverable error one way rather than two. */}
+          {paymentError && (
+            <div
+              className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-start space-x-2 text-xs text-red-700"
+              id="payment-error-banner"
+            >
+              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{paymentError}</span>
             </div>
-          </div>
-          <div className="flex justify-between">
-            <span>Total Players:</span>
-            <span className="text-ink">{1 + (booking.players?.length || 0)} Players</span>
-          </div>
-        </div>
+          )}
 
-        <div className="pt-4 border-t border-edge flex justify-between items-end">
-          <span className="text-sm font-bold text-ink-muted font-outfit">Amount to Pay:</span>
-          <span className="text-2xl font-extrabold text-[var(--brand-primary)] font-mono" id="pay-amount-display">
-            ₹{Number(booking.price)}
-          </span>
-        </div>
-      </div>
-
-      {/* Payment methods list */}
-      <div className="space-y-3">
-        {/* Mock Dev Method */}
-        {isDev && (
+          {/* F-190 Slice 3: one real button, not two -- UPI needs no separate button or
+              config.display work, Razorpay's Standard Checkout already surfaces it as a selectable
+              method inside the one overlay and hands off to the device's UPI apps (Intent)
+              directly. handleRazorpayCheckout is entirely unchanged -- same order-creation/verify/
+              navigate flow, same unrestricted options. Restyled to the wireframe's actual
+              payment-CTA color, a deliberate departure from 3a/3b's accent-700: accent-400
+              background, neutral-900 text, 54px height. Label is dynamic (real amount), matching
+              the wireframe's own {{pay.payLabel}} convention minus the fake UPI-app-name suffix it
+              originally paired with. #pay-amount-display above is not duplicated here -- the
+              button repeating the amount is the wireframe's own intentional redundancy, not a
+              mistake to fix. */}
           <button
-            onClick={handleMockPayment}
+            onClick={handleRazorpayCheckout}
             disabled={paying}
-            className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 p-4 rounded-xl flex items-center justify-between text-left group transition-all"
-            id="simulate-success-pay-btn"
+            className="w-full min-h-[54px] rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: 'var(--color-accent-400)', color: 'var(--color-neutral-900)', border: 'none' }}
+            id="real-razorpay-btn"
           >
-            <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm font-bold text-ink">Simulate Payment (Dev)</div>
-                <div className="text-[10px] text-ink-muted">Triggers secure server-side signature webhook</div>
-              </div>
-            </div>
             {paying ? (
-              <Activity className="h-4 w-4 animate-spin text-emerald-700" />
+              <Activity className="h-4 w-4 animate-spin" />
             ) : (
-              <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">Local</span>
+              <>
+                <Smartphone className="h-4 w-4" />
+                <span>Pay ₹{payAmount}</span>
+              </>
             )}
           </button>
-        )}
-
-        {/* F-163: recoverable failures render here, beside the payment methods that can be retried,
-            instead of replacing the page. Markup matches CourtBooking.tsx:323 so the app shows a
-            recoverable error one way rather than two. */}
-        {paymentError && (
-          <div
-            className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-start space-x-2 text-xs text-red-700"
-            id="payment-error-banner"
-          >
-            <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>{paymentError}</span>
-          </div>
-        )}
-
-        {/* Real SDK trigger */}
-        <button
-          onClick={handleRazorpayCheckout}
-          className="w-full bg-surface-mint hover:bg-edge border border-edge p-4 rounded-xl flex items-center justify-between text-left group transition-all"
-          id="real-razorpay-btn"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-lg bg-rose-50 flex items-center justify-center text-rose-700">
-              <Smartphone className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-ink">Razorpay Standard checkout</div>
-              <div className="text-[10px] text-ink-muted font-medium">UPI / Card / Netbanking</div>
-            </div>
-          </div>
-          <span className="text-xs bg-surface-mint text-ink-muted group-hover:text-ink px-2 py-0.5 rounded font-semibold transition-colors">SDK</span>
-        </button>
+        </div>
       </div>
     </div>
   );
