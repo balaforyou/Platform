@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiRequest } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { CheckCircle, AlertCircle, Activity, ArrowRight, Calendar, Clock, MapPin, Users } from 'lucide-react';
+import { CheckCircle, AlertCircle, Activity, ArrowRight, Navigation } from 'lucide-react';
 
 export default function BookingConfirmation() {
   const { bookingId } = useParams();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
 
   const [booking, setBooking] = useState<any>(null);
-  const [branchName, setBranchName] = useState<string | null>(null);
+  // F-190 Slice 4: broadened from just .name so the real coordinates are available for a real
+  // Directions link (see below) -- same /branches/:id/about fetch this screen already made.
+  const [branchAbout, setBranchAbout] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,15 +73,22 @@ export default function BookingConfirmation() {
   // disturbing confirmation polling.
   useEffect(() => {
     const branchId = booking?.branchId;
-    if (!branchId || branchName) return;
+    if (!branchId || branchAbout) return;
 
     let isMounted = true;
     apiRequest<any>(`/tenant/branches/${branchId}/about`, { token: accessToken })
-      .then((res) => { if (isMounted && res?.name) setBranchName(res.name); })
-      .catch(() => { /* leave the venue line absent — never show a venue we cannot confirm */ });
+      .then((res) => { if (isMounted && res) setBranchAbout(res); })
+      .catch(() => { /* leave the venue line and Directions link absent — never show data we cannot confirm */ });
 
     return () => { isMounted = false; };
-  }, [booking?.branchId, branchName, accessToken]);
+  }, [booking?.branchId, branchAbout, accessToken]);
+
+  // F-190 Slice 4: same real coordinate-validity check BranchAbout.tsx already uses (:57-62) --
+  // 0/0 is a real point (Gulf of Guinea), so a truthy check would silently hide Directions for a
+  // branch actually sitting on the equator or prime meridian.
+  const hasCoordinates =
+    typeof branchAbout?.latitude === 'number' && Number.isFinite(branchAbout.latitude) &&
+    typeof branchAbout?.longitude === 'number' && Number.isFinite(branchAbout.longitude);
 
   if (loading && !booking) {
     return (
@@ -109,61 +118,73 @@ export default function BookingConfirmation() {
   const sDate = booking?.window ? new Date(booking.window.startTime).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
   return (
-    <div className="flex-1 max-w-md w-full mx-auto px-4 py-10 space-y-8 text-ink">
-      {/* Visual Indicator */}
-      <div className="flex flex-col items-center justify-center text-center space-y-4">
-        {isConfirmed ? (
-          <>
-            <div className="h-20 w-20 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/10">
-              <CheckCircle className="h-10 w-10 animate-pulse" />
-            </div>
-            <div className="space-y-1">
-              <h2 className="text-3xl font-extrabold tracking-tight font-outfit" id="confirmation-title">
-                Booking Confirmed!
-              </h2>
-              <p className="text-ink-muted text-xs font-semibold leading-relaxed">
-                Payment captured successfully. Your court slot is reserved and ready.
-              </p>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="h-20 w-20 bg-amber-50 border border-amber-200 text-amber-700 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/10">
-              <Activity className="h-10 w-10 animate-spin" />
-            </div>
-            <div className="space-y-1">
-              <h2 className="text-3xl font-extrabold tracking-tight font-outfit" id="confirmation-title">
-                Confirming Payment...
-              </h2>
-              <p className="text-ink-muted text-xs font-semibold leading-relaxed">
-                We are validating the signature with the bank. Please hold on.
-              </p>
-            </div>
-          </>
-        )}
+    <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '480px' }}>
+      {/* F-190 Slice 4: success/pending banner (JBC Booking.dc.html:315-319). "Booking Confirmed!"
+          is kept verbatim -- e2e-locked (guest-booking.spec.ts:82,127, f023-full-system.spec.ts:436
+          all assert exact text on #confirmation-title) and the right call regardless, since the
+          wireframe's own "Court 3 is yours" needs courtSlotIndex display, which F-189 owns, not
+          this slice. The pending state has no wireframe guidance (it only draws the success case)
+          -- adapted to the same banner structure with amber coloring instead of accent-2. */}
+      <div
+        className="flex flex-col items-start gap-4 px-6"
+        style={{
+          paddingTop: '44px',
+          paddingBottom: '36px',
+          background: isConfirmed ? 'var(--color-accent-2-800)' : '#fffbeb',
+        }}
+      >
+        <div
+          className="h-16 w-16 rounded-full flex items-center justify-center"
+          style={{
+            background: isConfirmed ? 'var(--color-accent-2-300)' : '#fef3c7',
+            color: isConfirmed ? 'var(--color-accent-2-900)' : '#b45309',
+          }}
+        >
+          {isConfirmed ? <CheckCircle className="h-8 w-8" /> : <Activity className="h-8 w-8 animate-spin" />}
+        </div>
+        <div className="space-y-1">
+          <h2
+            style={{
+              fontFamily: 'var(--font-heading)',
+              fontWeight: 400,
+              fontSize: '30px',
+              lineHeight: 1.15,
+              color: isConfirmed ? 'var(--color-bg)' : '#78350f',
+            }}
+            id="confirmation-title"
+          >
+            {isConfirmed ? 'Booking Confirmed!' : 'Confirming Payment...'}
+          </h2>
+          <p
+            className="text-[13.5px] leading-relaxed"
+            style={{ color: isConfirmed ? 'var(--color-accent-2-200)' : '#92400e' }}
+          >
+            {isConfirmed
+              ? (user?.phone ? `Confirmation sent to ${user.phone}.` : 'Payment captured successfully.')
+              : 'We are validating the signature with the bank. Please hold on.'}
+          </p>
+        </div>
       </div>
 
-      {/* Booking Summary */}
-      {booking && (
-        <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
-          <h3 className="text-xs font-bold font-outfit text-ink-muted uppercase tracking-wider">
-            Match Details
-          </h3>
-          
-          <div className="space-y-3 font-mono text-xs text-ink-muted pt-1">
-            <div className="flex items-start space-x-2.5">
-              <Calendar className="h-4 w-4 text-[var(--brand-primary)] shrink-0 mt-0.5" />
-              <span>{sDate}</span>
+      <div className="px-5 py-6 space-y-6">
+        {/* Match details */}
+        {booking && (
+          <div style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}>
+            <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+              <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Booking Reference</span>
+              <span className="text-[13.5px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>
+                {formatBookingReference(booking.id)}
+              </span>
             </div>
-            <div className="flex items-start space-x-2.5">
-              <Clock className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <span>{st} - {et}</span>
+            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+              <div className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>{sDate}</div>
+              <div className="text-[12.5px]" style={{ color: 'var(--color-neutral-700)' }}>
+                {st} - {et}
                 {/* F-187: a multi-window (F-183) booking's additional hours are separate child
                     rows, each with its own window — without this, a guest who booked 2+ hours
                     would see only the first hour here despite paying for all of them. */}
                 {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
-                  <div className="space-y-0.5" id="confirmation-additional-windows">
+                  <div id="confirmation-additional-windows">
                     {booking.childBookings
                       .slice()
                       .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
@@ -177,44 +198,75 @@ export default function BookingConfirmation() {
                 )}
               </div>
             </div>
-            {branchName && (
-              <div className="flex items-start space-x-2.5">
-                <MapPin className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
-                <span id="confirmation-venue-name">{branchName}</span>
+            {branchAbout?.name && (
+              <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+                <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Venue</span>
+                <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }} id="confirmation-venue-name">
+                  {branchAbout.name}
+                </span>
               </div>
             )}
-            <div className="flex items-start space-x-2.5">
-              <Users className="h-4 w-4 text-ink-muted shrink-0 mt-0.5" />
-              <span>{1 + (booking.players?.length || 0)} Players ({booking.isMemberBooking ? 'Member' : 'Guest'})</span>
+            <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+              <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Players</span>
+              <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
+                {1 + (booking.players?.length || 0)} ({booking.isMemberBooking ? 'Member' : 'Guest'})
+              </span>
+            </div>
+            <div className="flex justify-between items-center px-4 py-3">
+              <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-neutral-700)' }}>Paid</span>
+              <span className="text-xl font-extrabold font-mono" style={{ color: 'var(--color-accent-700)' }}>
+                ₹{Number(booking.price)}
+              </span>
             </div>
           </div>
+        )}
 
-          <div className="pt-4 border-t border-edge flex justify-between items-end">
-            <span className="text-xs font-bold text-ink-muted font-outfit">Total Price:</span>
-            <span className="text-xl font-extrabold text-[var(--brand-primary)] font-mono">
-              ₹{Number(booking.price)}
-            </span>
-          </div>
-        </div>
-      )}
+        {/* F-190 Slice 4: real Directions link, reusing BranchAbout.tsx's exact URL pattern and
+            its Number.isFinite coordinate-validity check (not a truthy check -- 0/0 is a real
+            point, Gulf of Guinea) rather than inventing a new destination. Absent coordinates
+            means an absent button, same discipline BranchAbout.tsx itself already uses. */}
+        {hasCoordinates && (
+          <a
+            id="confirmation-directions-link"
+            href={`https://www.google.com/maps/dir/?api=1&destination=${branchAbout.latitude},${branchAbout.longitude}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full min-h-[50px] flex items-center justify-center gap-2 font-bold text-[13.5px]"
+            style={{ border: '1px solid var(--color-neutral-300)', background: '#fff', color: 'var(--color-text)', borderRadius: '14px' }}
+          >
+            <Navigation className="h-4 w-4" />
+            <span>Directions</span>
+          </a>
+        )}
 
-      {/* Next Actions */}
-      <div className="flex flex-col space-y-3">
+        {/* Go to Dashboard: secondary, non-sticky, stays in normal content flow. */}
+        <Link
+          to="/"
+          className="w-full py-3 rounded-2xl bg-surface-mint hover:bg-edge text-ink border border-edge-strong font-semibold text-center transition-all text-xs block"
+        >
+          Go to Dashboard
+        </Link>
+      </div>
+
+      {/* F-190 Slice 4: sticky primary action. Unlike BookingPay.tsx, this screen has exactly one
+          real action, so the wireframe's single-button sticky bar (JBC Booking.dc.html:340-342)
+          maps cleanly here -- no two-buttons-one-bar conflict. */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-20 px-5 pt-3.5 pb-[calc(14px+env(safe-area-inset-bottom))]
+          sm:static sm:px-0 sm:pt-0 sm:pb-6"
+        style={{ background: 'var(--color-neutral-100)', borderTop: '1px solid var(--color-neutral-300)' }}
+      >
         <Link
           to="/bookings/my"
-          className="w-full py-3 rounded-2xl bg-[var(--brand-primary)] hover:opacity-95 text-white font-semibold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-[var(--brand-primary)]/20"
+          className="w-full min-h-[54px] rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all"
+          style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
           id="view-my-bookings-confirmation-btn"
         >
           <span>View My Bookings</span>
           <ArrowRight className="h-4 w-4" />
         </Link>
-        <Link
-          to="/"
-          className="w-full py-3 rounded-2xl bg-surface-mint hover:bg-edge text-ink border border-edge-strong font-semibold text-center transition-all text-xs"
-        >
-          Go to Dashboard
-        </Link>
       </div>
+      <div className="sm:hidden" style={{ height: '84px' }} />
     </div>
   );
 }
