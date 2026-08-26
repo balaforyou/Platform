@@ -37,7 +37,25 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
-*(none yet)*
+### upcoming-slots-widget-single-window-display
+Batch: 20
+Surfaced: 26 Aug 2026
+Description: guest-member-pwa's dashboard "Upcoming Slots" widget (apps/guest-member-pwa/src/main.tsx)
+has the same single-window display gap F-187 fixed in BookingPay/BookingConfirmation/BookingHistory —
+a multi-window (F-183) booking's extra hours don't render, only the parent's base window shows.
+Deliberately left out of F-187's scope (a summary dashboard tile, not a payment-decision screen).
+Not fixed here.
+Confirmed-ID:
+Confirmed:
+
+### court-slot-index-guest-ui-display
+Batch: 20
+Surfaced: 26 Aug 2026
+Description: F-186 shipped courtSlotIndex as a backend field only — no guest-facing UI anywhere
+actually displays "Court N" to the guest. Real follow-on if the Chief wants the field surfaced,
+not assumed automatic from F-186 shipping.
+Confirmed-ID:
+Confirmed:
 
 ## Promoted (audit trail)
 
