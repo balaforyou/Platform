@@ -37,10 +37,6 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
-*(none yet)*
-
-## Promoted (audit trail)
-
 ### fast-grid-guest-booking-visual-revamp
 Batch: 21
 Surfaced: 26 Aug 2026
@@ -67,6 +63,14 @@ explicitly overridden to render from real BookingRule fields, never hardcoded te
 own established decisions #4/#5.
 Confirmed-ID: F-190
 Confirmed: 26 Aug 2026
+26 Aug 2026 filing correction: this entry and F-188/F-189 below were moved straight to "Promoted"
+with `Confirmed-ID`/`Confirmed` already set but with no `findings_register.md` row ever written for
+any of the three — breaking the pattern F-183/F-184/F-186/F-187 each correctly followed (Promoted
+requires a real register row created in the same commit as the move). F-188 and F-189 are also
+still genuinely unimplemented (their own description text says so). Filed back here to correct the
+record honestly rather than silently re-promoting as if the mistake never happened. F-190's real
+promotion + register row lands in a separate, later commit, once the register row's own content is
+confirmed.
 
 ### upcoming-slots-widget-single-window-display
 Batch: 20
@@ -78,6 +82,10 @@ Deliberately left out of F-187's scope (a summary dashboard tile, not a payment-
 Not fixed here.
 Confirmed-ID: F-188
 Confirmed: 26 Aug 2026
+26 Aug 2026 filing correction: moved back here from "Promoted" — this finding is still genuinely
+unimplemented (see Description above, "Not fixed here"), so it does not belong in an audit trail of
+resolved work. No `findings_register.md` row exists for it. `Confirmed-ID`/`Confirmed` kept as-is;
+only the section changed.
 
 ### court-slot-index-guest-ui-display
 Batch: 20
@@ -87,6 +95,12 @@ actually displays "Court N" to the guest. Real follow-on if the Chief wants the 
 not assumed automatic from F-186 shipping.
 Confirmed-ID: F-189
 Confirmed: 26 Aug 2026
+26 Aug 2026 filing correction: moved back here from "Promoted" — this finding is still genuinely
+unimplemented (see Description above, "not assumed automatic"), so it does not belong in an audit
+trail of resolved work. No `findings_register.md` row exists for it. `Confirmed-ID`/`Confirmed` kept
+as-is; only the section changed.
+
+## Promoted (audit trail)
 
 ### fast-grid-guest-booking-integration
 Batch: 20
