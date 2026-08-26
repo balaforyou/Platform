@@ -1886,6 +1886,8 @@ const BOOKING_RULE_INTEGER_FIELDS = [
   'guestAccessCutoffMinutes',
   // F-183: 0 is legal here too (no extension allowed for this pool).
   'maxAdditionalWindows',
+  // F-184: 0 is legal here too (no self-service bookings allowed for this pool's branch).
+  'maxDailyBookingsPerGuest',
 ] as const;
 
 // WHY (F-068): POST previously used truthiness — `x ? Number(x) : default` — so an explicit
@@ -1990,6 +1992,7 @@ server.post('/booking-rules', async (request, reply) => {
         prepaymentRequired: data.prepaymentRequired ?? true,
         cancellationPolicyJson: data.cancellationPolicyJson ?? DEFAULT_CANCELLATION_POLICY,
         maxAdditionalWindows: data.maxAdditionalWindows ?? 1,
+        maxDailyBookingsPerGuest: data.maxDailyBookingsPerGuest ?? 3,
       },
     });
     return rule;
@@ -2054,6 +2057,7 @@ server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
       prepaymentRequired: data.prepaymentRequired ?? true,
       cancellationPolicyJson: data.cancellationPolicyJson ?? defaultPolicy,
       maxAdditionalWindows: data.maxAdditionalWindows ?? 1,
+      maxDailyBookingsPerGuest: data.maxDailyBookingsPerGuest ?? 3,
     },
   });
 });
@@ -2464,6 +2468,41 @@ server.post('/bookings', async (request, reply) => {
       // F-066: an N-day horizon counted in branch-local days. setDate() counted them on
       // the server's clock, so the cutoff drifted by the UTC offset.
       const horizonTimeZone = await getBranchTimeZone(pool.branchId);
+
+      // F-184: guest-only daily booking cap, governed by the TARGET pool's own
+      // BookingRule — if pools in the same branch carry different values, the
+      // effective cap for a given request is whichever pool it targets (documented,
+      // not solved in code). Counted across every pool in the branch via
+      // window.resourcePool.branchId, not the untrusted Booking.branchId scalar
+      // (see the booking-branchid-unvalidated-client-scalar candidate finding).
+      // Gates on HELD + CONFIRMED, not CONFIRMED-only, so a guest cannot bypass the
+      // cap by holding several bookings in parallel and confirming them independently
+      // via separate payment webhooks. parentBookingId: null so an F-183 multi-window
+      // booking counts once, matching the GET /bookings/admin and GET /bookings/my
+      // precedent.
+      const requestedDateString = branchDateString(window.startTime, horizonTimeZone);
+      const dayStart = branchLocalToUtc(requestedDateString, '00:00', horizonTimeZone);
+      const dayEnd = addBranchDays(dayStart, 1, horizonTimeZone);
+
+      const dailyBookingCount = await tx.booking.count({
+        where: {
+          userId,
+          status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
+          parentBookingId: null,
+          window: {
+            startTime: { gte: dayStart, lt: dayEnd },
+            resourcePool: { branchId: pool.branchId },
+          },
+        },
+      });
+
+      if (dailyBookingCount >= (rule?.maxDailyBookingsPerGuest ?? 3)) {
+        const err = new Error(`Daily booking limit of ${rule?.maxDailyBookingsPerGuest ?? 3} reached for this branch`);
+        (err as any).statusCode = 400;
+        (err as any).code = 'DAILY_BOOKING_LIMIT_REACHED';
+        throw err;
+      }
+
       const maxBookingDate = addBranchDays(new Date(), windowDays, horizonTimeZone);
 
       // F-183: checked for every window, not just the first — a later window can

@@ -296,6 +296,10 @@ model BookingRule {
   // single booking (0 = no extension allowed for this pool). Default of 1 changes no
   // existing behavior — additionalWindowIds is opt-in per request.
   maxAdditionalWindows     Int          @default(1)
+  // F-184: cap on active (HELD + CONFIRMED) self-service Bookings a guest may hold per
+  // branch-local calendar day, counted across every pool in the branch. Default of 3
+  // changes no existing behavior for pools that never set it explicitly.
+  maxDailyBookingsPerGuest Int          @default(3)
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 

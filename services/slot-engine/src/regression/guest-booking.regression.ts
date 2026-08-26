@@ -318,6 +318,18 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
           basePrice: 100,
         },
       });
+      // F-184: this test is about blocked-window overlap, not the daily cap, and
+      // USER_ID_1 accumulates active bookings across earlier sections in this same
+      // file that share that fixture user — an explicit high cap here keeps this
+      // section's own two booking attempts from being interfered with by that
+      // cross-section count.
+      await db.bookingRule.create({
+        data: {
+          resourcePoolId: pool.id,
+          cancellationPolicyJson: { type: 'tiered', tiers: [] },
+          maxDailyBookingsPerGuest: 999,
+        },
+      });
 
       const start = new Date(Date.now() + 3 * 60 * 60 * 1000);
       start.setUTCMinutes(0, 0, 0);
