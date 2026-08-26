@@ -37,6 +37,10 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
+*(none yet)*
+
+## Promoted (audit trail)
+
 ### multi-slot-time-booking-phase1-contiguous-extension
 Batch: 18
 Surfaced: 26 Aug 2026
@@ -64,8 +68,6 @@ resourceId today — guard is dormant but scoped for correctness on any future F
 tenant). Non-contiguous multi-select explicitly deferred to a possible Phase 2, not built now.
 Confirmed-ID: F-183
 Confirmed: 26 Aug 2026
-
-## Promoted (audit trail)
 
 ### dateOnly-silent-calendar-overflow
 Batch: F-176/F-173 fix pass

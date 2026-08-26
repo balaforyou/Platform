@@ -332,6 +332,40 @@ is being built now anyway per Chief's decision, dormant until a future tenant ne
 off on the corrected plan; implementation follows in this same batch, tracked separately below once
 it lands. Commits: `bcaa329` (this filing — pending-findings.md + batch-log.md).
 
+**[26 Aug 2026 — same-batch update: implementation landed and closed out.]** Chief accepted the
+implementation after independently re-verifying the three flagged review items (the `BOOKING_RULE_
+INTEGER_FIELDS` reuse, the `CHILD_BOOKING_NOT_MUTABLE` guard placement, and the three commit hashes
+against `origin/main`). Shipped as `19da595`: schema migration (additive-only, applied to both
+`badminton_db` and `badminton_db_test`), the full `POST /bookings` validation/lock sequence, new
+`$transaction` cascades plus the `CHILD_BOOKING_NOT_MUTABLE` guard on `/confirm`/`/cancel`/`/check-in`,
+`parentBookingId: null` filters on `GET /bookings/admin` and `GET /bookings/my`, and the
+`CHILD_BOOKING_NOT_PREVIEWABLE` reject on `cancel-preview`. **One deviation from the signed-off plan,
+flagged and accepted**: `maxAdditionalWindows` was also wired into `POST /booking-rules` and
+`PUT /resource-pools/:id/booking-rule` (the existing `BOOKING_RULE_INTEGER_FIELDS`/F-068 validation
+pattern reused, not new mechanism) — needed because the register text already describes the field as
+admin-configurable, and without this wiring it would only ever be settable by hand against the
+database. New regression coverage: `services/slot-engine/src/regression/multi-slot-booking.regression.ts`,
+8 sections, real HTTP calls and database read-backs. Full 5-suite regression green, **rebuilt from
+`dist` first** — 37/37 slot-engine sections (including all 8 new F-183 cases), 5/5 suites overall,
+against `badminton_db_test`. Migration mechanics note: `prisma migrate dev` cannot run in this
+non-interactive shell at all; the migration was hand-written (matching this repo's existing
+additive-migration convention) and applied via `prisma migrate deploy`, which also surfaced
+**pre-existing, unrelated drift** in `badminton_db_test` — two earlier migrations (F-115's unique
+index, SCREEN-002's) had their underlying schema objects already present but were recorded as failed
+in `_prisma_migrations`. Resolved via `prisma migrate resolve --applied` on each, **confirmed
+bookkeeping-only**: both resolved rows show `applied_steps_count: 0` with `started_at` equal to
+`finished_at` (the resolve signature — zero migration steps actually executed), the real P3018 "already
+exists" errors from the original failed attempts independently prove the objects pre-dated any of
+this session's commands, both migrations' SQL contains no data-manipulation statements at all (schema
+guards plus a single `CREATE UNIQUE INDEX` each), and the subsequent `migrate deploy` proceeded straight
+to the new F-183 migration without re-hitting either conflict — which it could not have done had
+`resolve` re-executed either migration's `CREATE UNIQUE INDEX` against objects still in place. Close-out
+commit (this same pass): `docs/findings_register.md` gains F-183 as a Resolved row; the
+`pending-findings.md` entry moves from Awaiting confirmation to Promoted. `pnpm register:check` run and
+confirmed green before committing — the first real exercise of the F-179+ Confirmed-ID enforcement for
+this finding, not a no-op the way it was during the filing-only commit above. Commits: `19da595`
+(implementation), `<fill in after commit>` (this close-out).
+
 ---
 
 ## Queued, not yet batched
