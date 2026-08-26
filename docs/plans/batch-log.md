@@ -330,8 +330,7 @@ Empirical finding from the investigation: neither real JBC pool is `FIXED_INSTAN
 `POOLED`, `resourceId` null on every real window) — the `FIXED_INSTANCE` resourceId-continuity guard
 is being built now anyway per Chief's decision, dormant until a future tenant needs it. Chief signed
 off on the corrected plan; implementation follows in this same batch, tracked separately below once
-it lands. Commits: (pending — recorded in the next batch-log entry once this documentation commit's
-own hash is known).
+it lands. Commits: `bcaa329` (this filing — pending-findings.md + batch-log.md).
 
 ---
 
