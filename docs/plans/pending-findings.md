@@ -37,6 +37,10 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
+*(none yet)*
+
+## Promoted (audit trail)
+
 ### booking-branchid-unvalidated-client-scalar
 Batch: 19
 Surfaced: 26 Aug 2026
@@ -47,10 +51,8 @@ to (pool.branchId). Pre-existing, not introduced or touched by F-183 or F-184. S
 F-184's investigation because its own cross-pool daily-cap query deliberately avoids this column,
 joining Booking → AvailabilityWindow → ResourcePool.branchId instead — the untrusted column is
 why that join path is correct, not incidental. Not fixed here — scope discipline (rule 9).
-Confirmed-ID:
-Confirmed:
-
-## Promoted (audit trail)
+Confirmed-ID: F-185
+Confirmed: 26 Aug 2026
 
 ### daily-booking-cap-guest-per-branch
 Batch: 19
