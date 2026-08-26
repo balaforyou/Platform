@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { ArrowLeft, Calendar, Users, Activity, HelpCircle, ShieldAlert } from 'lucide-react';
+import { Calendar, Users, Activity, HelpCircle, ShieldAlert } from 'lucide-react';
 
 export default function CourtBooking() {
   const { branchId, poolId } = useParams();
@@ -50,6 +50,36 @@ export default function CourtBooking() {
   const [error, setError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
+
+  // F-190 Slice 2a: header shell data. Both are non-critical pill content -- the page works fine
+  // if either fetch fails, so failures are swallowed rather than surfaced as a page-level error.
+  const [branchAbout, setBranchAbout] = useState<any>(null);
+  const [upcomingBooking, setUpcomingBooking] = useState<any | null>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!branchId) return;
+    apiRequest<any>(`/tenant/branches/${branchId}/about`, { token: accessToken })
+      .then(setBranchAbout)
+      .catch(() => {});
+  }, [branchId, accessToken]);
+
+  // Same filter/sort as main.tsx's loadUpcoming (main.tsx:156-182), plus excluding this screen's
+  // own poolId -- a booking being created here shouldn't echo back as "upcoming" mid-flow.
+  useEffect(() => {
+    if (!accessToken) return;
+    apiRequest<any[]>('/slot-engine/bookings/my', { token: accessToken })
+      .then((res) => {
+        const list = Array.isArray(res) ? res : [];
+        const next = list
+          .filter((b) => b?.window?.startTime && ['HELD', 'CONFIRMED', 'CHECKED_IN'].includes(b.status))
+          .filter((b) => new Date(b.window.startTime).getTime() > Date.now())
+          .filter((b) => b.resourcePoolId !== poolId)
+          .sort((a, b) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime());
+        setUpcomingBooking(next[0] ?? null);
+      })
+      .catch(() => {});
+  }, [accessToken, poolId]);
 
   // F-187: Morning/Afternoon/Evening buckets. `test` ranges are half-open and together cover
   // every hour of the day (morning also catches the small-hours case, evening catches anything
@@ -183,6 +213,31 @@ export default function CourtBooking() {
     el.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
   }, [selectedSlot?.window?.id]);
 
+  // F-190 Slice 2a: day picker. Chip strip covers min(7, guestOpenWindowDays) days from today --
+  // real browse-ahead bound, not an arbitrary 7. The native <input type="date"> stays the source
+  // of truth (`bookingDate`); chips just set the same state via a friendlier control.
+  const guestOpenWindowDays = pool?.bookingRules?.[0]?.guestOpenWindowDays ?? 7;
+  const toDateKey = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+  const dayChips = Array.from({ length: Math.min(7, guestOpenWindowDays) }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    return {
+      key: toDateKey(d),
+      dow: d.toLocaleDateString([], { weekday: 'short' }).toUpperCase(),
+      day: d.getDate(),
+    };
+  });
+  const maxDateKey = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + guestOpenWindowDays);
+    return toDateKey(d);
+  })();
+
   // Shared by the slot cards and the rate summary so both render a slot's time the same way.
   const formatTimeRange = (win: any) =>
     `${new Date(win.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ` +
@@ -302,52 +357,138 @@ export default function CourtBooking() {
   }
 
   return (
-    <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-ink">
-      {/* Back Button */}
-      <Link
-        to={`/branches/${branchId}`}
-        className="inline-flex items-center space-x-2 text-xs text-ink-muted hover:text-ink transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span>Back to Branch Dashboard</span>
-      </Link>
+    <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '1024px' }}>
+      {/* F-190 Slice 2a: header shell (JBC Booking.dc.html:571-588) */}
+      <div className="flex flex-col gap-4 px-5 pt-5 pb-6" style={{ background: 'var(--color-neutral-900)' }}>
+        <div className="flex items-center justify-between">
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: '22px', color: 'var(--color-bg)' }}>
+            {tenant?.appName}
+          </div>
+          <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.08em', color: 'var(--color-neutral-400)' }}>
+            GUEST BOOKING
+          </div>
+        </div>
 
-      <div className="space-y-1">
-        <h2 className="text-3xl font-extrabold tracking-tight font-outfit">
-          Book <span className="text-[var(--brand-primary)]">{pool.name}</span>
-        </h2>
-        <p className="text-ink-muted text-xs">
-          Select date, choose an available slot, and enter participants to compute the total rate.
-        </p>
+        <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3" style={{ background: 'var(--color-neutral-800)' }}>
+          <div className="flex-1 flex flex-col gap-0.5 min-w-0">
+            <div className="text-[13.5px] font-bold truncate" style={{ color: 'var(--color-neutral-100)' }}>{pool.name}</div>
+            <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', color: 'var(--color-neutral-300)' }}>
+              {pool.capacity} COURT{pool.capacity === 1 ? '' : 'S'}
+              {branchAbout?.workingHoursStart && branchAbout?.workingHoursEnd
+                ? ` · ${branchAbout.workingHoursStart}–${branchAbout.workingHoursEnd}`
+                : ''}
+            </div>
+          </div>
+          <Link
+            to={`/branches/${branchId}`}
+            className="shrink-0 h-11 min-w-11 flex items-center justify-center text-[12px] font-bold rounded-full px-3.5"
+            style={{ color: 'var(--color-accent-400)', border: '1px solid var(--color-neutral-700)' }}
+          >
+            Change
+          </Link>
+        </div>
+
+        {upcomingBooking && (
+          <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3" style={{ background: 'var(--color-accent-2-800)' }}>
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--color-accent-2-400)' }} />
+            <div className="flex-1 text-[12.5px]" style={{ color: 'var(--color-accent-2-200)' }}>
+              {new Date(upcomingBooking.window.startTime).toLocaleDateString([], { weekday: 'short' })}{' '}
+              {new Date(upcomingBooking.window.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </div>
+            <Link to="/bookings/my" className="shrink-0 text-[12px] font-bold" style={{ color: 'var(--color-accent-2-300)' }}>
+              Manage
+            </Link>
+          </div>
+        )}
       </div>
 
+      <div className="px-4 sm:px-6 pt-6 pb-10 space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column: Date & Slots */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
-            <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider flex items-center space-x-2">
-              <Calendar className="h-4 w-4 text-[var(--brand-primary)]" />
-              <span>1. Choose Date</span>
+          <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-3">
+            <h3 style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
+              01 &middot; DAY
             </h3>
-            
+
+            <div className="flex items-center gap-2">
+              <div className="flex gap-[7px] overflow-x-auto flex-1 pb-1">
+                {dayChips.map((chip) => {
+                  const active = bookingDate === chip.key;
+                  return (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      onClick={() => setBookingDate(chip.key)}
+                      className="shrink-0 flex flex-col items-center justify-center gap-0.5 rounded-2xl"
+                      style={{
+                        width: '46px',
+                        minHeight: '50px',
+                        background: active ? 'var(--color-accent-700)' : '#fff',
+                        color: active ? 'var(--color-accent-100)' : 'var(--color-text)',
+                        border: `1px solid ${active ? 'var(--color-accent-700)' : 'var(--color-neutral-300)'}`,
+                      }}
+                    >
+                      <span className="text-[10px] font-semibold opacity-80">{chip.dow}</span>
+                      <span className="text-base font-bold">{chip.day}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* F-190 Slice 2a: only shown when the pool's real guestOpenWindowDays exceeds the
+                  7-day chip strip -- JBC's actual current value is 7, so this branch is dormant on
+                  real traffic today but real for any pool configured with a longer window. */}
+              {guestOpenWindowDays > 7 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    // showPicker() can throw even when it exists (e.g. NotAllowedError outside a
+                    // trusted user gesture, or browser-specific quirks on a visually hidden
+                    // input) -- always fall back to focus() rather than leaving the button inert.
+                    const el = dateInputRef.current as any;
+                    try {
+                      if (el?.showPicker) el.showPicker();
+                      else el?.focus();
+                    } catch {
+                      el?.focus();
+                    }
+                  }}
+                  aria-label="Choose a date beyond the next 7 days"
+                  className="shrink-0 h-11 w-11 flex items-center justify-center rounded-full"
+                  style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', color: 'var(--color-text)' }}
+                >
+                  <Calendar className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+
+            {/* Real native date input, kept in the DOM (not display:none) so
+                f041-verification.spec.ts and f043-phase-c.spec.ts's real
+                `input[type="date"]` .fill() calls keep working -- the chip strip above is the
+                primary control, this is visually hidden but fully present and functional. */}
             <input
+              ref={dateInputRef}
               type="date"
               value={bookingDate}
               onChange={(e) => setBookingDate(e.target.value)}
               min={new Date().toISOString().split('T')[0]}
-              className="w-full bg-surface border border-edge-strong rounded-xl px-4 py-3 text-sm text-ink focus:outline-none focus:border-[var(--brand-primary)] font-mono"
+              max={maxDateKey}
+              style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', border: 0, opacity: 0 }}
             />
           </div>
 
           <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
-            <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider">
-              2. Available Time Slots
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
+                02 &middot; START
+              </h3>
+            </div>
 
             {/* F-187: Fast Grid period tabs — 44px tall (slide 4a correction over the wireframe's
-                drawn 33-38px), so the tap target stays comfortable on a phone. */}
+                drawn 33-38px), so the tap target stays comfortable on a phone. Slice 2a: token
+                swap only, matching ds.css's .seg/.seg-opt segmented-control look. */}
             {!slotsLoading && slots.length > 0 && (
-              <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="Time of day">
+              <div className="grid grid-cols-3 gap-1 p-1 rounded-xl" role="tablist" aria-label="Time of day" style={{ background: 'var(--color-neutral-200)' }}>
                 {groupedSlots.map((g) => (
                   <button
                     key={g.key}
@@ -356,11 +497,10 @@ export default function CourtBooking() {
                     aria-selected={activePeriod === g.key}
                     onClick={() => setActivePeriod(g.key)}
                     disabled={g.slots.length === 0}
-                    className="h-11 rounded-xl text-xs font-bold font-outfit transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="h-11 rounded-lg text-xs font-bold font-outfit transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
-                      background: activePeriod === g.key ? 'var(--brand-primary)' : 'var(--surface-white)',
-                      color: activePeriod === g.key ? '#ffffff' : 'var(--text-primary)',
-                      border: `1px solid ${activePeriod === g.key ? 'var(--brand-primary)' : 'var(--border-card)'}`,
+                      background: activePeriod === g.key ? 'var(--color-accent-700)' : 'transparent',
+                      color: activePeriod === g.key ? 'var(--color-accent-100)' : 'var(--color-text)',
                     }}
                   >
                     {g.label} <span className="opacity-70 font-mono">({g.slots.length})</span>
@@ -382,11 +522,12 @@ export default function CourtBooking() {
                 No {activePeriod} slots on this date. Try another period or date.
               </p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              // F-190 Slice 2a: real breakpoint rework per 4a's table -- 3 across mobile, 4-5
+              // tablet, 6 laptop (one row per period), replacing the old grid-cols-1 sm:grid-cols-2.
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-[7px]">
                 {visibleSlots.map((slot) => {
                   const isSelected = selectedSlot?.window?.id === slot.window.id;
                   const timeRange = formatTimeRange(slot.window);
-                  const pricingMode = slot.window.pricingMode || pool.pricingMode || 'FLAT';
                   const rate = slot.window.price != null ? slot.window.price : pool.defaultRate;
 
                   // Slot state, derived from the REAL capacity the server returned — never assigned
@@ -412,9 +553,13 @@ export default function CourtBooking() {
                         setAdditionalWindowsCount(0);
                         setBookingError(null);
                       }}
-                      className="cursor-pointer p-4 border transition-all flex flex-col justify-between space-y-2"
+                      className="cursor-pointer border transition-all flex flex-col items-start justify-center gap-0.5 px-2.5 py-2"
                       style={{
-                        borderRadius: 'var(--radius-card)',
+                        borderRadius: 'var(--radius-md)',
+                        minHeight: '66px',
+                        // Slice 2a restyles shape/layout only -- the color source (F-146's
+                        // slot-state tokens, which resolve through --brand-primary for
+                        // "selected") is untouched, per the handover.
                         background: isSelected
                           ? 'var(--slot-selected-surface)'
                           : isAlmostFull ? 'var(--slot-almostfull-surface)' : 'var(--slot-available-surface)',
@@ -425,19 +570,16 @@ export default function CourtBooking() {
                       data-slot-state={slotState}
                       id={`slot-card-${slot.window.id}`}
                     >
-                      <div className="flex justify-between items-start">
-                        <span className="text-ink font-mono" style={{ font: 'var(--font-slot-time)' }}>{timeRange}</span>
-                        <span className="text-[10px] bg-surface-mint text-ink-muted px-2 py-0.5 rounded-full font-mono font-bold">
-                          {pricingMode === 'PER_PERSON' ? 'Per-Person' : 'Flat-Rate'}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-center text-xs pt-1 border-t border-edge font-mono">
-                        <span style={{ color: isAlmostFull ? 'var(--slot-almostfull-text)' : 'var(--slot-available-accent)' }}>
-                          {isAlmostFull ? `Almost full — ${slot.remainingCapacity} left` : `Left: ${slot.remainingCapacity} seats`}
-                        </span>
-                        <span className="font-bold text-ink">₹{rate}</span>
-                      </div>
+                      <span className="text-[13px] font-bold text-ink font-mono leading-tight">
+                        {timeRange.split(' - ')[0]}
+                      </span>
+                      <span className="text-[11px] font-bold text-ink font-mono">₹{rate}</span>
+                      <span
+                        className="text-[9.5px] font-mono leading-tight"
+                        style={{ color: isAlmostFull ? 'var(--slot-almostfull-text)' : 'var(--slot-available-accent)' }}
+                      >
+                        {isAlmostFull ? `${slot.remainingCapacity} left` : `${slot.remainingCapacity} seats`}
+                      </span>
                     </div>
                   );
                 })}
@@ -568,6 +710,7 @@ export default function CourtBooking() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
