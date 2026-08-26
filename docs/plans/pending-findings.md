@@ -37,7 +37,33 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
-*(none yet)*
+### multi-slot-time-booking-phase1-contiguous-extension
+Batch: 18
+Surfaced: 26 Aug 2026
+Description: New capability, not a bug — single-court contiguous booking extension (base 1 hour,
+extendable in fixed 60-minute increments up to an admin-configurable `maxAdditionalWindows` cap
+on `BookingRule`). Evidence anchor: market comparison (Playo and other EU booking platforms
+support 2-hour+ bookings) plus founder judgment that additional duration options help the
+business — explicitly not a direct JBC guest request or an observed booking failure, built ahead
+of confirmed demand deliberately. Design: hybrid parent/child `Booking` rows — one billable
+parent (real price, idempotencyKey, existing HELD→CONFIRMED lifecycle, one PaymentIntent) plus
+N-1 lightweight child rows (new nullable `parentBookingId` self-relation, price/idempotencyKey
+null) occupying the remaining windows so every existing windowId-keyed availability/capacity
+query stays correct unmodified. New `$transaction` wrappers added to /confirm, /cancel, /check-in
+(none existed previously) to cascade parent→children atomically, each also gaining a guard that
+rejects a direct call on a child booking id (`400 CHILD_BOOKING_NOT_MUTABLE`) — added after
+catching that a guest could otherwise call `/cancel` directly on their own child row's id (passes
+the existing ownership check, since they do own it) and free that court's capacity while the
+parent booking silently kept the full paid price with no refund computed. `GET /bookings/admin`
+and `GET /bookings/my` both filter out `parentBookingId`-carrying rows; `cancel-preview` rejects
+child rows with 400. All N AvailabilityWindow rows locked FOR UPDATE in startTime ASC order in
+one transaction at booking creation — all-or-nothing. Cancellation is whole-booking-only in Phase
+1 (parent + all children together), no partial refund logic needed. `FIXED_INSTANCE`
+resourceId-continuity guard included per Chief decision (both real JBC pools are POOLED with null
+resourceId today — guard is dormant but scoped for correctness on any future FIXED_INSTANCE
+tenant). Non-contiguous multi-select explicitly deferred to a possible Phase 2, not built now.
+Confirmed-ID: F-183
+Confirmed: 26 Aug 2026
 
 ## Promoted (audit trail)
 

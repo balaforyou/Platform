@@ -308,6 +308,33 @@ Resolved 75).
 
 ---
 
+Batch 18 (26 Aug 2026): F-183 filed — Multi-Slot-Time Booking, Phase 1 (single-court contiguous
+booking extension, base 1 hour extendable in fixed 60-minute increments up to an admin-configurable
+`maxAdditionalWindows` cap). Documentation only this part of the batch: `docs/plans/pending-findings.md`
+entry added to Awaiting confirmation with `Confirmed-ID`/`Confirmed` already filled in (Chief confirmed
+the ID inline, waiving the separate round-trip but not the Promoted-requires-a-register-row rule —
+moves to Promoted only once F-183 gets a real `docs/findings_register.md` row at implementation/
+resolution). Three real corrections landed during the investigation and review that preceded this
+filing: `/confirm`, `/cancel`, `/check-in` do not currently run inside any `prisma.$transaction` (new
+wrappers required, not extensions of one that existed); `POST /refunds/override` lives in
+`services/payment/src/index.ts`, not slot-engine, and is not vulnerable to the admin-picker gap since
+it hard-fails on a missing `PaymentIntent` for any child booking id; and — the significant one —
+`GET /bookings/my` had no `parentBookingId` filter in the original plan and none of the three mutation
+routes rejected a direct call on a child booking id, which chains into a real billing-integrity bug: a
+guest could call `/cancel` directly on their own child booking id (passes the existing ownership
+check, since they legitimately own that row), freeing the court in every windowId-keyed availability/
+capacity query while the parent stayed CONFIRMED with the full paid price and no refund computed on
+the child (its price is null by design). Fixed in the plan with a `parentBookingId: null` filter on
+`GET /bookings/my` and a `CHILD_BOOKING_NOT_MUTABLE` guard added to `/confirm`, `/cancel`, `/check-in`.
+Empirical finding from the investigation: neither real JBC pool is `FIXED_INSTANCE` (both are
+`POOLED`, `resourceId` null on every real window) — the `FIXED_INSTANCE` resourceId-continuity guard
+is being built now anyway per Chief's decision, dormant until a future tenant needs it. Chief signed
+off on the corrected plan; implementation follows in this same batch, tracked separately below once
+it lands. Commits: (pending — recorded in the next batch-log entry once this documentation commit's
+own hash is known).
+
+---
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
