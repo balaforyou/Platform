@@ -88,6 +88,7 @@ Stop any manually-started dev services first, or the suite silently exercises th
 
 - **OTP is always `123456`**, and any phone number self-registers as a `GUEST` on first verify. That means a fixed, guessable code on a public URL — fine for a driven demo, not for leaving unattended.
 - **Dev-only UI is compiled out of production builds.** `import.meta.env.DEV` is false, so the "Simulate Payment" control does not exist on the deployed site — real Razorpay checkout (test keys) is the only payment path there.
+- **Real Razorpay checkout requires a static IP and HTTPS domain — it cannot be tested from a local or sandboxed dev environment; only from the deployed VM.** This is why dev-mock exists at all: it's the only payment path available anywhere except production.
 - **Google sign-in is a mock.** `/auth/google/verify` accepts only `mock-google-token-<email>` and there is no OAuth client anywhere in the repo.
 
 **Tenant resolution is per-hostname.** DuckDNS resolves arbitrary sub-subdomains to the same VM, so **adding a tenant also means adding its hostname to `SITE_ADDRESS`** and recreating caddy — otherwise it will not resolve. Tenant context comes from the first hostname label; there is no persistence, so a URL without a valid tenant subdomain fails (F-149). See `deploy/gcp-vm/CLAUDE.md` for the Caddy/VM mechanics.
