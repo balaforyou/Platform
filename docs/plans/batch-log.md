@@ -366,6 +366,47 @@ confirmed green before committing — the first real exercise of the F-179+ Conf
 this finding, not a no-op the way it was during the filing-only commit above. Commits: `19da595`
 (implementation), `dce5b8b` (this close-out).
 
+Batch 19 (26 Aug 2026): F-184 resolved — daily booking cap (guest-only, per-branch).
+`BookingRule.maxDailyBookingsPerGuest` (`Int`, default 3, admin-configurable per pool, same
+per-pool-not-per-branch precedent as F-183's `maxAdditionalWindows`) caps a guest's active
+(`HELD` + `CONFIRMED`) self-service `Booking` rows per branch-local calendar day, counted across
+every pool in the branch via `Booking` → `AvailabilityWindow` → `ResourcePool.branchId` — not the
+untrusted `Booking.branchId` scalar, filed separately as a described-not-numbered candidate finding
+in `docs/plans/pending-findings.md` alongside this one (`booking-branchid-unvalidated-client-scalar`),
+per scope discipline (root `CLAUDE.md` rule 9). Enforced inside `POST /bookings`' existing
+transaction. `POST /bookings/negotiated` deliberately left unguarded (staff override capacity), but a
+negotiated row still correctly counts toward the guest's own next self-service attempt. **One
+deviation from the signed-off plan, flagged and accepted — the same class F-183 hit on
+`maxAdditionalWindows`**: the plan named `BOOKING_RULE_INTEGER_FIELDS` as the wiring point, but
+`POST /booking-rules` and `PUT /resource-pools/:id/booking-rule`'s literal `create()` objects list
+fields by name and silently never read `data.maxDailyBookingsPerGuest`, so a non-default value
+validated but always persisted as the schema default. Caught by a real regression failure (a
+deliberately non-default cap had no effect on a cross-pool test), confirmed with a temporary debug
+log, fixed at both call sites. Also required fixing one pre-existing regression section
+(`guest-booking.regression.ts`'s "Blocked-window overlap" test — its pool is created directly via
+Prisma with no `BookingRule` row, and its shared fixture user had already accumulated bookings from
+earlier sections in the same file, so the new default cap of 3 was reached before the test's own
+blocked-window assertion ever ran) by giving that section's own pool an explicit high cap. Migration
+additive-only (`Int` column with a default), applied to both `badminton_db` and `badminton_db_test`,
+confirmed against the real schema on both. New regression suite
+`services/slot-engine/src/regression/daily-booking-cap.regression.ts`, 7 sections, registered in
+`run.ts`: exactly-at-cap, cross-pool counting, a concurrent `HELD` race, the branch-local midnight
+boundary (proven against a purpose-built `Pacific/Kiritimati`, UTC+14, fixture branch — two windows
+sharing a UTC calendar date but sitting on different branch-local days are correctly *not* the same
+cap-day), the F-183 parent/child-counts-as-one interaction, the negotiated-bypass case, and the
+unaffected 0–2-bookings/day regression case. Full 5-suite regression green, **44/44 slot-engine
+sections** (37 pre-existing + 7 new), rebuilt from `dist` first, against `badminton_db_test`;
+whole-repo typecheck and build clean; `pnpm register:check` and `pnpm diagram:verify` both green.
+**Flagged for Chief, not silently resolved**: the sign-off brief's gate said "confirm 9/9 sections
+green (not 5)," but the brief's own section list names exactly 7 distinct F-184 scenarios, which is
+what was implemented and is what the suite contains — recorded here as a self-detected discrepancy
+per root `CLAUDE.md`'s standing rule on this exact situation, rather than guessing at two more
+sections to reach 9. Commits: `ce6a9d5` (Commit 1 — pending-findings.md filing, verified on
+`origin/main` via SHA-pinned fetch before Commit 2 began), `4fe243c` (Commit 2 — implementation,
+verified on `origin/main` via SHA-pinned fetch before Commit 3 began), this row (Commit 3 —
+register + batch-log close-out, same pass, per the standing rule that these two updates are one
+inseparable step).
+
 ---
 
 ## Queued, not yet batched
