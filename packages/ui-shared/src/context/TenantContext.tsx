@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { apiRequest } from '../lib/api';
+import { generateAccentRamp } from '../lib/colorRamp';
 
 export interface TenantBranding {
   id: string;
@@ -113,8 +114,15 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         if (resolved) {
           // Apply themeColor as CSS Variable
           document.documentElement.style.setProperty('--brand-primary', resolved.themeColor);
-          
-          // Generate hover and light variations if desired (standard hex manipulation or fallback)
+
+          // F-190 Slice 0: --color-accent-100..900 is the Organic design system's tenant-derived
+          // tonal ramp. --color-accent-2 (sage) stays fixed/universal in static CSS -- only one
+          // color is tenant-derived, matching the --brand-secondary convention just below.
+          const accentRamp = generateAccentRamp(resolved.themeColor);
+          for (const step of Object.keys(accentRamp) as unknown as Array<keyof typeof accentRamp>) {
+            document.documentElement.style.setProperty(`--color-accent-${step}`, accentRamp[step]);
+          }
+
           // We can set a fallback for secondary brand color too
           document.documentElement.style.setProperty('--brand-secondary', '#f3f4f6');
 
