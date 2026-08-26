@@ -434,6 +434,38 @@ and `badminton_db_test`; whole-repo typecheck and build clean; `pnpm register:ch
 `pnpm diagram:verify` both green. Commits: `bd4a4ac` (implementation), this row (register +
 batch-log close-out, same pass).
 
+Batch 20 continued (26 Aug 2026): F-187 resolved — Fast Grid guest booking integration, same
+batch as `[[F-186]]`, started only after F-186 was verified pushed to origin. Fast Grid period
+tabs (Morning/Afternoon/Evening) in `CourtBooking.tsx`, a duration stepper wired to `[[F-183]]`'s
+previously-unpopulated `additionalWindowIds`, and daily-cap/cancellation-policy copy read directly
+off the pool state `CourtBooking.tsx` already fetches — no new endpoint, no backend change for any
+of this. `LoginScreen.tsx`'s dev-mock Google flow reskinned with Organic tokens (no real OAuth),
+and its rejection handling now branches on `err.code` for `GOOGLE_LOGIN_ONLY_FOR_MEMBERS` and
+`PHONE_VERIFICATION_REQUIRED` — both real `APIError` codes identity-auth already set, never
+previously read here. **Two real deviations from the approved four-file scope, both confirmed via
+blast-radius check and explicit sign-off before proceeding — the same discipline `[[F-183]]` and
+`[[F-184]]` each hit on their own scope boundaries**: (1) neither `GET /bookings/:id` nor
+`GET /bookings/my` included `childBookings`, exactly the scenario the approved plan flagged as a
+stop-and-report condition rather than something to decide unilaterally — fixed with an additive
+`include` on both (no schema change, no new route); (2) `BookingPay.tsx` was added to the file
+list, found during the same check to carry the identical multi-window display gap as
+`BookingConfirmation.tsx`/`BookingHistory.tsx` one screen earlier, directly on the payment-decision
+screen. `main.tsx`'s "Upcoming Slots" dashboard widget has the same gap and was deliberately left
+out — described, not numbered, for the Chief to schedule separately. **Live-fire verified against
+the local dev stack**, not just typecheck/build: all 5 backend services plus `guest-member-pwa`
+started locally against real JBC branch/pool data in `badminton_db` (a temporary local-only Vite
+proxy mirrored the repo's Caddyfile routing since Caddy itself isn't installed on this machine;
+reverted before committing, confirmed via `git status`/`git diff` showing no change to
+`vite.config.ts`). Verified live: Fast Grid tabs showed real bucketed counts (Morning 3/Afternoon
+2/Evening 7); the stepper capped at the pool's real `maxAdditionalWindows` of 1 and summed price
+correctly (₹400 → ₹800); a real 2-hour booking's second hour rendered correctly on `BookingPay.tsx`,
+`BookingConfirmation.tsx`, and `BookingHistory.tsx` alike, read back from the actual patched
+endpoints; both Google-mock rejection codes produced their guest-facing message (via constructed
+test users, not real JBC customer data). Full 5-suite regression green, **50/50 slot-engine
+sections** (unchanged — the `childBookings` include is purely additive, no new server logic);
+whole-repo typecheck and build clean; `pnpm register:check` and `pnpm diagram:verify` both green.
+Commits: `056cbca` (implementation), this row (register + batch-log close-out, same pass).
+
 ---
 
 ## Queued, not yet batched

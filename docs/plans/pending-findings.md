@@ -41,6 +41,34 @@ Confirmed: <blank until Chief fills this in>
 
 ## Promoted (audit trail)
 
+### fast-grid-guest-booking-integration
+Batch: 20
+Surfaced: 26 Aug 2026
+Description: Guest booking PWA redesign (Organic design system, Claude Design wireframe) —
+Fast Grid slot picker with Morning/Afternoon/Evening period grouping, a duration stepper wired to
+F-183's existing (previously unpopulated) additionalWindowIds parameter, daily-cap and
+cancellation-policy copy read directly from BookingRule fields already included on the
+existing GET /branches/:id/resource-pools response (no new fetch, no backend change), a visual
+reskin of the existing dev-mock Google sign-in flow (real OAuth explicitly deferred to its own
+future kickoff), graceful guest-facing handling for both GOOGLE_LOGIN_ONLY_FOR_MEMBERS and
+PHONE_VERIFICATION_REQUIRED rejection codes (previously surfaced as raw errors, F-034's failure
+pattern), default token-based splash/loading/confirmation states (badminton-specific illustration
+work explicitly deferred), and multi-window (F-183) display support in BookingConfirmation.tsx and
+BookingHistory.tsx — surfaced during investigation as a real pre-existing gap the duration stepper
+would otherwise immediately expose, not optional follow-on scope. All changes confined to
+CourtBooking.tsx, LoginScreen.tsx, BookingConfirmation.tsx, BookingHistory.tsx — no backend routes
+touched, no migration, since every underlying capability already exists and is already fetched.
+26 Aug 2026 correction, added during implementation: two deviations from the approved four-file
+scope, both confirmed via blast-radius check and explicit sign-off before proceeding — (1)
+GET /bookings/:id and GET /bookings/my needed an additive `include: { childBookings: { include:
+{ window: true } } }` (no schema change, no new route) since neither previously returned child
+booking rows past the initial creation response; (2) BookingPay.tsx was added to the file list for
+the same multi-window display gap as BookingConfirmation.tsx/BookingHistory.tsx, one screen earlier
+in the guest flow, on the direct payment-decision screen. main.tsx's dashboard "Upcoming Slots"
+widget has the same gap and was deliberately left out of this batch.
+Confirmed-ID: F-187
+Confirmed: 26 Aug 2026
+
 ### court-slot-index-pooled-display
 Batch: 20
 Surfaced: 26 Aug 2026
