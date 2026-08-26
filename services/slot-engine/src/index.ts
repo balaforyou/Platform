@@ -1884,6 +1884,8 @@ const BOOKING_RULE_INTEGER_FIELDS = [
   'guestOpenWindowDays',
   'gracePeriodMinutes',
   'guestAccessCutoffMinutes',
+  // F-183: 0 is legal here too (no extension allowed for this pool).
+  'maxAdditionalWindows',
 ] as const;
 
 // WHY (F-068): POST previously used truthiness — `x ? Number(x) : default` — so an explicit
@@ -1987,6 +1989,7 @@ server.post('/booking-rules', async (request, reply) => {
         lowOccupancyThresholdPct: data.lowOccupancyThresholdPct ?? 50,
         prepaymentRequired: data.prepaymentRequired ?? true,
         cancellationPolicyJson: data.cancellationPolicyJson ?? DEFAULT_CANCELLATION_POLICY,
+        maxAdditionalWindows: data.maxAdditionalWindows ?? 1,
       },
     });
     return rule;
@@ -2050,6 +2053,7 @@ server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
       lowOccupancyThresholdPct: data.lowOccupancyThresholdPct ?? 50,
       prepaymentRequired: data.prepaymentRequired ?? true,
       cancellationPolicyJson: data.cancellationPolicyJson ?? defaultPolicy,
+      maxAdditionalWindows: data.maxAdditionalWindows ?? 1,
     },
   });
 });
@@ -2274,6 +2278,7 @@ server.post('/bookings', async (request, reply) => {
     resourcePoolId,
     resourceId,
     windowId,
+    additionalWindowIds,
     coPlayers,
     // WHY: identity, price and membership are intentionally destructured and
     // discarded. The self-service path must never honour a caller-supplied
@@ -2309,27 +2314,62 @@ server.post('/bookings', async (request, reply) => {
     ? coPlayers.map(normalizePhone)
     : [];
 
+  // F-183 Phase 1: additionalWindowIds lets a guest extend a booking by whole contiguous
+  // hours. Combined with windowId and re-sorted server-side below — client-supplied order
+  // is never trusted for lock order, which is what keeps two concurrent multi-window
+  // requests naming the same windows from deadlocking each other.
+  const normalizedAdditionalWindowIds: string[] = Array.isArray(additionalWindowIds)
+    ? additionalWindowIds
+    : [];
+  const requestedWindowIds = [windowId, ...normalizedAdditionalWindowIds];
+
   try {
     const booking = await prisma.$transaction(async (tx: any) => {
-      // 1. Lock the AvailabilityWindow row FOR UPDATE.
+      // 1. Determine real lock order from real data — an unlocked lookup just for
+      // startTime, never trusting client-supplied ordering, then lock in that order below.
+      const orderingRows = await tx.availabilityWindow.findMany({
+        where: { id: { in: requestedWindowIds } },
+        select: { id: true, startTime: true },
+      });
+      if (orderingRows.length !== requestedWindowIds.length) {
+        const err = new Error('Availability window not found');
+        (err as any).statusCode = 404;
+        (err as any).code = 'NOT_FOUND';
+        throw err;
+      }
+      const sortedWindowIds = [...orderingRows]
+        .sort((a: any, b: any) => {
+          const diff = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+          if (diff !== 0) return diff;
+          return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+        })
+        .map((row: any) => row.id);
+
+      // 2. Lock each AvailabilityWindow row FOR UPDATE, in that sorted order.
       // CASING TRAP: this is a RAW query, so the returned object carries the
       // database's real quoted-camelCase keys (startTime, endTime) — NOT the
       // lowercase forms. Reading `window.starttime` yields undefined, which
       // silently disabled the browse-ahead gate (Invalid Date compares false)
       // and stripped the time bounds from the blocked-window filter. Always
       // use startTime/endTime here.
-      const windows = await tx.$queryRaw<any[]>`
-        SELECT * FROM "AvailabilityWindow" WHERE id = ${windowId} FOR UPDATE
-      `;
-      if (!windows || windows.length === 0) {
-        const err = new Error('Availability window not found');
-        (err as any).statusCode = 404;
-        (err as any).code = 'NOT_FOUND';
-        throw err;
+      const lockedWindows: any[] = [];
+      for (const id of sortedWindowIds) {
+        const rows = await tx.$queryRaw<any[]>`
+          SELECT * FROM "AvailabilityWindow" WHERE id = ${id} FOR UPDATE
+        `;
+        if (!rows || rows.length === 0) {
+          const err = new Error('Availability window not found');
+          (err as any).statusCode = 404;
+          (err as any).code = 'NOT_FOUND';
+          throw err;
+        }
+        lockedWindows.push(rows[0]);
       }
-      const window = windows[0];
+      // Earliest locked window — kept as `window` so every single-window check below
+      // (unchanged from before F-183) reads exactly as it did before.
+      const window = lockedWindows[0];
 
-      // 2. Fetch resource pool details.
+      // 3. Fetch resource pool details.
       const pool = await tx.resourcePool.findUnique({ where: { id: resourcePoolId } });
       if (!pool) {
         const err = new Error('Resource pool not found');
@@ -2338,7 +2378,7 @@ server.post('/bookings', async (request, reply) => {
         throw err;
       }
 
-      // 3. Enforce group size against pool constraints.
+      // 4. Enforce group size against pool constraints.
       const groupSize = 1 + (Array.isArray(coPlayers) ? coPlayers.length : 0);
       if (groupSize < pool.minOccupancy) {
         const err = new Error(`Minimum group size for this pool is ${pool.minOccupancy}`);
@@ -2353,7 +2393,7 @@ server.post('/bookings', async (request, reply) => {
         throw err;
       }
 
-      // 4. Enforce the guest browse-ahead window.
+      // 5. Enforce the guest browse-ahead window.
       // F-048: this endpoint always applies guestOpenWindowDays. It previously
       // switched to the longer memberWindowDays on a client-supplied flag, so
       // any caller could bypass F-043's guest restriction by asserting
@@ -2361,17 +2401,80 @@ server.post('/bookings', async (request, reply) => {
       // created server-side by ensureTodayMemberBooking from a genuine
       // MemberGroupAssignment — so there is nothing legitimate to preserve.
       const rule = await tx.bookingRule.findFirst({ where: { resourcePoolId }, orderBy: { createdAt: 'asc' } });
+
+      // F-183: rejected before any more work if the guest asked for more additional
+      // hours than this pool allows. Placed immediately after the rule fetch — the
+      // first point in this transaction where `rule` exists.
+      if (normalizedAdditionalWindowIds.length > (rule?.maxAdditionalWindows ?? 1)) {
+        const err = new Error(`This pool allows at most ${rule?.maxAdditionalWindows ?? 1} additional window(s) per booking`);
+        (err as any).statusCode = 400;
+        (err as any).code = 'INVALID_WINDOW_COUNT';
+        throw err;
+      }
+
+      // F-183: every locked window must belong to the pool the caller named.
+      for (const w of lockedWindows) {
+        if (w.resourcePoolId !== resourcePoolId) {
+          const err = new Error('All windows in a multi-window booking must belong to the same resource pool');
+          (err as any).statusCode = 400;
+          (err as any).code = 'MIXED_RESOURCE_POOL';
+          throw err;
+        }
+      }
+
+      // F-183: Phase 1 only supports contiguous whole-hour extension — each additional
+      // window's start must equal the previous window's end, in the real chronological
+      // order established in step 1 (not the order the caller sent them in).
+      for (let i = 1; i < lockedWindows.length; i++) {
+        if (new Date(lockedWindows[i].startTime).getTime() !== new Date(lockedWindows[i - 1].endTime).getTime()) {
+          const err = new Error('Additional windows must be contiguous with the base booking');
+          (err as any).statusCode = 400;
+          (err as any).code = 'NON_CONTIGUOUS_WINDOWS';
+          throw err;
+        }
+      }
+
+      // F-183: for FIXED_INSTANCE pools, every window must resolve to the same physical
+      // court — a guest extending a booking needs the SAME court, not a different one
+      // that happens to be free. Real JBC pools are all POOLED today (confirmed against
+      // production data during the F-183 investigation, so this path is currently
+      // dormant there), which makes this the only real safety net for the case this
+      // feature is designed for rather than a defensive extra.
+      let targetResource: string | null = null;
+      if (pool.allocationMode === AllocationMode.FIXED_INSTANCE) {
+        targetResource = resourceId || window.resourceId;
+        if (!targetResource) {
+          const err = new Error('resourceId is required for FIXED_INSTANCE');
+          (err as any).statusCode = 400;
+          (err as any).code = 'BAD_REQUEST';
+          throw err;
+        }
+        for (const w of lockedWindows) {
+          const windowResource = w.resourceId || resourceId;
+          if (windowResource !== targetResource) {
+            const err = new Error('All windows in a multi-window booking must resolve to the same resource');
+            (err as any).statusCode = 400;
+            (err as any).code = 'RESOURCE_MISMATCH';
+            throw err;
+          }
+        }
+      }
+
       const windowDays = rule?.guestOpenWindowDays ?? 7;
       // F-066: an N-day horizon counted in branch-local days. setDate() counted them on
       // the server's clock, so the cutoff drifted by the UTC offset.
       const horizonTimeZone = await getBranchTimeZone(pool.branchId);
       const maxBookingDate = addBranchDays(new Date(), windowDays, horizonTimeZone);
 
-      if (new Date(window.startTime) > maxBookingDate) {
-        const err = new Error('Booking window is not open yet');
-        (err as any).statusCode = 400;
-        (err as any).code = 'BOOKING_WINDOW_CLOSED';
-        throw err;
+      // F-183: checked for every window, not just the first — a later window can
+      // exceed the horizon even when the first is within it.
+      for (const w of lockedWindows) {
+        if (new Date(w.startTime) > maxBookingDate) {
+          const err = new Error('Booking window is not open yet');
+          (err as any).statusCode = 400;
+          (err as any).code = 'BOOKING_WINDOW_CLOSED';
+          throw err;
+        }
       }
 
       // F-155: the horizon check above is only an UPPER bound. There was no lower bound at
@@ -2391,85 +2494,97 @@ server.post('/bookings', async (request, reply) => {
       // introduced here, and none exists today.
       //
       // This sits inside the FOR UPDATE transaction above, so it cannot be raced.
-      if (new Date(window.startTime) <= new Date()) {
-        const err = new Error('This slot has already started and can no longer be booked');
-        (err as any).statusCode = 400;
-        (err as any).code = 'SLOT_ALREADY_STARTED';
-        throw err;
-      }
-
-      // 5. Verify no overlap with blocked periods.
-      const blocked = await tx.blockedWindow.findFirst({
-        where: {
-          resourcePoolId,
-          OR: [
-            { resourceId: null },
-            ...(resourceId ? [{ resourceId }] : []),
-          ],
-          startTime: { lte: window.endTime },
-          endTime: { gte: window.startTime },
-        },
-      });
-      if (blocked) {
-        const err = new Error('Slot is blocked');
-        (err as any).statusCode = 409;
-        (err as any).code = 'SLOT_BLOCKED';
-        throw err;
-      }
-
-      // 6. Concurrency checks based on allocation mode.
-      if (pool.allocationMode === AllocationMode.FIXED_INSTANCE) {
-        const targetResource = resourceId || window.resourceId;
-        if (!targetResource) {
-          const err = new Error('resourceId is required for FIXED_INSTANCE');
+      // F-183: looped over every window for consistency, though only the earliest one
+      // can actually trip this — later windows are chronologically after it.
+      for (const w of lockedWindows) {
+        if (new Date(w.startTime) <= new Date()) {
+          const err = new Error('This slot has already started and can no longer be booked');
           (err as any).statusCode = 400;
-          (err as any).code = 'BAD_REQUEST';
-          throw err;
-        }
-        const activeBooking = await tx.booking.findFirst({
-          where: {
-            windowId,
-            resourceId: targetResource,
-            status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
-          },
-        });
-        if (activeBooking) {
-          const err = new Error('Slot is already booked');
-          (err as any).statusCode = 409;
-          (err as any).code = 'SLOT_ALREADY_BOOKED';
-          throw err;
-        }
-      } else {
-        const activeCount = await tx.booking.count({
-          where: {
-            windowId,
-            status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
-          },
-        });
-        if (activeCount >= window.capacity) {
-          const err = new Error('Pool capacity exceeded');
-          (err as any).statusCode = 409;
-          (err as any).code = 'POOL_CAPACITY_EXCEEDED';
+          (err as any).code = 'SLOT_ALREADY_STARTED';
           throw err;
         }
       }
 
-      // 7. Resolve price server-side — caller has no influence over this value.
-      const resolvedPrice = resolvePrice(pool, window, groupSize);
+      // 6. Verify no overlap with blocked periods — every window (F-183: looped; the
+      // OR clause is unchanged from before, still keyed off the raw body `resourceId`).
+      for (const w of lockedWindows) {
+        const blocked = await tx.blockedWindow.findFirst({
+          where: {
+            resourcePoolId,
+            OR: [
+              { resourceId: null },
+              ...(resourceId ? [{ resourceId }] : []),
+            ],
+            startTime: { lte: w.endTime },
+            endTime: { gte: w.startTime },
+          },
+        });
+        if (blocked) {
+          const err = new Error('Slot is blocked');
+          (err as any).statusCode = 409;
+          (err as any).code = 'SLOT_BLOCKED';
+          throw err;
+        }
+      }
 
-      // 8. Create booking in HELD state.
+      // 7. Concurrency checks based on allocation mode — every window (F-183: looped;
+      // targetResource was already validated as consistent across all windows above).
+      for (const w of lockedWindows) {
+        if (pool.allocationMode === AllocationMode.FIXED_INSTANCE) {
+          const activeBooking = await tx.booking.findFirst({
+            where: {
+              windowId: w.id,
+              resourceId: targetResource,
+              status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
+            },
+          });
+          if (activeBooking) {
+            const err = new Error('Slot is already booked');
+            (err as any).statusCode = 409;
+            (err as any).code = 'SLOT_ALREADY_BOOKED';
+            throw err;
+          }
+        } else {
+          const activeCount = await tx.booking.count({
+            where: {
+              windowId: w.id,
+              status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
+            },
+          });
+          if (activeCount >= w.capacity) {
+            const err = new Error('Pool capacity exceeded');
+            (err as any).statusCode = 409;
+            (err as any).code = 'POOL_CAPACITY_EXCEEDED';
+            throw err;
+          }
+        }
+      }
+
+      // 8. Resolve price server-side — caller has no influence over this value.
+      // F-183: summed across every locked window; identical to the original
+      // single-window behavior when there are no additional windows.
+      const resolvedPrice = lockedWindows.reduce(
+        (sum: Prisma.Decimal, w: any) => sum.add(resolvePrice(pool, w, groupSize)),
+        new Prisma.Decimal(0),
+      );
+
+      // 9. Create booking(s) in HELD state. The parent carries the real price and
+      // idempotencyKey and is the only row payment ever references (F-183); child rows
+      // are lightweight placeholders occupying the remaining windows so every existing
+      // windowId-keyed availability/capacity query keeps working unmodified.
       const now = new Date();
       const heldUntil = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes TTL
+      const bookingResourceId = pool.allocationMode === AllocationMode.FIXED_INSTANCE
+        ? targetResource
+        : null;
 
-      return await tx.booking.create({
+      const parent = await tx.booking.create({
         data: {
           tenantId,
           branchId,
           resourcePoolId,
-          resourceId: pool.allocationMode === AllocationMode.FIXED_INSTANCE
-            ? (resourceId || window.resourceId)
-            : null,
-          windowId,
+          resourceId: bookingResourceId,
+          windowId: window.id,
           userId,
           status: BookingStatus.HELD,
           heldAt: now,
@@ -2488,6 +2603,36 @@ server.post('/bookings', async (request, reply) => {
             create: normalizedCoPlayers.map((phone: string) => ({ phone })),
           } : undefined,
         },
+      });
+
+      // F-183: one lightweight child per additional window, all in the same
+      // transaction as the parent — no partial parent-without-children state is ever
+      // reachable. Players belong to the group as a whole, not per hour, so they're
+      // only ever attached to the parent above.
+      for (const w of lockedWindows.slice(1)) {
+        await tx.booking.create({
+          data: {
+            tenantId,
+            branchId,
+            resourcePoolId,
+            resourceId: bookingResourceId,
+            windowId: w.id,
+            userId,
+            status: BookingStatus.HELD,
+            heldAt: now,
+            heldUntil,
+            idempotencyKey: null,
+            isMemberBooking: false,
+            refundAmount: null,
+            price: null,
+            parentBookingId: parent.id,
+          },
+        });
+      }
+
+      return tx.booking.findUnique({
+        where: { id: parent.id },
+        include: { childBookings: true },
       });
     });
 
@@ -2701,6 +2846,17 @@ server.post('/bookings/:id/confirm', async (request, reply) => {
     throw new Error('Booking not found');
   }
 
+  // F-183: a child booking (one of the extra hours on a multi-window booking) is not
+  // independently mutable — it has no price/idempotencyKey of its own. Callers act on
+  // the parent id, which cascades to every child in the same transaction below.
+  if (booking.parentBookingId) {
+    reply.status(400);
+    const err = new Error('Cannot confirm a child booking directly — act on the parent booking id');
+    (err as any).statusCode = 400;
+    (err as any).code = 'CHILD_BOOKING_NOT_MUTABLE';
+    throw err;
+  }
+
   if (booking.status === BookingStatus.CONFIRMED) return booking; // idempotent
 
   if (booking.status !== BookingStatus.HELD) {
@@ -2708,9 +2864,17 @@ server.post('/bookings/:id/confirm', async (request, reply) => {
     throw new Error('Only held bookings can be confirmed');
   }
 
-  return await prisma.booking.update({
-    where: { id },
-    data: { status: BookingStatus.CONFIRMED },
+  return await prisma.$transaction(async (tx: any) => {
+    const updated = await tx.booking.update({
+      where: { id },
+      data: { status: BookingStatus.CONFIRMED },
+    });
+    // F-183: cascade the identical transition to every child, atomically with the parent.
+    await tx.booking.updateMany({
+      where: { parentBookingId: id },
+      data: { status: BookingStatus.CONFIRMED },
+    });
+    return updated;
   });
 });
 
@@ -2761,6 +2925,16 @@ server.post('/bookings/:id/check-in', async (request, reply) => {
     requireBookingAccess(booking, claims, reply);
   }
 
+  // F-183: same guard as /confirm and /cancel — a child booking is not independently
+  // mutable. See /confirm above for the full rationale.
+  if (booking.parentBookingId) {
+    reply.status(400);
+    const err = new Error('Cannot check in a child booking directly — act on the parent booking id');
+    (err as any).statusCode = 400;
+    (err as any).code = 'CHILD_BOOKING_NOT_MUTABLE';
+    throw err;
+  }
+
   if (booking.status === BookingStatus.CHECKED_IN) return booking; // idempotent
 
   if (booking.status !== BookingStatus.CONFIRMED) {
@@ -2768,9 +2942,17 @@ server.post('/bookings/:id/check-in', async (request, reply) => {
     throw new Error('Only confirmed bookings can be checked in');
   }
 
-  return await prisma.booking.update({
-    where: { id },
-    data: { status: BookingStatus.CHECKED_IN },
+  return await prisma.$transaction(async (tx: any) => {
+    const updated = await tx.booking.update({
+      where: { id },
+      data: { status: BookingStatus.CHECKED_IN },
+    });
+    // F-183: cascade the identical transition to every child, atomically with the parent.
+    await tx.booking.updateMany({
+      where: { parentBookingId: id },
+      data: { status: BookingStatus.CHECKED_IN },
+    });
+    return updated;
   });
 });
 
@@ -2807,6 +2989,22 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
     requireBookingAccess(booking, decodedUser, reply);
   }
 
+  // F-183: a guest's child booking carries the same userId as its parent, so the IDOR
+  // guard above legitimately passes for a guest calling this route directly on their own
+  // child booking's id. Without this guard, that cancelled the child (whose price is
+  // always null, so no refund is computed) while leaving the parent CONFIRMED with the
+  // full paid price and freeing that window in every availability/capacity query — a
+  // real billing-integrity and double-booking bug, confirmed during the F-183
+  // investigation, not a theoretical one. Callers act on the parent id, which cascades
+  // to every child in the same transaction below.
+  if (booking.parentBookingId) {
+    reply.status(400);
+    const err = new Error('Cannot cancel a child booking directly — act on the parent booking id');
+    (err as any).statusCode = 400;
+    (err as any).code = 'CHILD_BOOKING_NOT_MUTABLE';
+    throw err;
+  }
+
   if (booking.status === BookingStatus.CANCELLED) return booking; // idempotent
 
   if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD) {
@@ -2834,9 +3032,19 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
     }
   }
 
-  return await prisma.booking.update({
-    where: { id },
-    data: { status: BookingStatus.CANCELLED, refundAmount },
+  // F-183: parent update and child cascade commit together — no reachable state where
+  // the parent is CANCELLED but a child booking still holds its window, or vice versa.
+  // Children never had a price, so they never get a refund of their own.
+  return await prisma.$transaction(async (tx: any) => {
+    const updated = await tx.booking.update({
+      where: { id },
+      data: { status: BookingStatus.CANCELLED, refundAmount },
+    });
+    await tx.booking.updateMany({
+      where: { parentBookingId: id },
+      data: { status: BookingStatus.CANCELLED, refundAmount: null },
+    });
+    return updated;
   });
 });
 
@@ -3452,6 +3660,10 @@ server.get('/bookings/admin', async (request, reply) => {
   const bookings = await prisma.booking.findMany({
     where: {
       userId,
+      // F-183: a child booking (an extra hour on a multi-window booking) has no price
+      // and no PaymentIntent of its own — it isn't a real refund-override candidate, so
+      // it never enters this picker in the first place. Act on the parent id instead.
+      parentBookingId: null,
       ...(status ? { status: status as BookingStatus } : {}),
     },
     include: {
@@ -3533,7 +3745,17 @@ server.get('/bookings/my', async (request, reply) => {
   }
 
   const bookings = await prisma.booking.findMany({
-    where: { userId },
+    where: {
+      userId,
+      // F-183: hide child rows (the extra hours on a multi-window booking) from the
+      // guest's own history — they carry no independent price or refund of their own,
+      // and exposing their ids here is what let a guest reach /cancel directly on one
+      // (see the CHILD_BOOKING_NOT_MUTABLE guard on /confirm, /cancel, /check-in).
+      // Displaying a multi-window booking as one entry (rather than N-1 hours simply
+      // missing from this list) is a real guest-PWA product question, deliberately
+      // left for that workstream — this filter is the minimal backend-safety fix.
+      parentBookingId: null,
+    },
     include: {
       window: {
         include: {
@@ -3580,6 +3802,17 @@ server.get('/bookings/:id/cancel-preview', async (request, reply) => {
   // IDOR Guard (F-071): tenant-scoped, branch-aware, shared by all three booking routes.
   if (!isInternal && decodedUser) {
     requireBookingAccess(booking, decodedUser, reply);
+  }
+
+  // F-183: a child booking's price is always null, so the CANCELLED-branch math below
+  // would otherwise silently compute a confident-looking {refundAmount: 0, refundPercent:
+  // 0} rather than erroring. Reject explicitly instead — act on the parent booking id.
+  if (booking.parentBookingId) {
+    reply.status(400);
+    const err = new Error('Cannot preview a child booking directly — act on the parent booking id');
+    (err as any).statusCode = 400;
+    (err as any).code = 'CHILD_BOOKING_NOT_PREVIEWABLE';
+    throw err;
   }
 
   if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD && booking.status !== BookingStatus.CANCELLED) {

@@ -292,6 +292,10 @@ model BookingRule {
   lowOccupancyThresholdPct Int          @default(50)
   prepaymentRequired       Boolean      @default(true)
   cancellationPolicyJson   Json         // Tiered policy mapping: { type: "tiered", tiers: [{ min_hours_before_slot, refund_percent }] }
+  // F-183 Phase 1: cap on additional contiguous AvailabilityWindows a guest may add to a
+  // single booking (0 = no extension allowed for this pool). Default of 1 changes no
+  // existing behavior — additionalWindowIds is opt-in per request.
+  maxAdditionalWindows     Int          @default(1)
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
@@ -363,8 +367,17 @@ model Booking {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   players        BookingPlayer[]
+  // F-183 Phase 1: a multi-window booking is one billable parent plus N-1 lightweight
+  // child rows (one per additional contiguous hour), each occupying its own
+  // AvailabilityWindow so every existing windowId-keyed query is untouched. Children
+  // carry price: null, idempotencyKey: null (multiple NULLs are permitted under the
+  // existing @unique above).
+  parentBookingId String?
+  parentBooking   Booking?        @relation("BookingChildren", fields: [parentBookingId], references: [id], onDelete: Cascade)
+  childBookings   Booking[]       @relation("BookingChildren")
 
   @@index([status, heldUntil])
+  @@index([parentBookingId])
 }
 
 enum UserType {

@@ -12,6 +12,7 @@ import { memberFlowSections } from './member-flow.regression';
 import { availabilityGenerationSections } from './availability-generation.regression';
 import { availabilityGenerationApiSections } from './availability-generation-api.regression';
 import { coPlayerAndAlignmentSections } from './co-player-and-alignment.regression';
+import { multiSlotBookingSections } from './multi-slot-booking.regression';
 
 async function main() {
   console.log('Starting local Slot Engine server...');
@@ -43,6 +44,7 @@ async function main() {
         ...availabilityGenerationSections,
         ...availabilityGenerationApiSections,
         ...coPlayerAndAlignmentSections,
+        ...multiSlotBookingSections,
       ],
       context,
     );
