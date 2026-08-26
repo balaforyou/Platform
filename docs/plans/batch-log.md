@@ -364,7 +364,7 @@ commit (this same pass): `docs/findings_register.md` gains F-183 as a Resolved r
 `pending-findings.md` entry moves from Awaiting confirmation to Promoted. `pnpm register:check` run and
 confirmed green before committing — the first real exercise of the F-179+ Confirmed-ID enforcement for
 this finding, not a no-op the way it was during the filing-only commit above. Commits: `19da595`
-(implementation), `<fill in after commit>` (this close-out).
+(implementation), `dce5b8b` (this close-out).
 
 ---
 
