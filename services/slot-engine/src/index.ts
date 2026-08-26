@@ -2607,7 +2607,38 @@ server.post('/bookings', async (request, reply) => {
         new Prisma.Decimal(0),
       );
 
-      // 9. Create booking(s) in HELD state. The parent carries the real price and
+      // 9. F-186: display-only "Court N" number for POOLED pools with no real per-court
+      // resourceId tracking. Union the occupied courtSlotIndex values across every window
+      // this booking touches (not just lockedWindows[0] — a multi-window booking is checked
+      // independently against each), then take the lowest index in 1..pool.capacity absent
+      // from that union. If none exists, leave it null — the capacity check above (step 7)
+      // already independently governs validity; this is a cosmetic convenience over generic
+      // capacity, never a rejection reason.
+      let courtSlotIndex: number | null = null;
+      if (pool.allocationMode === AllocationMode.POOLED) {
+        const occupiedIndices = new Set<number>();
+        for (const w of lockedWindows) {
+          const occupied = await tx.booking.findMany({
+            where: {
+              windowId: w.id,
+              status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
+              courtSlotIndex: { not: null },
+            },
+            select: { courtSlotIndex: true },
+          });
+          for (const b of occupied) {
+            if (b.courtSlotIndex !== null) occupiedIndices.add(b.courtSlotIndex);
+          }
+        }
+        for (let i = 1; i <= pool.capacity; i++) {
+          if (!occupiedIndices.has(i)) {
+            courtSlotIndex = i;
+            break;
+          }
+        }
+      }
+
+      // 10. Create booking(s) in HELD state. The parent carries the real price and
       // idempotencyKey and is the only row payment ever references (F-183); child rows
       // are lightweight placeholders occupying the remaining windows so every existing
       // windowId-keyed availability/capacity query keeps working unmodified.
@@ -2623,6 +2654,7 @@ server.post('/bookings', async (request, reply) => {
           branchId,
           resourcePoolId,
           resourceId: bookingResourceId,
+          courtSlotIndex,
           windowId: window.id,
           userId,
           status: BookingStatus.HELD,
@@ -2655,6 +2687,7 @@ server.post('/bookings', async (request, reply) => {
             branchId,
             resourcePoolId,
             resourceId: bookingResourceId,
+            courtSlotIndex,
             windowId: w.id,
             userId,
             status: BookingStatus.HELD,
@@ -2829,6 +2862,33 @@ server.post('/bookings/negotiated', async (request, reply) => {
       const now = new Date();
       const heldUntil = new Date(now.getTime() + 5 * 60 * 1000);
 
+      // F-186: same computation as the self-service path, but this endpoint is
+      // single-window (no lockedWindows array, no child cascade) — the union collapses
+      // to occupancy on the one windowId. Confirmed at implementation time that the two
+      // endpoints share the same real capacity pool per window, so a negotiated booking
+      // with no index would otherwise be invisible to self-service's own computation
+      // and vice versa.
+      let courtSlotIndex: number | null = null;
+      if (pool.allocationMode === AllocationMode.POOLED) {
+        const occupied = await tx.booking.findMany({
+          where: {
+            windowId,
+            status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
+            courtSlotIndex: { not: null },
+          },
+          select: { courtSlotIndex: true },
+        });
+        const occupiedIndices = new Set<number>(
+          occupied.map((b: any) => b.courtSlotIndex).filter((v: any) => v !== null),
+        );
+        for (let i = 1; i <= pool.capacity; i++) {
+          if (!occupiedIndices.has(i)) {
+            courtSlotIndex = i;
+            break;
+          }
+        }
+      }
+
       return await tx.booking.create({
         data: {
           tenantId,
@@ -2837,6 +2897,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
           resourceId: pool.allocationMode === AllocationMode.FIXED_INSTANCE
             ? (resourceId || window.resourceId)
             : null,
+          courtSlotIndex,
           windowId,
           userId,
           status: BookingStatus.HELD,

@@ -355,6 +355,11 @@ model Booking {
   resourcePool   ResourcePool   @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
   resourceId     String?
   resource       Resource?      @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  // F-186: display-only "Court N" number for POOLED pools with no real per-court resourceId
+  // tracking. Assigned once per booking, identical on parent and every child. Null when no
+  // common index is free across every window the booking touches — degrades to today's
+  // no-court-shown state rather than rejecting the booking or showing an unstable number.
+  courtSlotIndex Int?
   windowId       String
   window         AvailabilityWindow @relation(fields: [windowId], references: [id], onDelete: Cascade)
   userId         String
