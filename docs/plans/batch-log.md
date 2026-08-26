@@ -407,6 +407,33 @@ verified on `origin/main` via SHA-pinned fetch before Commit 3 began), this row 
 register + batch-log close-out, same pass, per the standing rule that these two updates are one
 inseparable step).
 
+Batch 20 (26 Aug 2026): F-186 resolved — `courtSlotIndex` display-only "Court N" number for
+POOLED pools. Additive nullable `Int` on `Booking`, computed once per booking inside the same
+transaction that creates it: union the occupied `courtSlotIndex` values across every window the
+booking touches (the full `lockedWindows` array in self-service `POST /bookings`, not just its
+first element, since a `[[F-183]]` multi-window booking is checked independently against each),
+assign the lowest free index in `1..pool.capacity` to the parent and every child identically, or
+leave it `null` on both if none exists — the existing per-window capacity check already governs
+validity independently, so this never rejects a booking. Only computed for `AllocationMode.POOLED`
+pools. **Real structural finding during implementation**: `POST /bookings/negotiated` turned out to
+be genuinely single-window (one `windowId`, one `tx.booking.create`, no `lockedWindows` array, no
+parent/child cascade) — confirmed by reading the route directly rather than assuming symmetry with
+self-service. The negotiated compute step was written to match that reality (occupancy union over
+the one window, no loop, single write), still applied there because negotiated and self-service
+bookings share the same real capacity pool per window. New regression suite
+`services/slot-engine/src/regression/court-slot-index.regression.ts`, 6 sections, registered in
+`run.ts`: single-booking gets index 1; concurrent second booking gets index 2; a multi-window
+booking with different pre-existing occupancy on each of its two windows shares one index equal to
+the lowest free across their union; a deliberately engineered no-common-index case (index 1 free on
+A/taken on B, index 2 free on B/taken on A) still succeeds with `courtSlotIndex` null on parent and
+child; cancelling frees an index for reassignment on the same window; and a negotiated booking's
+index is correctly visible to, and skipped by, a subsequent self-service booking on the same
+window. Full 5-suite regression green, **50/50 slot-engine sections** (44 pre-existing + 6 new),
+rebuilt from `dist` first, against `badminton_db_test`; migration applied to both `badminton_db`
+and `badminton_db_test`; whole-repo typecheck and build clean; `pnpm register:check` and
+`pnpm diagram:verify` both green. Commits: `bd4a4ac` (implementation), this row (register +
+batch-log close-out, same pass).
+
 ---
 
 ## Queued, not yet batched

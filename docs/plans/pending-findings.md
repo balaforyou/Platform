@@ -41,6 +41,28 @@ Confirmed: <blank until Chief fills this in>
 
 ## Promoted (audit trail)
 
+### court-slot-index-pooled-display
+Batch: 20
+Surfaced: 26 Aug 2026
+Description: New capability — a display-only courtSlotIndex (Int, nullable) on Booking, giving
+guests a stable "Court N" number on POOLED pools that have no real per-court resourceId tracking.
+Assigned once per booking: union the occupied courtSlotIndex values across every AvailabilityWindow
+the booking touches (not just the first, since F-183 multi-window bookings span several
+independently-checked windows), assign the lowest index in 1..pool.capacity absent from that union
+to the parent and every child identically. If no common index exists across the full span, the
+booking is NOT rejected — the underlying per-window capacity check already independently confirms
+validity — courtSlotIndex is left null instead, degrading to today's no-court-shown state rather
+than displaying an unstable or per-segment-different number. Mirrors, without copying, F-183's
+FIXED_INSTANCE resource-continuity check: same shape (one value must hold across every window in a
+multi-hour booking), different failure mode (FIXED_INSTANCE hard-rejects via RESOURCE_MISMATCH
+because a specific resource was explicitly requested; here the index is a cosmetic convenience over
+generic capacity, so it degrades gracefully). Also applied to POST /bookings/negotiated's creation
+transaction — same pool of capacity as self-service, confirmed at services/slot-engine/src/index.ts,
+so a staff-created booking with no index would otherwise be invisible to self-service's
+occupied-index computation.
+Confirmed-ID: F-186
+Confirmed: 26 Aug 2026
+
 ### booking-branchid-unvalidated-client-scalar
 Batch: 19
 Surfaced: 26 Aug 2026
