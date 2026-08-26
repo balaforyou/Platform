@@ -37,6 +37,37 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
+*(none yet)*
+
+## Promoted (audit trail)
+
+### fast-grid-guest-booking-visual-revamp
+Batch: 21
+Surfaced: 26 Aug 2026
+Description: Full visual revamp of guest-member-pwa's booking flow (LoginScreen, CourtBooking,
+BookingPay, BookingConfirmation, BookingHistory, CancelBookingModal) adopting the Organic design
+system's shape language and typography (Caprasimo/Figtree, spacing/radius scale, pill buttons,
+.card/.field/.dialog component shapes) from the Claude Design wireframe. Real architectural
+conflict surfaced and resolved during investigation, not assumed: ds.css's accent colors are a
+fixed JBC-specific palette, but the app is genuinely multi-tenant (--brand-primary set at runtime
+from Tenant.themeColor, packages/ui-shared/src/context/TenantContext.tsx:115, confirmed used
+across 6+ components) — adopting the wireframe literally would have hardcoded JBC's terracotta for
+every tenant. Resolved: --color-accent becomes tenant-derived via a new OKLCH ramp-generation
+utility (9 steps, 100-900, built new — today's runtime theming is a single hex swap only, no ramp
+logic exists yet); --color-accent-2 (sage) stays fixed/universal across tenants, preserving the
+existing "one tenant-derived color, everything else universal" convention rather than doubling it.
+Six build slices, each stopping for review before the next: Slice 0 (foundation tokens + the ramp
+generator, no screen changes), Slice 1 (LoginScreen), Slice 2 (CourtBooking, largest), Slice 3
+(BookingPay), Slice 4 (BookingConfirmation), Slice 5 (BookingHistory/CancelBookingModal). Confirmed
+correctly excluded: 1a/1c picker variants (Chief already ruled out), courtSlotIndex court-chip
+display (F-189's own scope, not this), player +/- stepper (F-114/MVP, already absent), booking
+code/PDF receipt/directions (no backend support or already exists elsewhere per F-157). Wireframe's
+literal copy for daily-cap ("one booking per number per day") and cancellation refund examples
+explicitly overridden to render from real BookingRule fields, never hardcoded text, per F-187's
+own established decisions #4/#5.
+Confirmed-ID: F-190
+Confirmed: 26 Aug 2026
+
 ### upcoming-slots-widget-single-window-display
 Batch: 20
 Surfaced: 26 Aug 2026
@@ -45,8 +76,8 @@ has the same single-window display gap F-187 fixed in BookingPay/BookingConfirma
 a multi-window (F-183) booking's extra hours don't render, only the parent's base window shows.
 Deliberately left out of F-187's scope (a summary dashboard tile, not a payment-decision screen).
 Not fixed here.
-Confirmed-ID:
-Confirmed:
+Confirmed-ID: F-188
+Confirmed: 26 Aug 2026
 
 ### court-slot-index-guest-ui-display
 Batch: 20
@@ -54,10 +85,8 @@ Surfaced: 26 Aug 2026
 Description: F-186 shipped courtSlotIndex as a backend field only — no guest-facing UI anywhere
 actually displays "Court N" to the guest. Real follow-on if the Chief wants the field surfaced,
 not assumed automatic from F-186 shipping.
-Confirmed-ID:
-Confirmed:
-
-## Promoted (audit trail)
+Confirmed-ID: F-189
+Confirmed: 26 Aug 2026
 
 ### fast-grid-guest-booking-integration
 Batch: 20
