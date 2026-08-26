@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { Calendar, Users, Activity, HelpCircle, ShieldAlert } from 'lucide-react';
+import { Calendar, Activity, HelpCircle, ShieldAlert } from 'lucide-react';
+
+// F-190 Slice 2b: one shared class for the single #reserve-court-btn element -- flex-1 so it sits
+// next to the TOTAL readout in the mobile fixed bar, sm:w-full so it fills the width once the bar
+// becomes normal-flow content (sm:block cancels the flex context, making flex-1 inert there).
+const primaryReserveBtn =
+  'flex-1 sm:w-full min-h-[54px] py-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ' +
+  'bg-[var(--color-accent-700)] text-[var(--color-accent-100)] hover:bg-[var(--color-accent-800)] active:bg-[var(--color-accent-900)]';
 
 export default function CourtBooking() {
   const { branchId, poolId } = useParams();
@@ -591,119 +598,162 @@ export default function CourtBooking() {
         {/* Right column: Players & Price Summary */}
         <div className="space-y-6">
           {selectedSlot ? (
-            <div ref={summaryRef} id="rate-summary-panel" className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-6">
-              <h3 className="text-sm font-bold font-outfit text-ink-muted uppercase tracking-wider flex items-center space-x-2">
-                <Users className="h-4 w-4 text-[var(--brand-primary)]" />
-                <span>3. Rate Summary</span>
-              </h3>
+            <>
+              {/* F-190 Slice 2b: F-153's scroll effect is retargeted here, not removed -- this div
+                  no longer contains the reserve button (moved to the sticky bar below), so it's
+                  shorter than before and the same scrollIntoView({block:'nearest'}) now reveals
+                  duration+review without needing to evict the slot grid, matching the wireframe's
+                  own "Scrolling" guidance (4a): scroll only far enough to reveal the duration
+                  stepper, keep the slot grid on screen. */}
+              <div
+                ref={summaryRef}
+                id="rate-summary-panel"
+                className="space-y-5"
+                style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}
+              >
+                <div className="p-5 space-y-0">
+                  {/* MVP: the participant-collection list was removed here — see the note at the
+                      top of this component. The API still accepts coPlayers; only this UI step is
+                      gone. */}
 
-              {/* MVP: the participant-collection list was removed here — see the note at the top of
-                  this component. The API still accepts coPlayers; only this UI step is gone. */}
-
-              {/* Price Calculation details */}
-              <div className="space-y-3">
-                {/* F-153: echo which slot was picked. On a long list the tapped card necessarily
-                    leaves the viewport when this panel scrolls into view — a 375px screen cannot
-                    hold both — so the confirmation of WHAT was selected has to exist here too, not
-                    only as the highlight in the list. Deliberately additive: F-146's selected-slot
-                    styling is untouched. */}
-                <div className="flex justify-between text-xs text-ink-muted font-medium">
-                  <span>Selected Slot:</span>
-                  <span className="text-ink font-mono font-bold" id="selected-slot-echo">
-                    {(() => {
-                      const chain = getSelectedChain();
-                      const last = chain[chain.length - 1] ?? selectedSlot;
-                      return `${formatTimeRange(selectedSlot.window).split(' - ')[0]} - ${formatTimeRange(last.window).split(' - ')[1]}`;
-                    })()}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs text-ink-muted font-medium">
-                  <span>Pricing Mode:</span>
-                  <span className="text-ink">
-                    {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON'
-                      ? 'Per-person rate multiplication'
-                      : 'Flat booking rate'}
-                  </span>
-                </div>
-
-                {/* F-187: duration stepper. Whole-hour increments only (not the wireframe's drawn
-                    30-min steps — the pool's own minBookingDurationMinutes/AvailabilityWindow grain
-                    is hourly here), capped by maxAdditionalWindows AND by how many contiguous hours
-                    actually exist after the selected slot. */}
-                <div className="flex justify-between items-center text-xs text-ink-muted font-medium pt-1">
-                  <span>Duration:</span>
-                  <div className="flex items-center space-x-3">
-                    <button
-                      type="button"
-                      onClick={() => setAdditionalWindowsCount((c) => Math.max(0, c - 1))}
-                      disabled={additionalWindowsCount === 0}
-                      className="h-7 w-7 rounded-lg border border-edge-strong bg-surface text-ink font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-                      id="duration-decrement-btn"
-                      aria-label="Decrease duration"
-                    >
-                      −
-                    </button>
-                    <span className="text-ink font-mono font-bold w-16 text-center" id="duration-display">
-                      {additionalWindowsCount + 1} hr{additionalWindowsCount + 1 > 1 ? 's' : ''}
+                  {/* F-153: echo which slot was picked. On a long list the tapped card necessarily
+                      leaves the viewport when this panel scrolls into view — a 375px screen cannot
+                      hold both — so the confirmation of WHAT was selected has to exist here too,
+                      not only as the highlight in the list. Deliberately additive: F-146's
+                      selected-slot styling is untouched. */}
+                  <div className="flex justify-between items-center py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+                    <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Slot</span>
+                    <span className="text-[13.5px] font-bold font-mono" style={{ color: 'var(--color-text)' }} id="selected-slot-echo">
+                      {(() => {
+                        const chain = getSelectedChain();
+                        const last = chain[chain.length - 1] ?? selectedSlot;
+                        return `${formatTimeRange(selectedSlot.window).split(' - ')[0]} - ${formatTimeRange(last.window).split(' - ')[1]}`;
+                      })()}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setAdditionalWindowsCount((c) => Math.min(maxAdditionalAvailable(selectedSlot), c + 1))}
-                      disabled={additionalWindowsCount >= maxAdditionalAvailable(selectedSlot)}
-                      className="h-7 w-7 rounded-lg border border-edge-strong bg-surface text-ink font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-                      id="duration-increment-btn"
-                      aria-label="Increase duration"
-                    >
-                      +
-                    </button>
+                  </div>
+                  <div className="flex justify-between items-center py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+                    <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Pricing</span>
+                    <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
+                      {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON'
+                        ? 'Per-person rate multiplication'
+                        : 'Flat booking rate'}
+                    </span>
+                  </div>
+
+                  {/* F-187: duration stepper. Whole-hour increments only (not the wireframe's drawn
+                      30-min steps — the pool's own minBookingDurationMinutes/AvailabilityWindow
+                      grain is hourly here), capped by maxAdditionalWindows AND by how many
+                      contiguous hours actually exist after the selected slot. Slice 2b: buttons
+                      resized to 52px (from 28px, under 4a's 44px floor for a control that changes
+                      the price) -- restyle only, no logic change. */}
+                  <div className="flex justify-between items-center py-3">
+                    <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Duration</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAdditionalWindowsCount((c) => Math.max(0, c - 1))}
+                        disabled={additionalWindowsCount === 0}
+                        className="h-[52px] w-[52px] rounded-2xl font-bold text-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ border: '1px solid var(--color-neutral-300)', background: '#fff', color: 'var(--color-text)' }}
+                        id="duration-decrement-btn"
+                        aria-label="Decrease duration"
+                      >
+                        −
+                      </button>
+                      <span className="font-mono font-bold w-16 text-center text-[15px]" style={{ color: 'var(--color-text)' }} id="duration-display">
+                        {additionalWindowsCount + 1} hr{additionalWindowsCount + 1 > 1 ? 's' : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setAdditionalWindowsCount((c) => Math.min(maxAdditionalAvailable(selectedSlot), c + 1))}
+                        disabled={additionalWindowsCount >= maxAdditionalAvailable(selectedSlot)}
+                        className="h-[52px] w-[52px] rounded-2xl font-bold text-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ border: '1px solid var(--color-neutral-300)', background: '#fff', color: 'var(--color-text)' }}
+                        id="duration-increment-btn"
+                        aria-label="Increase duration"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-3" style={{ borderTop: '1px solid var(--color-neutral-200)' }}>
+                    <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-neutral-700)' }}>Total</span>
+                    <span className="text-xl font-extrabold font-mono" style={{ color: 'var(--color-accent-700)' }} id="computed-price-display">
+                      ₹{calculatePrice()}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-end pt-2 border-t border-edge">
-                  <span className="text-sm font-bold text-ink font-outfit">Total Estimate:</span>
-                  <span className="text-2xl font-extrabold text-[var(--brand-primary)] font-mono" id="computed-price-display">
-                    ₹{calculatePrice()}
-                  </span>
-                </div>
+                {/* F-187: daily-cap / cancellation-policy copy, read directly off the pool's own
+                    BookingRule — no new fetch, this is the same `pool` state already loaded above.
+                    Real dynamic content untouched; the wireframe's own hardcoded "Free
+                    cancellation up to 4 hours before start" example line is deliberately not
+                    copied, same trap already avoided elsewhere in F-187. */}
+                {(pool.bookingRules?.[0]?.maxDailyBookingsPerGuest != null || pool.bookingRules?.[0]?.cancellationPolicyJson) && (
+                  <div className="text-[11.5px] p-4 space-y-1" style={{ background: 'var(--color-neutral-100)', color: 'var(--color-neutral-700)' }}>
+                    <p>
+                      Up to <span className="font-bold" style={{ color: 'var(--color-text)' }}>{pool.bookingRules?.[0]?.maxDailyBookingsPerGuest ?? 3}</span> booking(s) per day per guest.
+                    </p>
+                    {formatCancellationPolicy(pool.bookingRules?.[0]?.cancellationPolicyJson).map((line, i) => (
+                      <p key={i}>{line}</p>
+                    ))}
+                  </div>
+                )}
+
+                {/* F-190 Slice 2b: kept in the scrollable review card rather than duplicated near
+                    the sticky bar -- a real potential UX improvement, but out of this slice's
+                    restyle-only mandate; noted rather than silently done or silently skipped. */}
+                {bookingError && (
+                  <div className="bg-red-50 border-t border-red-200 p-4 flex items-start space-x-2 text-xs text-red-700">
+                    <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>{bookingError}</span>
+                  </div>
+                )}
               </div>
 
-              {/* F-187: daily-cap / cancellation-policy copy, read directly off the pool's own
-                  BookingRule — no new fetch, this is the same `pool` state already loaded above. */}
-              {(pool.bookingRules?.[0]?.maxDailyBookingsPerGuest != null || pool.bookingRules?.[0]?.cancellationPolicyJson) && (
-                <div className="text-[11px] text-ink-muted bg-surface border border-edge rounded-xl p-3 space-y-1">
-                  <p>
-                    Up to <span className="font-bold text-ink">{pool.bookingRules?.[0]?.maxDailyBookingsPerGuest ?? 3}</span> booking(s) per day per guest.
-                  </p>
-                  {formatCancellationPolicy(pool.bookingRules?.[0]?.cancellationPolicyJson).map((line, i) => (
-                    <p key={i}>{line}</p>
-                  ))}
-                </div>
-              )}
-
-              {bookingError && (
-                <div className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-start space-x-2 text-xs text-red-700">
-                  <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{bookingError}</span>
-                </div>
-              )}
-
-              {/* Reserve action */}
-              <button
-                onClick={handleReserve}
-                disabled={submitting}
-                className="w-full py-3 rounded-2xl bg-[var(--brand-primary)] hover:opacity-95 text-white font-semibold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-[var(--brand-primary)]/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                id="reserve-court-btn"
+              {/* F-190 Slice 2b: sticky bottom bar (JBC Booking.dc.html:670-676). Mobile gets the
+                  real fixed bar 4a specifies (env(safe-area-inset-bottom)-aware); sm: and up use
+                  plain normal-flow positioning -- covers both the wireframe's tablet AND laptop
+                  breakpoint tiers. Laptop's "sticky right rail" tier is deliberately not
+                  implemented: the review card already renders fully visible in the existing
+                  2-column desktop layout with no scrolling needed (confirmed in Slice 2a), so that
+                  tier has no reachability consequence, unlike the mobile bar which is F-153's real
+                  problem. ONE button element throughout -- only its wrapper's positioning/
+                  background classes change per breakpoint, never a second element sharing
+                  #reserve-court-btn. */}
+              <div
+                className="fixed inset-x-0 bottom-0 z-20 flex items-center gap-3 px-5 pt-3.5
+                  bg-[var(--color-neutral-900)] pb-[calc(14px+env(safe-area-inset-bottom))]
+                  sm:static sm:px-0 sm:pt-0 sm:pb-0 sm:bg-transparent sm:block"
               >
-                {submitting ? (
-                  <>
-                    <Activity className="h-4 w-4 animate-spin" />
-                    <span>Processing Hold...</span>
-                  </>
-                ) : (
-                  <span>Hold & Proceed to Pay</span>
-                )}
-              </button>
-            </div>
+                <div className="flex flex-col gap-0.5 min-w-[80px] sm:hidden">
+                  <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '10px', letterSpacing: '0.08em', color: 'var(--color-neutral-500)' }}>
+                    TOTAL
+                  </div>
+                  <div className="font-extrabold" style={{ fontSize: '21px', color: 'var(--color-neutral-100)' }}>
+                    ₹{calculatePrice()}
+                  </div>
+                </div>
+                <button
+                  onClick={handleReserve}
+                  disabled={submitting}
+                  className={primaryReserveBtn}
+                  id="reserve-court-btn"
+                >
+                  {submitting ? (
+                    <>
+                      <Activity className="h-4 w-4 animate-spin" />
+                      <span>Processing Hold...</span>
+                    </>
+                  ) : (
+                    <span>Hold & Proceed to Pay</span>
+                  )}
+                </button>
+              </div>
+              {/* Mobile-only spacer so the fixed bar above doesn't cover the last inline content. */}
+              <div className="sm:hidden" style={{ height: '84px' }} />
+            </>
           ) : (
             <div className="bg-surface-mint border border-edge p-6 rounded-2xl text-center text-ink-muted py-16 text-xs font-semibold">
               Select an availability slot to display participant setup and pricing details.
