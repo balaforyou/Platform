@@ -1,19 +1,50 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { Calendar, Clock, MapPin, Users, HelpCircle, Activity } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users, HelpCircle, Activity, Navigation } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
 
 export default function BookingHistory() {
   const { accessToken } = useAuth();
-  
+
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // States for cancellation modal
   const [selectedCancelId, setSelectedCancelId] = useState<string | null>(null);
+
+  // F-190 Slice 5: real per-branch venue name + coordinates, keyed by Booking.branchId (a bare
+  // scalar, same shape BookingConfirmation.tsx already resolves via /branches/:id/about for its
+  // own venue name + Directions link). Deduped across the list so N bookings at the same branch
+  // cost one fetch, not N. A failed fetch just leaves that branch's entry absent.
+  const [branchAboutById, setBranchAboutById] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const missingIds = Array.from(new Set(bookings.map((b) => b.branchId).filter(Boolean)))
+      .filter((id) => !(id in branchAboutById));
+    if (missingIds.length === 0) return;
+
+    let isMounted = true;
+    missingIds.forEach((branchId) => {
+      apiRequest<any>(`/tenant/branches/${branchId}/about`, { token: accessToken })
+        .then((res) => {
+          if (isMounted && res) {
+            setBranchAboutById((prev) => ({ ...prev, [branchId]: res }));
+          }
+        })
+        .catch(() => { /* leave this branch's venue/Directions data absent — never show data we cannot confirm */ });
+    });
+
+    return () => { isMounted = false; };
+  }, [bookings, accessToken]);
+
+  // Same real coordinate-validity check as BookingConfirmation.tsx (Slice 4) — Number.isFinite,
+  // not truthy, since 0/0 is a real point (Gulf of Guinea).
+  const hasCoordinates = (about: any) =>
+    typeof about?.latitude === 'number' && Number.isFinite(about.latitude) &&
+    typeof about?.longitude === 'number' && Number.isFinite(about.longitude);
 
   const fetchBookings = async () => {
     try {
@@ -51,40 +82,53 @@ export default function BookingHistory() {
   };
 
   const getStatusBadge = (status: string) => {
+    const base = 'px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase border';
     switch (status) {
       case 'HELD':
         return (
-          <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span className={base} style={{ background: '#fffbeb', color: '#b45309', borderColor: '#fde68a' }}>
             Hold Pending
           </span>
         );
       case 'CONFIRMED':
         return (
-          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span
+            className={base}
+            style={{ background: 'var(--color-accent-2-100)', color: 'var(--color-accent-2-800)', borderColor: 'var(--color-accent-2-200)' }}
+          >
             Confirmed
           </span>
         );
       case 'CHECKED_IN':
         return (
-          <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span
+            className={base}
+            style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-800)', borderColor: 'var(--color-accent-200)' }}
+          >
             Checked In
           </span>
         );
       case 'CANCELLED':
         return (
-          <span className="bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span className={base} style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}>
             Cancelled
           </span>
         );
       case 'RELEASED_NO_SHOW':
         return (
-          <span className="bg-surface-mint text-ink-muted border border-edge px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span
+            className={base}
+            style={{ background: 'var(--color-neutral-100)', color: 'var(--color-neutral-700)', borderColor: 'var(--color-neutral-300)' }}
+          >
             Expired
           </span>
         );
       default:
         return (
-          <span className="bg-surface-mint text-ink-muted border border-edge px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase">
+          <span
+            className={base}
+            style={{ background: 'var(--color-neutral-100)', color: 'var(--color-neutral-700)', borderColor: 'var(--color-neutral-300)' }}
+          >
             {status}
           </span>
         );
@@ -134,8 +178,8 @@ export default function BookingHistory() {
     <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-ink">
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <h2 className="text-3xl font-extrabold tracking-tight font-outfit">
-            My <span className="text-[var(--brand-primary)]">Bookings</span>
+          <h2 className="text-3xl font-extrabold tracking-tight" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400 }}>
+            My <span style={{ color: 'var(--color-accent-700)' }}>Bookings</span>
           </h2>
           <p className="text-ink-muted text-xs">
             Manage your scheduled court matches, complete checkout, check-in, or request cancellations.
@@ -143,14 +187,18 @@ export default function BookingHistory() {
         </div>
         <Link
           to="/"
-          className="py-2.5 px-5 bg-surface-mint hover:bg-edge border border-edge-strong rounded-2xl text-xs font-semibold transition-all"
+          className="py-2.5 px-5 rounded-2xl text-xs font-semibold transition-all"
+          style={{ background: 'var(--color-neutral-200)', color: 'var(--color-text)' }}
         >
           Go Dashboard
         </Link>
       </div>
 
       {bookings.length === 0 ? (
-        <div className="bg-surface-mint border border-edge p-16 rounded-3xl text-center space-y-4">
+        <div
+          className="p-16 rounded-3xl text-center space-y-4"
+          style={{ background: 'var(--color-neutral-200)', border: '1px solid var(--color-neutral-300)' }}
+        >
           <Calendar className="h-10 w-10 text-ink-muted mx-auto" />
           <h3 className="text-lg font-bold">No bookings found</h3>
           <p className="text-ink-muted text-xs max-w-xs mx-auto">
@@ -158,7 +206,8 @@ export default function BookingHistory() {
           </p>
           <Link
             to="/branches"
-            className="inline-flex py-3 px-6 rounded-2xl bg-[var(--brand-primary)] hover:opacity-95 text-white font-semibold text-xs transition-all shadow-lg"
+            className="inline-flex py-3 px-6 rounded-2xl font-semibold text-xs transition-all shadow-lg"
+            style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
           >
             Book Court Now
           </Link>
@@ -169,28 +218,37 @@ export default function BookingHistory() {
             const st = new Date(booking.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const et = new Date(booking.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const sDate = new Date(booking.window.startTime).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+            const about = branchAboutById[booking.branchId];
 
             return (
               <div
                 key={booking.id}
-                className="bg-surface-mint border border-edge rounded-2xl p-6 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between gap-6"
+                className="rounded-2xl p-6 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between gap-6"
+                style={{ background: '#fff', border: '1px solid var(--color-neutral-300)' }}
                 id={`booking-card-${booking.id}`}
               >
                 <div className="space-y-3">
                   <div className="flex items-center space-x-3">
-                    <h4 className="text-lg font-bold font-outfit text-ink">
+                    <h4 className="text-lg font-bold text-ink" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400 }}>
                       {booking.window.resourcePool.name}
                     </h4>
                     {getStatusBadge(booking.status)}
                   </div>
 
+                  <div className="flex items-center justify-between text-[12.5px]" style={{ color: 'var(--color-neutral-700)' }}>
+                    <span>Ref</span>
+                    <span className="font-bold font-mono" style={{ color: 'var(--color-text)' }}>
+                      {formatBookingReference(booking.id)}
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-ink-muted font-mono">
                     <div className="flex items-center space-x-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-[var(--brand-primary)] shrink-0" />
+                      <Calendar className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-accent-700)' }} />
                       <span>{sDate}</span>
                     </div>
                     <div className="flex items-start space-x-1.5">
-                      <Clock className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-px" />
+                      <Clock className="h-3.5 w-3.5 shrink-0 mt-px" style={{ color: 'var(--color-accent-2-700)' }} />
                       <div className="space-y-0.5">
                         <div>{st} - {et}</div>
                         {/* F-187: a multi-window (F-183) booking's extra hours live on separate
@@ -211,10 +269,29 @@ export default function BookingHistory() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center space-x-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                      <span>Coimbatore Hub</span>
-                    </div>
+                    {/* F-190 Slice 5: real venue name (Booking.branchId -> /branches/:id/about),
+                        replacing a hardcoded "Coimbatore Hub" string that predated this slice.
+                        Absent entirely if the branch fetch hasn't resolved or failed — never a
+                        wrong or fabricated name. Directions reuses BookingConfirmation.tsx's
+                        (Slice 4) exact URL + hasCoordinates gate. */}
+                    {about?.name && (
+                      <div className="flex items-center space-x-1.5">
+                        <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-neutral-700)' }} />
+                        <span>{about.name}</span>
+                        {hasCoordinates(about) && (
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${about.latitude},${about.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Directions"
+                            className="inline-flex items-center"
+                            style={{ color: 'var(--color-accent-700)' }}
+                          >
+                            <Navigation className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center space-x-1.5">
                       <Users className="h-3.5 w-3.5 text-ink-muted shrink-0" />
                       <span>{1 + (booking.players?.length || 0)} Players</span>
@@ -226,7 +303,8 @@ export default function BookingHistory() {
                       {booking.players.map((player: any, idx: number) => (
                         <span
                           key={idx}
-                          className="bg-surface-mint text-ink-muted text-[10px] px-2 py-0.5 rounded border border-edge font-mono"
+                          className="text-[10px] px-2 py-0.5 rounded font-mono"
+                          style={{ background: 'var(--color-neutral-200)', color: 'var(--color-neutral-700)', border: '1px solid var(--color-neutral-300)' }}
                         >
                           {player.phone}
                         </span>
@@ -235,7 +313,7 @@ export default function BookingHistory() {
                   )}
                 </div>
 
-                <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-4 shrink-0 border-t md:border-t-0 md:border-l border-edge pt-4 md:pt-0 md:pl-6">
+                <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center gap-4 shrink-0 border-t md:border-t-0 md:border-l border-[var(--color-neutral-200)] pt-4 md:pt-0 md:pl-6">
                   <div className="flex flex-col md:items-end text-left md:text-right font-mono">
                     <span className="text-[10px] text-ink-muted">Paid Amount</span>
                     <span className="text-xl font-extrabold text-ink">₹{Number(booking.price)}</span>
@@ -246,7 +324,8 @@ export default function BookingHistory() {
                     {booking.status === 'HELD' && (
                       <Link
                         to={`/bookings/${booking.id}/pay`}
-                        className="py-2 px-4 bg-[var(--brand-primary)] hover:opacity-95 text-white text-xs font-semibold rounded-xl transition-all shadow-lg"
+                        className="py-2 px-4 text-xs font-semibold rounded-xl transition-all shadow-lg"
+                        style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
                         id={`pay-now-btn-${booking.id}`}
                       >
                         Pay Now
@@ -257,7 +336,8 @@ export default function BookingHistory() {
                     {isCheckInOpen(booking) && (
                       <button
                         onClick={() => handleCheckIn(booking.id)}
-                        className="py-2 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-xl transition-all shadow-lg shadow-emerald-900/20"
+                        className="py-2 px-4 text-xs font-semibold rounded-xl transition-all shadow-lg"
+                        style={{ background: 'var(--color-accent-2-700)', color: 'var(--color-accent-2-100)' }}
                         id={`check-in-btn-${booking.id}`}
                       >
                         I'm Here
@@ -268,7 +348,8 @@ export default function BookingHistory() {
                     {(booking.status === 'CONFIRMED' || booking.status === 'HELD') && (
                       <button
                         onClick={() => setSelectedCancelId(booking.id)}
-                        className="py-2 px-4 bg-surface-mint hover:bg-red-50 text-ink-muted hover:text-red-700 border border-edge-strong hover:border-red-200 text-xs font-semibold rounded-xl transition-all"
+                        className="py-2 px-4 text-xs font-semibold rounded-xl transition-all hover:bg-red-50 hover:text-red-700 hover:border-red-200"
+                        style={{ background: 'var(--color-neutral-200)', color: 'var(--color-neutral-700)', border: '1px solid var(--color-neutral-300)' }}
                         id={`cancel-booking-btn-${booking.id}`}
                       >
                         Cancel Match
