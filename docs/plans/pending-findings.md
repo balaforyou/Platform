@@ -37,9 +37,49 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
-*(none yet)*
+### booking-branchid-unvalidated-client-scalar
+Batch: 19
+Surfaced: 26 Aug 2026
+Description: `Booking.branchId` (services/slot-engine/src/index.ts:2277, :2584, :2616) is a bare
+scalar destructured directly from POST /bookings' and POST /bookings/negotiated's request bodies
+and written to the Booking row with no cross-check against the resourcePool it actually belongs
+to (pool.branchId). Pre-existing, not introduced or touched by F-183 or F-184. Surfaced during
+F-184's investigation because its own cross-pool daily-cap query deliberately avoids this column,
+joining Booking → AvailabilityWindow → ResourcePool.branchId instead — the untrusted column is
+why that join path is correct, not incidental. Not fixed here — scope discipline (rule 9).
+Confirmed-ID:
+Confirmed:
 
 ## Promoted (audit trail)
+
+### daily-booking-cap-guest-per-branch
+Batch: 19
+Surfaced: 26 Aug 2026
+Description: New capability, not a bug — supersedes the original multi-court group booking
+discovery, which would have required linked-booking atomicity and a real pricing-model fork.
+Reframed after investigation showed nothing currently prevents a guest from booking multiple
+courts sequentially today; the actual gap was an upper bound, not a missing capability. Guest-only
+cap of maxDailyBookingsPerGuest (Int, default 3, admin-configurable per BookingRule, same
+per-pool-not-per-branch precedent as F-183's maxAdditionalWindows) on active (HELD + CONFIRMED)
+Booking rows per guest per branch-local calendar day, counted across every pool in the branch via
+Booking → AvailabilityWindow → ResourcePool.branchId (not the untrusted Booking.branchId scalar —
+see the separate candidate finding filed alongside this one). Enforced inside POST /bookings'
+existing transaction, gating on HELD + CONFIRMED (not CONFIRMED-only) specifically to prevent a
+guest holding several bookings in parallel and getting them all confirmed independently via
+separate payment webhooks after the cap should have blocked the later ones. F-183 parent/child
+rows count as one reservation toward the cap (parentBookingId: null filter), matching the
+GET /bookings/admin and GET /bookings/my precedent — a guest's extended-duration booking isn't
+penalized relative to the same guest making several short separate bookings. POST /bookings/negotiated
+deliberately left unguarded — staff retain override capacity, and the row-count approach still
+correctly caps a guest's own next self-service attempt even against a mix of negotiated and
+self-service bookings. Real corrections during investigation, preserved: an initial insertion-point
+proposal referenced a variable (horizonTimeZone) before it was actually in scope at that point in
+the transaction — caught before implementation, moved to the correct location. Original evidence
+anchor for the superseded multi-court discovery (Playo comparison, 10-player scenario) carries
+forward as this feature's anchor too — founder judgment and market comparison, not an observed JBC
+complaint.
+Confirmed-ID: F-184
+Confirmed: 26 Aug 2026
 
 ### multi-slot-time-booking-phase1-contiguous-extension
 Batch: 18
