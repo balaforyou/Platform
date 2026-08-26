@@ -37,41 +37,6 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
-### fast-grid-guest-booking-visual-revamp
-Batch: 21
-Surfaced: 26 Aug 2026
-Description: Full visual revamp of guest-member-pwa's booking flow (LoginScreen, CourtBooking,
-BookingPay, BookingConfirmation, BookingHistory, CancelBookingModal) adopting the Organic design
-system's shape language and typography (Caprasimo/Figtree, spacing/radius scale, pill buttons,
-.card/.field/.dialog component shapes) from the Claude Design wireframe. Real architectural
-conflict surfaced and resolved during investigation, not assumed: ds.css's accent colors are a
-fixed JBC-specific palette, but the app is genuinely multi-tenant (--brand-primary set at runtime
-from Tenant.themeColor, packages/ui-shared/src/context/TenantContext.tsx:115, confirmed used
-across 6+ components) — adopting the wireframe literally would have hardcoded JBC's terracotta for
-every tenant. Resolved: --color-accent becomes tenant-derived via a new OKLCH ramp-generation
-utility (9 steps, 100-900, built new — today's runtime theming is a single hex swap only, no ramp
-logic exists yet); --color-accent-2 (sage) stays fixed/universal across tenants, preserving the
-existing "one tenant-derived color, everything else universal" convention rather than doubling it.
-Six build slices, each stopping for review before the next: Slice 0 (foundation tokens + the ramp
-generator, no screen changes), Slice 1 (LoginScreen), Slice 2 (CourtBooking, largest), Slice 3
-(BookingPay), Slice 4 (BookingConfirmation), Slice 5 (BookingHistory/CancelBookingModal). Confirmed
-correctly excluded: 1a/1c picker variants (Chief already ruled out), courtSlotIndex court-chip
-display (F-189's own scope, not this), player +/- stepper (F-114/MVP, already absent), booking
-code/PDF receipt/directions (no backend support or already exists elsewhere per F-157). Wireframe's
-literal copy for daily-cap ("one booking per number per day") and cancellation refund examples
-explicitly overridden to render from real BookingRule fields, never hardcoded text, per F-187's
-own established decisions #4/#5.
-Confirmed-ID: F-190
-Confirmed: 26 Aug 2026
-26 Aug 2026 filing correction: this entry and F-188/F-189 below were moved straight to "Promoted"
-with `Confirmed-ID`/`Confirmed` already set but with no `findings_register.md` row ever written for
-any of the three — breaking the pattern F-183/F-184/F-186/F-187 each correctly followed (Promoted
-requires a real register row created in the same commit as the move). F-188 and F-189 are also
-still genuinely unimplemented (their own description text says so). Filed back here to correct the
-record honestly rather than silently re-promoting as if the mistake never happened. F-190's real
-promotion + register row lands in a separate, later commit, once the register row's own content is
-confirmed.
-
 ### upcoming-slots-widget-single-window-display
 Batch: 20
 Surfaced: 26 Aug 2026
@@ -101,6 +66,40 @@ trail of resolved work. No `findings_register.md` row exists for it. `Confirmed-
 as-is; only the section changed.
 
 ## Promoted (audit trail)
+
+### fast-grid-guest-booking-visual-revamp
+Batch: 21
+Surfaced: 26 Aug 2026
+Description: Full visual revamp of guest-member-pwa's booking flow (LoginScreen, CourtBooking,
+BookingPay, BookingConfirmation, BookingHistory, CancelBookingModal) adopting the Organic design
+system's shape language and typography (Caprasimo/Figtree, spacing/radius scale, pill buttons,
+.card/.field/.dialog component shapes) from the Claude Design wireframe. Real architectural
+conflict surfaced and resolved during investigation, not assumed: ds.css's accent colors are a
+fixed JBC-specific palette, but the app is genuinely multi-tenant (--brand-primary set at runtime
+from Tenant.themeColor, packages/ui-shared/src/context/TenantContext.tsx:115, confirmed used
+across 6+ components) — adopting the wireframe literally would have hardcoded JBC's terracotta for
+every tenant. Resolved: --color-accent becomes tenant-derived via a new OKLCH ramp-generation
+utility (9 steps, 100-900, built new — today's runtime theming is a single hex swap only, no ramp
+logic exists yet); --color-accent-2 (sage) stays fixed/universal across tenants, preserving the
+existing "one tenant-derived color, everything else universal" convention rather than doubling it.
+Six build slices, each stopping for review before the next: Slice 0 (foundation tokens + the ramp
+generator, no screen changes), Slice 1 (LoginScreen), Slice 2 (CourtBooking, largest), Slice 3
+(BookingPay), Slice 4 (BookingConfirmation), Slice 5 (BookingHistory/CancelBookingModal). Confirmed
+correctly excluded: 1a/1c picker variants (Chief already ruled out), courtSlotIndex court-chip
+display (F-189's own scope, not this), player +/- stepper (F-114/MVP, already absent), booking
+code/PDF receipt/directions (no backend support or already exists elsewhere per F-157). Wireframe's
+literal copy for daily-cap ("one booking per number per day") and cancellation refund examples
+explicitly overridden to render from real BookingRule fields, never hardcoded text, per F-187's
+own established decisions #4/#5.
+Confirmed-ID: F-190
+Confirmed: 26 Aug 2026
+27 Aug 2026 filing correction: this entry sat under "Promoted" once already, with no
+`findings_register.md` row ever written for it — breaking the pattern F-183/F-184/F-186/F-187 each
+correctly followed. Moved back to "Awaiting confirmation" to correct the record honestly (see
+`docs/plans/batch-log.md` Batch 21 and commit `1785967`), and only re-promoted here in the same
+commit as its real register row, which also corrected the row's `Resolved` date to 27 Aug 2026 —
+the date the final commit (`93218ad`) actually landed, not the 26 Aug 2026 filing date, since the
+work genuinely crossed the IST midnight boundary.
 
 ### fast-grid-guest-booking-integration
 Batch: 20

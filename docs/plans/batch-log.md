@@ -466,6 +466,63 @@ sections** (unchanged — the `childBookings` include is purely additive, no new
 whole-repo typecheck and build clean; `pnpm register:check` and `pnpm diagram:verify` both green.
 Commits: `056cbca` (implementation), this row (register + batch-log close-out, same pass).
 
+Batch 21 (26-27 Aug 2026): F-190 resolved — Chief-directed six-slice visual revamp of
+`guest-member-pwa`'s booking flow onto the Claude Design wireframe (Organic system):
+`LoginScreen.tsx`, `CourtBooking.tsx`, `BookingPay.tsx`, `BookingConfirmation.tsx`,
+`BookingHistory.tsx`, `CancelBookingModal.tsx`. Every underlying capability this restyles onto
+already existed from `[[F-183]]`/`[[F-184]]`/`[[F-186]]`/`[[F-187]]` — a visual-parity pass against
+the real committed wireframe source (`JBC Booking.dc.html`, `ds.css`), not new server capability.
+`[[F-187]]`'s earlier UI work was functionally correct but never actually ran against the
+wireframe files themselves, only a secondhand prose description of them. **Real architectural
+conflict resolved during Slice 0**: `ds.css`'s accent palette is fixed/JBC-specific, but the app is
+genuinely multi-tenant (`--brand-primary` set at runtime from `Tenant.themeColor`, confirmed used
+across 6+ components) — adopting the wireframe literally would have hardcoded JBC's terracotta for
+every tenant. Fixed with a new OKLCH ramp-generation utility (`packages/ui-shared/src/lib/colorRamp.ts`)
+deriving a full 9-step accent ramp from each tenant's own `themeColor`, verified by reconstructing
+`ds.css`'s own real ramp from its base color to within 1/255 per channel; `--color-accent-2` (sage)
+stays fixed/universal, preserving the existing one-tenant-color convention. Six slices, each
+stopped for review and explicit sign-off before the next began — Slice 0 (foundation tokens +
+ramp generator), Slice 1 (`LoginScreen.tsx`), Slice 2a/2b (`CourtBooking.tsx`, the largest), Slice 3
+(`BookingPay.tsx`), Slice 4 (`BookingConfirmation.tsx`), Slice 5 (`BookingHistory.tsx`/
+`CancelBookingModal.tsx`). **Two real pre-existing bugs found and fixed along the way, not assumed
+from the plan**: `showPicker()` throwing outside a trusted user gesture with no fallback (Slice 2a,
+fixed with a try/catch `.focus()` fallback); a mid-Slice-5 self-caught investigation error — first
+pass wrongly concluded no real venue data was reachable per `BookingHistory.tsx` card (checked
+`ResourcePool.branchId`, a bare scalar with no relation) and proposed removing a hardcoded fake
+"Coimbatore Hub" string outright, corrected before implementing once `Booking.branchId` (the
+actually-relevant field, already used by `[[F-186]]`/`[[F-187]]`'s own `BookingConfirmation.tsx`
+fetch) was found to make the real venue name and a real Directions link cheaply reachable instead.
+`[[F-186]]`/`[[F-187]]`'s earlier "invalid Razorpay credentials" diagnosis also corrected during
+Slice 3: real cause is Razorpay checkout requiring a static IP/HTTPS domain, not a bad key — no
+credential rotation needed, documented as a standing environment fact in root `CLAUDE.md`.
+**Live-fire verified** against the local dev stack for every slice (real JBC branch/pool data in
+`badminton_db`, real bookings created and cancelled afterward, real computed-style checks proving
+tenant-derived colors resolve to actual RGB values rather than literal `var(...)` strings on both
+tenants). **Zero e2e regressions across all 8 real spec files** — every non-pass root-caused
+individually (admin-web not running locally, a local ad-hoc proxy conflicting with `f043`'s
+self-hosted one, the pre-existing IST day-boundary seed bug, a pre-existing missing `f061` seed
+fixture — none touching the changed files) rather than compared against a raw pass count, since
+root `CLAUDE.md`'s own e2e notes make clear no suite-wide number was ever a stable baseline to
+begin with. All 5 backend regression suites verified 100% green run individually (`pnpm test:regression`'s
+combined orchestration has a pre-existing port-cleanup issue between its own per-service steps on
+this environment, unrelated to this batch — confirmed by isolating each suite). Whole-repo
+typecheck and build clean throughout. **Filing correction, same batch**: `[[F-188]]`, `[[F-189]]`,
+and this finding were all moved straight to "Promoted" in `docs/plans/pending-findings.md` with no
+register row ever written, breaking the pattern this same batch-log's own prior entries
+(`[[F-183]]`/`[[F-184]]`/`[[F-186]]`/`[[F-187]]`) correctly followed — caught and corrected in two
+separate commits (`[[F-188]]`/`[[F-189]]` moved back to "Awaiting confirmation" since they are
+still genuinely unimplemented; this finding's real promotion landed only alongside its real
+register row, this same pass). **Second self-detected correction, same close-out**: the register
+row's first draft used `Resolved: 26 Aug 2026`, matching the finding's original filing date — real
+commit timestamps checked directly (`fe33b2a` at `2026-08-26 16:52:58 +0530`, `93218ad` at
+`2026-08-27 03:40:37 +0530`) show the work genuinely crossed the IST midnight boundary, so the
+correct `Resolved` date is 27 Aug 2026, not the filing date. `pnpm register:check` and
+`pnpm diagram:verify` both green. Commits: `fe33b2a` (Slice 0), `9c24d51` (Slice 1),
+`0679163`/`9ba36a1` (Slice 2a/2b), `55ac988` (Slice 3), `31d3480` (`CLAUDE.md` addendum), `c1303ce`
+(Slice 4), `93218ad` (Slice 5), `1785967` (pending-findings.md filing correction for
+`[[F-188]]`/`[[F-189]]`/this finding), this row (real promotion, register row, and batch-log
+close-out, same pass).
+
 ---
 
 ## Queued, not yet batched
