@@ -692,6 +692,16 @@ also dormant. A handful of inert root-wrapper `text-ink`/`text-ink-muted` classe
 design (documented in each file) — they keep the git-stash regression diffs byte-identical and
 still resolve to valid F-146 semantic tokens.
 
+**Correction, 27 Aug 2026** (append-only): Slice F's commit message (`4ac7272`) and the
+`PwaInstallPrompt.tsx` line above describe that file as "a `brand-primary` consumer the plan's
+grep missed". That framing is inaccurate — `PwaInstallPrompt.tsx` was inside Slice F's scope from
+the start: the plan-mode document's verification gate required "`var(--brand-primary)` — zero
+consumers across `apps/guest-member-pwa/src`", which necessarily includes it. The file-list table
+enumerated five files and not this one, and the consumer was located during implementation via
+the Tailwind-class grep rather than the arbitrary-value grep — but the *scope* (the zero-consumers
+gate) always covered it. The migration itself is correct and needs no code change; only this
+record needed the correction.
+
 **F-167 (Open) — discharged by Slice D (`811b33a`), Chief to decide register status.** See the
 Slice D entry above: `--slot-selected-surface` went from the weak 10% brand tint F-167 describes
 to a solid `accent-700` fill + light label/meta tokens. Slice D did not touch the register.
