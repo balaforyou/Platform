@@ -525,11 +525,16 @@ close-out, same pass).
 
 ---
 
-## Batch 22 — F-192 guest-PWA Organic migration (JBC Migration wireframe), in progress
+## Batch 22 — F-192 guest-PWA Organic migration (JBC Migration wireframe)
 
 **Findings:** F-192
-**Status:** In progress (Slices A–E done; Slice F pending)
-**Handed off:** 27 Aug 2026
+**Status:** All six slices (A–F) landed, verified, and pushed. **Awaiting Chief close-out** —
+register row + `pending-findings.md` promotion not yet written (deliberately deferred to Chief per
+this file's own rule below); F-167 register-status decision pending; frames 03/04 deferred work
+needs scheduling. Not `Done` until those land.
+**Handed off:** 27 Aug 2026 · **Slices complete:** 27 Aug 2026
+**Commits:** `638f848` (A) · `5bdc2c8` (B) · `d5b9217` (C) · `811b33a` + `2085e6e` (D) ·
+`b70db9c` + `01b1269` (E) · `4ac7272` (F). Plus per-slice batch-log back-reference rows below.
 
 Six-slice (A–F) visual migration of `guest-member-pwa`'s booking flow off the F-146 palette onto
 the Organic system per `wireframe/Badminton Court Booking PWA_Latest/JBC Migration.dc.html` (token
@@ -650,6 +655,70 @@ rate-summary + BookingPay's pay button/amount/verified badge **byte-identical**;
 (full booking→pay→simulate flow) passes. `--brand-primary` after Slice E: `BookingPay.tsx:209`
 removed; remaining = `BookingConfirmation.tsx:96`, `BookingHistory.tsx:155`, ~13 in `main.tsx`
 (Slice F scope). `pnpm diagram:verify` green.
+
+**Slice F — commit `4ac7272`.** Final token migration, batch close. Six files:
+`main.tsx` (MainDashboard body + `renderMemberSessionCard` + `upcomingBadge` + `ProtectedRoute`
+spinner), `BookingConfirmation.tsx` (loading/error + "Go to Dashboard" link — the last
+`bg-surface-mint` on that screen — + pending amber → `--slot-almostfull-*`), `BookingHistory.tsx`
+(loading/error + `<h2>` accent-word trick dropped + "Go Dashboard" pill + `getStatusBadge` HELD
+amber → `--slot-almostfull-*` / CANCELLED red → muted `--color-destructive` + cancel-hover warm),
+`CancelBookingModal.tsx` (`bg-black/80` → `--scrim-warm`; `#dc2626` → `--color-destructive`; close
+button `p-1.5` ~34px → real 44px per frame 13's "fix it in code"; copy capitalised),
+`LoginScreen.tsx` (shared dark band on sign-in + OTP, OTP in-band back arrow removed — the page's
+"Wrong number?" already does `setOtpSent(false)`; error banner → `--color-destructive`; the
+"never migrated" authenticated card fully tokenised), `PwaInstallPrompt.tsx` (a `brand-primary`
+**Tailwind-class** consumer the plan's `[var(--brand-primary)]` grep missed — `bg-brand-primary`
+→ `accent-700`, `bg-surface-mint`/`font-outfit` → neutral).
+
+**Scope boundary confirmed during Slice F planning:** wireframe frames **03** (`NEW · name capture`
+modal) and **04** (`NEW · landing with a booking` — the dashboard "upcoming-to-top" restructure +
+profile menu) are `NEW` feature work, **not migration**. A whole-repo search found **no
+"Stream 2 / Stream 3"** anywhere (code, docs, plan file) and **no "Edit your name" / name-editing
+control** in any component — the frame-04 profile-menu "Edit your name" button is a mockup element
+with zero implementation. Slice F re-tokened the *current* MainDashboard markup only.
+**→ For Chief: frames 03 & 04 are unscheduled `NEW` work with no code owner — needs a decision on
+whether/when to build (they were the original handover's "Streams 2–3 deferred to later
+investigation").**
+
+**Batch result — F-146 → Organic migration is complete for `guest-member-pwa`:**
+`var(--brand-primary)` has **zero styling consumers app-wide** (verified against *both* the
+`bg-[var(--brand-primary)]` arbitrary-value form and the `brand-primary` Tailwind-class form; the
+single remaining textual reference is `BookingPay.tsx:194`'s defensive `getComputedStyle` *read*
+of the runtime value for the Razorpay `theme.color` fallback, primary path `tenant.themeColor`).
+`bg-surface-mint` and `font-outfit`: **zero app-wide.** `--brand-primary` stays defined in
+`index.css` and set at runtime by `TenantContext.tsx:116`, **fully dormant — not aliased**, per
+the handover's standing decision. `tailwind.config.js`'s `brand.*` token block is left in place,
+also dormant. A handful of inert root-wrapper `text-ink`/`text-ink-muted` classes remain by
+design (documented in each file) — they keep the git-stash regression diffs byte-identical and
+still resolve to valid F-146 semantic tokens.
+
+**F-167 (Open) — discharged by Slice D (`811b33a`), Chief to decide register status.** See the
+Slice D entry above: `--slot-selected-surface` went from the weak 10% brand tint F-167 describes
+to a solid `accent-700` fill + light label/meta tokens. Slice D did not touch the register.
+
+**Verification across the batch:** every slice — build + `pnpm -r typecheck` clean; live browser
+on both real tenants (jbc `#166534`, courtowner1 `#e11d48`); git-stash before/after
+computed-style capture proving the already-migrated parts byte-identical; e2e vs
+`badminton_db_e2e` holding steady at **3 passed / 5 failed / 1 skipped** from Slice C onward
+(the 5 failures pre-existing — `f023` login-input timeout stash-proven in Slice C, `f041`/`f043`/
+`f061` documented fixture gaps in `apps/guest-member-pwa/CLAUDE.md`). Slice F's three passing
+specs (`guest-booking`, `member-self-confirm`, `pwa-install-dismissal`) between them assert every
+e2e-locked Slice F string/id: `#confirmation-title` "Booking Confirmed!", `text=Cancel Your Match`,
+`#member-session-card` + "Attendance confirmed" + "No recurring member session is scheduled for
+you today.", `#confirm-member-attendance-btn`, `#book-court-dashboard-btn`, `text=Welcome back to
+<appName>`, `Install <appName>` + `Later`, and the full phone-OTP login flow.
+`pnpm register:check` + `pnpm diagram:verify` green after each slice. One mid-batch correction
+appended above (Slice D's over-broad `--brand-primary` claim, `2085e6e`).
+
+**Still owned by Chief at close-out (not done by the implementing thread):**
+1. **File F-192.** It has no `pending-findings.md` entry and no `findings_register.md` row yet
+   (deliberate — see `docs/plans/pending-findings.md` process rules; `scripts/check-register.mjs`
+   requires a `Confirmed-ID:` line in "Promoted" for any ID ≥ F-179 before its register row is
+   valid). Chief adds the pending-findings confirmation, then the register row, then flips this
+   entry's Status to `Done`.
+2. **F-167 register status** — Resolved-by-Slice-D (`811b33a`), or keep Open for its own pass.
+3. **Wireframe frames 03 & 04** — schedule the `NEW` name-capture modal + dashboard restructure,
+   or explicitly shelve them.
 
 **F-192 ID:** confirmed by the Chief thread as next-available (independently re-verified against
 `origin/main` `ae2238c` — zero references anywhere; `[[F-191]]`'s filing `d05f3f8` is the most
