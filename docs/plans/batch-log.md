@@ -528,7 +528,7 @@ close-out, same pass).
 ## Batch 22 — F-192 guest-PWA Organic migration (JBC Migration wireframe), in progress
 
 **Findings:** F-192
-**Status:** In progress (Slices A–C done; Slices D–F pending)
+**Status:** In progress (Slices A–D done; Slices E–F pending)
 **Handed off:** 27 Aug 2026
 
 Six-slice (A–F) visual migration of `guest-member-pwa`'s booking flow off the F-146 palette onto
@@ -586,6 +586,32 @@ zero `surface-mint`/`font-outfit`/`brand-primary` in either `<main>`; diff scope
 `guest-booking` (exercises both migrated screens) went red→green, `f023-full-system` went
 green→red on a pre-existing `LoginScreen` phone-input timeout, **confirmed pre-existing by a
 git-stash re-run failing identically without Slice C**. `pnpm diagram:verify` green.
+
+**Slice D — commit `811b33a`.** CourtBooking completion (was half-migrated by F-190 Slice 2a/2b).
+`index.css`: the 5 `--slot-*` token values repointed — `--slot-selected-surface`/`-border` from a
+10% `--brand-primary` tint to a **solid `var(--color-accent-700)` fill**, `--slot-available-border`
+→ `--color-neutral-300`, `--slot-available-accent` → `--color-accent-2-700` (sage); amber
+`--slot-almostfull-*` unchanged. **`--brand-primary` now has zero consumers anywhere** (still
+defined + set at runtime, dormant). `CourtBooking.tsx`: slot-card time/price text →
+`--slot-selected-label` (accent-100) when selected, seats line → `--slot-selected-meta`
+(accent-200); **sticky reserve button `primaryReserveBtn` → `accent-400` fill / `neutral-900`
+text** (old `accent-700`-on-`neutral-900` measured ~2.25:1, below WCAG AA's 3:1 UI floor; new
+~6.8:1); DAY/START `bg-surface-mint` card wrappers dropped → plain sections on cream per frame 08;
+loading/error/empty/`bookingError` states re-themed; `font-outfit` dropped. The wrapper's inert
+`text-ink` kept as-is so the Slice 2a/2b parts stay byte-identical. Verified: build/typecheck
+clean; compiled CSS confirms no `--brand-primary` in any `--slot-*` value; live browser both
+tenants (JBC full flow + courtowner1 error/loading); **git-stash before/after computed-style
+capture of the 12 Slice 2a/2b elements → byte-identical**; e2e vs `badminton_db_e2e`
+**3 passed / 5 failed / 1 skipped**, identical spec set to Slice C (all 5 fail at login/fixtures,
+not at a CourtBooking locator), `guest-booking` + `findings-verification` pass. `pnpm
+diagram:verify` green.
+
+**F-167 (Open) overlap — for Chief at close-out, NOT self-resolved.** `findings_register.md:138`
+is exactly "the selected-slot highlight (`--slot-selected-surface`) is weak … a 10% brand tint
+over white … likely a contrast or tint-strength adjustment." Slice D replaces that tint with a
+solid `accent-700` fill + light text (`811b33a`), which effectively discharges F-167. Chief to
+decide at batch close-out whether to mark F-167 Resolved and reference this commit; Slice D did
+not touch the register.
 
 **F-192 ID:** confirmed by the Chief thread as next-available (independently re-verified against
 `origin/main` `ae2238c` — zero references anywhere; `[[F-191]]`'s filing `d05f3f8` is the most
