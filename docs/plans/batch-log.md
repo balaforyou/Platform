@@ -525,6 +525,39 @@ close-out, same pass).
 
 ---
 
+## Batch 22 — F-192 guest-PWA Organic migration (JBC Migration wireframe), in progress
+
+**Findings:** F-192
+**Status:** In progress (Slice A done; Slices B–F pending)
+**Handed off:** 27 Aug 2026
+
+Six-slice (A–F) visual migration of `guest-member-pwa`'s booking flow off the F-146 palette onto
+the Organic system per `wireframe/Badminton Court Booking PWA_Latest/JBC Migration.dc.html` (token
+diff sheet, lines 1014–1099) — the follow-on to `[[F-190]]`. Slice A = the token file
+(`apps/guest-member-pwa/src/index.css`), foundation-only and additive, same discipline as F-190
+Slice 0: no screen markup changes, no live-consumed token repointed. The diff sheet's WAS→BECOMES
+repoints (`--surface-background`→cream, `--mint-surface`, `--border-*`, the slot tokens) each move
+into the per-screen slice that also edits the component, so a contrast-sensitive change (e.g. a
+solid `--slot-selected` fill needs `CourtBooking.tsx`'s slot text colour changed in the same
+commit) never lands split across two commits.
+
+**Slice A — commit `638f848`.** Renamed the dead Inter `--font-body` shorthand →
+`--font-body-legacy-inter` (zero consumers, frees the canonical name for the Figtree token in a
+later slice); added `--slot-selected-label`, `--slot-selected-meta`, `--scrim-warm`,
+`--color-destructive` (zero consumers today). Verified: tsc/build clean; compiled-CSS before/after
+diff = only the rename + 4 added lines; full-source grep confirms nothing reads `var(--font-body)`
+or the new names outside `index.css`; live browser both tenants (jbc `#166534`, courtowner1
+`#e11d48`), git-stash before/after computed-style capture on the dashboard and on `CourtBooking`
+with a slot selected (71 / 114 elements) — every rendered element byte-identical, only the `:root`
+token-declaration lines differ. `pnpm diagram:verify` green (register not touched).
+
+**F-192 ID:** confirmed by the Chief thread as next-available (independently re-verified against
+`origin/main` `ae2238c` — zero references anywhere; `[[F-191]]`'s filing `d05f3f8` is the most
+recent register-touching commit). Deliberately **not** yet written into `findings_register.md` or
+`docs/plans/pending-findings.md` — register/pending-findings filing is deferred to batch close-out,
+landing alongside the real register row once all six slices are verified. This entry is the
+implementing thread's in-progress record until then.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
