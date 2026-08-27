@@ -528,7 +528,7 @@ close-out, same pass).
 ## Batch 22 — F-192 guest-PWA Organic migration (JBC Migration wireframe), in progress
 
 **Findings:** F-192
-**Status:** In progress (Slices A–B done; Slices C–F pending)
+**Status:** In progress (Slices A–C done; Slices D–F pending)
 **Handed off:** 27 Aug 2026
 
 Six-slice (A–F) visual migration of `guest-member-pwa`'s booking flow off the F-146 palette onto
@@ -567,6 +567,25 @@ bodies byte-identical before/after; e2e vs `badminton_db_e2e` **3 passed / 5 fai
 matching the documented late-IST-day baseline (`apps/guest-member-pwa/CLAUDE.md:22`), all 5
 failures pre-existing (`f041`/`f043`/`f061` fixture gaps, `guest-booking` = `alignTimeToBoundary`
 IST-boundary seed bug). `pnpm diagram:verify` green (register not touched).
+
+**Slice C — commit `d5b9217`.** `BranchDashboard.tsx` + `BranchAbout.tsx` (both "never
+migrated"), rendering inside Slice B's Organic band. Dashboard: drops the gradient/`shadow-2xl`
+hero; hardcoded "Coimbatore" pill → `MapPin` + real `branchAbout.address`; generic heading →
+real `branchAbout.name` (both already in the `/branches/:id/about` response — no new fetch);
+pool cards white-on-cream with `accent-200`/`accent-800` price pill, `font-mono` kept.
+About: back button → "Back to venue" pill; directions/review links re-themed; info panel
+`neutral-100`/`radius-lg`; **removes the two hardcoded `images.unsplash.com` photo fallbacks**
+(wireframe annotation) → Organic "No photos yet" placeholder, real photos get
+`filter: saturate(.72) contrast(.94)`. All four e2e ids preserved (`view-about-branch-btn`,
+`court-pool-card-*`, `branch-directions-link`, `branch-review-link`); `guest-booking.spec.ts`'s
+two copy-based locators updated in the same commit (`Welcome to the Branch Dashboard` →
+`COURT CATEGORIES`, `Back to Court Dashboard` → `Back to venue`). Verified: build/typecheck
+clean; live browser both tenants (jbc success + courtowner1 error state), every token resolves,
+zero `surface-mint`/`font-outfit`/`brand-primary` in either `<main>`; diff scope = exactly the
+3 files. e2e vs `badminton_db_e2e` **3 passed / 5 failed / 1 skipped** — same profile as Slice B;
+`guest-booking` (exercises both migrated screens) went red→green, `f023-full-system` went
+green→red on a pre-existing `LoginScreen` phone-input timeout, **confirmed pre-existing by a
+git-stash re-run failing identically without Slice C**. `pnpm diagram:verify` green.
 
 **F-192 ID:** confirmed by the Chief thread as next-available (independently re-verified against
 `origin/main` `ae2238c` — zero references anywhere; `[[F-191]]`'s filing `d05f3f8` is the most
