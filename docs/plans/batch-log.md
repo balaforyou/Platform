@@ -613,6 +613,18 @@ solid `accent-700` fill + light text (`811b33a`), which effectively discharges F
 decide at batch close-out whether to mark F-167 Resolved and reference this commit; Slice D did
 not touch the register.
 
+**Correction, 27 Aug 2026** (append-only, per project discipline): Slice D's commit message
+(`811b33a`) overstated `--brand-primary`'s status as "zero consumers anywhere in the app." A
+direct whole-app grep (`var(--brand-primary)` across `apps/guest-member-pwa/src`) finds **16 live
+consumers still present**: `BookingConfirmation.tsx:96`, `BookingPay.tsx:209`,
+`BookingHistory.tsx:155`, and 13 sites in `main.tsx` (`MainDashboard` body +
+`renderMemberSessionCard` — Slice E/F scope). What is actually true, and what Slice D's evidence
+supports: **`CourtBooking.tsx` (this slice's own file) has zero remaining `--brand-primary`
+consumers** — the `--slot-*` repoint completed exactly what Slice D needed, no more. The variable
+becomes fully dormant only once Slices E and F land. The mistake: the pre-commit grep was run on
+the two changed files only and the result was generalised to the whole app without re-running it
+app-wide.
+
 **F-192 ID:** confirmed by the Chief thread as next-available (independently re-verified against
 `origin/main` `ae2238c` — zero references anywhere; `[[F-191]]`'s filing `d05f3f8` is the most
 recent register-touching commit). Deliberately **not** yet written into `findings_register.md` or
