@@ -83,6 +83,35 @@ Confirmed: 27 Aug 2026
 
 ## Promoted (audit trail)
 
+### guest-pwa-organic-migration-completion
+Batch: 22
+Surfaced: 27 Aug 2026
+Description: Completes the guest-member-pwa visual migration onto the Organic design system that
+F-190 (Batch 21) started. F-190 migrated the six booking-flow screens but left the venue-selection
+path (BranchSelect, BranchDashboard, BranchAbout), the dashboard (MainDashboard body,
+renderMemberSessionCard), the tenant-resolution loading/error screens (TenantContext, shared),
+and PwaInstallPrompt still on the F-146 palette, and CourtBooking only half-migrated (F-190 Slice
+2a/2b did shape/layout but the slot-state colours still resolved through --brand-primary).
+Migration only — no new capability. Six review-gated slices A-F: A = foundation tokens (additive),
+B = tenant-resolve screens + BranchSelect + a shared dark band via the Layout header, C =
+BranchDashboard + BranchAbout, D = CourtBooking completion (the --slot-* token repoint), E =
+BookingPay + a stacked-dark-band cleanup (Slice B's shared band had made CourtBooking's and
+BookingPay's own local dark headers redundant), F = MainDashboard/renderMemberSessionCard/the
+Booking* loading-error states/CancelBookingModal/LoginScreen band/PwaInstallPrompt. End state:
+zero --brand-primary styling consumers anywhere in the app (both the bg-[var(--brand-primary)]
+and the brand-primary Tailwind-class forms); the variable stays defined and set at runtime by
+TenantContext, fully dormant, not aliased. Real fixes found along the way, not assumed from the
+plan: the stacked-dark-band regression (Slice E); a WCAG contrast failure on the reserve button
+(2.25:1 -> 6.83:1, Slice D); a sub-44px close-target on the cancel modal (Slice F); two hotlinked
+Unsplash photo fallbacks replaced with an honest empty state (Slice C); Razorpay's checkout
+overlay showing a hardcoded 'Badminton Hub' / '#e11d48' instead of the real tenant name/theme
+(Slice E). Discharges F-167 (the weak 10% selected-slot tint it describes is exactly what Slice
+D's solid-fill replacement fixes). Wireframe frames 03 (NEW name-capture modal) and 04 (NEW
+dashboard restructure) confirmed as genuinely new feature work with no existing code or design to
+build against -- deferred, needs its own scoping pass when scheduled.
+Confirmed-ID: F-192
+Confirmed: 27 Aug 2026
+
 ### fast-grid-guest-booking-visual-revamp
 Batch: 21
 Surfaced: 26 Aug 2026
