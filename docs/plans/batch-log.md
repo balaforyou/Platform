@@ -528,7 +528,7 @@ close-out, same pass).
 ## Batch 22 — F-192 guest-PWA Organic migration (JBC Migration wireframe), in progress
 
 **Findings:** F-192
-**Status:** In progress (Slice A done; Slices B–F pending)
+**Status:** In progress (Slices A–B done; Slices C–F pending)
 **Handed off:** 27 Aug 2026
 
 Six-slice (A–F) visual migration of `guest-member-pwa`'s booking flow off the F-146 palette onto
@@ -550,6 +550,23 @@ or the new names outside `index.css`; live browser both tenants (jbc `#166534`, 
 `#e11d48`), git-stash before/after computed-style capture on the dashboard and on `CourtBooking`
 with a slot selected (71 / 114 elements) — every rendered element byte-identical, only the `:root`
 token-declaration lines differ. `pnpm diagram:verify` green (register not touched).
+
+**Slice B — commit `5bdc2c8`.** Tenant-resolve loading/error screens + `BranchSelect.tsx` +
+the shared dark band. `packages/ui-shared/src/context/TenantContext.tsx` gains additive
+`loadingFallback`/`errorFallback` props (default path unchanged → **admin-web**, which also wraps
+`<TenantProvider>` and has none of the Organic tokens, is byte-identical, proven by a git-stash
+before/after computed-style capture of its tenant-not-found screen). `main.tsx` passes Organic
+fallbacks and migrates `Layout`'s header to the `--color-neutral-900` band (Caprasimo wordmark,
+route-derived state label, round `logout-btn` — `id` preserved, real e2e locator dependency) +
+footer; this changes the chrome on all 8 authenticated routes, their bodies untouched.
+`BranchSelect.tsx` fully re-themed (Caprasimo, white cards, `accent-700`/sage icons; 4×
+`text-[var(--brand-primary)]` → `accent-700`, `--brand-primary` left dormant). Verified: `pnpm -r
+typecheck` + both app builds clean; live browser both tenants (loading forced via a temp resolve
+delay, reverted; identical across tenants); regression — `CourtBooking`/`BookingHistory` `<main>`
+bodies byte-identical before/after; e2e vs `badminton_db_e2e` **3 passed / 5 failed / 1 skipped**,
+matching the documented late-IST-day baseline (`apps/guest-member-pwa/CLAUDE.md:22`), all 5
+failures pre-existing (`f041`/`f043`/`f061` fixture gaps, `guest-booking` = `alignTimeToBoundary`
+IST-boundary seed bug). `pnpm diagram:verify` green (register not touched).
 
 **F-192 ID:** confirmed by the Chief thread as next-available (independently re-verified against
 `origin/main` `ae2238c` — zero references anywhere; `[[F-191]]`'s filing `d05f3f8` is the most
