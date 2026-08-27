@@ -68,7 +68,24 @@ const errorIconWrap: React.CSSProperties = {
   width: '56px',
 };
 
-export function TenantProvider({ children }: { children: React.ReactNode }) {
+export function TenantProvider({
+  children,
+  loadingFallback,
+  errorFallback,
+}: {
+  children: React.ReactNode;
+  /**
+   * Optional app-supplied replacement for the default tenant-resolution loading screen.
+   * When omitted, the neutral default below renders (admin-web relies on this). The guest PWA
+   * passes an Organic-themed version.
+   */
+  loadingFallback?: React.ReactNode;
+  /**
+   * Optional app-supplied replacement for the default tenant-not-found / error screen.
+   * Receives the error message. When omitted, the neutral default below renders.
+   */
+  errorFallback?: (message: string) => React.ReactNode;
+}) {
   const [tenant, setTenant] = useState<TenantBranding | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +168,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (loading) {
+    if (loadingFallback !== undefined) return <>{loadingFallback}</>;
     return (
       <div style={fullScreenCenter}>
         <style>{'@keyframes tenant-spin { to { transform: rotate(360deg); } }'}</style>
@@ -163,6 +181,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   }
 
   if (error || !tenant) {
+    if (errorFallback) return <>{errorFallback(error ?? 'Tenant not found')}</>;
     return (
       <div style={fullScreenCenter}>
         <div style={errorCard}>

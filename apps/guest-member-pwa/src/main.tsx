@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { apiRequest, TenantProvider, useTenant, AuthProvider, useAuth } from '@badminton/ui-shared';
 import LoginScreen from './components/LoginScreen';
@@ -50,43 +50,228 @@ function formatUserContact(user: any) {
 }
 
 /**
+ * Generic pre-resolve dark band. Tenant identity is not known yet at this point, so this shows a
+ * neutral platform wordmark rather than a tenant name/logo.
+ */
+function StartupBand({ label }: { label: string }) {
+  return (
+    <div
+      className="flex-none flex items-center justify-between"
+      style={{ background: 'var(--color-neutral-900)', padding: '15px 18px' }}
+    >
+      <span style={{ fontFamily: 'var(--font-heading)', fontSize: '19px', color: 'var(--color-bg)' }}>
+        Courts
+      </span>
+      <span
+        style={{
+          fontFamily: 'var(--font-body-organic)',
+          fontSize: '11px',
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          color: 'var(--color-neutral-400)',
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/** Organic-themed replacement for TenantProvider's default tenant-resolution loading screen. */
+function TenantResolveLoading() {
+  return (
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
+      <style>{'@keyframes organic-tenant-spin { to { transform: rotate(360deg); } }'}</style>
+      <StartupBand label="STARTING UP" />
+      <div className="flex-1 flex flex-col items-center justify-center gap-[18px] p-8">
+        <div
+          style={{
+            width: '52px',
+            height: '52px',
+            borderRadius: '999px',
+            border: '4px solid var(--color-accent-200)',
+            borderTopColor: 'var(--color-accent-700)',
+            animation: 'organic-tenant-spin 1s linear infinite',
+          }}
+        />
+        <div
+          style={{
+            fontFamily: 'var(--font-body-organic)',
+            fontSize: '14.5px',
+            fontWeight: 600,
+            color: 'var(--color-neutral-800)',
+          }}
+        >
+          Finding your court
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Organic-themed replacement for TenantProvider's default tenant-not-found screen. */
+function TenantResolveError({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
+      <StartupBand label="COURT NOT FOUND" />
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div
+          className="w-full text-center"
+          style={{
+            maxWidth: '448px',
+            background: 'var(--color-neutral-100)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: 'var(--shadow-lg)',
+            padding: '32px',
+          }}
+        >
+          <div
+            className="mx-auto flex items-center justify-center"
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '999px',
+              background: 'var(--color-accent-100)',
+              color: 'var(--color-accent-700)',
+              marginBottom: '24px',
+            }}
+          >
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <h1
+            style={{
+              fontFamily: 'var(--font-heading)',
+              fontWeight: 400,
+              fontSize: '24px',
+              lineHeight: 1.15,
+              color: 'var(--color-text)',
+              margin: '0 0 8px',
+            }}
+          >
+            Can&rsquo;t load this venue
+          </h1>
+          <p
+            style={{
+              fontFamily: 'var(--font-body-organic)',
+              fontSize: '14px',
+              lineHeight: 1.55,
+              color: 'var(--color-neutral-800)',
+              margin: '0 0 24px',
+            }}
+          >
+            We couldn&rsquo;t resolve the branding for this address. In development, check that
+            Tenant Management is running and try appending{' '}
+            <code
+              style={{
+                background: 'var(--color-neutral-200)',
+                borderRadius: '4px',
+                color: 'var(--color-accent-800)',
+                fontFamily: 'ui-monospace, monospace',
+                padding: '2px 4px',
+              }}
+            >
+              ?tenant=courtowner1
+            </code>{' '}
+            to the URL.
+            {message ? <><br /><span style={{ fontSize: '12px', color: 'var(--color-neutral-600)' }}>{message}</span></> : null}
+          </p>
+          <a
+            href="?tenant=courtowner1"
+            className="inline-block w-full"
+            style={{
+              background: 'var(--color-accent-700)',
+              borderRadius: '14px',
+              color: 'var(--color-accent-100)',
+              fontFamily: 'var(--font-body-organic)',
+              fontWeight: 700,
+              padding: '12px 16px',
+              textDecoration: 'none',
+            }}
+          >
+            Load Courtowner1 (default)
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Uppercase state label for the shared dark band, by route. */
+function bandLabelForPath(pathname: string): string {
+  if (pathname === '/') return 'HOME';
+  if (pathname === '/branches') return 'CHOOSE A VENUE';
+  if (pathname === '/bookings/my') return 'MY BOOKINGS';
+  if (/^\/branches\/[^/]+\/about$/.test(pathname)) return 'VENUE INFO';
+  if (/^\/branches\/[^/]+\/book\//.test(pathname)) return 'BOOK A COURT';
+  if (/^\/branches\/[^/]+$/.test(pathname)) return 'COURT CATEGORIES';
+  if (/^\/bookings\/[^/]+\/pay$/.test(pathname)) return 'PAYMENT';
+  if (/^\/bookings\/[^/]+\/confirmation$/.test(pathname)) return 'CONFIRMED';
+  return '';
+}
+
+/**
  * Shared Layout wrapper containing navbar, footer, and PwaInstallPrompt.
  */
 function Layout() {
   const { tenant } = useTenant();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
+  const { pathname } = useLocation();
+  const stateLabel = bandLabelForPath(pathname);
 
   return (
-    <div className="min-h-screen bg-surface-alt text-ink flex flex-col">
-      {/* Header / Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-edge bg-surface-header backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center space-x-3 group">
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+      {/* Shared dark band -- identical chrome on every authenticated screen */}
+      <header
+        className="sticky top-0 z-50 w-full"
+        style={{ background: 'var(--color-neutral-900)' }}
+      >
+        <div className="max-w-7xl mx-auto flex items-center justify-between" style={{ padding: '15px 18px' }}>
+          <Link to="/" className="flex items-center gap-3 group" aria-label="Home">
             {tenant?.logo ? (
               <img src={tenant.logo} alt={tenant.appName} className="h-8 w-auto object-contain rounded" />
             ) : (
-              <div className="h-8 w-8 rounded-lg bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 flex items-center justify-center text-[var(--brand-primary)]">
-                <span className="font-extrabold text-sm">{tenant?.appName?.[0]?.toUpperCase()}</span>
-              </div>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '19px', color: 'var(--color-bg)' }}>
+                {tenant?.appName || 'Courts'}
+              </span>
             )}
-            <span className="font-bold text-lg tracking-wider uppercase font-outfit group-hover:text-[var(--brand-primary)] transition-colors">
-              {tenant?.appName}
-            </span>
           </Link>
 
-          <div className="flex items-center space-x-4">
-            <Link to="/bookings/my" className="text-xs text-ink-muted hover:text-ink transition-colors font-semibold" id="nav-my-bookings-btn">
+          <div className="flex items-center gap-3">
+            {stateLabel && (
+              <span
+                className="hidden sm:inline"
+                style={{
+                  fontFamily: 'var(--font-body-organic)',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  letterSpacing: '0.1em',
+                  color: 'var(--color-neutral-400)',
+                }}
+              >
+                {stateLabel}
+              </span>
+            )}
+            <Link
+              to="/bookings/my"
+              id="nav-my-bookings-btn"
+              className="transition-colors"
+              style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-400)' }}
+            >
               My Bookings
             </Link>
-            <div className="flex items-center space-x-2 bg-surface-mint px-3 py-1.5 rounded-full border border-edge text-xs text-ink-muted">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-              <span>{user?.roles?.join(', ') || 'member'}</span>
-            </div>
             <button
               onClick={logout}
-              className="p-2 rounded-full bg-surface-mint hover:bg-red-50 text-ink-muted hover:text-red-700 border border-edge transition-all"
               title="Logout"
               id="logout-btn"
+              className="flex items-center justify-center flex-none transition-colors"
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '999px',
+                background: 'var(--color-neutral-800)',
+                border: '1px solid var(--color-neutral-700)',
+                color: 'var(--color-accent-300)',
+              }}
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -100,7 +285,16 @@ function Layout() {
       </main>
 
       {/* Footer */}
-      <footer className="py-6 border-t border-edge bg-surface-alt text-center text-xs text-ink-muted font-medium">
+      <footer
+        className="py-6 text-center"
+        style={{
+          borderTop: '1px solid var(--color-neutral-300)',
+          background: 'var(--color-bg)',
+          color: 'var(--color-neutral-600)',
+          fontFamily: 'var(--font-body-organic)',
+          fontSize: '12px',
+        }}
+      >
         &copy; 2026 {tenant?.name}. Powered by Whitelabel Badminton Platform.
       </footer>
       <PwaInstallPrompt />
@@ -472,7 +666,10 @@ function AppRoutes() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <TenantProvider>
+      <TenantProvider
+        loadingFallback={<TenantResolveLoading />}
+        errorFallback={(message) => <TenantResolveError message={message} />}
+      >
         <AuthProvider>
           <BrowserRouter>
             <AppRoutes />
