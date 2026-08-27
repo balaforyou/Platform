@@ -37,7 +37,7 @@ test.describe('Guest Booking Flow E2E', () => {
 
     // 4. Verify Branch Dashboard
     await expect(page).toHaveURL(/\/branches\/22222222-2222-2222-2222-222222222222/);
-    await expect(page.locator('text=Welcome to the Branch Dashboard')).toBeVisible();
+    await expect(page.locator('text=COURT CATEGORIES')).toBeVisible();
 
     // Go to about page
     await page.click('#view-about-branch-btn');
@@ -45,7 +45,7 @@ test.describe('Guest Booking Flow E2E', () => {
     await expect(page.locator('text=Cafeteria')).toBeVisible();
     
     // Back to dashboard
-    await page.click('text=Back to Court Dashboard');
+    await page.click('text=Back to venue');
     await page.click('[id^="court-pool-card-courtpool-e2e-001"]');
 
     // 5. Verify Slot Grid Loads

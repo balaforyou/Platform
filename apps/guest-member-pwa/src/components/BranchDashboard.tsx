@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { Calendar, Info, MapPin, Activity, HelpCircle, ChevronRight } from 'lucide-react';
+import { Calendar, Info, MapPin, Activity, ChevronRight } from 'lucide-react';
 
 export default function BranchDashboard() {
   const { branchId } = useParams();
@@ -42,123 +42,201 @@ export default function BranchDashboard() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
-        <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-ink-muted text-sm font-medium">Loading branch dashboard...</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-4" style={{ background: 'var(--color-bg)' }}>
+        <Activity className="h-10 w-10 animate-spin" style={{ color: 'var(--color-accent-700)' }} />
+        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-700)' }}>
+          Loading venue&hellip;
+        </p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
-        <HelpCircle className="h-12 w-12 text-red-600 mb-4" />
-        <h3 className="text-lg font-bold">Failed to load branch</h3>
-        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error}</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] p-4 gap-3 text-center" style={{ background: 'var(--color-bg)' }}>
+        <span
+          className="flex items-center justify-center"
+          style={{ width: '48px', height: '48px', borderRadius: '999px', background: 'var(--color-neutral-200)', color: 'var(--color-neutral-600)' }}
+        >
+          <MapPin className="h-6 w-6" />
+        </span>
+        <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '19px', color: 'var(--color-text)' }}>
+          Couldn&rsquo;t load this venue
+        </h3>
+        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', lineHeight: 1.55, color: 'var(--color-neutral-600)', maxWidth: '260px' }}>
+          {error}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      {/* Branch Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-8 rounded-3xl bg-gradient-to-tr from-surface-mint to-surface border border-edge shadow-2xl relative overflow-hidden">
-        <div className="space-y-3 relative z-10">
-          <div className="inline-flex items-center space-x-1.5 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 text-[var(--brand-primary)] px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider font-outfit">
-            <MapPin className="h-3.5 w-3.5" />
-            <span>Coimbatore</span>
-          </div>
-          <h2 className="text-3xl font-extrabold tracking-tight font-outfit text-ink">
-            Welcome to the <span className="text-[var(--brand-primary)]">Branch Dashboard</span>
+    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8" style={{ background: 'var(--color-bg)' }}>
+      {/* Branch header -- no gradient hero, plain column on the Layout cream ground */}
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div className="space-y-3">
+          {branchAbout?.address && (
+            <div className="flex items-start gap-2" style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', lineHeight: 1.5, color: 'var(--color-neutral-700)' }}>
+              <MapPin className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--color-accent-700)' }} />
+              <span>{branchAbout.address}</span>
+            </div>
+          )}
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '30px', lineHeight: 1.15, color: 'var(--color-text)' }}>
+            {branchAbout?.name || 'Venue'}
           </h2>
           {branchAbout?.description && (
-            <p className="text-ink-muted text-sm max-w-xl leading-relaxed">
+            <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '13.5px', lineHeight: 1.55, color: 'var(--color-neutral-800)', maxWidth: '36rem' }}>
               {branchAbout.description}
             </p>
           )}
         </div>
-        <div className="shrink-0 relative z-10 flex space-x-3">
+        <div className="shrink-0 flex gap-2.5">
           <Link
             to={`/branches/${branchId}/about`}
-            className="py-3 px-6 rounded-2xl bg-surface-mint hover:bg-edge text-ink border border-edge-strong font-semibold flex items-center space-x-2 transition-all"
             id="view-about-branch-btn"
+            className="inline-flex items-center gap-2 transition-colors"
+            style={{
+              minHeight: '48px',
+              padding: '0 20px',
+              background: '#fff',
+              border: '1px solid var(--color-neutral-300)',
+              borderRadius: '14px',
+              fontFamily: 'var(--font-body-organic)',
+              fontSize: '13.5px',
+              fontWeight: 700,
+              color: 'var(--color-text)',
+            }}
           >
-            <Info className="h-4 w-4 text-[var(--brand-primary)]" />
-            <span>Branch Info</span>
+            <Info className="h-4 w-4" style={{ color: 'var(--color-accent-700)' }} />
+            <span>Venue info</span>
           </Link>
           <button
             onClick={() => navigate('/branches')}
-            className="py-3 px-6 rounded-2xl bg-surface-mint hover:bg-edge text-ink border border-edge-strong font-semibold transition-all text-xs"
+            className="inline-flex items-center transition-colors"
+            style={{
+              minHeight: '48px',
+              padding: '0 20px',
+              background: 'transparent',
+              border: '1px solid var(--color-neutral-300)',
+              borderRadius: '14px',
+              fontFamily: 'var(--font-body-organic)',
+              fontSize: '13.5px',
+              fontWeight: 700,
+              color: 'var(--color-neutral-700)',
+            }}
           >
-            Switch Branch
+            Switch venue
           </button>
         </div>
       </div>
 
       {/* Resource Pools / Courts Listing */}
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div className="space-y-1">
-          <h3 className="text-xl font-bold font-outfit text-ink">Available Court Categories</h3>
-          <p className="text-ink-muted text-xs">
-            Browse our list of court pools and select one to see availability or book slots.
+          <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
+            COURT CATEGORIES
+          </div>
+          <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', color: 'var(--color-neutral-700)' }}>
+            Browse the court pools at this venue and pick one to see availability.
           </p>
         </div>
 
         {pools.length === 0 ? (
-          <div className="bg-surface-mint border border-edge p-12 rounded-2xl text-center text-ink-muted font-medium">
-            No active court pools found at this branch.
+          <div
+            className="p-12 text-center"
+            style={{
+              background: 'var(--color-neutral-100)',
+              border: '1px solid var(--color-neutral-300)',
+              borderRadius: 'var(--radius-lg)',
+              fontFamily: 'var(--font-body-organic)',
+              color: 'var(--color-neutral-600)',
+            }}
+          >
+            No active court pools found at this venue.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {pools.map((pool) => {
-              const pricingText = pool.pricingMode === 'PER_PERSON' 
-                ? `₹${pool.defaultRate}/player` 
-                : `₹${pool.defaultRate} Flat`;
+              const pricingText = pool.pricingMode === 'PER_PERSON'
+                ? `₹${pool.defaultRate}/player`
+                : `₹${pool.defaultRate} flat`;
 
               return (
                 <div
                   key={pool.id}
                   onClick={() => navigate(`/branches/${branchId}/book/${pool.id}`)}
-                  className="group cursor-pointer bg-surface-mint hover:bg-edge border border-edge hover:border-edge-strong rounded-2xl p-6 transition-all duration-300 shadow-lg flex flex-col justify-between space-y-4 hover:-translate-y-0.5"
+                  className="cursor-pointer flex flex-col gap-3 p-[18px] transition-colors"
+                  style={{
+                    background: '#fff',
+                    border: '1px solid var(--color-neutral-300)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-sm)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-neutral-400)';
+                    e.currentTarget.style.background = 'var(--color-neutral-100)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-neutral-300)';
+                    e.currentTarget.style.background = '#fff';
+                  }}
                   id={`court-pool-card-${pool.id}`}
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-lg font-bold font-outfit text-ink group-hover:text-[var(--brand-primary)] transition-colors">
-                        {pool.name}
-                      </h4>
-                      <div className="text-xs bg-[var(--brand-primary)]/10 text-[var(--brand-primary)] px-2.5 py-1 rounded-full font-bold font-mono">
-                        {pricingText}
-                      </div>
-                    </div>
-
-                    {pool.aboutDescription && (
-                      <p className="text-xs text-ink-muted leading-relaxed">
-                        {pool.aboutDescription}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-muted pt-2 font-mono">
-                      <div>
-                        Capacity: <span className="text-ink">{pool.capacity} seats</span>
-                      </div>
-                      {pool.minOccupancy > 1 && (
-                        <div>
-                          Min Players: <span className="text-ink">{pool.minOccupancy}</span>
-                        </div>
-                      )}
-                      <div>
-                        Duration: <span className="text-ink">{pool.minBookingDurationMinutes}m</span>
-                      </div>
-                    </div>
+                  <div className="flex items-start gap-2.5">
+                    <h4 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '18px', color: 'var(--color-text)', flex: 1 }}>
+                      {pool.name}
+                    </h4>
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        color: 'var(--color-accent-800)',
+                        background: 'var(--color-accent-200)',
+                        padding: '5px 10px',
+                        borderRadius: '999px',
+                      }}
+                    >
+                      {pricingText}
+                    </span>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-edge text-xs text-ink-muted group-hover:text-ink transition-colors">
-                    <span className="flex items-center space-x-1.5 font-semibold">
-                      <Calendar className="h-4 w-4 text-[var(--brand-primary)]" />
-                      <span>Check Slots & Book</span>
+                  {pool.aboutDescription && (
+                    <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', lineHeight: 1.5, color: 'var(--color-neutral-600)' }}>
+                      {pool.aboutDescription}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 font-mono" style={{ fontSize: '11.5px', color: 'var(--color-neutral-700)' }}>
+                    <span>
+                      Capacity <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>{pool.capacity}</span>
                     </span>
-                    <ChevronRight className="h-4 w-4 transform group-hover:translate-x-1 transition-transform" />
+                    {pool.minOccupancy > 1 && (
+                      <span>
+                        Min <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>{pool.minOccupancy}</span>
+                      </span>
+                    )}
+                    <span>
+                      Slot <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>{pool.minBookingDurationMinutes}m</span>
+                    </span>
+                  </div>
+
+                  <div
+                    className="flex items-center justify-between"
+                    style={{
+                      paddingTop: '12px',
+                      borderTop: '1px solid var(--color-neutral-200)',
+                      fontFamily: 'var(--font-body-organic)',
+                      fontSize: '12.5px',
+                      fontWeight: 700,
+                      color: 'var(--color-accent-700)',
+                    }}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="h-4 w-4" />
+                      <span>Check slots and book</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4" />
                   </div>
                 </div>
               );
