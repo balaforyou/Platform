@@ -41,7 +41,11 @@
   --font-page-title: 700 28px/1.25 'Inter', system-ui, sans-serif;
   --font-section-title: 700 18px/1.3 'Inter', system-ui, sans-serif;
   --font-card-title: 600 16px/1.4 'Inter', system-ui, sans-serif;
-  --font-body: 400 14px/1.5 'Inter', system-ui, sans-serif;
+  /* Renamed out of --font-body so that name is free for the Organic Figtree token to take in a
+     later slice. This Inter `font` shorthand has zero consumers (as do its six siblings here);
+     kept for now rather than deleted so the existing type scale stays intact until a slice
+     deliberately retires it. */
+  --font-body-legacy-inter: 400 14px/1.5 'Inter', system-ui, sans-serif;
   --font-metadata: 500 12px/1.4 'Inter', system-ui, sans-serif;
   --font-button: 600 15px/1 'Inter', system-ui, sans-serif;
   --font-slot-time: 700 15px/1 'Inter', system-ui, sans-serif;
@@ -113,11 +117,10 @@
   --color-accent-900: #402310;
 
   --font-heading: 'Caprasimo', system-ui, sans-serif;
-  /* Not named --font-body: that name already exists above (line 44) as a full `font` shorthand
-     (weight/size/line-height + Inter) for the existing type scale -- a bare family-name value
-     under the same name would silently redefine it for whichever slice reads it later, even
-     though nothing currently consumes it. Kept distinctly named until an actual migration slice
-     deliberately retires the Inter-based token. */
+  /* The canonical --font-body name is now vacant (the old Inter shorthand was renamed to
+     --font-body-legacy-inter above). --font-body-organic still holds the Figtree family and has
+     live consumers; a later slice repoints those and promotes this to --font-body. Kept as-is
+     here so this slice touches no consumer. */
   --font-body-organic: 'Figtree', system-ui, sans-serif;
 
   --space-1: 4.4px;
@@ -134,6 +137,19 @@
   --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
   --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
   --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+
+  /*
+   * Guest-PWA Organic-migration foundation, Slice A. Additive only -- nothing above is repointed,
+   * matching the F-190 Slice 0 precedent (no screen renders differently after this slice). These
+   * four tokens have zero consumers today; the screens that will use them repoint their own
+   * variables in their own later slices, where the accompanying markup change keeps contrast
+   * correct (e.g. a solid --slot-selected fill needs CourtBooking.tsx's slot text colour to
+   * change in the same commit).
+   */
+  --slot-selected-label: var(--color-accent-100);
+  --slot-selected-meta: var(--color-accent-200);
+  --scrim-warm: rgba(46, 43, 37, 0.72);
+  --color-destructive: #b3261e;
 }
 
 body {
