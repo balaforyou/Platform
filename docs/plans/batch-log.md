@@ -528,7 +528,7 @@ close-out, same pass).
 ## Batch 22 — F-192 guest-PWA Organic migration (JBC Migration wireframe), in progress
 
 **Findings:** F-192
-**Status:** In progress (Slices A–D done; Slices E–F pending)
+**Status:** In progress (Slices A–E done; Slice F pending)
 **Handed off:** 27 Aug 2026
 
 Six-slice (A–F) visual migration of `guest-member-pwa`'s booking flow off the F-146 palette onto
@@ -624,6 +624,32 @@ consumers** — the `--slot-*` repoint completed exactly what Slice D needed, no
 becomes fully dormant only once Slices E and F land. The mistake: the pre-commit grep was run on
 the two changed files only and the result was generalised to the whole app without re-running it
 app-wide.
+
+**Slice E — commit `b70db9c`.** `BookingPay.tsx` + a stacked-dark-band cleanup on both booking
+screens. `BookingPay` was mostly migrated by F-190 Slice 3 (its pay button was already
+`accent-400`/`neutral-900` — the diff sheet's "same decision, two screens" fix was done *here*
+first). Frame-09 remainder: Simulate button emerald → **sage** (`--color-accent-2-*`),
+`paymentError` banner → `--color-destructive` on `neutral-100` (matching Slice D's `bookingError`),
+loading/error states re-themed, and the Razorpay checkout `options` — `theme.color: '#e11d48'` →
+`tenant?.themeColor`, `name: 'Badminton Hub'` → `tenant?.appName || tenant?.name` (both "the
+checkout overlay leaves your brand"; verified on JBC → `#166534` / "JBC Courts"; `useTenant` added).
+
+**Stacked-band cleanup — a Slice-B-introduced regression, fixed here one commit after Slice D.**
+Slice B's shared `Layout` band made the F-190 Slice 2a/3 per-screen dark headers redundant:
+confirmed live that `/branches/:id/book/:poolId` and `/bookings/:id/pay` each rendered **two
+stacked `#2e2b25` blocks** (Layout band `0..74`, local header `74..235`). Slice D "completed"
+CourtBooking but treated `:369` as already-migrated (true as a no-op). Fixed: `CourtBooking.tsx`'s
+dark header → a white pool-summary row + "Change" pill + sage upcoming pill (frame 08);
+`BookingPay.tsx`'s dark back-arrow header → a "Back to slots" `neutral-200` pill;
+`main.tsx` `bandLabelForPath` `/pay` label `PAYMENT` → `CONFIRM AND PAY`. Both screens now render
+**one** dark band. Verified: build/typecheck clean; live browser JBC (one band each, all e2e ids
+present, zero `surface-mint`/`font-outfit`/`brand-primary`/`emerald` in either `<main>`);
+git-stash before/after computed-style capture — CourtBooking's slot grid/chips/tabs/duration/
+rate-summary + BookingPay's pay button/amount/verified badge **byte-identical**; e2e vs
+`badminton_db_e2e` **3 passed / 5 failed / 1 skipped**, same set as Slice C/D, `guest-booking`
+(full booking→pay→simulate flow) passes. `--brand-primary` after Slice E: `BookingPay.tsx:209`
+removed; remaining = `BookingConfirmation.tsx:96`, `BookingHistory.tsx:155`, ~13 in `main.tsx`
+(Slice F scope). `pnpm diagram:verify` green.
 
 **F-192 ID:** confirmed by the Chief thread as next-available (independently re-verified against
 `origin/main` `ae2238c` — zero references anywhere; `[[F-191]]`'s filing `d05f3f8` is the most
