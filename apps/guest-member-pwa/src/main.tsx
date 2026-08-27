@@ -204,7 +204,7 @@ function bandLabelForPath(pathname: string): string {
   if (/^\/branches\/[^/]+\/about$/.test(pathname)) return 'VENUE INFO';
   if (/^\/branches\/[^/]+\/book\//.test(pathname)) return 'BOOK A COURT';
   if (/^\/branches\/[^/]+$/.test(pathname)) return 'COURT CATEGORIES';
-  if (/^\/bookings\/[^/]+\/pay$/.test(pathname)) return 'PAYMENT';
+  if (/^\/bookings\/[^/]+\/pay$/.test(pathname)) return 'CONFIRM AND PAY';
   if (/^\/bookings\/[^/]+\/confirmation$/.test(pathname)) return 'CONFIRMED';
   return '';
 }

@@ -398,21 +398,18 @@ export default function CourtBooking() {
     // sets its own colour, so this inherited base is inert -- kept as-is (not migrated to
     // --color-text) so Slice D leaves the already-migrated header/summary parts byte-identical.
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '1024px' }}>
-      {/* F-190 Slice 2a: header shell (JBC Booking.dc.html:571-588) */}
-      <div className="flex flex-col gap-4 px-5 pt-5 pb-6" style={{ background: 'var(--color-neutral-900)' }}>
-        <div className="flex items-center justify-between">
-          <div style={{ fontFamily: 'var(--font-heading)', fontSize: '22px', color: 'var(--color-bg)' }}>
-            {tenant?.appName}
-          </div>
-          <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.08em', color: 'var(--color-neutral-400)' }}>
-            GUEST BOOKING
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3" style={{ background: 'var(--color-neutral-800)' }}>
+      {/* F-192 Slice E: the F-190 Slice 2a dark header shell is removed -- the shared Layout band
+          (F-192 Slice B) already carries the wordmark + "BOOK A COURT" + account control, so a
+          second dark block here was redundant (two stacked #2e2b25 zones, wordmark twice). Per
+          wireframe frame 08 this becomes a white pool-summary row on the cream ground. */}
+      <div className="px-4 sm:px-6 pt-6 space-y-3">
+        <div
+          className="flex items-center gap-3"
+          style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', padding: '13px 14px' }}
+        >
           <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-            <div className="text-[13.5px] font-bold truncate" style={{ color: 'var(--color-neutral-100)' }}>{pool.name}</div>
-            <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', color: 'var(--color-neutral-300)' }}>
+            <div className="text-[13.5px] font-bold truncate" style={{ color: 'var(--color-text)' }}>{pool.name}</div>
+            <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.04em', color: 'var(--color-neutral-600)' }}>
               {pool.capacity} COURT{pool.capacity === 1 ? '' : 'S'}
               {branchAbout?.workingHoursStart && branchAbout?.workingHoursEnd
                 ? ` · ${branchAbout.workingHoursStart}–${branchAbout.workingHoursEnd}`
@@ -421,28 +418,28 @@ export default function CourtBooking() {
           </div>
           <Link
             to={`/branches/${branchId}`}
-            className="shrink-0 h-11 min-w-11 flex items-center justify-center text-[12px] font-bold rounded-full px-3.5"
-            style={{ color: 'var(--color-accent-400)', border: '1px solid var(--color-neutral-700)' }}
+            className="shrink-0 flex items-center justify-center text-[12.5px] font-bold rounded-full px-4"
+            style={{ minHeight: '44px', background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', color: 'var(--color-accent-700)', fontFamily: 'var(--font-body-organic)' }}
           >
             Change
           </Link>
         </div>
 
         {upcomingBooking && (
-          <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3" style={{ background: 'var(--color-accent-2-800)' }}>
-            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--color-accent-2-400)' }} />
-            <div className="flex-1 text-[12.5px]" style={{ color: 'var(--color-accent-2-200)' }}>
+          <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3" style={{ background: 'var(--color-accent-2-200)' }}>
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--color-accent-2-600)' }} />
+            <div className="flex-1 text-[12.5px] font-semibold" style={{ color: 'var(--color-accent-2-800)' }}>
               {new Date(upcomingBooking.window.startTime).toLocaleDateString([], { weekday: 'short' })}{' '}
               {new Date(upcomingBooking.window.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
             </div>
-            <Link to="/bookings/my" className="shrink-0 text-[12px] font-bold" style={{ color: 'var(--color-accent-2-300)' }}>
+            <Link to="/bookings/my" className="shrink-0 text-[12px] font-bold" style={{ color: 'var(--color-accent-2-700)' }}>
               Manage
             </Link>
           </div>
         )}
       </div>
 
-      <div className="px-4 sm:px-6 pt-6 pb-10 space-y-6">
+      <div className="px-4 sm:px-6 pt-4 pb-10 space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column: Date & Slots */}
         <div className="lg:col-span-2 space-y-6">

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
-import { useAuth } from '@badminton/ui-shared';
-import { Smartphone, Activity, HelpCircle, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { useAuth, useTenant } from '@badminton/ui-shared';
+import { Smartphone, Activity, MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 export default function BookingPay() {
   const { bookingId } = useParams();
   const { accessToken, user } = useAuth();
+  const { tenant } = useTenant();
   const navigate = useNavigate();
 
   const [booking, setBooking] = useState<any>(null);
@@ -141,7 +142,12 @@ export default function BookingPay() {
         key: razorpayKey,
         amount: orderRes.amount,
         currency: orderRes.currency,
-        name: 'Badminton Hub',
+        // F-192 Slice E: the checkout overlay's merchant name + theme were hardcoded
+        // ('Badminton Hub' / '#e11d48') -- the one place the payment sheet left the tenant's
+        // brand. Both now come from the resolved tenant. themeColor is the exact hex the tenant
+        // configured; the getComputedStyle fallback covers the (unreachable -- TenantProvider
+        // blocks children until resolved) missing-tenant case.
+        name: tenant?.appName || tenant?.name || 'Court Booking',
         description: 'Court Booking Payment',
         order_id: orderId,
         handler: async function (response: any) {
@@ -183,7 +189,10 @@ export default function BookingPay() {
           contact: booking.phone || '',
         },
         theme: {
-          color: '#e11d48',
+          color:
+            tenant?.themeColor ||
+            getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
+            '#e11d48',
         }
       };
 
@@ -205,24 +214,56 @@ export default function BookingPay() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
-        <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-ink-muted text-sm font-medium">Securing payment gateway...</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
+        <style>{'@keyframes booking-pay-spin { to { transform: rotate(360deg); } }'}</style>
+        <div
+          style={{
+            width: '52px',
+            height: '52px',
+            borderRadius: '999px',
+            border: '4px solid var(--color-accent-200)',
+            borderTopColor: 'var(--color-accent-700)',
+            animation: 'booking-pay-spin 1s linear infinite',
+          }}
+        />
+        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-600)' }}>
+          Securing payment gateway&hellip;
+        </p>
       </div>
     );
   }
 
   if (error || !booking) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
-        <HelpCircle className="h-12 w-12 text-red-600 mb-4" />
-        <h3 className="text-lg font-bold">Failed to load booking details</h3>
-        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error}</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] p-4 gap-3 text-center" style={{ background: 'var(--color-bg)' }}>
+        <span
+          className="flex items-center justify-center"
+          style={{ width: '48px', height: '48px', borderRadius: '999px', background: 'var(--color-neutral-200)', color: 'var(--color-neutral-600)' }}
+        >
+          <MapPin className="h-6 w-6" />
+        </span>
+        <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '19px', color: 'var(--color-text)' }}>
+          Couldn&rsquo;t load booking details
+        </h3>
+        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', lineHeight: 1.55, color: 'var(--color-neutral-600)', maxWidth: '260px' }}>
+          {error}
+        </p>
         <button
           onClick={() => navigate('/bookings/my')}
-          className="mt-4 py-2 px-6 bg-surface-mint border border-edge-strong rounded-xl text-xs hover:bg-edge"
+          style={{
+            marginTop: '4px',
+            minHeight: '44px',
+            padding: '0 20px',
+            background: '#fff',
+            border: '1px solid var(--color-neutral-300)',
+            borderRadius: '14px',
+            fontFamily: 'var(--font-body-organic)',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--color-text)',
+          }}
         >
-          View Bookings
+          View bookings
         </button>
       </div>
     );
@@ -232,30 +273,35 @@ export default function BookingPay() {
   const payAmount = Number(intent?.amount ? intent.amount / 100 : booking.price);
 
   return (
+    // text-ink here is the F-190 Slice 3 wrapper default; every text element below sets its own
+    // colour, so this inherited base is inert -- kept as-is so the Slice 3-migrated summary card /
+    // YOUR NUMBER / pay button stay byte-identical.
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '480px' }}>
-      {/* F-190 Slice 3: header shell (JBC Booking.dc.html:260-263), matching 3b's established
-          pattern. navigate(-1) is plain browser-back semantics -- there's no other real "back"
-          destination from a payment screen to invent. */}
-      <div className="flex items-center gap-3.5 px-5 py-5" style={{ background: 'var(--color-neutral-900)' }}>
+      {/* F-192 Slice E: the F-190 Slice 3 dark header shell is removed -- the shared Layout band
+          (Slice B) already carries the wordmark + "CONFIRM AND PAY" + account control. Per
+          wireframe frame 09 the back control becomes a "Back to slots" pill in the page.
+          navigate(-1) is plain browser-back semantics, unchanged. */}
+      <div className="px-5 py-6 space-y-6">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          aria-label="Back"
-          className="h-11 w-11 flex items-center justify-center rounded-full border-none cursor-pointer bg-transparent"
+          className="inline-flex items-center gap-2 transition-colors"
+          style={{
+            minHeight: '44px',
+            padding: '0 16px 0 12px',
+            background: 'var(--color-neutral-200)',
+            border: '1px solid var(--color-neutral-300)',
+            borderRadius: '999px',
+            fontFamily: 'var(--font-body-organic)',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--color-text)',
+          }}
         >
-          <span
-            className="h-[38px] w-[38px] rounded-full flex items-center justify-center text-[17px]"
-            style={{ background: 'var(--color-neutral-800)', color: 'var(--color-neutral-100)' }}
-          >
-            ←
-          </span>
+          <ArrowLeft className="h-4 w-4" />
+          <span>Back to slots</span>
         </button>
-        <div className="text-base font-bold" style={{ color: 'var(--color-neutral-100)' }}>
-          Confirm and pay
-        </div>
-      </div>
 
-      <div className="px-5 py-6 space-y-6">
         {/* Booking Summary */}
         <div style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}>
           <div className="p-4" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
@@ -343,22 +389,36 @@ export default function BookingPay() {
             <button
               onClick={handleMockPayment}
               disabled={paying}
-              className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 p-4 rounded-xl flex items-center justify-between text-left group transition-all"
+              className="w-full p-4 flex items-center justify-between text-left transition-colors"
+              style={{
+                background: 'var(--color-accent-2-100)',
+                border: '1px solid var(--color-accent-2-300)',
+                borderRadius: '16px',
+                fontFamily: 'var(--font-body-organic)',
+              }}
               id="simulate-success-pay-btn"
             >
               <div className="flex items-center space-x-3">
-                <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700">
+                <div
+                  className="h-10 w-10 rounded-xl flex items-center justify-center"
+                  style={{ background: 'var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }}
+                >
                   <ShieldCheck className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-ink">Simulate Payment (Dev)</div>
-                  <div className="text-[10px] text-ink-muted">Triggers secure server-side signature webhook</div>
+                  <div className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>Simulate payment (dev)</div>
+                  <div className="text-[10px]" style={{ color: 'var(--color-neutral-600)' }}>Triggers the server-side signature webhook</div>
                 </div>
               </div>
               {paying ? (
-                <Activity className="h-4 w-4 animate-spin text-emerald-700" />
+                <Activity className="h-4 w-4 animate-spin" style={{ color: 'var(--color-accent-2-800)' }} />
               ) : (
-                <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">Local</span>
+                <span
+                  className="text-xs px-2 py-0.5 rounded font-mono font-bold"
+                  style={{ background: 'var(--color-accent-2-300)', color: 'var(--color-accent-2-800)' }}
+                >
+                  Local
+                </span>
               )}
             </button>
           )}
@@ -368,7 +428,13 @@ export default function BookingPay() {
               banner so the app shows a recoverable error one way rather than two. */}
           {paymentError && (
             <div
-              className="bg-red-50 border border-red-200 p-3 rounded-xl flex items-start space-x-2 text-xs text-red-700"
+              className="p-3 flex items-start space-x-2 text-xs"
+              style={{
+                background: 'var(--color-neutral-100)',
+                border: '1px solid var(--color-neutral-300)',
+                borderRadius: '14px',
+                color: 'var(--color-destructive)',
+              }}
               id="payment-error-banner"
             >
               <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
