@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/organic-dc271991-5364-4991-8fbe-0b7d94cdf79e/styles.css">
+<script src="_ds/organic-dc271991-5364-4991-8fbe-0b7d94cdf79e/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:var(--color-neutral-200); font-family:var(--font-body); }
+  a { color:var(--color-accent-700); }
+  a:hover { color:var(--color-accent-600); }
+  .ph::-webkit-scrollbar { width:0; height:0; }
+  .ph { scrollbar-width:none; }
+</style>
+</helmet>
+
+<template id="__bundler_thumbnail" data-bg-color="#eee7db">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#eee7db"></rect>
+    <rect x="360" y="140" width="480" height="520" rx="60" fill="#2e2b25"></rect>
+    <rect x="410" y="250" width="120" height="90" rx="20" fill="#8c491a"></rect>
+    <rect x="540" y="250" width="120" height="90" rx="20" fill="#f9f4ed"></rect>
+    <rect x="670" y="250" width="120" height="90" rx="20" fill="#f9f4ed"></rect>
+    <rect x="410" y="360" width="120" height="90" rx="20" fill="#f9f4ed"></rect>
+    <rect x="540" y="360" width="120" height="90" rx="20" fill="#f9f4ed"></rect>
+    <rect x="670" y="360" width="120" height="90" rx="20" fill="#f9f4ed"></rect>
+    <rect x="410" y="520" width="380" height="90" rx="45" fill="#f6a06b"></rect>
+  </svg>
+</template>
+
+<section style="padding:56px 48px 40px; display:flex; flex-direction:column; gap:32px">
+  <div style="display:flex; flex-direction:column; gap:8px; max-width:760px">
+    <div style="font-family:var(--font-body); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--color-neutral-700)">Turn 4 · Build notes for the React PWA</div>
+    <h1 style="font-family:var(--font-heading); font-weight:400; font-size:40px; line-height:1.1; margin:0; color:var(--color-text)">Touch targets and breakpoints</h1>
+    <p style="margin:0; font-size:16px; line-height:1.6; color:var(--color-neutral-800); text-wrap:pretty">Sizes as drawn in <a href="#1b">1b</a>, <a href="#2a">2a</a> and <a href="#3a">3a</a>, with the rule to hold to on tablet and laptop. Everything here is already true in the mockups — this is the contract to keep during the build.</p>
+  </div>
+
+  <div id="4a" style="display:flex; flex-wrap:wrap; gap:26px; align-items:flex-start">
+
+    <div style="width:600px; background:#fff; border:1px solid var(--color-neutral-300); border-radius:28px; overflow:hidden">
+      <div style="background:var(--color-neutral-900); padding:16px 22px; font-size:14px; font-weight:700; color:var(--color-neutral-100)">Minimum sizes</div>
+      <div style="display:grid; grid-template-columns:1.4fr 0.7fr 1.6fr; gap:0">
+        <div style="padding:12px 22px; font-family:var(--font-body); font-size:11px; font-weight:600; letter-spacing:0.08em; color:var(--color-neutral-700); border-bottom:1px solid var(--color-neutral-200)">CONTROL</div>
+        <div style="padding:12px 10px; font-family:var(--font-body); font-size:11px; font-weight:600; letter-spacing:0.08em; color:var(--color-neutral-700); border-bottom:1px solid var(--color-neutral-200)">IN DESIGN</div>
+        <div style="padding:12px 22px; font-family:var(--font-body); font-size:11px; font-weight:600; letter-spacing:0.08em; color:var(--color-neutral-700); border-bottom:1px solid var(--color-neutral-200)">RULE</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">Slot chip</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">112×66</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">min-height 56px, 7px gap. Never shrink the gap to fit more columns — drop a column instead.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">Date chip</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">46×50</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">Under 44px wide, so pad the hit area to 44 with a transparent inset rather than growing the pill.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">Period tab</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">111×33</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">Drawn 33–38px tall across the three directions. Standardise on 44px in the build; the 4px track padding stays.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">±30 stepper</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">66×52</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">Keep the two buttons 8px apart minimum — mis-taps here change the price.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">Court chip</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">auto×44</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">44px floor, 6px gap, wraps rather than scrolls.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">Player ± </div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">32×32</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">Ship it with a 44×44 transparent hit area around the 32px pill.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">Back / icon button</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">38×38</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">Header back on 2a, 2c and 3b. Keep the 38px circle, pad the hit area to 44×44.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">Branch "Change" chip</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">68×30</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">Smallest control in the design. Grow to 44px tall in the build, or make the whole branch row the target and drop the chip.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">Pay / primary</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">auto×54</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">54px everywhere. Sticky bar keeps 20px side padding plus the safe-area inset.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text); border-bottom:1px solid var(--color-neutral-200)">UPI app row</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">full×56</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800); border-bottom:1px solid var(--color-neutral-200)">Whole row is the target, not the radio dot.</div>
+
+        <div style="padding:14px 22px; font-size:13.5px; font-weight:700; color:var(--color-text)">OTP box</div>
+        <div style="padding:14px 10px; font-size:13.5px; color:var(--color-neutral-800)">50×66</div>
+        <div style="padding:14px 22px; font-size:13.5px; line-height:1.5; color:var(--color-neutral-800)">Six boxes must still clear 44px wide at 320px viewport — reduce the gap to 6px, never the box.</div>
+      </div>
+    </div>
+
+    <div style="width:430px; display:flex; flex-direction:column; gap:26px">
+      <div style="background:#fff; border:1px solid var(--color-neutral-300); border-radius:28px; overflow:hidden">
+        <div style="background:var(--color-neutral-900); padding:16px 22px; font-size:14px; font-weight:700; color:var(--color-neutral-100)">Breakpoints</div>
+        <div style="padding:18px 22px 22px; display:flex; flex-direction:column; gap:16px">
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-text)">Mobile · under 600px</div>
+            <div style="font-size:13.5px; line-height:1.55; color:var(--color-neutral-800)">One column, as drawn. Slot grid 3 across. Sticky pay bar. Content max 390–430px.</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-text)">Tablet · 600–1024px</div>
+            <div style="font-size:13.5px; line-height:1.55; color:var(--color-neutral-800)">Still one column, centred at 560px. Slot grid 4–5 across. Pay bar stops being sticky and sits after the review card.</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-text)">Laptop · 1024px and up</div>
+            <div style="font-size:13.5px; line-height:1.55; color:var(--color-neutral-800)">Two columns: picker left, review and pay in a sticky right rail at 360px. Slot grid 6 across, one row per period.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:var(--color-accent-100); border-radius:28px; padding:20px 22px; display:flex; flex-direction:column; gap:12px">
+        <div style="font-size:14px; font-weight:700; color:var(--color-accent-800)">Carry into the code</div>
+        <div style="font-size:13.5px; line-height:1.6; color:var(--color-accent-800)">44px is the floor on every pointer, not only touch — a laptop with a touchscreen reports both. Gate the growth on <span style="font-weight:700">@media (pointer: coarse)</span> and keep the 44px hit area on fine pointers too.</div>
+        <div style="font-size:13.5px; line-height:1.6; color:var(--color-accent-800)">Respect <span style="font-weight:700">env(safe-area-inset-bottom)</span> on the sticky bar, or the pay button sits under the home indicator when the PWA is installed.</div>
+        <div style="font-size:13.5px; line-height:1.6; color:var(--color-accent-800)">Focus ring is a 2px accent outline at 2px offset on every control — keyboard users on laptop get the same flow.</div>
+      </div>
+
+      <div style="background:#fff; border:1px solid var(--color-neutral-300); border-radius:28px; overflow:hidden">
+        <div style="background:var(--color-neutral-900); padding:16px 22px; font-size:14px; font-weight:700; color:var(--color-neutral-100)">Scrolling</div>
+        <div style="padding:18px 22px 22px; display:flex; flex-direction:column; gap:16px">
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-text)">After picking a slot</div>
+            <div style="font-size:13.5px; line-height:1.55; color:var(--color-neutral-800)">Duration, court and review appear below the fold. Scroll only far enough to reveal the duration stepper — keep the slot grid on screen or people lose their place.</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-text)">After changing day or period</div>
+            <div style="font-size:13.5px; line-height:1.55; color:var(--color-neutral-800)">Do not scroll. The grid reloads in place and the user is already looking at it.</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-text)">OTP field on mobile</div>
+            <div style="font-size:13.5px; line-height:1.55; color:var(--color-neutral-800)">The keyboard covers the verify button. Lift the field above it on focus.</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px">
+            <div style="font-size:13.5px; font-weight:700; color:var(--color-text)">Everywhere</div>
+            <div style="font-size:13.5px; line-height:1.55; color:var(--color-neutral-800)">Give scroll targets a <span style="font-weight:700">scroll-margin-top</span> so they don't land flush under the sticky header, and gate smooth behaviour on <span style="font-weight:700">prefers-reduced-motion</span>.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="padding:16px 48px 40px; display:flex; flex-direction:column; gap:32px">
+  <div style="display:flex; flex-direction:column; gap:8px; max-width:760px">
+    <div style="font-family:var(--font-body); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--color-neutral-700)">Turn 3 · Fast grid · sign in</div>
+    <h1 style="font-family:var(--font-heading); font-weight:400; font-size:40px; line-height:1.1; margin:0; color:var(--color-text)">Getting in</h1>
+    <p style="margin:0; font-size:16px; line-height:1.6; color:var(--color-neutral-800); text-wrap:pretty">Sits before <a href="#1b">1b</a>. Two doors: guest by phone and OTP, member by Google. Both land on the same booking screen — the member just skips the number and keeps a history.</p>
+  </div>
+
+  <div id="3a" style="display:flex; flex-wrap:wrap; gap:40px; align-items:flex-start">
+
+    <div style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:600; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">3a</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">Sign in</span>
+      </div>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-neutral-900); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative; display:flex; flex-direction:column">
+        <div style="height:290px; flex:none; background:repeating-linear-gradient(115deg,var(--color-accent-2-700) 0 12px,var(--color-accent-2-800) 12px 24px); display:flex; flex-direction:column; justify-content:space-between; padding:30px 24px 22px">
+          <div style="font-family:var(--font-heading); font-size:30px; color:var(--color-bg)">JBC</div>
+          <span style="font-family:var(--font-body); font-size:10.5px; font-weight:600; letter-spacing:0.06em; color:var(--color-accent-2-100); background:rgba(32,30,29,0.55); padding:6px 10px; border-radius:999px; align-self:flex-start">court photo</span>
+        </div>
+        <div style="flex:1; background:var(--color-neutral-100); border-radius:28px 28px 0 0; margin-top:-24px; padding:28px 22px 24px; display:flex; flex-direction:column; gap:20px">
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <h2 style="font-family:var(--font-heading); font-weight:400; font-size:28px; line-height:1.15; margin:0; color:var(--color-text)">Book a court at JBC</h2>
+            <p style="margin:0; font-size:14px; line-height:1.55; color:var(--color-neutral-800)">Sign in once so we know the courts are going to real players.</p>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:9px">
+            <div style="font-family:var(--font-body); font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--color-neutral-700)">GUEST · PHONE NUMBER</div>
+            <div style="display:flex; align-items:center; gap:10px; border:1px solid var(--color-neutral-300); background:#fff; border-radius:14px; padding:0 16px; min-height:56px">
+              <span style="font-size:15px; font-weight:700; color:var(--color-neutral-700)">+91</span>
+              <span style="width:1px; height:22px; background:var(--color-neutral-300)"></span>
+              <span style="flex:1; font-size:15px; font-weight:700; color:var(--color-text)">98450 22119</span>
+            </div>
+            <button style="min-height:54px; border-radius:14px; border:none; background:var(--color-accent-700); color:var(--color-accent-100); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer">Send me a code</button>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px">
+            <span style="flex:1; height:1px; background:var(--color-neutral-300)"></span>
+            <span style="font-size:12px; font-weight:600; color:var(--color-neutral-700)">or</span>
+            <span style="flex:1; height:1px; background:var(--color-neutral-300)"></span>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:9px">
+            <button style="display:flex; align-items:center; justify-content:center; gap:11px; min-height:54px; border-radius:14px; border:1px solid var(--color-neutral-300); background:#fff; font-family:inherit; font-size:15px; font-weight:700; color:var(--color-text); cursor:pointer">
+              <span style="width:22px; height:22px; border-radius:999px; background:repeating-linear-gradient(135deg,var(--color-neutral-300) 0 4px,var(--color-neutral-200) 4px 8px)"></span>
+              Continue with Google
+            </button>
+            <div style="font-size:12px; line-height:1.55; color:var(--color-neutral-700)">Members keep their booking history and skip the code next time.</div>
+          </div>
+
+          <div style="margin-top:auto; font-size:11.5px; line-height:1.55; color:var(--color-neutral-700)">By continuing you accept the court rules and the 4-hour cancellation policy.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:600; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">3b</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">Verify</span>
+      </div>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-neutral-100); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative; display:flex; flex-direction:column">
+        <div style="background:var(--color-neutral-900); padding:20px; display:flex; align-items:center; gap:14px; flex:none">
+          <button style="font-family:inherit; width:38px; height:38px; border-radius:999px; border:none; background:var(--color-neutral-800); color:var(--color-neutral-100); font-size:17px; cursor:pointer">←</button>
+          <div style="font-size:16px; font-weight:700; color:var(--color-neutral-100)">Verify your number</div>
+        </div>
+        <div style="flex:1; padding:26px 22px 24px; display:flex; flex-direction:column; gap:22px">
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <h2 style="font-family:var(--font-heading); font-weight:400; font-size:28px; line-height:1.15; margin:0; color:var(--color-text)">Enter the code</h2>
+            <p style="margin:0; font-size:14px; line-height:1.55; color:var(--color-neutral-800)">Sent by SMS to +91 98450 22119. <a href="#3a">Wrong number?</a></p>
+          </div>
+          <div style="display:flex; gap:9px">
+            <div style="flex:1; min-height:66px; border:1px solid var(--color-neutral-900); border-radius:14px; background:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:800; color:var(--color-text)">4</div>
+            <div style="flex:1; min-height:66px; border:1px solid var(--color-neutral-900); border-radius:14px; background:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:800; color:var(--color-text)">8</div>
+            <div style="flex:1; min-height:66px; border:1px solid var(--color-neutral-900); border-radius:14px; background:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:800; color:var(--color-text)">2</div>
+            <div style="flex:1; min-height:66px; border:2px solid var(--color-accent-700); border-radius:14px; background:#fff; display:flex; align-items:center; justify-content:center"><span style="width:2px; height:26px; background:var(--color-accent-700)"></span></div>
+            <div style="flex:1; min-height:66px; border:1px solid var(--color-neutral-300); border-radius:14px; background:#fff"></div>
+            <div style="flex:1; min-height:66px; border:1px solid var(--color-neutral-300); border-radius:14px; background:#fff"></div>
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; font-size:13px">
+            <span style="color:var(--color-neutral-700)">Resend in 0:24</span>
+            <span style="font-weight:700; color:var(--color-neutral-500)">Resend code</span>
+          </div>
+          <button style="min-height:54px; border-radius:14px; border:none; background:var(--color-accent-700); color:var(--color-accent-100); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer">Verify and continue</button>
+          <div style="margin-top:auto; background:var(--color-accent-100); border-radius:16px; padding:14px 16px; font-size:12.5px; line-height:1.55; color:var(--color-accent-800)">Three wrong codes and the number is locked for 15 minutes. One booking per number per day.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="padding:16px 48px 40px; display:flex; flex-direction:column; gap:32px">
+  <div style="display:flex; flex-direction:column; gap:8px; max-width:760px">
+    <div style="font-family:var(--font-body); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--color-neutral-700)">Turn 2 · Fast grid · the rest of the flow</div>
+    <h1 style="font-family:var(--font-heading); font-weight:400; font-size:40px; line-height:1.1; margin:0; color:var(--color-text)">Pay, confirm, manage</h1>
+    <p style="margin:0; font-size:16px; line-height:1.6; color:var(--color-neutral-800); text-wrap:pretty">Carrying on from <a href="#1b">1b</a>. Sample booking throughout: today, 7:00–8:30 PM, Court 3, ₹550. The UPI app list is live.</p>
+  </div>
+
+  <div id="2a" style="display:flex; flex-wrap:wrap; gap:40px; align-items:flex-start">
+
+    <div style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:600; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">2a</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">Pay</span>
+      </div>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-neutral-100); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative">
+        <div class="ph" style="position:absolute; inset:0 0 84px 0; overflow-y:auto">
+          <div style="background:var(--color-neutral-900); padding:20px; display:flex; align-items:center; gap:14px">
+            <button style="font-family:inherit; width:38px; height:38px; border-radius:999px; border:none; background:var(--color-neutral-800); color:var(--color-neutral-100); font-size:17px; cursor:pointer">←</button>
+            <div style="font-size:16px; font-weight:700; color:var(--color-neutral-100)">Confirm and pay</div>
+          </div>
+          <div style="padding:20px; display:flex; flex-direction:column; gap:22px">
+            <div style="border:1px solid var(--color-neutral-300); border-radius:16px; background:#fff; overflow:hidden">
+              <div style="padding:14px 16px; border-bottom:1px solid var(--color-neutral-200); display:flex; flex-direction:column; gap:3px">
+                <div style="font-size:15px; font-weight:700; color:var(--color-text)">JBC Badminton court</div>
+                <div style="font-size:12.5px; color:var(--color-neutral-700)">Today, 23 Aug · 7:00 PM – 8:30 PM</div>
+              </div>
+              <div style="display:flex; justify-content:space-between; padding:11px 16px; font-size:13.5px"><span style="color:var(--color-neutral-700)">Court</span><span style="font-weight:700; color:var(--color-text)">Court 3</span></div>
+              <div style="display:flex; justify-content:space-between; padding:11px 16px; font-size:13.5px"><span style="color:var(--color-neutral-700)">Players</span><span style="font-weight:700; color:var(--color-text)">4</span></div>
+              <div style="display:flex; justify-content:space-between; padding:11px 16px; font-size:13.5px"><span style="color:var(--color-neutral-700)">1 hr peak + 30 min off-peak</span><span style="font-weight:700; color:var(--color-text)">₹550</span></div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:11px">
+              <div style="font-family:var(--font-body); font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--color-neutral-700)">PAY WITH UPI</div>
+              <div style="display:flex; flex-direction:column; gap:8px">
+                <sc-for list="{{ pay.apps }}" as="p" hint-placeholder-count="4">
+                  <button style="{{ p.st }}" onClick="{{ p.pick }}">
+                    <span style="{{ p.markSt }}"></span>
+                    <span style="flex:1">{{ p.name }}</span>
+                    <span style="{{ p.dotSt }}"></span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:9px">
+              <div style="font-family:var(--font-body); font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--color-neutral-700)">YOUR NUMBER</div>
+              <div style="display:flex; align-items:center; gap:10px; border:1px solid var(--color-neutral-300); background:#fff; border-radius:14px; padding:13px 16px; min-height:52px">
+                <span style="font-size:14px; font-weight:700; color:var(--color-text)">+91 98450 22119</span>
+                <span style="margin-left:auto; font-size:11px; font-weight:700; color:var(--color-accent-2-800); background:var(--color-accent-2-200); padding:5px 10px; border-radius:999px">Verified</span>
+              </div>
+              <div style="font-size:11.5px; line-height:1.5; color:var(--color-neutral-700)">Your booking and cancellation link go to this number. Free cancellation until 3:00 PM today.</div>
+            </div>
+          </div>
+        </div>
+        <div style="position:absolute; left:0; right:0; bottom:0; height:84px; background:var(--color-neutral-900); padding:14px 20px; display:flex; align-items:center; gap:12px">
+          <div style="display:flex; flex-direction:column; gap:1px; min-width:80px">
+            <div style="font-family:var(--font-body); font-size:10px; font-weight:600; letter-spacing:0.08em; color:var(--color-neutral-400)">TOTAL</div>
+            <div style="font-size:21px; font-weight:800; color:var(--color-neutral-100)">₹550</div>
+          </div>
+          <button style="flex:1; height:54px; border:none; border-radius:14px; font-family:inherit; font-size:14.5px; font-weight:700; background:var(--color-accent-400); color:var(--color-neutral-900); cursor:pointer">{{ pay.payLabel }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:600; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">2b</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">Confirmed</span>
+      </div>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-neutral-100); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative">
+        <div style="position:absolute; inset:0 0 96px 0; overflow-y:auto">
+          <div style="background:var(--color-accent-2-800); padding:44px 24px 36px; display:flex; flex-direction:column; gap:16px; align-items:flex-start">
+            <div style="width:64px; height:64px; border-radius:999px; background:var(--color-accent-2-300); display:flex; align-items:center; justify-content:center; font-size:30px; color:var(--color-accent-2-900)">✓</div>
+            <div style="font-family:var(--font-heading); font-size:32px; line-height:1.12; color:var(--color-bg)">Court 3 is yours</div>
+            <div style="font-size:14px; line-height:1.5; color:var(--color-accent-2-200)">Today, 23 Aug · 7:00 PM – 8:30 PM<br>Confirmation sent to +91 98450 22119</div>
+          </div>
+          <div style="padding:22px 20px; display:flex; flex-direction:column; gap:20px">
+            <div style="border:1px solid var(--color-neutral-300); border-radius:16px; background:#fff; overflow:hidden">
+              <div style="display:flex; justify-content:space-between; padding:13px 16px; border-bottom:1px solid var(--color-neutral-200); font-size:13.5px"><span style="color:var(--color-neutral-700)">Booking code</span><span style="font-weight:700; color:var(--color-text); letter-spacing:0.06em">JBC-4821</span></div>
+              <div style="display:flex; justify-content:space-between; padding:13px 16px; border-bottom:1px solid var(--color-neutral-200); font-size:13.5px"><span style="color:var(--color-neutral-700)">Paid</span><span style="font-weight:700; color:var(--color-text)">₹550 · Google Pay</span></div>
+              <div style="display:flex; justify-content:space-between; padding:13px 16px; font-size:13.5px"><span style="color:var(--color-neutral-700)">Players</span><span style="font-weight:700; color:var(--color-text)">4</span></div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px">
+              <div style="font-family:var(--font-body); font-size:11px; font-weight:600; letter-spacing:0.09em; color:var(--color-neutral-700)">BEFORE YOU COME</div>
+              <div style="font-size:13.5px; line-height:1.6; color:var(--color-neutral-800)">Show the booking code at the desk. Non-marking shoes only. Rackets and shuttles are on sale at reception.</div>
+            </div>
+            <div style="display:flex; gap:9px">
+              <button style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--color-neutral-300); background:#fff; font-family:inherit; font-size:13.5px; font-weight:700; color:var(--color-text); cursor:pointer">Add to calendar</button>
+              <button style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--color-neutral-300); background:#fff; font-family:inherit; font-size:13.5px; font-weight:700; color:var(--color-text); cursor:pointer">Directions</button>
+            </div>
+            <button style="display:flex; align-items:center; justify-content:center; gap:9px; min-height:50px; border-radius:14px; border:1px solid var(--color-neutral-300); background:#fff; font-family:inherit; font-size:13.5px; font-weight:700; color:var(--color-text); cursor:pointer">
+              <span style="width:16px; height:16px; border-radius:4px; background:var(--color-accent-200)"></span>
+              Download receipt (PDF)
+            </button>
+          </div>
+        </div>
+        <div style="position:absolute; left:0; right:0; bottom:0; height:96px; background:var(--color-neutral-100); border-top:1px solid var(--color-neutral-300); padding:20px; display:flex; align-items:center">
+          <button style="flex:1; height:54px; border:none; border-radius:14px; font-family:inherit; font-size:15px; font-weight:700; background:var(--color-accent-700); color:var(--color-accent-100); cursor:pointer">View my booking</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:600; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">2c</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">My booking</span>
+      </div>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-neutral-100); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative">
+        <div class="ph" style="position:absolute; inset:0; overflow-y:auto">
+          <div style="background:var(--color-neutral-900); padding:20px; display:flex; align-items:center; gap:14px">
+            <button style="font-family:inherit; width:38px; height:38px; border-radius:999px; border:none; background:var(--color-neutral-800); color:var(--color-neutral-100); font-size:17px; cursor:pointer">←</button>
+            <div style="font-size:16px; font-weight:700; color:var(--color-neutral-100)">My booking</div>
+          </div>
+          <div style="padding:20px; display:flex; flex-direction:column; gap:22px">
+            <div style="border:1px solid var(--color-neutral-300); border-radius:16px; background:#fff; overflow:hidden">
+              <div style="padding:16px; display:flex; align-items:flex-start; gap:12px; border-bottom:1px solid var(--color-neutral-200)">
+                <div style="flex:1; display:flex; flex-direction:column; gap:4px">
+                  <div style="font-size:18px; font-weight:800; color:var(--color-text)">7:00 – 8:30 PM</div>
+                  <div style="font-size:13px; color:var(--color-neutral-700)">Today, 23 Aug · Court 3 · 4 players</div>
+                </div>
+                <span style="font-size:11px; font-weight:700; color:var(--color-accent-2-800); background:var(--color-accent-2-200); padding:6px 10px; border-radius:999px">Confirmed</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--color-neutral-200); font-size:13.5px"><span style="color:var(--color-neutral-700)">Code</span><span style="font-weight:700; color:var(--color-text); letter-spacing:0.06em">JBC-4821</span></div>
+              <div style="display:flex; justify-content:space-between; padding:12px 16px; font-size:13.5px"><span style="color:var(--color-neutral-700)">Paid</span><span style="font-weight:700; color:var(--color-text)">₹550</span></div>
+            </div>
+
+            <div style="background:var(--color-accent-100); border-radius:16px; padding:14px 16px; display:flex; flex-direction:column; gap:4px">
+              <div style="font-size:13px; font-weight:700; color:var(--color-accent-800)">Free cancellation until 3:00 PM</div>
+              <div style="font-size:12.5px; line-height:1.5; color:var(--color-accent-800)">Cancel after that and the ₹550 is not refunded.</div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:9px">
+              <button style="min-height:52px; border-radius:14px; border:none; background:var(--color-accent-700); color:var(--color-accent-100); font-family:inherit; font-size:14.5px; font-weight:700; cursor:pointer">Book another slot</button>
+              <button style="min-height:52px; border-radius:14px; border:1px solid var(--color-neutral-300); background:#fff; color:var(--color-text); font-family:inherit; font-size:14.5px; font-weight:700; cursor:pointer">Download receipt (PDF)</button>
+              <button style="min-height:52px; border-radius:14px; border:1px solid var(--color-neutral-300); background:#fff; color:var(--color-text); font-family:inherit; font-size:14.5px; font-weight:700; cursor:pointer">Directions to JBC</button>
+              <button style="min-height:52px; border-radius:14px; border:none; background:none; color:var(--color-accent-700); font-family:inherit; font-size:14.5px; font-weight:700; cursor:pointer">Cancel booking</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:600; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">2d</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">Cancel</span>
+      </div>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-neutral-100); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative">
+        <div style="position:absolute; inset:0; overflow:hidden; filter:blur(1px)">
+          <div style="background:var(--color-neutral-900); padding:20px; display:flex; align-items:center; gap:14px">
+            <div style="width:38px; height:38px; border-radius:999px; background:var(--color-neutral-800)"></div>
+            <div style="font-size:16px; font-weight:700; color:var(--color-neutral-100)">My booking</div>
+          </div>
+          <div style="padding:20px; display:flex; flex-direction:column; gap:22px">
+            <div style="border:1px solid var(--color-neutral-300); border-radius:16px; background:#fff; height:180px"></div>
+            <div style="background:var(--color-accent-100); border-radius:16px; height:76px"></div>
+          </div>
+        </div>
+        <div style="position:absolute; inset:0; background:rgba(32,30,29,0.55); display:flex; align-items:flex-end">
+          <div style="width:100%; background:var(--color-neutral-100); border-radius:28px 28px 34px 34px; padding:26px 22px 22px; display:flex; flex-direction:column; gap:16px">
+            <div style="width:44px; height:5px; border-radius:999px; background:var(--color-neutral-300); align-self:center"></div>
+            <div style="font-family:var(--font-heading); font-size:26px; line-height:1.15; color:var(--color-text)">Cancel this booking?</div>
+            <div style="font-size:14px; line-height:1.6; color:var(--color-neutral-800)">Today, 7:00 – 8:30 PM on Court 3. You are inside the free window, so the full ₹550 goes back to Google Pay in 3–5 working days.</div>
+            <div style="border:1px solid var(--color-neutral-300); border-radius:16px; background:#fff; overflow:hidden">
+              <div style="display:flex; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--color-neutral-200); font-size:13.5px"><span style="color:var(--color-neutral-700)">Paid</span><span style="font-weight:700; color:var(--color-text)">₹550</span></div>
+              <div style="display:flex; justify-content:space-between; padding:12px 16px; font-size:13.5px"><span style="color:var(--color-neutral-700)">Refund</span><span style="font-weight:700; color:var(--color-accent-2-800)">₹550 · 100%</span></div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:9px; margin-top:4px">
+              <button style="min-height:54px; border-radius:14px; border:none; background:var(--color-accent-700); color:var(--color-accent-100); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer">Yes, cancel and refund</button>
+              <button style="min-height:54px; border-radius:14px; border:1px solid var(--color-neutral-300); background:#fff; color:var(--color-text); font-family:inherit; font-size:15px; font-weight:700; cursor:pointer">Keep my booking</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section style="padding:16px 48px 80px; display:flex; flex-direction:column; gap:32px">
+  <div style="display:flex; flex-direction:column; gap:8px; max-width:760px">
+    <div style="font-family:var(--font-body); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--color-neutral-700)">Turn 1 · JBC guest booking · first screen</div>
+    <h1 style="font-family:var(--font-heading); font-weight:400; font-size:40px; line-height:1.1; margin:0; color:var(--color-text)">Three ways to book a court</h1>
+    <p style="margin:0; font-size:16px; line-height:1.6; color:var(--color-neutral-700); text-wrap:pretty">Same flow in all three — branch, day, slot, duration, court, review, pay — in one scroll. They differ in how you pick a slot and how loud the screen is. Try them: the slots, the +30 stepper and the total are live.</p>
+  </div>
+
+  <div style="display:flex; flex-wrap:wrap; gap:40px; align-items:flex-start">
+
+    <div id="1a" style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:500; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">1a</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">Quiet list</span>
+      </div>
+      <p style="margin:0; font-size:13px; line-height:1.55; color:var(--color-neutral-700); min-height:56px">One tap per hour on a full-width card that already shows price and courts left. Calm, sage-led, generous spacing — reads well one-handed and never asks you to aim.</p>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-bg); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative">
+        <div class="ph" style="position:absolute; inset:0 0 92px 0; overflow-y:auto">
+          <div style="padding:22px 22px 24px; display:flex; flex-direction:column; gap:22px">
+
+            <div style="display:flex; align-items:center; justify-content:space-between">
+              <div style="font-family:var(--font-heading); font-size:26px; color:var(--color-text); letter-spacing:0.01em">JBC</div>
+              <div style="font-size:13px; font-weight:600; color:var(--color-neutral-700); background:var(--color-neutral-200); padding:9px 15px; border-radius:999px">Guest</div>
+            </div>
+
+            <div style="background:var(--color-accent-2-200); border-radius:28px; padding:16px 18px; display:flex; align-items:center; gap:14px">
+              <div style="width:44px; height:44px; border-radius:999px; background:var(--color-accent-2-700); flex:none; display:flex; align-items:center; justify-content:center; color:var(--color-accent-2-100); font-size:15px; font-weight:700">3</div>
+              <div style="flex:1; display:flex; flex-direction:column; gap:2px">
+                <div style="font-size:14px; font-weight:700; color:var(--color-accent-2-800)">Tomorrow · 7:00 PM</div>
+                <div style="font-size:12.5px; color:var(--color-accent-2-700)">Court 3 · 60 min · paid</div>
+              </div>
+              <a href="#1a" style="font-size:13px; font-weight:700; color:var(--color-accent-2-700); text-decoration:none; padding:8px 4px">View</a>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:12px">
+              <h2 style="font-family:var(--font-heading); font-weight:400; font-size:30px; line-height:1.12; margin:0; color:var(--color-text)">Book a court</h2>
+              <div style="display:flex; gap:14px; align-items:center; background:#fff; border-radius:24px; padding:12px 14px; box-shadow:var(--shadow-sm)">
+                <div style="width:56px; height:56px; border-radius:18px; flex:none; background:repeating-linear-gradient(135deg,var(--color-neutral-300) 0 6px,var(--color-neutral-200) 6px 12px)"></div>
+                <div style="flex:1; display:flex; flex-direction:column; gap:3px">
+                  <div style="font-size:15px; font-weight:700; color:var(--color-text)">JBC Badminton court</div>
+                  <div style="font-size:12.5px; color:var(--color-neutral-700)">6 courts · 6 AM – 11 PM</div>
+                </div>
+                <div style="font-size:11px; font-weight:600; color:var(--color-accent-700); background:var(--color-accent-200); padding:6px 10px; border-radius:999px">Only branch</div>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:11px">
+              <div style="font-size:13px; font-weight:700; color:var(--color-neutral-700); letter-spacing:0.02em">Day</div>
+              <div class="ph" style="display:flex; gap:9px; overflow-x:auto; padding-bottom:2px">
+                <sc-for list="{{ a.dates }}" as="d" hint-placeholder-count="7">
+                  <button style="{{ d.st }}" onClick="{{ d.pick }}">
+                    <span style="{{ d.subSt }}">{{ d.dow }}</span>
+                    <span style="font-size:17px; font-weight:700">{{ d.day }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:11px">
+              <div style="display:flex; align-items:center; justify-content:space-between">
+                <div style="font-size:13px; font-weight:700; color:var(--color-neutral-700)">Start time</div>
+                <div style="font-size:12px; color:var(--color-neutral-700)">{{ a.countLabel }}</div>
+              </div>
+              <div style="display:flex; gap:6px; background:var(--color-neutral-200); padding:5px; border-radius:999px">
+                <sc-for list="{{ a.periods }}" as="p" hint-placeholder-count="3">
+                  <button style="{{ p.st }}" onClick="{{ p.pick }}">{{ p.name }}</button>
+                </sc-for>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:9px">
+                <sc-for list="{{ a.slots }}" as="s" hint-placeholder-count="5">
+                  <button style="{{ s.st }}" onClick="{{ s.pick }}">
+                    <span style="display:flex; flex-direction:column; gap:3px; align-items:flex-start">
+                      <span style="font-size:18px; font-weight:700">{{ s.time }}</span>
+                      <span style="{{ s.subSt }}">{{ s.left }}</span>
+                    </span>
+                    <span style="display:flex; flex-direction:column; gap:3px; align-items:flex-end">
+                      <span style="font-size:15px; font-weight:700">{{ s.price }}</span>
+                      <span style="{{ s.metaSt }}">{{ s.band }}</span>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+
+            <sc-if value="{{ a.sel }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; flex-direction:column; gap:22px">
+                <div style="display:flex; flex-direction:column; gap:11px">
+                  <div style="font-size:13px; font-weight:700; color:var(--color-neutral-700)">How long</div>
+                  <div style="background:#fff; border-radius:26px; padding:16px 18px; display:flex; align-items:center; gap:14px; box-shadow:var(--shadow-sm)">
+                    <button style="{{ a.decSt }}" onClick="{{ a.dec }}">−</button>
+                    <div style="flex:1; display:flex; flex-direction:column; gap:3px; align-items:center">
+                      <div style="font-size:19px; font-weight:700; color:var(--color-text)">{{ a.durLabel }}</div>
+                      <div style="font-size:12.5px; color:var(--color-neutral-700)">{{ a.range }}</div>
+                    </div>
+                    <button style="{{ a.incSt }}" onClick="{{ a.inc }}">+</button>
+                  </div>
+                  <div style="font-size:12px; color:var(--color-neutral-700); padding-left:4px">{{ a.durHint }}</div>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:11px">
+                  <div style="font-size:13px; font-weight:700; color:var(--color-neutral-700)">Court</div>
+                  <div style="display:flex; gap:9px; flex-wrap:wrap">
+                    <sc-for list="{{ a.courts }}" as="c" hint-placeholder-count="4">
+                      <button style="{{ c.st }}" onClick="{{ c.pick }}">{{ c.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:11px">
+                  <div style="font-size:13px; font-weight:700; color:var(--color-neutral-700)">Review</div>
+                  <div style="background:#fff; border-radius:26px; padding:18px; display:flex; flex-direction:column; gap:13px; box-shadow:var(--shadow-sm)">
+                    <div style="display:flex; justify-content:space-between; font-size:14px"><span style="color:var(--color-neutral-700)">When</span><span style="font-weight:700; color:var(--color-text)">{{ a.whenLabel }}</span></div>
+                    <div style="display:flex; justify-content:space-between; font-size:14px"><span style="color:var(--color-neutral-700)">Court</span><span style="font-weight:700; color:var(--color-text)">{{ a.courtLabel }}</span></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:14px">
+                      <span style="color:var(--color-neutral-700)">Players</span>
+                      <span style="display:flex; align-items:center; gap:10px">
+                        <button style="{{ a.plDecSt }}" onClick="{{ a.plDec }}">−</button>
+                        <span style="font-weight:700; color:var(--color-text); min-width:14px; text-align:center">{{ a.pl }}</span>
+                        <button style="{{ a.plIncSt }}" onClick="{{ a.plInc }}">+</button>
+                      </span>
+                    </div>
+                    <div style="height:1px; background:var(--color-neutral-200)"></div>
+                    <div style="display:flex; justify-content:space-between; font-size:14px"><span style="color:var(--color-neutral-700)">{{ a.rateLine }}</span><span style="font-weight:700; color:var(--color-text)">{{ a.totalLabel }}</span></div>
+                    <div style="font-size:12px; line-height:1.5; color:var(--color-neutral-700)">Free cancellation up to 4 hours before start. After that, no refund.</div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="position:absolute; left:0; right:0; bottom:0; height:92px; background:var(--color-bg); border-top:1px solid var(--color-neutral-300); padding:14px 22px; display:flex; align-items:center; gap:14px">
+          <div style="display:flex; flex-direction:column; gap:2px; min-width:92px">
+            <div style="font-size:11px; font-weight:600; color:var(--color-neutral-700); letter-spacing:0.04em">TOTAL</div>
+            <div style="font-family:var(--font-heading); font-size:24px; color:var(--color-text)">{{ a.totalLabel }}</div>
+          </div>
+          <button style="{{ a.paySt }}">{{ a.payLabel }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="1b" style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:500; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">1b</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">Fast grid</span>
+      </div>
+      <p style="margin:0; font-size:13px; line-height:1.55; color:var(--color-neutral-700); min-height:56px">Every open hour of the period on one screen, three across. Utilitarian and dense for the regular who knows exactly when they play and wants out in four taps.</p>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-neutral-100); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative">
+        <div class="ph" style="position:absolute; inset:0 0 84px 0; overflow-y:auto">
+          <div style="background:var(--color-neutral-900); padding:20px 20px 22px; display:flex; flex-direction:column; gap:16px">
+            <div style="display:flex; align-items:center; justify-content:space-between">
+              <div style="font-family:var(--font-heading); font-size:22px; color:var(--color-bg)">JBC</div>
+              <div style="font-family:var(--font-body); font-size:11px; letter-spacing:0.08em; color:var(--color-neutral-400)">GUEST BOOKING</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; background:var(--color-neutral-800); border-radius:16px; padding:12px 14px">
+              <div style="flex:1; display:flex; flex-direction:column; gap:2px">
+                <div style="font-size:13.5px; font-weight:700; color:var(--color-neutral-100)">JBC Badminton court</div>
+                <div style="font-family:var(--font-body); font-size:11px; color:var(--color-neutral-300)">6 COURTS · 06:00–23:00</div>
+              </div>
+              <button style="font-family:inherit; font-size:12px; font-weight:700; color:var(--color-accent-400); background:none; border:1px solid var(--color-neutral-700); border-radius:999px; padding:7px 12px; cursor:pointer">Change</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; background:var(--color-accent-2-800); border-radius:16px; padding:11px 14px">
+              <div style="width:8px; height:8px; border-radius:999px; background:var(--color-accent-2-400); flex:none"></div>
+              <div style="flex:1; font-size:12.5px; color:var(--color-accent-2-200)">Tomorrow 7 PM · Court 3</div>
+              <a href="#1b" style="font-size:12px; font-weight:700; color:var(--color-accent-2-300); text-decoration:none">Manage</a>
+            </div>
+          </div>
+
+          <div style="padding:18px 20px 22px; display:flex; flex-direction:column; gap:20px">
+            <div style="display:flex; flex-direction:column; gap:9px">
+              <div style="font-family:var(--font-body); font-size:11px; letter-spacing:0.09em; color:var(--color-neutral-700)">01 · DAY</div>
+              <div class="ph" style="display:flex; gap:7px; overflow-x:auto">
+                <sc-for list="{{ b.dates }}" as="d" hint-placeholder-count="7">
+                  <button style="{{ d.st }}" onClick="{{ d.pick }}">
+                    <span style="{{ d.subSt }}">{{ d.dow }}</span>
+                    <span style="font-size:16px; font-weight:700">{{ d.day }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:9px">
+              <div style="display:flex; align-items:center; justify-content:space-between">
+                <div style="font-family:var(--font-body); font-size:11px; letter-spacing:0.09em; color:var(--color-neutral-700)">02 · START</div>
+                <div style="font-family:var(--font-body); font-size:11px; color:var(--color-neutral-700)">{{ b.countLabel }}</div>
+              </div>
+              <div style="display:flex; gap:4px; background:var(--color-neutral-200); padding:4px; border-radius:12px">
+                <sc-for list="{{ b.periods }}" as="p" hint-placeholder-count="3">
+                  <button style="{{ p.st }}" onClick="{{ p.pick }}">{{ p.name }}</button>
+                </sc-for>
+              </div>
+              <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:7px">
+                <sc-for list="{{ b.slots }}" as="s" hint-placeholder-count="6">
+                  <button style="{{ s.st }}" onClick="{{ s.pick }}">
+                    <span style="font-size:15px; font-weight:700">{{ s.time }}</span>
+                    <span style="{{ s.subSt }}">{{ s.price }}</span>
+                    <span style="{{ s.metaSt }}">{{ s.short }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+
+            <sc-if value="{{ b.sel }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; flex-direction:column; gap:20px">
+                <div style="display:flex; flex-direction:column; gap:9px">
+                  <div style="font-family:var(--font-body); font-size:11px; letter-spacing:0.09em; color:var(--color-neutral-700)">03 · DURATION</div>
+                  <div style="display:flex; align-items:stretch; gap:7px">
+                    <button style="{{ b.decSt }}" onClick="{{ b.dec }}">−30</button>
+                    <div style="flex:1; background:#fff; border:1px solid var(--color-neutral-300); border-radius:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:10px">
+                      <div style="font-size:17px; font-weight:700; color:var(--color-text)">{{ b.durLabel }}</div>
+                      <div style="font-family:var(--font-body); font-size:11px; color:var(--color-neutral-700)">{{ b.range }}</div>
+                    </div>
+                    <button style="{{ b.incSt }}" onClick="{{ b.inc }}">+30</button>
+                  </div>
+                  <div style="font-family:var(--font-body); font-size:10.5px; color:var(--color-neutral-700)">{{ b.durHint }}</div>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:9px">
+                  <div style="font-family:var(--font-body); font-size:11px; letter-spacing:0.09em; color:var(--color-neutral-700)">04 · COURT</div>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap">
+                    <sc-for list="{{ b.courts }}" as="c" hint-placeholder-count="4">
+                      <button style="{{ c.st }}" onClick="{{ c.pick }}">{{ c.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:9px">
+                  <div style="font-family:var(--font-body); font-size:11px; letter-spacing:0.09em; color:var(--color-neutral-700)">05 · REVIEW</div>
+                  <div style="border:1px solid var(--color-neutral-300); border-radius:16px; overflow:hidden; background:#fff">
+                    <div style="display:flex; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--color-neutral-200); font-size:13.5px"><span style="color:var(--color-neutral-700)">Slot</span><span style="font-weight:700; color:var(--color-text)">{{ b.whenLabel }}</span></div>
+                    <div style="display:flex; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--color-neutral-200); font-size:13.5px"><span style="color:var(--color-neutral-700)">Court</span><span style="font-weight:700; color:var(--color-text)">{{ b.courtLabel }}</span></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 14px; border-bottom:1px solid var(--color-neutral-200); font-size:13.5px">
+                      <span style="color:var(--color-neutral-700)">Players</span>
+                      <span style="display:flex; align-items:center; gap:9px">
+                        <button style="{{ b.plDecSt }}" onClick="{{ b.plDec }}">−</button>
+                        <span style="font-weight:700; color:var(--color-text); min-width:12px; text-align:center">{{ b.pl }}</span>
+                        <button style="{{ b.plIncSt }}" onClick="{{ b.plInc }}">+</button>
+                      </span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:12px 14px; font-size:13.5px"><span style="color:var(--color-neutral-700)">{{ b.rateLine }}</span><span style="font-weight:700; color:var(--color-text)">{{ b.totalLabel }}</span></div>
+                  </div>
+                  <div style="font-size:11.5px; line-height:1.5; color:var(--color-neutral-700)">Free cancellation up to 4 hours before start. After that, no refund.</div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="position:absolute; left:0; right:0; bottom:0; height:84px; background:var(--color-neutral-900); padding:14px 20px; display:flex; align-items:center; gap:12px">
+          <div style="display:flex; flex-direction:column; gap:1px; min-width:80px">
+            <div style="font-family:var(--font-body); font-size:10px; letter-spacing:0.08em; color:var(--color-neutral-500)">TOTAL</div>
+            <div style="font-size:21px; font-weight:800; color:var(--color-neutral-100)">{{ b.totalLabel }}</div>
+          </div>
+          <button style="{{ b.paySt }}">{{ b.payLabel }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="1c" style="display:flex; flex-direction:column; gap:14px; width:390px">
+      <div style="display:flex; align-items:baseline; gap:10px">
+        <span style="font-family:var(--font-body); font-size:12px; font-weight:500; background:var(--color-text); color:var(--color-bg); padding:4px 9px; border-radius:999px">1c</span>
+        <span style="font-family:var(--font-heading); font-size:20px; color:var(--color-text)">Timeline</span>
+      </div>
+      <p style="margin:0; font-size:13px; line-height:1.55; color:var(--color-neutral-700); min-height:56px">A horizontal rail of the day where the selection is a block you grow. The evening is dark and loud — the booking reads as a physical span of time, not a list item.</p>
+      <div class="ph" style="width:390px; height:844px; background:var(--color-neutral-900); border-radius:34px; box-shadow:var(--shadow-lg); overflow:hidden; position:relative">
+        <div class="ph" style="position:absolute; inset:0 0 96px 0; overflow-y:auto">
+          <div style="padding:22px 0 26px; display:flex; flex-direction:column; gap:22px">
+
+            <div style="padding:0 22px; display:flex; align-items:center; justify-content:space-between">
+              <div style="font-family:var(--font-heading); font-size:26px; color:var(--color-bg)">JBC</div>
+              <div style="font-size:13px; font-weight:600; color:var(--color-bg); background:var(--color-neutral-800); padding:9px 15px; border-radius:999px">Guest</div>
+            </div>
+
+            <div style="padding:0 22px">
+              <div style="border-radius:28px; overflow:hidden; background:var(--color-neutral-800)">
+                <div style="height:132px; background:repeating-linear-gradient(115deg,var(--color-accent-2-700) 0 10px,var(--color-accent-2-800) 10px 20px); display:flex; align-items:flex-end; padding:14px">
+                  <span style="font-family:var(--font-body); font-size:10.5px; letter-spacing:0.06em; color:var(--color-accent-2-200); background:rgba(32,30,29,0.55); padding:6px 10px; border-radius:999px">court photo</span>
+                </div>
+                <div style="padding:16px 18px; display:flex; align-items:center; gap:12px">
+                  <div style="flex:1; display:flex; flex-direction:column; gap:3px">
+                    <div style="font-size:15px; font-weight:700; color:var(--color-neutral-100)">JBC Badminton court</div>
+                    <div style="font-size:12.5px; color:var(--color-neutral-400)">6 courts · 6 AM – 11 PM · more branches soon</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding:0 22px">
+              <div style="background:var(--color-accent-2-800); border-radius:22px; padding:14px 16px; display:flex; align-items:center; gap:12px">
+                <div style="flex:1; font-size:13px; color:var(--color-accent-2-200)"><span style="font-weight:700">You're playing tomorrow</span> · 7:00 PM, Court 3</div>
+                <a href="#1c" style="font-size:12.5px; font-weight:700; color:var(--color-accent-2-300); text-decoration:none">Manage</a>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:12px">
+              <div style="padding:0 22px"><h2 style="font-family:var(--font-heading); font-weight:400; font-size:30px; line-height:1.1; margin:0; color:var(--color-bg)">Pick your slot</h2></div>
+              <div class="ph" style="display:flex; gap:9px; overflow-x:auto; padding:0 22px 2px">
+                <sc-for list="{{ c.dates }}" as="d" hint-placeholder-count="7">
+                  <button style="{{ d.st }}" onClick="{{ d.pick }}">
+                    <span style="{{ d.subSt }}">{{ d.dow }}</span>
+                    <span style="font-size:17px; font-weight:700">{{ d.day }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="padding:0 22px; display:flex; gap:6px">
+                <sc-for list="{{ c.periods }}" as="p" hint-placeholder-count="3">
+                  <button style="{{ p.st }}" onClick="{{ p.pick }}">{{ p.name }}</button>
+                </sc-for>
+              </div>
+              <div class="ph" style="display:flex; gap:10px; overflow-x:auto; padding:6px 22px 10px; align-items:stretch">
+                <sc-for list="{{ c.slots }}" as="s" hint-placeholder-count="5">
+                  <button style="{{ s.st }}" onClick="{{ s.pick }}">
+                    <span style="font-size:19px; font-weight:700; letter-spacing:-0.01em">{{ s.time }}</span>
+                    <span style="{{ s.subSt }}">{{ s.price }}</span>
+                    <span style="{{ s.metaSt }}">{{ s.left }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="padding:0 22px; font-size:12px; color:var(--color-neutral-500)">{{ c.countLabel }} · booked-out hours are hidden</div>
+            </div>
+
+            <sc-if value="{{ c.sel }}" hint-placeholder-val="{{ true }}">
+              <div style="padding:0 22px; display:flex; flex-direction:column; gap:14px">
+                <div style="background:var(--color-bg); border-radius:28px; padding:20px; display:flex; flex-direction:column; gap:18px">
+                  <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px">
+                    <div style="display:flex; flex-direction:column; gap:4px">
+                      <div style="font-size:12px; font-weight:700; color:var(--color-neutral-700); letter-spacing:0.04em">YOUR SLOT</div>
+                      <div style="font-family:var(--font-heading); font-size:26px; line-height:1.1; color:var(--color-text)">{{ c.range }}</div>
+                      <div style="font-size:13px; color:var(--color-neutral-700)">{{ c.dayLabel }} · {{ c.courtLabel }}</div>
+                    </div>
+                    <div style="font-family:var(--font-heading); font-size:26px; color:var(--color-accent-700)">{{ c.totalLabel }}</div>
+                  </div>
+
+                  <div style="display:flex; align-items:center; gap:12px; background:var(--color-neutral-200); border-radius:999px; padding:8px">
+                    <button style="{{ c.decSt }}" onClick="{{ c.dec }}">−</button>
+                    <div style="flex:1; text-align:center; font-size:16px; font-weight:700; color:var(--color-text)">{{ c.durLabel }}</div>
+                    <button style="{{ c.incSt }}" onClick="{{ c.inc }}">+</button>
+                  </div>
+                  <div style="font-size:12px; color:var(--color-neutral-700); margin-top:-8px; text-align:center">{{ c.durHint }}</div>
+
+                  <div style="display:flex; flex-direction:column; gap:10px">
+                    <div style="font-size:12px; font-weight:700; color:var(--color-neutral-700); letter-spacing:0.04em">COURT</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap">
+                      <sc-for list="{{ c.courts }}" as="ct" hint-placeholder-count="4">
+                        <button style="{{ ct.st }}" onClick="{{ ct.pick }}">{{ ct.label }}</button>
+                      </sc-for>
+                    </div>
+                  </div>
+
+                  <div style="height:1px; background:var(--color-neutral-300)"></div>
+
+                  <div style="display:flex; align-items:center; justify-content:space-between; font-size:14px">
+                    <span style="color:var(--color-neutral-700)">Players</span>
+                    <span style="display:flex; align-items:center; gap:12px">
+                      <button style="{{ c.plDecSt }}" onClick="{{ c.plDec }}">−</button>
+                      <span style="font-weight:700; color:var(--color-text); min-width:14px; text-align:center">{{ c.pl }}</span>
+                      <button style="{{ c.plIncSt }}" onClick="{{ c.plInc }}">+</button>
+                    </span>
+                  </div>
+                  <div style="display:flex; align-items:center; justify-content:space-between; font-size:14px">
+                    <span style="color:var(--color-neutral-700)">{{ c.rateLine }}</span>
+                    <span style="font-weight:700; color:var(--color-text)">{{ c.totalLabel }}</span>
+                  </div>
+                  <div style="font-size:12px; line-height:1.5; color:var(--color-neutral-700)">Free cancellation up to 4 hours before start. After that, no refund.</div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="position:absolute; left:0; right:0; bottom:0; height:96px; background:var(--color-text); padding:16px 22px; display:flex; align-items:center; gap:14px">
+          <div style="display:flex; flex-direction:column; gap:2px; min-width:92px">
+            <div style="font-size:11px; font-weight:600; color:var(--color-neutral-500); letter-spacing:0.04em">TOTAL</div>
+            <div style="font-family:var(--font-heading); font-size:24px; color:var(--color-bg)">{{ c.totalLabel }}</div>
+          </div>
+          <button style="{{ c.paySt }}">{{ c.payLabel }}</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = {
+    a: { d: 0, p: 2, s: null, dur: 60, court: null, pl: 2 },
+    b: { d: 0, p: 2, s: null, dur: 60, court: null, pl: 2 },
+    c: { d: 0, p: 2, s: null, dur: 60, court: null, pl: 4 }
+  };
+
+  set(k, patch) { this.setState(st => ({ [k]: Object.assign({}, st[k], patch) })); }
+
+  isPeak(h) { return (h >= 6 && h < 10) || (h >= 19 && h < 21); }
+  rate(h) { return this.isPeak(h) ? 400 : 300; }
+  left(d, h) { const n = (d * 7 + h * 13 + 3) % 10; return n < 7 ? (n % 4) + 1 : 0; }
+  fmt(mins) {
+    const h = Math.floor(mins / 60), m = mins % 60;
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return h12 + ':' + (m === 0 ? '00' : '30') + ' ' + (h < 12 ? 'AM' : 'PM');
+  }
+  price(start, dur) {
+    let t = 0;
+    for (let i = 0; i < dur / 30; i++) t += this.rate(Math.floor(start + i * 0.5)) / 2;
+    return t;
+  }
+  rupee(n) { return '\u20b9' + n.toLocaleString('en-IN'); }
+  maxDur(d, start) {
+    if (this.left(d, start + 1) > 0 && start + 2 <= 23) return 120;
+    if (this.left(d, start + 1) > 0) return 90;
+    return 60;
+  }
+  dates() {
+    const base = new Date(2026, 7, 23);
+    const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const out = [];
+    for (let i = 0; i < 7; i++) {
+      const dt = new Date(base.getTime() + i * 86400000);
+      out.push({
+        dow: i === 0 ? 'Today' : dow[dt.getDay()],
+        day: String(dt.getDate()),
+        full: (i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : dow[dt.getDay()]) + ' ' + dt.getDate() + ' Aug'
+      });
+    }
+    return out;
+  }
+  periodsDef() { return [['Morning', 6, 12], ['Afternoon', 12, 17], ['Evening', 17, 23]]; }
+
+  deck(k, T) {
+    const s = this.state[k];
+    const dates = this.dates();
+    const pd = this.periodsDef();
+    const openHours = [];
+    for (let h = pd[s.p][1]; h < pd[s.p][2]; h++) if (this.left(s.d, h) > 0) openHours.push(h);
+
+    const sel = s.s !== null && this.left(s.d, s.s) > 0;
+    const max = sel ? this.maxDur(s.d, s.s) : 60;
+    const dur = Math.min(s.dur, max);
+    const total = sel ? this.price(s.s, dur) : 0;
+    const courtsN = sel ? this.left(s.d, s.s) : 0;
+    const court = sel ? Math.min(s.court || 1, courtsN) : null;
+
+    const D = {
+      dates: dates.map((d, i) => ({
+        dow: d.dow, day: d.day, st: T.date(i === s.d), subSt: T.dateSub(i === s.d),
+        pick: () => this.set(k, { d: i, s: null, court: null })
+      })),
+      periods: pd.map((p, i) => ({
+        name: p[0], st: T.period(i === s.p),
+        pick: () => this.set(k, { p: i, s: null, court: null })
+      })),
+      slots: openHours.map(h => {
+        const l = this.left(s.d, h);
+        return {
+          time: this.fmt(h * 60).replace(':00', ''),
+          price: this.rupee(this.rate(h)) + '/hr',
+          band: this.isPeak(h) ? 'Peak' : 'Off-peak',
+          short: this.isPeak(h) ? 'PEAK' : 'OFF',
+          left: l + (l === 1 ? ' court left' : ' courts free'),
+          st: T.slot(h === s.s, this.isPeak(h)),
+          subSt: T.slotSub(h === s.s), metaSt: T.slotMeta(h === s.s),
+          pick: () => this.set(k, { s: h, dur: 60, court: 1 })
+        };
+      }),
+      countLabel: openHours.length + ' of ' + (pd[s.p][2] - pd[s.p][1]) + ' hours open',
+      sel: sel,
+      dur: dur,
+      durLabel: dur === 60 ? '60 min' : dur === 90 ? '90 min' : '2 hours',
+      durHint: max === 60
+        ? 'Next hour is fully booked, so 60 min is the max here.'
+        : dur >= max ? 'Longest continuous block available at this start.' : 'Add 30 min at a time, up to 2 hours.',
+      dec: () => this.set(k, { dur: Math.max(60, dur - 30) }),
+      inc: () => this.set(k, { dur: Math.min(max, dur + 30) }),
+      decSt: T.step(dur > 60),
+      incSt: T.step(dur < max),
+      range: sel ? this.fmt(s.s * 60) + ' – ' + this.fmt(s.s * 60 + dur) : '',
+      dayLabel: dates[s.d].full,
+      whenLabel: sel ? dates[s.d].full.split(' ')[0] + ', ' + this.fmt(s.s * 60) + ' – ' + this.fmt(s.s * 60 + dur) : '',
+      courts: Array.from({ length: courtsN }, (_, i) => ({
+        label: 'Court ' + (i + 1), st: T.court(i + 1 === court),
+        pick: () => this.set(k, { court: i + 1 })
+      })),
+      courtLabel: court ? 'Court ' + court : '',
+      pl: s.pl,
+      plDec: () => this.set(k, { pl: Math.max(1, s.pl - 1) }),
+      plInc: () => this.set(k, { pl: Math.min(6, s.pl + 1) }),
+      plDecSt: T.pill(s.pl > 1),
+      plIncSt: T.pill(s.pl < 6),
+      rateLine: sel ? (dur / 60) + ' hr' + (dur > 60 ? 's' : '') + ' \u00b7 ' + (this.isPeak(s.s) ? 'peak' : 'off-peak') + ' rate' : '',
+      totalLabel: sel ? this.rupee(total) : '\u2014',
+      payLabel: sel ? 'Pay ' + this.rupee(total) + ' with UPI' : 'Pick a start time',
+      paySt: T.pay(sel)
+    };
+    return D;
+  }
+
+  payDeck() {
+    const btn = { fontFamily: 'inherit', cursor: 'pointer', border: 'none', transition: 'background .14s ease, color .14s ease' };
+    const apps = ['Google Pay', 'PhonePe', 'Paytm', 'Other UPI ID'];
+    const pick = this.state.payApp === undefined ? 0 : this.state.payApp;
+    return {
+      apps: apps.map((n, i) => ({
+        name: n,
+        st: Object.assign({}, btn, {
+          display: 'flex', alignItems: 'center', gap: '12px', width: '100%', textAlign: 'left',
+          padding: '14px 16px', borderRadius: '14px', minHeight: '56px', fontSize: '14px', fontWeight: 600,
+          border: i === pick ? '1px solid var(--color-neutral-900)' : '1px solid var(--color-neutral-300)',
+          background: '#fff', color: 'var(--color-text)'
+        }),
+        dotSt: {
+          width: '18px', height: '18px', borderRadius: '999px', flex: 'none',
+          border: i === pick ? '5px solid var(--color-accent-700)' : '2px solid var(--color-neutral-400)',
+          background: '#fff'
+        },
+        markSt: {
+          width: '34px', height: '34px', borderRadius: '10px', flex: 'none',
+          background: 'repeating-linear-gradient(135deg,var(--color-neutral-300) 0 5px,var(--color-neutral-200) 5px 10px)'
+        },
+        pick: () => this.setState({ payApp: i })
+      })),
+      payLabel: 'Pay \u20b9550 with ' + apps[pick]
+    };
+  }
+
+  renderVals() {
+    const btn = { fontFamily: 'inherit', cursor: 'pointer', border: 'none', transition: 'background .14s ease, color .14s ease' };
+
+    const themeA = {
+      date: on => Object.assign({}, btn, {
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', flex: 'none',
+        width: '52px', padding: '10px 0', borderRadius: '18px',
+        background: on ? 'var(--color-accent-700)' : 'var(--color-neutral-200)',
+        color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-700)'
+      }),
+      dateSub: on => ({ fontSize: '11px', fontWeight: 600, color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-700)' }),
+      slotSub: on => ({ fontSize: '12px', color: on ? 'var(--color-accent-2-200)' : 'var(--color-neutral-700)' }),
+      slotMeta: on => ({ fontSize: '11px', fontWeight: 600, color: on ? 'var(--color-accent-2-200)' : 'var(--color-neutral-700)' }),
+      period: on => Object.assign({}, btn, {
+        flex: 1, padding: '11px 0', borderRadius: '999px', fontSize: '13.5px', fontWeight: 700,
+        background: on ? 'var(--color-bg)' : 'transparent',
+        color: on ? 'var(--color-text)' : 'var(--color-neutral-700)',
+        boxShadow: on ? 'var(--shadow-sm)' : 'none'
+      }),
+      slot: (on, peak) => Object.assign({}, btn, {
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left',
+        padding: '15px 18px', borderRadius: '22px', minHeight: '68px',
+        background: on ? 'var(--color-accent-2-700)' : '#fff',
+        color: on ? 'var(--color-accent-2-100)' : 'var(--color-text)',
+        boxShadow: on ? 'var(--shadow-md)' : 'var(--shadow-sm)'
+      }),
+      step: en => Object.assign({}, btn, {
+        width: '46px', height: '46px', borderRadius: '999px', fontSize: '22px', fontWeight: 700,
+        background: en ? 'var(--color-accent-200)' : 'var(--color-neutral-200)',
+        color: en ? 'var(--color-accent-700)' : 'var(--color-neutral-500)',
+        cursor: en ? 'pointer' : 'not-allowed'
+      }),
+      court: on => Object.assign({}, btn, {
+        padding: '12px 16px', borderRadius: '999px', fontSize: '13.5px', fontWeight: 700, minHeight: '44px',
+        background: on ? 'var(--color-text)' : 'var(--color-neutral-200)',
+        color: on ? 'var(--color-bg)' : 'var(--color-neutral-700)'
+      }),
+      pill: en => Object.assign({}, btn, {
+        width: '34px', height: '34px', borderRadius: '999px', fontSize: '16px', fontWeight: 700,
+        background: 'var(--color-neutral-200)',
+        color: en ? 'var(--color-neutral-700)' : 'var(--color-neutral-500)'
+      }),
+      pay: en => Object.assign({}, btn, {
+        flex: 1, height: '58px', borderRadius: '999px', fontSize: '15.5px', fontWeight: 700,
+        background: en ? 'var(--color-accent-700)' : 'var(--color-neutral-300)',
+        color: en ? 'var(--color-accent-100)' : 'var(--color-neutral-600)',
+        cursor: en ? 'pointer' : 'not-allowed'
+      })
+    };
+
+    const themeB = {
+      date: on => Object.assign({}, btn, {
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', flex: 'none',
+        width: '46px', padding: '9px 0', borderRadius: '12px',
+        background: on ? 'var(--color-neutral-900)' : 'var(--color-neutral-200)',
+        color: on ? 'var(--color-neutral-100)' : 'var(--color-neutral-700)'
+      }),
+      dateSub: on => ({ fontSize: '10.5px', fontWeight: 600, color: on ? 'var(--color-neutral-300)' : 'var(--color-neutral-700)' }),
+      slotSub: on => ({ fontSize: '10.5px', fontWeight: 600, color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-700)' }),
+      slotMeta: on => ({ fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-700)' }),
+      period: on => Object.assign({}, btn, {
+        flex: 1, padding: '9px 0', borderRadius: '9px', fontSize: '12.5px', fontWeight: 700,
+        background: on ? '#fff' : 'transparent',
+        color: on ? 'var(--color-text)' : 'var(--color-neutral-700)'
+      }),
+      slot: (on, peak) => Object.assign({}, btn, {
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px',
+        minHeight: '62px', padding: '9px 4px', borderRadius: '13px',
+        border: on ? '1px solid var(--color-accent-600)' : '1px solid var(--color-neutral-300)',
+        background: on ? 'var(--color-accent-700)' : peak ? 'var(--color-accent-100)' : '#fff',
+        color: on ? 'var(--color-accent-100)' : 'var(--color-text)'
+      }),
+      step: en => Object.assign({}, btn, {
+        width: '66px', borderRadius: '14px', fontSize: '13px', fontWeight: 700, minHeight: '52px',
+        background: en ? 'var(--color-neutral-900)' : 'var(--color-neutral-200)',
+        color: en ? 'var(--color-neutral-100)' : 'var(--color-neutral-500)',
+        cursor: en ? 'pointer' : 'not-allowed'
+      }),
+      court: on => Object.assign({}, btn, {
+        padding: '11px 14px', borderRadius: '10px', fontSize: '12.5px', fontWeight: 700, minHeight: '44px',
+        border: on ? '1px solid var(--color-neutral-900)' : '1px solid var(--color-neutral-300)',
+        background: on ? 'var(--color-neutral-900)' : '#fff',
+        color: on ? 'var(--color-neutral-100)' : 'var(--color-neutral-700)'
+      }),
+      pill: en => Object.assign({}, btn, {
+        width: '32px', height: '32px', borderRadius: '8px', fontSize: '15px', fontWeight: 700,
+        border: '1px solid var(--color-neutral-300)', background: 'var(--color-neutral-100)',
+        color: en ? 'var(--color-neutral-700)' : 'var(--color-neutral-500)'
+      }),
+      pay: en => Object.assign({}, btn, {
+        flex: 1, height: '54px', borderRadius: '14px', fontSize: '15px', fontWeight: 700,
+        background: en ? 'var(--color-accent-400)' : 'var(--color-neutral-800)',
+        color: en ? 'var(--color-neutral-900)' : 'var(--color-neutral-400)',
+        cursor: en ? 'pointer' : 'not-allowed'
+      })
+    };
+
+    const themeC = {
+      date: on => Object.assign({}, btn, {
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', flex: 'none',
+        width: '52px', padding: '10px 0', borderRadius: '18px',
+        background: on ? 'var(--color-bg)' : 'var(--color-neutral-800)',
+        color: on ? 'var(--color-text)' : 'var(--color-neutral-300)'
+      }),
+      dateSub: on => ({ fontSize: '11px', fontWeight: 600, color: on ? 'var(--color-neutral-700)' : 'var(--color-neutral-300)' }),
+      slotSub: on => ({ fontSize: '12px', color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-300)' }),
+      slotMeta: on => ({ fontSize: '11px', color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-300)' }),
+      period: on => Object.assign({}, btn, {
+        flex: 1, padding: '10px 0', borderRadius: '999px', fontSize: '13px', fontWeight: 700,
+        background: on ? 'var(--color-accent-2-500)' : 'transparent',
+        color: on ? 'var(--color-text)' : 'var(--color-neutral-300)',
+        outline: on ? 'none' : '1px solid var(--color-neutral-700)'
+      }),
+      slot: (on, peak) => Object.assign({}, btn, {
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-end', gap: '3px',
+        flex: 'none', width: '128px', minHeight: '112px', padding: '16px', borderRadius: '24px', textAlign: 'left',
+        background: on ? 'var(--color-accent-700)' : 'var(--color-neutral-800)',
+        color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-200)',
+        transform: on ? 'translateY(-4px)' : 'none',
+        boxShadow: on ? 'var(--shadow-lg)' : 'none'
+      }),
+      step: en => Object.assign({}, btn, {
+        width: '46px', height: '46px', borderRadius: '999px', fontSize: '22px', fontWeight: 700,
+        background: en ? 'var(--color-text)' : 'var(--color-neutral-300)',
+        color: en ? 'var(--color-bg)' : 'var(--color-neutral-600)',
+        cursor: en ? 'pointer' : 'not-allowed'
+      }),
+      court: on => Object.assign({}, btn, {
+        padding: '12px 16px', borderRadius: '999px', fontSize: '13.5px', fontWeight: 700, minHeight: '44px',
+        background: on ? 'var(--color-accent-2-700)' : 'var(--color-neutral-200)',
+        color: on ? 'var(--color-accent-2-100)' : 'var(--color-neutral-700)'
+      }),
+      pill: en => Object.assign({}, btn, {
+        width: '34px', height: '34px', borderRadius: '999px', fontSize: '16px', fontWeight: 700,
+        background: 'var(--color-neutral-200)',
+        color: en ? 'var(--color-neutral-700)' : 'var(--color-neutral-500)'
+      }),
+      pay: en => Object.assign({}, btn, {
+        flex: 1, height: '60px', borderRadius: '999px', fontSize: '15.5px', fontWeight: 700,
+        background: en ? 'var(--color-accent-400)' : 'var(--color-neutral-800)',
+        color: en ? 'var(--color-neutral-900)' : 'var(--color-neutral-400)',
+        cursor: en ? 'pointer' : 'not-allowed'
+      })
+    };
+
+    return { a: this.deck('a', themeA), b: this.deck('b', themeB), c: this.deck('c', themeC), pay: this.payDeck() };
+  }
+}
+</script>
+</body>
+</html>

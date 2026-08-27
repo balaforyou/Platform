@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #e7dcc9; font-family: 'Figtree', system-ui, sans-serif; }
+  a { color: #8c491a; }
+  a:hover { color: #643312; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+
+<section style="padding:56px 64px 96px;display:flex;flex-direction:column;gap:44px">
+
+  <div style="display:flex;flex-direction:column;gap:14px;max-width:920px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-family:'Figtree',sans-serif;font-size:12px;font-weight:700;letter-spacing:0.1em;color:#f9f4ed;background:#2e2b25;padding:6px 12px;border-radius:999px">5a</span>
+      <span style="font-family:'Figtree',sans-serif;font-size:12px;font-weight:600;letter-spacing:0.09em;color:#645c50">FULL MIGRATION · 20 FRAMES · 390px</span>
+    </div>
+    <h1 style="font-family:'Caprasimo',serif;font-weight:400;font-size:44px;line-height:1.1;color:#201e1d;margin:0;text-wrap:pretty">Every screen on the proposal</h1>
+    <p style="font-size:16px;line-height:1.6;color:#474238;margin:0;max-width:660px;text-wrap:pretty">Flow order, left to right. The profile control in the band opens on tap — see 04. State frames sit beneath the screen they belong to. Rendered at the Organic default accent <span style="font-family:ui-monospace,monospace;font-size:14px;background:#f9f4ed;padding:2px 6px;border-radius:6px">#c67139</span> — every accent value below comes from the ramp, so a tenant override moves all of them together.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px">
+      <span style="font-size:12.5px;font-weight:600;color:#474238;background:#f9f4ed;border:1px solid #dcd3c4;padding:7px 13px;border-radius:999px">Cream ground app-wide, mint retired</span>
+      <span style="font-size:12.5px;font-weight:600;color:#474238;background:#f9f4ed;border:1px solid #dcd3c4;padding:7px 13px;border-radius:999px">Identical dark band on all nine</span>
+      <span style="font-size:12.5px;font-weight:600;color:#474238;background:#f9f4ed;border:1px solid #dcd3c4;padding:7px 13px;border-radius:999px">Figtree body · Caprasimo headings · mono for times</span>
+      <span style="font-size:12.5px;font-weight:600;color:#474238;background:#f9f4ed;border:1px solid #dcd3c4;padding:7px 13px;border-radius:999px">brand-primary aliased to accent-500</span>
+      <span style="font-size:12.5px;font-weight:600;color:#474238;background:#f9f4ed;border:1px solid #dcd3c4;padding:7px 13px;border-radius:999px">Sage for available, amber kept for scarcity</span>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:flex-start;gap:44px">
+
+    <!-- ============ 1. TENANT RESOLVE ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">01 · TenantContext.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Resolving the tenant</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Was <span style="font-family:ui-monospace,monospace">#f9fafb</span> with a <span style="font-family:ui-monospace,monospace">#e11d48</span> spinner and no band — the first thing a guest ever sees, and the only screen with no design system at all.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:600px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">STARTING UP</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:32px">
+          <div style="width:52px;height:52px;border-radius:999px;border:4px solid #ffe1d0;border-top-color:#8c491a"></div>
+          <div style="font-size:14.5px;font-weight:600;color:#474238">Finding your court</div>
+        </div>
+      </div>
+
+      
+    </div>
+
+    <!-- ============ 2. SIGN IN + OTP ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">02 · LoginScreen.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Sign in, then verify</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Already migrated in Slice 1 — the only change is the band, now identical to the other eight, with the back control moved into the page.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:700px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">SIGN IN</div>
+        </div>
+        <div style="height:200px;flex:0 0 auto;background:repeating-linear-gradient(115deg,#56633f 0 12px,#3d472b 12px 24px);display:flex;align-items:flex-end;padding:18px">
+          <span style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;color:#f0fae1;background:rgba(32,30,29,0.55);padding:6px 11px;border-radius:999px">court photo</span>
+        </div>
+        <div style="flex:1;background:#f9f4ed;border-radius:28px 28px 0 0;margin-top:-24px;padding:26px 22px 24px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0;text-wrap:pretty">Book a court at JBC</h2>
+            <p style="font-size:14px;line-height:1.55;color:#474238;margin:0">Sign in once so we know the courts are going to real players.</p>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">GUEST · PHONE NUMBER</div>
+            <div style="display:flex;align-items:center;gap:10px;padding:0 16px;min-height:56px;background:#fff;border:1px solid #dcd3c4;border-radius:14px">
+              <span style="font-size:15px;font-weight:700;color:#645c50">+91</span>
+              <span style="width:1px;height:22px;background:#dcd3c4"></span>
+              <span style="font-size:15px;font-weight:700;color:#a19786">99999 99999</span>
+            </div>
+            <button style="min-height:54px;border:none;border-radius:14px;background:#8c491a;color:#fff2eb;font-family:'Figtree',sans-serif;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#643312" style-active="background:#402310">Send me a code</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="flex:1;height:1px;background:#dcd3c4"></span>
+            <span style="font-size:12px;font-weight:600;color:#645c50">or</span>
+            <span style="flex:1;height:1px;background:#dcd3c4"></span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <button style="min-height:54px;border:1px solid #dcd3c4;border-radius:14px;background:#fff;color:#201e1d;font-family:'Figtree',sans-serif;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:11px" style-hover="background:#f9f4ed" style-active="background:#eee7db">
+              <span style="width:22px;height:22px;border-radius:999px;background:repeating-linear-gradient(135deg,#dcd3c4 0 4px,#eee7db 4px 8px)"></span>
+              <span>Continue with Google</span>
+            </button>
+            <div style="display:flex;flex-direction:column;gap:2px;font-size:12px;line-height:1.55;color:#645c50">
+              <span>Members keep their booking history and skip the code next time.</span>
+              <span style="font-weight:600;color:#a19786">[Dev Mock] — does not use real Google sign-in.</span>
+            </div>
+          </div>
+          <div style="margin-top:auto;font-size:11.5px;line-height:1.55;color:#645c50">By continuing you accept the court rules and cancellation policy.</div>
+        </div>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f9f4ed;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:640px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">VERIFY</div>
+        </div>
+        <div style="flex:1;padding:18px 20px 24px;display:flex;flex-direction:column;gap:20px">
+          <button style="align-self:flex-start;min-height:44px;padding:0 16px 0 12px;display:flex;align-items:center;gap:8px;background:#eee7db;border:1px solid #dcd3c4;border-radius:999px;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#201e1d;cursor:pointer" style-hover="background:#dcd3c4">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>Change number</span>
+          </button>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">Enter the code</h2>
+            <p style="font-size:14px;line-height:1.55;color:#474238;margin:0">Sent by SMS to +91 99999 99999.</p>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="min-height:60px;background:#fff;border:2px solid #8c491a;border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:22px;font-weight:700;letter-spacing:0.32em;color:#201e1d">42918</div>
+            <p style="text-align:center;font-size:12px;color:#645c50;margin:0">SMS OTP dev-fallback is active. Code is printed in the backend service logs.</p>
+          </div>
+          <button style="min-height:54px;border:none;border-radius:14px;background:#8c491a;color:#fff2eb;font-family:'Figtree',sans-serif;font-size:15px;font-weight:700;cursor:pointer" style-hover="background:#643312" style-active="background:#402310">Verify and continue</button>
+          <div style="margin-top:auto;background:#fff2eb;color:#643312;border-radius:16px;padding:14px 16px;font-size:12.5px;line-height:1.55;text-wrap:pretty">Three wrong codes and you'll need to request a new one — you can request up to 3 codes every 10 minutes.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 3. NAME CAPTURE ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">03 · NEW · name capture</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">What should we call you?</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">New screen. Fires once, straight after OTP, before the guest reaches the landing. No close and no skip — the name goes on the booking so the front desk knows who is on court. Members never see it; theirs comes from the Google account.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:700px;position:relative;background:#f5ead8">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto;filter:blur(1.5px)">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">ONE LAST THING</div>
+        </div>
+        <div style="flex:1;padding:22px 20px;display:flex;flex-direction:column;gap:16px;filter:blur(2.5px)">
+          <div style="height:26px;width:60%;background:#eee7db;border-radius:8px"></div>
+          <div style="background:#3d472b;border-radius:16px;height:150px"></div>
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;height:90px"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:rgba(46,43,37,0.72);display:flex;align-items:center;justify-content:center;padding:18px">
+          <div style="width:100%;background:#f9f4ed;border:1px solid #dcd3c4;border-radius:28px;padding:26px 22px;display:flex;flex-direction:column;gap:20px;box-shadow:0 12px 32px rgba(46,43,37,0.34)">
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <h3 style="font-family:'Caprasimo',serif;font-weight:400;font-size:26px;line-height:1.15;color:#201e1d;margin:0;text-wrap:pretty">What should we call you?</h3>
+              <p style="font-size:13.5px;line-height:1.55;color:#474238;margin:0;text-wrap:pretty">We put this on the booking so the front desk knows who is playing.</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">YOUR NAME</div>
+              <div style="display:flex;align-items:center;padding:0 16px;min-height:56px;background:#fff;border:2px solid #8c491a;border-radius:14px">
+                <span style="font-size:15px;font-weight:700;color:#201e1d">Ravi Kumar</span>
+                <span style="width:2px;height:22px;background:#8c491a;margin-left:2px"></span>
+              </div>
+            </div>
+            <button style="min-height:54px;border:none;border-radius:14px;background:#8c491a;color:#fff2eb;font-family:'Figtree',sans-serif;font-size:15px;font-weight:700;cursor:pointer" style-hover="background:#643312" style-active="background:#402310">Continue</button>
+            <p style="font-size:11.5px;line-height:1.55;color:#645c50;margin:0">You can change this later from your profile.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 4. LANDING ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">04 · NEW · landing with a booking</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Home · first visit, then with a booking</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Three frames in order: the first visit straight after the name modal with nothing booked, the same landing once a court is held, and the profile menu open. The upcoming booking becomes the top of the page rather than a pill above the picker. <span style="font-family:ui-monospace,monospace">main.tsx</span> already fetches this list.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:700px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">HOME</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="flex:1;padding:24px 20px 28px;display:flex;flex-direction:column;gap:22px">
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">Hello, Ravi</h2>
+            <p style="font-size:13.5px;line-height:1.55;color:#474238;margin:0">Nothing booked yet.</p>
+          </div>
+
+          <div style="background:#3d472b;border-radius:16px;padding:22px 20px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <h3 style="font-family:'Caprasimo',serif;font-weight:400;font-size:24px;line-height:1.2;color:#f5ead8;margin:0;text-wrap:pretty">Book your first court</h3>
+              <p style="font-size:13px;line-height:1.55;color:#ccdbb2;margin:0;text-wrap:pretty">Pick a venue, pick an hour, pay. Free cancellation up to the venue's cut-off.</p>
+            </div>
+            <button style="min-height:52px;border:none;border-radius:14px;background:#f6a06b;color:#2e2b25;font-family:'Figtree',sans-serif;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px" style-hover="background:#ffc6a5" style-active="background:#d67f48">
+              <span>Find a slot</span>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2e2b25" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">OUR VENUES</div>
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 1px 2px rgba(46,43,37,0.14)" style-hover="border-color:#c0b6a5;background:#f9f4ed">
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:18px;color:#201e1d">Peelamedu Arena</div>
+                <div style="font-size:12px;color:#645c50">6 courts · 06:00 – 22:00</div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 1px 2px rgba(46,43,37,0.14)" style-hover="border-color:#c0b6a5;background:#f9f4ed">
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:18px;color:#201e1d">Saibaba Colony Court</div>
+                <div style="font-size:12px;color:#645c50">4 courts · 05:30 – 23:00</div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:700px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">HOME</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="flex:1;padding:24px 20px 28px;display:flex;flex-direction:column;gap:22px">
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">Hello, Ravi</h2>
+            <p style="font-size:13.5px;line-height:1.55;color:#474238;margin:0">One court booked. Bring water.</p>
+          </div>
+          <div style="background:#3d472b;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:8px;height:8px;border-radius:999px;background:#aebf92;flex:0 0 auto"></span>
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:0.09em;color:#ccdbb2">NEXT UP</span>
+              <span style="margin-left:auto;font-family:ui-monospace,monospace;font-size:11.5px;font-weight:700;color:#e1eecc">JBC-7K2M9Q</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:23px;line-height:1.2;color:#f5ead8">Today, 7:00 PM</div>
+              <div style="font-size:13px;line-height:1.55;color:#ccdbb2">Synthetic Courts · Peelamedu Arena · 2 hrs</div>
+            </div>
+            <div style="display:flex;gap:9px;padding-top:4px">
+              <button style="flex:1;min-height:46px;background:#56633f;border:none;border-radius:12px;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#f0fae1;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#728157"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f0fae1" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg><span>Directions</span></button>
+              <button style="flex:1;min-height:46px;background:transparent;border:1px solid #56633f;border-radius:12px;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#e1eecc;cursor:pointer" style-hover="background:#56633f">Manage</button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">BOOK ANOTHER</div>
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 1px 2px rgba(46,43,37,0.14)" style-hover="border-color:#c0b6a5;background:#f9f4ed">
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:18px;color:#201e1d">Peelamedu Arena</div>
+                <div style="font-size:12px;color:#645c50">Your usual · 4 courts free tonight</div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+            <button style="align-self:flex-start;min-height:44px;padding:0 16px;background:transparent;border:1px solid #dcd3c4;border-radius:999px;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;color:#645c50;cursor:pointer" style-hover="background:#f9f4ed;color:#201e1d">All venues</button>
+          </div>
+          <button style="margin-top:auto;align-self:flex-start;background:none;border:none;padding:0;min-height:44px;display:flex;align-items:center;gap:8px;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#8c491a;cursor:pointer">
+            <span>All my bookings</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <sc-if value="{{ showStates }}" hint-placeholder-val="{{ true }}">
+        <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:700px;position:relative">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">HOME</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+          <div style="flex:1;padding:24px 20px 28px;display:flex;flex-direction:column;gap:22px">
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">Hello, Ravi</h2>
+              <p style="font-size:13.5px;line-height:1.55;color:#474238;margin:0">One court booked. Bring water.</p>
+            </div>
+          <div style="background:#3d472b;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:8px;height:8px;border-radius:999px;background:#aebf92;flex:0 0 auto"></span>
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:0.09em;color:#ccdbb2">NEXT UP</span>
+              <span style="margin-left:auto;font-family:ui-monospace,monospace;font-size:11.5px;font-weight:700;color:#e1eecc">JBC-7K2M9Q</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:23px;line-height:1.2;color:#f5ead8">Today, 7:00 PM</div>
+              <div style="font-size:13px;line-height:1.55;color:#ccdbb2">Synthetic Courts · Peelamedu Arena · 2 hrs</div>
+            </div>
+            <div style="display:flex;gap:9px;padding-top:4px">
+              <button style="flex:1;min-height:46px;background:#56633f;border:none;border-radius:12px;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#f0fae1;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#728157"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f0fae1" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg><span>Directions</span></button>
+              <button style="flex:1;min-height:46px;background:transparent;border:1px solid #56633f;border-radius:12px;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#e1eecc;cursor:pointer" style-hover="background:#56633f">Manage</button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">BOOK ANOTHER</div>
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 1px 2px rgba(46,43,37,0.14)" style-hover="border-color:#c0b6a5;background:#f9f4ed">
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:18px;color:#201e1d">Peelamedu Arena</div>
+                <div style="font-size:12px;color:#645c50">Your usual · 4 courts free tonight</div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m9 18 6-6-6-6"/></svg>
+            </div>
+            <button style="align-self:flex-start;min-height:44px;padding:0 16px;background:transparent;border:1px solid #dcd3c4;border-radius:999px;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;color:#645c50;cursor:pointer" style-hover="background:#f9f4ed;color:#201e1d">All venues</button>
+          </div>
+          </div>
+          <div style="position:absolute;inset:0;background:rgba(46,43,37,0.34)"></div>
+          <div style="position:absolute;top:78px;right:14px;width:238px;background:#f9f4ed;border:1px solid #dcd3c4;border-radius:20px;padding:8px;box-shadow:0 12px 32px rgba(46,43,37,0.34);display:flex;flex-direction:column;gap:4px">
+            <div style="padding:12px 12px 14px;display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:15px;font-weight:700;color:#201e1d">Ravi Kumar</div>
+              <div style="font-family:ui-monospace,monospace;font-size:12px;color:#645c50">+91 99999 99999</div>
+              <span style="align-self:flex-start;margin-top:7px;font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:#645c50;background:#eee7db;border:1px solid #dcd3c4;padding:4px 10px;border-radius:999px">GUEST</span>
+            </div>
+            <span style="height:1px;background:#dcd3c4;margin:0 4px"></span>
+            <button style="min-height:46px;padding:0 12px;background:transparent;border:none;border-radius:12px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#201e1d;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px" style-hover="background:#eee7db">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#645c50" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
+              <span>My bookings</span>
+            </button>
+            <button style="min-height:46px;padding:0 12px;background:transparent;border:none;border-radius:12px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#201e1d;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px" style-hover="background:#eee7db">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#645c50" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Edit your name</span>
+            </button>
+            <button style="min-height:46px;padding:0 12px;background:transparent;border:none;border-radius:12px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#b3261e;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px" style-hover="background:#fdecea">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b3261e" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>
+              <span>Log out</span>
+            </button>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- ============ 5. BRANCH SELECT ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">05 · BranchSelect.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Choose a venue · first visit</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Never migrated. Drops <span style="font-family:ui-monospace,monospace">font-outfit</span>, <span style="font-family:ui-monospace,monospace">bg-surface-mint</span>, the accent-word heading trick and the hover lift.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:700px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">CHOOSE A VENUE</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="flex:1;padding:24px 20px 28px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">Pick a venue</h2>
+            <p style="font-size:13.5px;line-height:1.55;color:#474238;margin:0;text-wrap:pretty">Choose a badminton venue to browse courts and book your slot.</p>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;cursor:pointer;box-shadow:0 1px 2px rgba(46,43,37,0.14)" style-hover="border-color:#c0b6a5;background:#f9f4ed">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <h3 style="font-family:'Caprasimo',serif;font-weight:400;font-size:19px;color:#201e1d;margin:0;flex:1">Peelamedu Arena</h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.5;color:#645c50">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>12 Avinashi Road, Peelamedu, Coimbatore 641004</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#645c50">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#56633f" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Open 06:00 – 22:00</span>
+              </div>
+              <p style="font-size:12.5px;line-height:1.5;color:#645c50;margin:0;padding-top:10px;border-top:1px solid #eee7db;text-wrap:pretty">Six wooden courts, floodlit, with a coaching bay and covered parking.</p>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <span style="font-size:10.5px;font-weight:600;color:#645c50;background:#f9f4ed;border:1px solid #dcd3c4;padding:4px 10px;border-radius:999px">Parking</span>
+                <span style="font-size:10.5px;font-weight:600;color:#645c50;background:#f9f4ed;border:1px solid #dcd3c4;padding:4px 10px;border-radius:999px">Showers</span>
+                <span style="font-size:10.5px;font-weight:600;color:#645c50;background:#f9f4ed;border:1px solid #dcd3c4;padding:4px 10px;border-radius:999px">Café</span>
+                <span style="font-size:10.5px;color:#82796a;align-self:center">+2 more</span>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;cursor:pointer;box-shadow:0 1px 2px rgba(46,43,37,0.14)" style-hover="border-color:#c0b6a5;background:#f9f4ed">
+              <div style="display:flex;align-items:center;gap:10px">
+                <h3 style="font-family:'Caprasimo',serif;font-weight:400;font-size:19px;color:#201e1d;margin:0;flex:1">Saibaba Colony Court</h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.5;color:#645c50">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>44 Thadagam Road, Saibaba Colony, Coimbatore 641011</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#645c50">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#56633f" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Open 05:30 – 23:00</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <span style="font-size:10.5px;font-weight:600;color:#645c50;background:#f9f4ed;border:1px solid #dcd3c4;padding:4px 10px;border-radius:999px">Parking</span>
+                <span style="font-size:10.5px;font-weight:600;color:#645c50;background:#f9f4ed;border:1px solid #dcd3c4;padding:4px 10px;border-radius:999px">Pro shop</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ showStates }}" hint-placeholder-val="{{ true }}">
+        <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:420px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+            <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+            <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">CHOOSE A VENUE</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+          </div>
+          <div style="flex:1;padding:24px 20px;display:flex;flex-direction:column;gap:20px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">Pick a venue</h2>
+            <div style="flex:1;background:#f9f4ed;border:1px solid #dcd3c4;border-radius:28px;padding:36px 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center">
+              <div style="width:48px;height:48px;border-radius:999px;background:#eee7db;color:#82796a;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#82796a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></div>
+              <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:19px;color:#201e1d">No venues open</div>
+              <p style="font-size:12.5px;line-height:1.55;color:#645c50;margin:0;max-width:230px;text-wrap:pretty">No branches are active right now. Try again shortly.</p>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- ============ 6. BRANCH DASHBOARD ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">06 · BranchDashboard.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Court categories</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Never migrated. The <span style="font-family:ui-monospace,monospace">bg-gradient-to-tr</span> hero and <span style="font-family:ui-monospace,monospace">shadow-2xl</span> go; the hardcoded "Coimbatore" pill now reads the real branch.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:700px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">VENUE</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="flex:1;padding:22px 20px 28px;display:flex;flex-direction:column;gap:22px">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <span style="align-self:flex-start;display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;letter-spacing:0.08em;color:#643312;background:#ffe1d0;padding:6px 12px;border-radius:999px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#643312" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>PEELAMEDU</span></span>
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0;text-wrap:pretty">Peelamedu Arena</h2>
+            <p style="font-size:13.5px;line-height:1.55;color:#474238;margin:0;text-wrap:pretty">Six wooden courts under floodlights, a coaching bay, and a pro shop by the entrance.</p>
+            <div style="display:flex;gap:10px">
+              <button style="flex:1;min-height:48px;background:#fff;border:1px solid #dcd3c4;border-radius:14px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#201e1d;cursor:pointer" style-hover="background:#f9f4ed">Venue info</button>
+              <button style="flex:1;min-height:48px;background:transparent;border:1px solid #dcd3c4;border-radius:14px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#645c50;cursor:pointer" style-hover="background:#f9f4ed;color:#201e1d">Switch venue</button>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">COURT CATEGORIES</div>
+
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;cursor:pointer;box-shadow:0 1px 2px rgba(46,43,37,0.14)" style-hover="border-color:#c0b6a5;background:#f9f4ed">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <h4 style="font-family:'Caprasimo',serif;font-weight:400;font-size:18px;color:#201e1d;margin:0;flex:1">Synthetic Courts</h4>
+                <span style="font-family:ui-monospace,monospace;font-size:11.5px;font-weight:700;color:#643312;background:#ffe1d0;padding:5px 10px;border-radius:999px">₹400 flat</span>
+              </div>
+              <p style="font-size:12.5px;line-height:1.5;color:#645c50;margin:0;text-wrap:pretty">Four BWF-grade synthetic courts, air-conditioned hall.</p>
+              <div style="display:flex;flex-wrap:wrap;gap:16px;font-family:ui-monospace,monospace;font-size:11.5px;color:#645c50">
+                <span>Capacity <span style="color:#201e1d;font-weight:700">4</span></span>
+                <span>Slot <span style="color:#201e1d;font-weight:700">60m</span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid #eee7db;font-size:12.5px;font-weight:700;color:#8c491a">
+                <span>Check slots and book</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;cursor:pointer;box-shadow:0 1px 2px rgba(46,43,37,0.14)" style-hover="border-color:#c0b6a5;background:#f9f4ed">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <h4 style="font-family:'Caprasimo',serif;font-weight:400;font-size:18px;color:#201e1d;margin:0;flex:1">Wooden Courts</h4>
+                <span style="font-family:ui-monospace,monospace;font-size:11.5px;font-weight:700;color:#643312;background:#ffe1d0;padding:5px 10px;border-radius:999px">₹550 flat</span>
+              </div>
+              <p style="font-size:12.5px;line-height:1.5;color:#645c50;margin:0;text-wrap:pretty">Two sprung maple courts, used for club nights.</p>
+              <div style="display:flex;flex-wrap:wrap;gap:16px;font-family:ui-monospace,monospace;font-size:11.5px;color:#645c50">
+                <span>Capacity <span style="color:#201e1d;font-weight:700">4</span></span>
+                <span>Slot <span style="color:#201e1d;font-weight:700">60m</span></span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid #eee7db;font-size:12.5px;font-weight:700;color:#8c491a">
+                <span>Check slots and book</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 7. BRANCH ABOUT ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">07 · BranchAbout.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Venue info</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Never migrated. Photos go through Organic's washed treatment — desaturated and lifted. Real images come from <span style="font-family:ui-monospace,monospace">aboutData.photos</span>; the Unsplash hotlink fallbacks should go.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:760px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">VENUE INFO</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="flex:1;padding:18px 20px 28px;display:flex;flex-direction:column;gap:20px">
+          <button style="align-self:flex-start;min-height:44px;padding:0 16px 0 12px;display:flex;align-items:center;gap:8px;background:#eee7db;border:1px solid #dcd3c4;border-radius:999px;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#201e1d;cursor:pointer" style-hover="background:#dcd3c4">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>Back to venue</span>
+          </button>
+
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">About the venue</h2>
+            <div style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.5;color:#645c50">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>12 Avinashi Road, Peelamedu, Coimbatore 641004</span>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button style="flex:1;min-height:48px;background:#8c491a;border:none;border-radius:14px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#fff2eb;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#643312" style-active="background:#402310"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff2eb" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg><span>Get directions</span></button>
+              <button style="flex:1;min-height:48px;background:#fff;border:1px solid #dcd3c4;border-radius:14px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#201e1d;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-hover="background:#f9f4ed"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.123 2.123 0 0 0-1.973 0L6.396 21.11a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg><span>Leave a review</span></button>
+            </div>
+          </div>
+
+          <div style="background:#f9f4ed;border:1px solid #dcd3c4;border-radius:28px;padding:22px;display:flex;flex-direction:column;gap:20px">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">VISION AND MISSION</div>
+              <p style="font-size:13.5px;line-height:1.6;color:#474238;margin:0;text-wrap:pretty">A neighbourhood club first: affordable court time, honest coaching, and a place where beginners get a game.</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:18px;padding-top:18px;border-top:1px solid #dcd3c4">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#56633f" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>WORKING SCHEDULE</div>
+                <div style="font-family:ui-monospace,monospace;font-size:12px;line-height:1.7;color:#645c50">
+                  <div>Days <span style="color:#201e1d;font-weight:700">Mon – Sun</span></div>
+                  <div>Hours <span style="color:#201e1d;font-weight:700">06:00 – 22:00</span></div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>FACILITIES</div>
+                <div style="display:flex;flex-wrap:wrap;gap:7px">
+                  <span style="font-size:11.5px;font-weight:600;color:#645c50;background:#fff;border:1px solid #dcd3c4;padding:5px 12px;border-radius:999px">Parking</span>
+                  <span style="font-size:11.5px;font-weight:600;color:#645c50;background:#fff;border:1px solid #dcd3c4;padding:5px 12px;border-radius:999px">Showers</span>
+                  <span style="font-size:11.5px;font-weight:600;color:#645c50;background:#fff;border:1px solid #dcd3c4;padding:5px 12px;border-radius:999px">Café</span>
+                  <span style="font-size:11.5px;font-weight:600;color:#645c50;background:#fff;border:1px solid #dcd3c4;padding:5px 12px;border-radius:999px">Pro shop</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><span>PHOTOS</span></div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="height:150px;border-radius:16px;background:repeating-linear-gradient(120deg,#dcd3c4 0 22px,#eee7db 22px 44px);display:flex;align-items:flex-end;padding:12px;filter:saturate(0.72) contrast(0.94)">
+                <span style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;color:#474238;background:rgba(249,244,237,0.85);padding:5px 10px;border-radius:999px">venue photo</span>
+              </div>
+              <div style="height:150px;border-radius:16px;background:repeating-linear-gradient(60deg,#dcd3c4 0 22px,#eee7db 22px 44px);display:flex;align-items:flex-end;padding:12px;filter:saturate(0.72) contrast(0.94)">
+                <span style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;color:#474238;background:rgba(249,244,237,0.85);padding:5px 10px;border-radius:999px">venue photo</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 8. COURT BOOKING (reference) ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">08 · CourtBooking.tsx — REFERENCE</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Pick a slot</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">The double accent is gone: slot fills now come from the accent ramp, not <span style="font-family:ui-monospace,monospace">--brand-primary</span>. Mint cards go white on cream. Seats-left moves to sage; almost-full keeps amber. The reserve button on the dark bar moves to <span style="font-family:ui-monospace,monospace">accent-400</span> on <span style="font-family:ui-monospace,monospace">neutral-900</span> — <span style="font-family:ui-monospace,monospace">accent-700</span> was near-invisible there.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:900px;position:relative">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">BOOK A COURT</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+
+        <div style="flex:1;padding:18px 18px 96px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:13px 14px">
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:13.5px;font-weight:700;color:#201e1d">Synthetic Courts</div>
+              <div style="font-size:11px;letter-spacing:0.04em;color:#645c50">4 COURTS · 06:00–22:00</div>
+            </div>
+            <button style="min-height:44px;padding:0 16px;background:#f9f4ed;border:1px solid #dcd3c4;border-radius:999px;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;color:#8c491a;cursor:pointer" style-hover="background:#eee7db">Change</button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:11px;background:#e1eecc;border-radius:16px;padding:12px 14px">
+            <span style="width:8px;height:8px;border-radius:999px;background:#56633f;flex:0 0 auto"></span>
+            <div style="flex:1;font-size:12.5px;font-weight:600;color:#3d472b">Thu 7:00 PM booked</div>
+            <button style="background:none;border:none;font-family:'Figtree',sans-serif;font-size:12px;font-weight:700;color:#56633f;cursor:pointer;min-height:44px;padding:0 4px;display:flex;align-items:center;flex:0 0 auto">Manage</button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">01 · DAY</div>
+            <div style="display:flex;gap:7px;overflow:hidden">
+              <div style="flex:0 0 auto;width:46px;min-height:52px;border-radius:16px;background:#8c491a;border:1px solid #8c491a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+                <span style="font-size:10px;font-weight:700;color:#ffe1d0">THU</span><span style="font-size:16px;font-weight:800;color:#fff2eb">27</span>
+              </div>
+              <div style="flex:0 0 auto;width:46px;min-height:52px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+                <span style="font-size:10px;font-weight:700;color:#645c50">FRI</span><span style="font-size:16px;font-weight:800;color:#201e1d">28</span>
+              </div>
+              <div style="flex:0 0 auto;width:46px;min-height:52px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+                <span style="font-size:10px;font-weight:700;color:#645c50">SAT</span><span style="font-size:16px;font-weight:800;color:#201e1d">29</span>
+              </div>
+              <div style="flex:0 0 auto;width:46px;min-height:52px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+                <span style="font-size:10px;font-weight:700;color:#645c50">SUN</span><span style="font-size:16px;font-weight:800;color:#201e1d">30</span>
+              </div>
+              <div style="flex:0 0 auto;width:46px;min-height:52px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+                <span style="font-size:10px;font-weight:700;color:#645c50">MON</span><span style="font-size:16px;font-weight:800;color:#201e1d">31</span>
+              </div>
+              <div style="flex:0 0 auto;width:46px;min-height:52px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+                <span style="font-size:10px;font-weight:700;color:#645c50">TUE</span><span style="font-size:16px;font-weight:800;color:#201e1d">01</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">02 · START</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:14px;background:#eee7db">
+              <button style="height:44px;border:none;border-radius:11px;background:#8c491a;color:#fff2eb;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer">Morning <span style="font-family:ui-monospace,monospace;color:#ffc6a5">(4)</span></button>
+              <button style="height:44px;border:none;border-radius:11px;background:transparent;color:#201e1d;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer" style-hover="background:#dcd3c4">Afternoon <span style="font-family:ui-monospace,monospace;color:#645c50">(5)</span></button>
+              <button style="height:44px;border:none;border-radius:11px;background:transparent;color:#201e1d;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer" style-hover="background:#dcd3c4">Evening <span style="font-family:ui-monospace,monospace;color:#645c50">(6)</span></button>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+              <div style="min-height:66px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;padding:9px 10px;display:flex;flex-direction:column;gap:2px;cursor:pointer" style-hover="border-color:#c0b6a5">
+                <span style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:#201e1d">06:00</span>
+                <span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:#201e1d">₹400</span>
+                <span style="font-family:ui-monospace,monospace;font-size:9.5px;color:#56633f">4 seats</span>
+              </div>
+              <div style="min-height:66px;border-radius:16px;background:#8c491a;border:1px solid #8c491a;padding:9px 10px;display:flex;flex-direction:column;gap:2px;cursor:pointer">
+                <span style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:#fff2eb">07:00</span>
+                <span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:#fff2eb">₹400</span>
+                <span style="font-family:ui-monospace,monospace;font-size:9.5px;color:#ffe1d0">selected</span>
+              </div>
+              <div style="min-height:66px;border-radius:16px;background:#fff7ed;border:1px solid #fed7aa;padding:9px 10px;display:flex;flex-direction:column;gap:2px;cursor:pointer">
+                <span style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:#201e1d">08:00</span>
+                <span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:#201e1d">₹400</span>
+                <span style="font-family:ui-monospace,monospace;font-size:9.5px;color:#c2410c">1 left</span>
+              </div>
+              <div style="min-height:66px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;padding:9px 10px;display:flex;flex-direction:column;gap:2px;cursor:pointer" style-hover="border-color:#c0b6a5">
+                <span style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:#201e1d">09:00</span>
+                <span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:#201e1d">₹400</span>
+                <span style="font-family:ui-monospace,monospace;font-size:9.5px;color:#56633f">3 seats</span>
+              </div>
+              <div style="min-height:66px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;padding:9px 10px;display:flex;flex-direction:column;gap:2px;cursor:pointer" style-hover="border-color:#c0b6a5">
+                <span style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:#201e1d">10:00</span>
+                <span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:#201e1d">₹400</span>
+                <span style="font-family:ui-monospace,monospace;font-size:9.5px;color:#56633f">4 seats</span>
+              </div>
+              <div style="min-height:66px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;padding:9px 10px;display:flex;flex-direction:column;gap:2px;cursor:pointer" style-hover="border-color:#c0b6a5">
+                <span style="font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:#201e1d">11:00</span>
+                <span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:#201e1d">₹400</span>
+                <span style="font-family:ui-monospace,monospace;font-size:9.5px;color:#56633f">2 seats</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;overflow:hidden">
+            <div style="padding:6px 16px 14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #eee7db">
+                <span style="font-size:13.5px;color:#645c50">Slot</span>
+                <span style="font-family:ui-monospace,monospace;font-size:13.5px;font-weight:700;color:#201e1d">07:00 - 09:00</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #eee7db">
+                <span style="font-size:13.5px;color:#645c50">Pricing</span>
+                <span style="font-size:13.5px;font-weight:700;color:#201e1d">Flat booking rate</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0">
+                <span style="font-size:13.5px;color:#645c50">Duration</span>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <button style="width:52px;height:52px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#f9f4ed"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M5 12h14"/></svg></button>
+                  <span style="font-family:ui-monospace,monospace;font-size:15px;font-weight:700;width:62px;text-align:center;color:#201e1d">2 hrs</span>
+                  <button style="width:52px;height:52px;border-radius:16px;background:#fff;border:1px solid #dcd3c4;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#f9f4ed"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding-top:13px;border-top:1px solid #eee7db">
+                <span style="font-size:13.5px;font-weight:700;color:#645c50">Total</span>
+                <span style="font-family:ui-monospace,monospace;font-size:21px;font-weight:800;color:#8c491a">₹800</span>
+              </div>
+            </div>
+            <div style="background:#f9f4ed;padding:14px 16px;display:flex;flex-direction:column;gap:4px;font-size:11.5px;line-height:1.55;color:#645c50">
+              <p style="margin:0">Up to <span style="font-weight:700;color:#201e1d">3</span> bookings per day per guest.</p>
+              <p style="margin:0">100% refund if cancelled 12h+ before the slot</p>
+              <p style="margin:0">50% refund after that</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:12px;padding:14px 18px 18px;background:#2e2b25">
+          <div style="display:flex;flex-direction:column;gap:1px;min-width:78px">
+            <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;color:#a19786">TOTAL</div>
+            <div style="font-size:21px;font-weight:800;color:#f9f4ed">₹800</div>
+          </div>
+          <button style="flex:1;min-height:54px;border:none;border-radius:16px;background:#f6a06b;color:#2e2b25;font-family:'Figtree',sans-serif;font-size:15px;font-weight:700;cursor:pointer" style-hover="background:#ffc6a5" style-active="background:#d67f48">Hold and pay</button>
+        </div>
+      </div>
+
+      <sc-if value="{{ showStates }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:420px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25">
+              <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+              <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">BOOK A COURT</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px">
+              <div style="width:52px;height:52px;border-radius:999px;border:4px solid #ffe1d0;border-top-color:#8c491a"></div>
+              <div style="display:flex;flex-direction:column;gap:3px;align-items:center">
+                <div style="font-size:14.5px;font-weight:700;color:#201e1d">Setting up your booking</div>
+                <div style="font-size:12.5px;color:#645c50">Loading real-time availability</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:420px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25">
+              <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+              <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">BOOK A COURT</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+            </div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:22px">
+              <div style="background:#f9f4ed;border:1px solid #dcd3c4;border-radius:28px;padding:26px 22px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+                <div style="width:48px;height:48px;border-radius:999px;background:#ffe1d0;color:#8c491a;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
+                <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:21px;line-height:1.2;color:#201e1d">Couldn't load this court</div>
+                <p style="font-size:13px;line-height:1.55;color:#474238;margin:0;text-wrap:pretty">Resource category not found at this venue.</p>
+                <button style="min-height:48px;padding:0 20px;background:#8c491a;border:none;border-radius:14px;font-family:'Figtree',sans-serif;font-size:14px;font-weight:700;color:#fff2eb;cursor:pointer" style-hover="background:#643312">Back to venue</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:460px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25">
+              <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+              <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">BOOK A COURT</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+            </div>
+            <div style="flex:1;padding:18px;display:flex;flex-direction:column;gap:16px">
+              <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">02 · START</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:14px;background:#eee7db">
+                <button style="height:44px;border:none;border-radius:11px;background:#8c491a;color:#fff2eb;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700">Morning <span style="font-family:ui-monospace,monospace;color:#ffc6a5">(0)</span></button>
+                <button style="height:44px;border:none;border-radius:11px;background:transparent;color:#a19786;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700">Afternoon <span style="font-family:ui-monospace,monospace">(0)</span></button>
+                <button style="height:44px;border:none;border-radius:11px;background:transparent;color:#a19786;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700">Evening <span style="font-family:ui-monospace,monospace">(0)</span></button>
+              </div>
+              <div style="flex:1;background:#f9f4ed;border:1px solid #dcd3c4;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:28px;text-align:center">
+                <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:19px;color:#201e1d">Nothing free today</div>
+                <p style="font-size:12.5px;line-height:1.55;color:#645c50;margin:0;max-width:220px;text-wrap:pretty">No slots on this date. Try another day above.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- ============ 9. PAY ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">09 · BookingPay.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Confirm and pay</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Mostly migrated in Slice 3. The dev Simulate button leaves Tailwind emerald for sage, and the error banner moves onto the sanctioned red. Razorpay's <span style="font-family:ui-monospace,monospace">theme.color</span> is still <span style="font-family:ui-monospace,monospace">#e11d48</span> — pass the tenant accent instead.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:760px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">CONFIRM AND PAY</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="flex:1;padding:18px 20px 26px;display:flex;flex-direction:column;gap:20px">
+          <button style="align-self:flex-start;min-height:44px;padding:0 16px 0 12px;display:flex;align-items:center;gap:8px;background:#eee7db;border:1px solid #dcd3c4;border-radius:999px;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#201e1d;cursor:pointer" style-hover="background:#dcd3c4">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span>Back to slots</span>
+          </button>
+
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;overflow:hidden">
+            <div style="padding:16px;border-bottom:1px solid #eee7db;display:flex;flex-direction:column;gap:3px">
+              <div style="font-family:ui-monospace,monospace;font-size:15px;font-weight:700;color:#201e1d">JBC-7K2M9Q</div>
+              <div style="font-size:12.5px;color:#645c50">Thursday, August 27 · 07:00 AM - 08:00 AM</div>
+              <div style="font-size:12.5px;color:#645c50">+ 08:00 AM - 09:00 AM</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #eee7db">
+              <span style="font-size:13.5px;color:#645c50">Players</span>
+              <span style="font-size:13.5px;font-weight:700;color:#201e1d">1</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px">
+              <span style="font-size:13.5px;font-weight:700;color:#645c50">Amount to pay</span>
+              <span style="font-family:ui-monospace,monospace;font-size:21px;font-weight:800;color:#8c491a">₹800</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.09em;color:#645c50">YOUR NUMBER</div>
+            <div style="display:flex;align-items:center;gap:10px;padding:0 16px;min-height:52px;background:#fff;border:1px solid #dcd3c4;border-radius:14px">
+              <span style="font-size:14px;font-weight:700;color:#201e1d">+91 99999 99999</span>
+              <span style="margin-left:auto;font-size:11px;font-weight:700;color:#3d472b;background:#e1eecc;padding:5px 11px;border-radius:999px">Verified</span>
+            </div>
+            <p style="font-size:11.5px;line-height:1.55;color:#645c50;margin:0">Your booking confirmation and cancellation link go to this number.</p>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <button style="background:#f0fae1;border:1px solid #ccdbb2;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;text-align:left;font-family:'Figtree',sans-serif" style-hover="background:#e1eecc">
+              <span style="width:40px;height:40px;border-radius:12px;background:#e1eecc;color:#3d472b;display:flex;align-items:center;justify-content:center;flex:0 0 auto"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#3d472b" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:13.5px;font-weight:700;color:#201e1d">Simulate payment (dev)</span>
+                <span style="font-size:10.5px;color:#645c50">Triggers the server-side signature webhook</span>
+              </span>
+              <span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:#3d472b;background:#ccdbb2;padding:4px 8px;border-radius:6px">Local</span>
+            </button>
+
+            <div style="background:#fff2eb;border:1px solid #ffe1d0;border-radius:14px;padding:13px;display:flex;gap:9px;font-size:12px;line-height:1.5;color:#8c2f14">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8c2f14" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span>Payment failed. Please try again.</span>
+            </div>
+
+            <button style="min-height:54px;border:none;border-radius:16px;background:#f6a06b;color:#2e2b25;font-family:'Figtree',sans-serif;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px" style-hover="background:#ffc6a5" style-active="background:#d67f48"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2e2b25" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg><span>Pay ₹800</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 10. CONFIRMATION ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">10 · BookingConfirmation.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Confirmed</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Slice 4 already sage. Only the Go-to-Dashboard link changes — it was the last <span style="font-family:ui-monospace,monospace">bg-surface-mint</span> on the screen. The pending state's amber stays.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:760px;position:relative">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">CONFIRMED</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="background:#3d472b;padding:38px 24px 34px;display:flex;flex-direction:column;gap:16px;align-items:flex-start">
+          <div style="width:64px;height:64px;border-radius:999px;background:#ccdbb2;color:#272e1b;display:flex;align-items:center;justify-content:center"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#272e1b" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:29px;line-height:1.15;color:#f5ead8;margin:0">Booking Confirmed!</h2>
+            <p style="font-size:13.5px;line-height:1.55;color:#e1eecc;margin:0">Confirmation sent to +91 99999 99999.</p>
+          </div>
+        </div>
+        <div style="flex:1;padding:22px 20px 100px;display:flex;flex-direction:column;gap:18px">
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #eee7db">
+              <span style="font-size:13.5px;color:#645c50">Reference</span>
+              <span style="font-family:ui-monospace,monospace;font-size:13.5px;font-weight:700;color:#201e1d">JBC-7K2M9Q</span>
+            </div>
+            <div style="padding:13px 16px;border-bottom:1px solid #eee7db;display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:13.5px;font-weight:700;color:#201e1d">Thursday, 27 August 2026</div>
+              <div style="font-size:12.5px;color:#645c50">07:00 AM - 08:00 AM</div>
+              <div style="font-size:12.5px;color:#645c50">+ 08:00 AM - 09:00 AM</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #eee7db">
+              <span style="font-size:13.5px;color:#645c50">Venue</span>
+              <span style="font-size:13.5px;font-weight:700;color:#201e1d">Peelamedu Arena</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #eee7db">
+              <span style="font-size:13.5px;color:#645c50">Players</span>
+              <span style="font-size:13.5px;font-weight:700;color:#201e1d">1 (Guest)</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px">
+              <span style="font-size:13.5px;font-weight:700;color:#645c50">Paid</span>
+              <span style="font-family:ui-monospace,monospace;font-size:21px;font-weight:800;color:#8c491a">₹800</span>
+            </div>
+          </div>
+          <button style="min-height:50px;background:#fff;border:1px solid #dcd3c4;border-radius:14px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#201e1d;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px" style-hover="background:#f9f4ed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg><span>Directions</span></button>
+          <button style="min-height:50px;background:transparent;border:1px solid #dcd3c4;border-radius:14px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#645c50;cursor:pointer" style-hover="background:#f9f4ed;color:#201e1d">Go to dashboard</button>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 20px 18px;background:#f9f4ed;border-top:1px solid #dcd3c4">
+          <button style="width:100%;min-height:54px;border:none;border-radius:16px;background:#8c491a;color:#fff2eb;font-family:'Figtree',sans-serif;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px" style-hover="background:#643312" style-active="background:#402310"><span>View my bookings</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff2eb" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 11. HISTORY ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">11 · BookingHistory.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">My bookings</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Slice 5 tokenised the cards but the screen had no band and the page heading used the accent-word trick. Status pills stay as they are — sage, amber, red and neutral are already doing real semantic work.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:760px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">MY BOOKINGS</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="flex:1;padding:22px 20px 28px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+              <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">My bookings</h2>
+              <p style="font-size:12.5px;line-height:1.5;color:#645c50;margin:0">Pay a hold, check in, or cancel.</p>
+            </div>
+            <button style="min-height:44px;padding:0 15px;background:#eee7db;border:1px solid #dcd3c4;border-radius:999px;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;color:#201e1d;cursor:pointer;flex:0 0 auto" style-hover="background:#dcd3c4">Dashboard</button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <h4 style="font-family:'Caprasimo',serif;font-weight:400;font-size:18px;color:#201e1d;margin:0;flex:1">Synthetic Courts</h4>
+                <span style="font-family:ui-monospace,monospace;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#3d472b;background:#f0fae1;border:1px solid #e1eecc;padding:5px 10px;border-radius:999px">Confirmed</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:#645c50">
+                <span>Ref</span><span style="font-family:ui-monospace,monospace;font-weight:700;color:#201e1d">JBC-7K2M9Q</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-family:ui-monospace,monospace;font-size:11.5px;color:#645c50">
+                <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:inline-block;vertical-align:-2px"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg> Thu, Aug 27</span>
+                <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#56633f" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:inline-block;vertical-align:-2px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 07:00 - 09:00</span>
+                <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#82796a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:inline-block;vertical-align:-2px"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg> Peelamedu</span>
+                <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#82796a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:inline-block;vertical-align:-2px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> 1 player</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px solid #eee7db">
+                <div style="display:flex;flex-direction:column">
+                  <span style="font-size:10px;letter-spacing:0.06em;color:#82796a">PAID</span>
+                  <span style="font-family:ui-monospace,monospace;font-size:19px;font-weight:800;color:#201e1d">₹800</span>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button style="min-height:44px;padding:0 14px;background:#56633f;border:none;border-radius:12px;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;color:#f0fae1;cursor:pointer" style-hover="background:#3d472b">I'm here</button>
+                  <button style="min-height:44px;padding:0 14px;background:#eee7db;border:1px solid #dcd3c4;border-radius:12px;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;color:#645c50;cursor:pointer" style-hover="background:#fff2eb;color:#8c2f14">Cancel</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <h4 style="font-family:'Caprasimo',serif;font-weight:400;font-size:18px;color:#201e1d;margin:0;flex:1">Wooden Courts</h4>
+                <span style="font-family:ui-monospace,monospace;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#b45309;background:#fffbeb;border:1px solid #fde68a;padding:5px 10px;border-radius:999px">Hold pending</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:#645c50">
+                <span>Ref</span><span style="font-family:ui-monospace,monospace;font-weight:700;color:#201e1d">JBC-4P8B1T</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-family:ui-monospace,monospace;font-size:11.5px;color:#645c50">
+                <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8c491a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:inline-block;vertical-align:-2px"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg> Sat, Aug 29</span>
+                <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#56633f" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:inline-block;vertical-align:-2px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 06:00 - 07:00</span>
+                <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#82796a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:inline-block;vertical-align:-2px"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg> Saibaba</span>
+                <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#82796a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:inline-block;vertical-align:-2px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> 1 player</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px solid #eee7db">
+                <div style="display:flex;flex-direction:column">
+                  <span style="font-size:10px;letter-spacing:0.06em;color:#82796a">DUE</span>
+                  <span style="font-family:ui-monospace,monospace;font-size:19px;font-weight:800;color:#201e1d">₹550</span>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button style="min-height:44px;padding:0 16px;background:#8c491a;border:none;border-radius:12px;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;color:#fff2eb;cursor:pointer" style-hover="background:#643312">Pay now</button>
+                  <button style="min-height:44px;padding:0 14px;background:#eee7db;border:1px solid #dcd3c4;border-radius:12px;font-family:'Figtree',sans-serif;font-size:12.5px;font-weight:700;color:#645c50;cursor:pointer" style-hover="background:#fff2eb;color:#8c2f14">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ showStates }}" hint-placeholder-val="{{ true }}">
+        <div style="width:390px;border-radius:28px;overflow:hidden;background:#f5ead8;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:480px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25">
+            <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+            <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">MY BOOKINGS</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+          </div>
+          <div style="flex:1;padding:22px 20px 28px;display:flex;flex-direction:column;gap:20px">
+            <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;line-height:1.15;color:#201e1d;margin:0">My bookings</h2>
+            <div style="flex:1;background:#f9f4ed;border:1px solid #dcd3c4;border-radius:28px;padding:36px 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center">
+              <div style="width:48px;height:48px;border-radius:999px;background:#eee7db;color:#82796a;display:flex;align-items:center;justify-content:center"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#82796a" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></div>
+              <div style="font-family:'Caprasimo',serif;font-weight:400;font-size:20px;color:#201e1d">No bookings yet</div>
+              <p style="font-size:12.5px;line-height:1.55;color:#645c50;margin:0;max-width:230px;text-wrap:pretty">Reserve a court and it'll show up here.</p>
+              <button style="min-height:48px;padding:0 22px;background:#8c491a;border:none;border-radius:14px;font-family:'Figtree',sans-serif;font-size:14px;font-weight:700;color:#fff2eb;cursor:pointer;margin-top:4px" style-hover="background:#643312">Book a court</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- ============ 12. CANCEL MODAL ============ -->
+    <div style="display:flex;flex-direction:column;gap:18px;flex:0 0 auto">
+      <div style="display:flex;flex-direction:column;gap:4px;width:390px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#82796a">12 · CancelBookingModal.tsx</div>
+        <div style="font-size:14px;font-weight:700;color:#201e1d">Cancel and refund</div>
+        <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:12.5px;line-height:1.5;color:#645c50;text-wrap:pretty">Backdrop drops from <span style="font-family:ui-monospace,monospace">black/80</span> to a warm neutral-900 scrim. Confirm moves off Tailwind <span style="font-family:ui-monospace,monospace">#dc2626</span> to <span style="font-family:ui-monospace,monospace">#b3261e</span> — the second sanctioned non-system color, for destructive only. Copy now starts with a capital letter.</div>
+        </sc-if>
+      </div>
+
+      <div style="width:390px;border-radius:28px;overflow:hidden;box-shadow:0 3px 10px rgba(46,43,37,0.16);display:flex;flex-direction:column;min-height:700px;position:relative;background:#f5ead8">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#2e2b25;flex:0 0 auto;filter:blur(1.5px)">
+          <div style="font-family:'Caprasimo',serif;font-size:19px;color:#f5ead8">JBC</div>
+          <div style="display:flex;align-items:center;gap:12px"><div style="font-size:10px;font-weight:600;letter-spacing:0.1em;color:#c0b6a5">MY BOOKINGS</div><button style="width:44px;height:44px;border-radius:999px;background:#474238;border:1px solid #645c50;font-family:'Figtree',sans-serif;font-size:13px;font-weight:700;color:#ffc6a5;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto" style-hover="background:#645c50">RK</button></div>
+        </div>
+        <div style="flex:1;padding:22px 20px;display:flex;flex-direction:column;gap:16px;filter:blur(2.5px)">
+          <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:27px;color:#201e1d;margin:0">My bookings</h2>
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;height:150px"></div>
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;height:150px"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:rgba(46,43,37,0.72);display:flex;align-items:center;justify-content:center;padding:18px">
+          <div style="width:100%;background:#f9f4ed;border:1px solid #dcd3c4;border-radius:28px;padding:24px 22px;display:flex;flex-direction:column;gap:20px;box-shadow:0 12px 32px rgba(46,43,37,0.34);position:relative">
+            <button style="position:absolute;top:12px;right:12px;width:44px;height:44px;border-radius:999px;background:#eee7db;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#dcd3c4;color:#201e1d"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#645c50" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            <div style="display:flex;align-items:center;gap:12px;padding-right:48px">
+              <span style="width:42px;height:42px;border-radius:14px;background:#fdecea;color:#b3261e;display:flex;align-items:center;justify-content:center;flex:0 0 auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b3261e" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;display:block"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></span>
+              <h3 style="font-family:'Caprasimo',serif;font-weight:400;font-size:21px;line-height:1.2;color:#201e1d;margin:0">Cancel your match</h3>
+            </div>
+            <p style="font-size:13px;line-height:1.55;color:#474238;margin:0;text-wrap:pretty">Cancellations follow the venue's booking rules. Here's your refund under the current policy.</p>
+            <div style="background:#eee7db;border:1px solid #dcd3c4;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;font-family:ui-monospace,monospace;font-size:12.5px">
+              <div style="display:flex;justify-content:space-between;color:#645c50">
+                <span>Original price</span><span style="color:#201e1d;font-weight:700">₹800</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;color:#645c50">
+                <span>Policy refund</span><span style="color:#3d472b;font-weight:700">100%</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid #dcd3c4">
+                <span style="font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#201e1d">Refund to you</span>
+                <span style="font-size:19px;font-weight:800;color:#3d472b">₹800</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button style="flex:1;min-height:50px;background:transparent;border:1px solid #dcd3c4;border-radius:14px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#645c50;cursor:pointer" style-hover="background:#eee7db;color:#201e1d">Keep it</button>
+              <button style="flex:1;min-height:50px;background:#b3261e;border:none;border-radius:14px;font-family:'Figtree',sans-serif;font-size:13.5px;font-weight:700;color:#fff;cursor:pointer" style-hover="background:#8c1d17">Cancel match</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ TOKEN DIFF SHEET ============ -->
+  <sc-if value="{{ showTokenSheet }}" hint-placeholder-val="{{ true }}">
+    <div style="background:#f9f4ed;border:1px solid #dcd3c4;border-radius:28px;padding:38px 40px;display:flex;flex-direction:column;gap:30px;max-width:1180px">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.08em;color:#82796a">HANDOFF · index.css</div>
+        <h2 style="font-family:'Caprasimo',serif;font-weight:400;font-size:32px;line-height:1.15;color:#201e1d;margin:0">What changes in the token file</h2>
+        <p style="font-size:14px;line-height:1.6;color:#474238;margin:0;max-width:620px;text-wrap:pretty">The F-146 palette retires. Nothing here touches the tenant data model: one tenant-derived color in, a nine-step ramp out, sage fixed.</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:0">
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:12px 0;border-bottom:2px solid #dcd3c4;font-size:11px;font-weight:700;letter-spacing:0.08em;color:#645c50">
+          <div>WAS</div><div>BECOMES</div><div>WHY</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">--brand-primary: #e11d48</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">var(--color-accent-500)</div>
+          <div>One line retires the double accent. Every unmigrated screen that references brand-primary follows the tenant ramp at once.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">--surface-background: #f8faf9</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">var(--color-bg) · #f5ead8</div>
+          <div>Cream ground app-wide. This is the single change that makes the retrofit stop reading as two apps.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">--mint-surface: #f0fdf4<br>bg-surface-mint</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">#fff cards<br>var(--color-neutral-100) panels</div>
+          <div>Mint retires. Green cards on a cream ground was the loudest mismatch. Sage stays as the second voice, not as a surface.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">--border-subtle / --border-card<br>border-edge</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">var(--color-neutral-300)<br>var(--color-neutral-200) rules</div>
+          <div>The old borders carry a green cast that reads dirty on cream.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">--slot-selected-surface<br>10% brand-primary on white</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">accent-700 fill<br>accent-100 label · accent-200 meta</div>
+          <div>A 10% tint was doing too little work next to the accent-700 tabs. Solid fill, explicit light tokens on top — no opacity blends, so contrast holds in both states.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">--slot-available-accent: #15803d</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">var(--color-accent-2-700)</div>
+          <div>Seats-left joins the sage ramp. 6.1:1 on white.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#645c50">--slot-almostfull-* amber</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#645c50">unchanged</div>
+          <div>The one sanctioned non-system color. Scarcity, not failure — and no ramp step reads as urgency without reading as brand.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">--font-body (Inter shorthand)<br>font-outfit</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">Figtree body<br>Caprasimo headings</div>
+          <div>Retire Inter and Outfit. Rename the Inter shorthand out of <span style="font-family:ui-monospace,monospace;font-size:12px">--font-body</span> so <span style="font-family:ui-monospace,monospace;font-size:12px">--font-body-organic</span> can take the canonical name.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#645c50">font-mono</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#645c50">kept</div>
+          <div>Times, prices, references and capacity counts only. It's tabular data, not body copy.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">accent-700 on the dark sticky bar</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">accent-400 fill · neutral-900 text</div>
+          <div>Contrast bug in Slice 2b: accent-700 on neutral-900 is 1.9:1. This also makes the reserve and pay buttons match, which they should — same decision, two screens.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;border-bottom:1px solid #eee7db;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">#dc2626 confirm · black/80 scrim</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">#b3261e · rgba(46,43,37,0.72)</div>
+          <div>Destructive is the second sanctioned exception. The scrim goes warm so the cream sheet underneath doesn't turn grey.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:20px;padding:15px 0;font-size:13px;line-height:1.5;color:#474238">
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#8c2f14">Razorpay theme.color: '#e11d48'</div>
+          <div style="font-family:ui-monospace,monospace;font-size:12px;color:#3d472b">tenant.themeColor</div>
+          <div>Hardcoded in BookingPay. The one place the checkout overlay leaves your brand.</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;padding-top:26px;border-top:2px solid #dcd3c4">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#645c50">WORK BY FILE</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="width:9px;height:9px;border-radius:999px;background:#b3261e"></span>
+              <span style="font-family:ui-monospace,monospace;font-size:12.5px;font-weight:700;color:#201e1d">Never migrated</span>
+            </div>
+            <div style="font-size:13px;line-height:1.6;color:#474238">BranchSelect · BranchDashboard · BranchAbout · TenantContext · LoginScreen's authenticated card</div>
+          </div>
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="width:9px;height:9px;border-radius:999px;background:#c2410c"></span>
+              <span style="font-family:ui-monospace,monospace;font-size:12.5px;font-weight:700;color:#201e1d">Half migrated</span>
+            </div>
+            <div style="font-size:13px;line-height:1.6;color:#474238">CourtBooking — mint cards, brand-primary slot tokens, dark-bar contrast. Every loading and error state in all nine files.</div>
+          </div>
+          <div style="background:#fff;border:1px solid #dcd3c4;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="width:9px;height:9px;border-radius:999px;background:#56633f"></span>
+              <span style="font-family:ui-monospace,monospace;font-size:12.5px;font-weight:700;color:#201e1d">Band only</span>
+            </div>
+            <div style="font-size:13px;line-height:1.6;color:#474238">LoginScreen · BookingPay · BookingConfirmation · BookingHistory · CancelBookingModal — already on the ramp; add the band, move back controls into the page.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff2eb;border:1px solid #ffe1d0;border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#8c491a">TWO THINGS TO DECIDE IN CODE</div>
+        <div style="font-size:13.5px;line-height:1.6;color:#474238;text-wrap:pretty">The cancel modal's close button is 34px in <span style="font-family:ui-monospace,monospace;font-size:12.5px">CancelBookingModal.tsx</span> (<span style="font-family:ui-monospace,monospace;font-size:12.5px">p-1.5</span> on a 16px icon) — it is 44px here, so fix it in code rather than matching the old markup. The identical band means Pay, OTP and Venue info lose their in-band back arrow — it becomes a pill in the page body. Check that against your e2e specs, which target the band's button today. And <span style="font-family:ui-monospace,monospace;font-size:12.5px">generateAccentRamp</span> is only wired for <span style="font-family:ui-monospace,monospace;font-size:12.5px">--color-accent-*</span>; once brand-primary is an alias, the pre-resolve fallback in <span style="font-family:ui-monospace,monospace;font-size:12.5px">:root</span> is the only thing standing between a slow tenant fetch and an unstyled first paint.</div>
+      </div>
+    </div>
+  </sc-if>
+
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;showAnnotations&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Handoff&quot; },
+  &quot;showStates&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Handoff&quot; },
+  &quot;showTokenSheet&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Handoff&quot; }
+}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      showAnnotations: this.props.showAnnotations ?? true,
+      showStates: this.props.showStates ?? true,
+      showTokenSheet: this.props.showTokenSheet ?? true,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens.
+ *
+ * Everything here is a FIXED, app-wide value except --brand-primary, which continues to be set at
+ * runtime from `Tenant.themeColor` by TenantContext (packages/ui-shared/src/context/TenantContext.tsx:115).
+ * The tenant theming data model is deliberately unchanged: one tenant-derived colour, everything
+ * else universal.
+ *
+ * These are consumed throughout the app. The guest PWA was dark in all 11 of its files; F-146
+ * converted it to this light palette via semantic Tailwind tokens (see tailwind.config.js), so
+ * components reference `bg-surface` / `text-ink` / `border-edge` rather than literal colours.
+ * Re-theming from here is a matter of changing values below, not of touching components again.
+ */
+
+:root {
+  /* --- tenant-derived: the only per-tenant value --- */
+  --brand-primary: #e11d48; /* overwritten at runtime from Tenant.themeColor */
+  --brand-secondary: #f3f4f6;
+
+  /* --- universal palette (fixed, target light theme) --- */
+  --fresh-green: #22c55e;      /* success / available */
+  --lime-accent: #84cc16;      /* tiny highlights only */
+  --mint-surface: #f0fdf4;     /* cards, availability areas */
+  --surface-background: #f8faf9;
+  --surface-white: #ffffff;
+  --surface-header: rgba(255, 255, 255, 0.82); /* sticky header; keeps backdrop-blur legible */
+  --text-primary: #17211b;
+  --text-secondary: #647067;
+  --border-subtle: #dde7e0;
+  --border-card: #e2e9e4;
+
+  /* --- radii --- */
+  --radius-card: 16px;         /* 14-16px range; deliberately not pill-round */
+  --radius-button: 12px;
+
+  /* --- typography scale (Inter; loaded in index.html) --- */
+  --font-page-title: 700 28px/1.25 'Inter', system-ui, sans-serif;
+  --font-section-title: 700 18px/1.3 'Inter', system-ui, sans-serif;
+  --font-card-title: 600 16px/1.4 'Inter', system-ui, sans-serif;
+  --font-body: 400 14px/1.5 'Inter', system-ui, sans-serif;
+  --font-metadata: 500 12px/1.4 'Inter', system-ui, sans-serif;
+  --font-button: 600 15px/1 'Inter', system-ui, sans-serif;
+  --font-slot-time: 700 15px/1 'Inter', system-ui, sans-serif;
+
+  /*
+   * --- slot-state tokens ---
+   *
+   * Values now target the light surface. Selected still resolves to --brand-primary so a selected
+   * slot follows the tenant's brand colour rather than a second fixed green that could clash for a
+   * non-green tenant. Almost Full uses amber-on-cream rather than a red: it is a scarcity signal,
+   * not an error, and must not read as a failure state.
+   */
+  --slot-selected-border: var(--brand-primary);
+  --slot-selected-surface: color-mix(in srgb, var(--brand-primary) 10%, #ffffff);
+
+  --slot-available-border: var(--border-card);
+  --slot-available-surface: var(--surface-white);
+  --slot-available-accent: #15803d;
+
+  --slot-almostfull-border: #fed7aa;
+  --slot-almostfull-surface: #fff7ed;
+  --slot-almostfull-text: #c2410c;
+
+  /*
+   * F-190 Slice 0: Organic design system tokens, copied from
+   * wireframe/Badminton Court Booking PWA/ds.css. Additive alongside the palette above -- no
+   * screen migrates to these yet, that happens screen-by-screen in later slices.
+   */
+
+  /* --- fixed universal tokens (verbatim from ds.css) --- */
+  --color-bg: #f5ead8;
+  --color-text: #201e1d;
+
+  --color-neutral-100: #f9f4ed;
+  --color-neutral-200: #eee7db;
+  --color-neutral-300: #dcd3c4;
+  --color-neutral-400: #c0b6a5;
+  --color-neutral-500: #a19786;
+  --color-neutral-600: #82796a;
+  --color-neutral-700: #645c50;
+  --color-neutral-800: #474238;
+  --color-neutral-900: #2e2b25;
+
+  /* --color-accent-2 (sage) is fixed/universal across tenants -- not generated, matching the
+     "one tenant-derived color, everything else universal" convention --brand-secondary already
+     establishes above. */
+  --color-accent-2-100: #f0fae1;
+  --color-accent-2-200: #e1eecc;
+  --color-accent-2-300: #ccdbb2;
+  --color-accent-2-400: #aebf92;
+  --color-accent-2-500: #8fa073;
+  --color-accent-2-600: #728157;
+  --color-accent-2-700: #56633f;
+  --color-accent-2-800: #3d472b;
+  --color-accent-2-900: #272e1b;
+
+  /* --color-accent-* IS tenant-derived (TenantContext.tsx generates it at runtime from
+     Tenant.themeColor via generateAccentRamp). These are only the pre-resolve fallback --
+     ds.css's own literal accent ramp -- so the property is never undefined before that runs,
+     mirroring --brand-primary's static fallback above. */
+  --color-accent-100: #fff2eb;
+  --color-accent-200: #ffe1d0;
+  --color-accent-300: #ffc6a5;
+  --color-accent-400: #f6a06b;
+  --color-accent-500: #d67f48;
+  --color-accent-600: #b2622d;
+  --color-accent-700: #8c491a;
+  --color-accent-800: #643312;
+  --color-accent-900: #402310;
+
+  --font-heading: 'Caprasimo', system-ui, sans-serif;
+  /* Not named --font-body: that name already exists above (line 44) as a full `font` shorthand
+     (weight/size/line-height + Inter) for the existing type scale -- a bare family-name value
+     under the same name would silently redefine it for whichever slice reads it later, even
+     though nothing currently consumes it. Kept distinctly named until an actual migration slice
+     deliberately retires the Inter-based token. */
+  --font-body-organic: 'Figtree', system-ui, sans-serif;
+
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--surface-background);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
