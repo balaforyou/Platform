@@ -2,14 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { Calendar, Activity, HelpCircle, ShieldAlert } from 'lucide-react';
+import { Calendar, Activity, MapPin, ShieldAlert } from 'lucide-react';
 
 // F-190 Slice 2b: one shared class for the single #reserve-court-btn element -- flex-1 so it sits
 // next to the TOTAL readout in the mobile fixed bar, sm:w-full so it fills the width once the bar
 // becomes normal-flow content (sm:block cancels the flex context, making flex-1 inert there).
+// F-192 Slice D: accent-400 fill / neutral-900 text (was accent-700 / accent-100). On the dark
+// sticky bar the old pairing measured ~2.25:1 -- below WCAG AA's 3:1 floor for UI components;
+// accent-400 on neutral-900 clears it at ~6.8:1. Matches JBC Migration.dc.html frame 08.
 const primaryReserveBtn =
   'flex-1 sm:w-full min-h-[54px] py-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ' +
-  'bg-[var(--color-accent-700)] text-[var(--color-accent-100)] hover:bg-[var(--color-accent-800)] active:bg-[var(--color-accent-900)]';
+  'bg-[var(--color-accent-400)] text-[var(--color-neutral-900)] hover:bg-[var(--color-accent-300)] active:bg-[var(--color-accent-500)]';
 
 export default function CourtBooking() {
   const { branchId, poolId } = useParams();
@@ -340,30 +343,60 @@ export default function CourtBooking() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink gap-1">
-        <div className="p-4 rounded-full bg-surface-mint mb-2">
-          <Activity className="h-8 w-8 animate-spin text-[var(--brand-primary)]" />
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
+        <style>{'@keyframes court-booking-spin { to { transform: rotate(360deg); } }'}</style>
+        <div
+          style={{
+            width: '52px',
+            height: '52px',
+            borderRadius: '999px',
+            border: '4px solid var(--color-accent-200)',
+            borderTopColor: 'var(--color-accent-700)',
+            animation: 'court-booking-spin 1s linear infinite',
+          }}
+        />
+        <div className="flex flex-col gap-1 items-center">
+          <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14.5px', fontWeight: 700, color: 'var(--color-text)' }}>
+            Setting up your booking
+          </div>
+          <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', color: 'var(--color-neutral-600)' }}>
+            Loading real-time availability&hellip;
+          </div>
         </div>
-        <p className="text-ink font-outfit font-bold text-sm">Setting up your booking</p>
-        <p className="text-ink-muted text-xs">Loading real-time availability…</p>
       </div>
     );
   }
 
   if (error || !pool) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
-        <HelpCircle className="h-12 w-12 text-red-600 mb-4" />
-        <h3 className="text-lg font-bold">Failed to load booking details</h3>
-        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error}</p>
-        <Link to={`/branches/${branchId}`} className="mt-4 text-xs text-[var(--brand-primary)] hover:underline">
-          Back to Dashboard
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] p-4 gap-3 text-center" style={{ background: 'var(--color-bg)' }}>
+        <span
+          className="flex items-center justify-center"
+          style={{ width: '48px', height: '48px', borderRadius: '999px', background: 'var(--color-neutral-200)', color: 'var(--color-neutral-600)' }}
+        >
+          <MapPin className="h-6 w-6" />
+        </span>
+        <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '19px', color: 'var(--color-text)' }}>
+          Couldn&rsquo;t load booking details
+        </h3>
+        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', lineHeight: 1.55, color: 'var(--color-neutral-600)', maxWidth: '260px' }}>
+          {error}
+        </p>
+        <Link
+          to={`/branches/${branchId}`}
+          className="hover:underline"
+          style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12px', fontWeight: 700, color: 'var(--color-accent-700)' }}
+        >
+          Back to venue
         </Link>
       </div>
     );
   }
 
   return (
+    // NOTE: `text-ink` on this wrapper is the F-190 Slice 2a default. Every text element below
+    // sets its own colour, so this inherited base is inert -- kept as-is (not migrated to
+    // --color-text) so Slice D leaves the already-migrated header/summary parts byte-identical.
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '1024px' }}>
       {/* F-190 Slice 2a: header shell (JBC Booking.dc.html:571-588) */}
       <div className="flex flex-col gap-4 px-5 pt-5 pb-6" style={{ background: 'var(--color-neutral-900)' }}>
@@ -413,7 +446,7 @@ export default function CourtBooking() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left column: Date & Slots */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-3">
+          <div className="space-y-3">
             <h3 style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
               01 &middot; DAY
             </h3>
@@ -484,7 +517,7 @@ export default function CourtBooking() {
             />
           </div>
 
-          <div className="bg-surface-mint border border-edge p-6 rounded-2xl space-y-4">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
                 02 &middot; START
@@ -504,7 +537,7 @@ export default function CourtBooking() {
                     aria-selected={activePeriod === g.key}
                     onClick={() => setActivePeriod(g.key)}
                     disabled={g.slots.length === 0}
-                    className="h-11 rounded-lg text-xs font-bold font-outfit transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="h-11 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                       background: activePeriod === g.key ? 'var(--color-accent-700)' : 'transparent',
                       color: activePeriod === g.key ? 'var(--color-accent-100)' : 'var(--color-text)',
@@ -518,14 +551,20 @@ export default function CourtBooking() {
 
             {slotsLoading ? (
               <div className="py-12 flex justify-center">
-                <Activity className="h-8 w-8 animate-spin text-[var(--brand-primary)]" />
+                <Activity className="h-8 w-8 animate-spin" style={{ color: 'var(--color-accent-700)' }} />
               </div>
             ) : slots.length === 0 ? (
-              <p className="text-xs text-ink-muted py-8 text-center bg-surface rounded-xl border border-edge">
+              <p
+                className="text-xs py-8 text-center"
+                style={{ color: 'var(--color-neutral-600)', background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: 'var(--radius-md)' }}
+              >
                 No slots available on this date. Try another date.
               </p>
             ) : visibleSlots.length === 0 ? (
-              <p className="text-xs text-ink-muted py-8 text-center bg-surface rounded-xl border border-edge">
+              <p
+                className="text-xs py-8 text-center"
+                style={{ color: 'var(--color-neutral-600)', background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: 'var(--radius-md)' }}
+              >
                 No {activePeriod} slots on this date. Try another period or date.
               </p>
             ) : (
@@ -564,9 +603,10 @@ export default function CourtBooking() {
                       style={{
                         borderRadius: 'var(--radius-md)',
                         minHeight: '66px',
-                        // Slice 2a restyles shape/layout only -- the color source (F-146's
-                        // slot-state tokens, which resolve through --brand-primary for
-                        // "selected") is untouched, per the handover.
+                        // F-192 Slice D: --slot-selected-surface is now a solid --color-accent-700
+                        // fill (was a 10% --brand-primary tint), so the time/price text switches to
+                        // --slot-selected-label and the seats line to --slot-selected-meta when
+                        // selected -- dark ink over the solid fill would be unreadable.
                         background: isSelected
                           ? 'var(--slot-selected-surface)'
                           : isAlmostFull ? 'var(--slot-almostfull-surface)' : 'var(--slot-available-surface)',
@@ -577,13 +617,21 @@ export default function CourtBooking() {
                       data-slot-state={slotState}
                       id={`slot-card-${slot.window.id}`}
                     >
-                      <span className="text-[13px] font-bold text-ink font-mono leading-tight">
+                      <span
+                        className="text-[13px] font-bold font-mono leading-tight"
+                        style={{ color: isSelected ? 'var(--slot-selected-label)' : 'var(--color-text)' }}
+                      >
                         {timeRange.split(' - ')[0]}
                       </span>
-                      <span className="text-[11px] font-bold text-ink font-mono">₹{rate}</span>
+                      <span
+                        className="text-[11px] font-bold font-mono"
+                        style={{ color: isSelected ? 'var(--slot-selected-label)' : 'var(--color-text)' }}
+                      >
+                        ₹{rate}
+                      </span>
                       <span
                         className="text-[9.5px] font-mono leading-tight"
-                        style={{ color: isAlmostFull ? 'var(--slot-almostfull-text)' : 'var(--slot-available-accent)' }}
+                        style={{ color: isSelected ? 'var(--slot-selected-meta)' : isAlmostFull ? 'var(--slot-almostfull-text)' : 'var(--slot-available-accent)' }}
                       >
                         {isAlmostFull ? `${slot.remainingCapacity} left` : `${slot.remainingCapacity} seats`}
                       </span>
@@ -705,7 +753,10 @@ export default function CourtBooking() {
                     the sticky bar -- a real potential UX improvement, but out of this slice's
                     restyle-only mandate; noted rather than silently done or silently skipped. */}
                 {bookingError && (
-                  <div className="bg-red-50 border-t border-red-200 p-4 flex items-start space-x-2 text-xs text-red-700">
+                  <div
+                    className="p-4 flex items-start space-x-2 text-xs"
+                    style={{ background: 'var(--color-neutral-100)', borderTop: '1px solid var(--color-neutral-300)', color: 'var(--color-destructive)' }}
+                  >
                     <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>{bookingError}</span>
                   </div>
@@ -755,7 +806,16 @@ export default function CourtBooking() {
               <div className="sm:hidden" style={{ height: '84px' }} />
             </>
           ) : (
-            <div className="bg-surface-mint border border-edge p-6 rounded-2xl text-center text-ink-muted py-16 text-xs font-semibold">
+            <div
+              className="p-6 text-center py-16 text-xs font-semibold"
+              style={{
+                background: 'var(--color-neutral-100)',
+                border: '1px solid var(--color-neutral-300)',
+                borderRadius: 'var(--radius-md)',
+                fontFamily: 'var(--font-body-organic)',
+                color: 'var(--color-neutral-600)',
+              }}
+            >
               Select an availability slot to display participant setup and pricing details.
             </div>
           )}

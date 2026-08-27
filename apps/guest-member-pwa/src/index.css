@@ -53,17 +53,20 @@
   /*
    * --- slot-state tokens ---
    *
-   * Values now target the light surface. Selected still resolves to --brand-primary so a selected
-   * slot follows the tenant's brand colour rather than a second fixed green that could clash for a
-   * non-green tenant. Almost Full uses amber-on-cream rather than a red: it is a scarcity signal,
-   * not an error, and must not read as a failure state.
+   * F-192 Slice D: Selected is now a SOLID --color-accent-700 fill (was a 10% --brand-primary
+   * tint over white), with --slot-selected-label / --slot-selected-meta carrying the light text
+   * on top -- the tenant-derived accent ramp still drives it, so it follows the tenant's brand
+   * without the weak-tint problem. Seats-left "available" joins the fixed sage ramp
+   * (--color-accent-2-700). Almost Full keeps its amber-on-cream: a scarcity signal, not an
+   * error, and the one sanctioned non-system colour on this screen.
+   * Consumed only by CourtBooking.tsx.
    */
-  --slot-selected-border: var(--brand-primary);
-  --slot-selected-surface: color-mix(in srgb, var(--brand-primary) 10%, #ffffff);
+  --slot-selected-border: var(--color-accent-700);
+  --slot-selected-surface: var(--color-accent-700);
 
-  --slot-available-border: var(--border-card);
+  --slot-available-border: var(--color-neutral-300);
   --slot-available-surface: var(--surface-white);
-  --slot-available-accent: #15803d;
+  --slot-available-accent: var(--color-accent-2-700);
 
   --slot-almostfull-border: #fed7aa;
   --slot-almostfull-surface: #fff7ed;
