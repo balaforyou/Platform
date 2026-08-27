@@ -111,31 +111,40 @@ export default function LoginScreen() {
 
   if (isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-surface-alt via-surface-mint to-surface-alt px-4">
-        <div className="relative w-full max-w-md bg-surface backdrop-blur-xl rounded-3xl p-8 border border-edge-strong shadow-2xl text-center text-ink">
-          <div className="absolute -top-12 left-1/2 -translate-x-1/2 h-24 w-24 rounded-full bg-gradient-to-tr from-brand-primary to-rose-400 p-1 shadow-lg shadow-brand-primary/30">
-            <div className="flex h-full w-full items-center justify-center rounded-full bg-surface-alt">
-              <ShieldCheck className="h-12 w-12 text-brand-primary animate-pulse" />
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--color-bg)' }}>
+        <div
+          className="relative w-full max-w-md p-8 text-center"
+          style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)' }}
+        >
+          <div
+            className="absolute -top-12 left-1/2 -translate-x-1/2 h-24 w-24 rounded-full p-1"
+            style={{ background: 'var(--color-accent-700)', boxShadow: 'var(--shadow-md)' }}
+          >
+            <div className="flex h-full w-full items-center justify-center rounded-full" style={{ background: 'var(--color-bg)' }}>
+              <ShieldCheck className="h-12 w-12 animate-pulse" style={{ color: 'var(--color-accent-700)' }} />
             </div>
           </div>
 
           <div className="mt-12 mb-6">
-            <h2 className="text-2xl font-bold tracking-tight">Welcome to {tenant?.appName}!</h2>
-            <p className="text-ink-muted text-sm mt-1">Logged in successfully.</p>
+            <h2 className="text-2xl tracking-tight" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>Welcome to {tenant?.appName}!</h2>
+            <p className="text-sm mt-1" style={{ color: 'var(--color-neutral-600)' }}>Logged in successfully.</p>
           </div>
 
-          <div className="bg-surface-mint rounded-2xl p-6 border border-edge text-left mb-8 space-y-3 font-mono text-xs">
-            <div className="flex justify-between">
-              <span className="text-ink-muted">User ID:</span>
-              <span className="text-ink-muted font-semibold">{user?.userId || user?.id}</span>
+          <div
+            className="rounded-2xl p-6 text-left mb-8 space-y-3 font-mono text-xs"
+            style={{ background: '#fff', border: '1px solid var(--color-neutral-300)' }}
+          >
+            <div className="flex justify-between" style={{ color: 'var(--color-neutral-600)' }}>
+              <span>User ID:</span>
+              <span className="font-semibold">{user?.userId || user?.id}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-ink-muted">Tenant ID:</span>
-              <span className="text-ink-muted">{user?.tenantId}</span>
+            <div className="flex justify-between" style={{ color: 'var(--color-neutral-600)' }}>
+              <span>Tenant ID:</span>
+              <span>{user?.tenantId}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-ink-muted">Roles:</span>
-              <span className="text-brand-primary font-semibold">
+            <div className="flex justify-between" style={{ color: 'var(--color-neutral-600)' }}>
+              <span>Roles:</span>
+              <span className="font-semibold" style={{ color: 'var(--color-accent-700)' }}>
                 {user?.roles?.length ? user.roles.join(', ') : 'member'}
               </span>
             </div>
@@ -143,7 +152,8 @@ export default function LoginScreen() {
 
           <button
             onClick={logout}
-            className="w-full py-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-medium transition-all shadow-lg shadow-rose-600/20 active:scale-[0.98]"
+            className="w-full py-4 rounded-xl font-medium transition-colors active:scale-[0.98]"
+            style={{ background: 'var(--color-destructive)', color: '#fff' }}
           >
             Sign Out
           </button>
@@ -158,13 +168,13 @@ export default function LoginScreen() {
     <div
       className="flex items-center gap-2 border p-4 text-sm"
       style={{
-        background: '#fee2e2',
-        borderColor: '#fecaca',
-        color: '#991b1b',
+        background: 'var(--color-neutral-100)',
+        borderColor: 'var(--color-neutral-300)',
+        color: 'var(--color-destructive)',
         borderRadius: 'var(--radius-md)',
       }}
     >
-      <AlertCircle className="h-5 w-5 shrink-0" style={{ color: '#b91c1c' }} />
+      <AlertCircle className="h-5 w-5 shrink-0" />
       <span>{error}</span>
     </div>
   );
@@ -244,23 +254,15 @@ export default function LoginScreen() {
     // 3b -- Verify (JBC Booking.dc.html:208-239)
     return (
       <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-neutral-100)' }}>
-        <div className="flex-none flex items-center gap-3.5 p-5" style={{ background: 'var(--color-neutral-900)' }}>
-          <button
-            type="button"
-            onClick={() => setOtpSent(false)}
-            aria-label="Change number"
-            className="h-11 w-11 flex items-center justify-center rounded-full border-none cursor-pointer bg-transparent"
-          >
-            <span
-              className="h-[38px] w-[38px] rounded-full flex items-center justify-center text-[17px]"
-              style={{ background: 'var(--color-neutral-800)', color: 'var(--color-neutral-100)' }}
-            >
-              ←
-            </span>
-          </button>
-          <div className="text-base font-bold" style={{ color: 'var(--color-neutral-100)' }}>
-            Verify your number
-          </div>
+        {/* F-192 Slice F: the shared dark band. The in-band back arrow is gone -- the page body
+            already carries the "Wrong number?" control (setOtpSent(false)). */}
+        <div className="flex-none flex items-center justify-between" style={{ background: 'var(--color-neutral-900)', padding: '15px 18px' }}>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: '19px', color: 'var(--color-bg)' }}>
+            {tenant?.appName || 'Courts'}
+          </span>
+          <span style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--color-neutral-400)' }}>
+            VERIFY
+          </span>
         </div>
 
         <div className="flex-1 flex flex-col gap-5 px-5 pt-7 pb-6 mx-auto w-full max-w-md">
@@ -335,16 +337,22 @@ export default function LoginScreen() {
   // 3a -- Sign in (JBC Booking.dc.html:168-205)
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
+      {/* F-192 Slice F: the shared dark band -- the wordmark moves here off the gradient strip. */}
+      <div className="flex-none flex items-center justify-between mx-auto w-full max-w-md" style={{ background: 'var(--color-neutral-900)', padding: '15px 18px' }}>
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: '19px', color: 'var(--color-bg)' }}>
+          {tenant?.appName || 'Courts'}
+        </span>
+        <span style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--color-neutral-400)' }}>
+          SIGN IN
+        </span>
+      </div>
       <div
-        className="flex-none flex flex-col justify-between px-6 pt-8 pb-6 mx-auto w-full max-w-md"
+        className="flex-none flex flex-col justify-end px-6 pt-8 pb-6 mx-auto w-full max-w-md"
         style={{
-          minHeight: '290px',
+          minHeight: '200px',
           background: 'repeating-linear-gradient(115deg, var(--color-accent-2-700) 0 12px, var(--color-accent-2-800) 12px 24px)',
         }}
       >
-        <div style={{ fontFamily: 'var(--font-heading)', fontSize: '30px', color: 'var(--color-bg)' }}>
-          {tenant?.appName}
-        </div>
         <span
           className="self-start px-2.5 py-1.5 rounded-full text-[10.5px] font-semibold tracking-wide"
           style={{ fontFamily: 'var(--font-body-organic)', color: 'var(--color-accent-2-100)', background: 'rgba(32,30,29,0.55)' }}

@@ -92,21 +92,28 @@ export default function BookingConfirmation() {
 
   if (loading && !booking) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink">
-        <Activity className="h-10 w-10 animate-spin text-[var(--brand-primary)] mb-4" />
-        <p className="text-ink-muted text-sm font-medium">Verifying payment confirmation...</p>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
+        <style>{'@keyframes booking-confirm-spin { to { transform: rotate(360deg); } }'}</style>
+        <div style={{ width: '52px', height: '52px', borderRadius: '999px', border: '4px solid var(--color-accent-200)', borderTopColor: 'var(--color-accent-700)', animation: 'booking-confirm-spin 1s linear infinite' }} />
+        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-600)' }}>Verifying payment confirmation&hellip;</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-ink p-4">
-        <AlertCircle className="h-12 w-12 text-red-600 mb-4" />
-        <h3 className="text-lg font-bold">Verification Error</h3>
-        <p className="text-ink-muted text-sm mt-1 text-center max-w-md">{error}</p>
-        <Link to="/bookings/my" className="mt-4 py-2.5 px-6 bg-surface-mint border border-edge-strong rounded-xl text-xs hover:bg-edge">
-          Check My Bookings
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] p-4 gap-3 text-center" style={{ background: 'var(--color-bg)' }}>
+        <span className="flex items-center justify-center" style={{ width: '48px', height: '48px', borderRadius: '999px', background: 'var(--color-neutral-200)', color: 'var(--color-neutral-600)' }}>
+          <AlertCircle className="h-6 w-6" />
+        </span>
+        <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '19px', color: 'var(--color-text)' }}>Verification error</h3>
+        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', lineHeight: 1.55, color: 'var(--color-neutral-600)', maxWidth: '260px' }}>{error}</p>
+        <Link
+          to="/bookings/my"
+          className="mt-1"
+          style={{ minHeight: '44px', padding: '0 20px', display: 'inline-flex', alignItems: 'center', background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '14px', fontFamily: 'var(--font-body-organic)', fontSize: '13px', fontWeight: 700, color: 'var(--color-text)' }}
+        >
+          Check my bookings
         </Link>
       </div>
     );
@@ -124,20 +131,21 @@ export default function BookingConfirmation() {
           all assert exact text on #confirmation-title) and the right call regardless, since the
           wireframe's own "Court 3 is yours" needs courtSlotIndex display, which F-189 owns, not
           this slice. The pending state has no wireframe guidance (it only draws the success case)
-          -- adapted to the same banner structure with amber coloring instead of accent-2. */}
+          -- adapted to the same banner structure. F-192 Slice F: pending state's amber routed
+          through the one sanctioned amber token set (--slot-almostfull-*). */}
       <div
         className="flex flex-col items-start gap-4 px-6"
         style={{
           paddingTop: '44px',
           paddingBottom: '36px',
-          background: isConfirmed ? 'var(--color-accent-2-800)' : '#fffbeb',
+          background: isConfirmed ? 'var(--color-accent-2-800)' : 'var(--slot-almostfull-surface)',
         }}
       >
         <div
           className="h-16 w-16 rounded-full flex items-center justify-center"
           style={{
-            background: isConfirmed ? 'var(--color-accent-2-300)' : '#fef3c7',
-            color: isConfirmed ? 'var(--color-accent-2-900)' : '#b45309',
+            background: isConfirmed ? 'var(--color-accent-2-300)' : 'var(--slot-almostfull-border)',
+            color: isConfirmed ? 'var(--color-accent-2-900)' : 'var(--slot-almostfull-text)',
           }}
         >
           {isConfirmed ? <CheckCircle className="h-8 w-8" /> : <Activity className="h-8 w-8 animate-spin" />}
@@ -149,7 +157,7 @@ export default function BookingConfirmation() {
               fontWeight: 400,
               fontSize: '30px',
               lineHeight: 1.15,
-              color: isConfirmed ? 'var(--color-bg)' : '#78350f',
+              color: isConfirmed ? 'var(--color-bg)' : 'var(--slot-almostfull-text)',
             }}
             id="confirmation-title"
           >
@@ -157,7 +165,7 @@ export default function BookingConfirmation() {
           </h2>
           <p
             className="text-[13.5px] leading-relaxed"
-            style={{ color: isConfirmed ? 'var(--color-accent-2-200)' : '#92400e' }}
+            style={{ color: isConfirmed ? 'var(--color-accent-2-200)' : 'var(--slot-almostfull-text)' }}
           >
             {isConfirmed
               ? (user?.phone ? `Confirmation sent to ${user.phone}.` : 'Payment captured successfully.')
@@ -242,7 +250,8 @@ export default function BookingConfirmation() {
         {/* Go to Dashboard: secondary, non-sticky, stays in normal content flow. */}
         <Link
           to="/"
-          className="w-full py-3 rounded-2xl bg-surface-mint hover:bg-edge text-ink border border-edge-strong font-semibold text-center transition-all text-xs block"
+          className="w-full py-3 rounded-2xl font-semibold text-center transition-colors text-xs block"
+          style={{ background: 'transparent', border: '1px solid var(--color-neutral-300)', color: 'var(--color-neutral-700)', fontFamily: 'var(--font-body-organic)' }}
         >
           Go to Dashboard
         </Link>

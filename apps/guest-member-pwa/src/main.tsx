@@ -12,7 +12,7 @@ import CourtBooking from './components/CourtBooking';
 import BookingPay from './components/BookingPay';
 import BookingHistory from './components/BookingHistory';
 import BookingConfirmation from './components/BookingConfirmation';
-import { AlertTriangle, Calendar, CheckCircle, Clock, User, LogOut, ArrowRight, Activity, MapPin, Phone, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckCircle, Clock, User, LogOut, ArrowRight, MapPin, Phone, RefreshCw } from 'lucide-react';
 import './index.css';
 
 // Capture beforeinstallprompt event globally to avoid React component mounting race conditions
@@ -375,10 +375,21 @@ function MainDashboard() {
     .filter((b) => new Date(b.window.startTime).getTime() > Date.now())
     .sort((a, b) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime());
 
-  const upcomingBadge = (status: string) => {
-    if (status === 'HELD') return { label: 'Payment pending', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
-    if (status === 'CHECKED_IN') return { label: 'Checked in', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
-    return { label: 'Confirmed', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+  // F-192 Slice F: same token families as BookingHistory.getStatusBadge -- amber through the one
+  // sanctioned --slot-almostfull-* set, Confirmed sage, Checked-in on the accent ramp.
+  const upcomingBadge = (status: string): { label: string; style: React.CSSProperties } => {
+    if (status === 'HELD') return {
+      label: 'Payment pending',
+      style: { background: 'var(--slot-almostfull-surface)', color: 'var(--slot-almostfull-text)', borderColor: 'var(--slot-almostfull-border)' },
+    };
+    if (status === 'CHECKED_IN') return {
+      label: 'Checked in',
+      style: { background: 'var(--color-accent-100)', color: 'var(--color-accent-800)', borderColor: 'var(--color-accent-200)' },
+    };
+    return {
+      label: 'Confirmed',
+      style: { background: 'var(--color-accent-2-100)', color: 'var(--color-accent-2-800)', borderColor: 'var(--color-accent-2-200)' },
+    };
   };
 
   const handleBookNow = () => {
@@ -415,45 +426,46 @@ function MainDashboard() {
     const poolName = memberSession?.assignment?.resourcePool?.name;
 
     return (
-      <section className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4" id="member-session-card">
+      <section className="p-6 rounded-2xl space-y-4" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }} id="member-session-card">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wider text-[var(--brand-primary)] font-bold">Member Attendance</p>
-            <h3 className="text-xl font-extrabold font-outfit text-ink">Today&apos;s Member Session</h3>
+            <p className="text-xs uppercase tracking-wider font-bold" style={{ color: 'var(--color-accent-700)' }}>Member Attendance</p>
+            <h3 className="text-xl" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>Today&apos;s Member Session</h3>
           </div>
-          <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
+          <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-700)' }}>
             <Clock className="h-5 w-5" />
           </div>
         </div>
 
         {memberSessionLoading ? (
-          <div className="flex items-center gap-2 text-sm text-ink-muted"><RefreshCw className="h-4 w-4 animate-spin" />Loading today&apos;s session</div>
+          <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-neutral-600)' }}><RefreshCw className="h-4 w-4 animate-spin" />Loading today&apos;s session</div>
         ) : null}
 
         {memberSessionError ? (
-          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', color: 'var(--color-destructive)' }}>
             <AlertTriangle className="h-4 w-4" />{memberSessionError}
           </div>
         ) : null}
 
         {memberSession?.state === 'HAS_SESSION' ? (
           <div className="space-y-4">
-            <div className="grid gap-2 text-sm text-ink-muted">
-              <div className="flex justify-between gap-4"><span>Slot</span><span className="text-ink font-semibold">{poolName}</span></div>
-              <div className="flex justify-between gap-4"><span>Time</span><span className="text-ink font-semibold">{windowStart ? windowStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : memberSession.assignment?.startTime}</span></div>
-              {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="text-ink font-semibold">{new Date(memberSession.cutoffTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
+            <div className="grid gap-2 text-sm" style={{ color: 'var(--color-neutral-600)' }}>
+              <div className="flex justify-between gap-4"><span>Slot</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{poolName}</span></div>
+              <div className="flex justify-between gap-4"><span>Time</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{windowStart ? windowStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : memberSession.assignment?.startTime}</span></div>
+              {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{new Date(memberSession.cutoffTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
             </div>
             {booking?.memberAttendanceConfirmedAt ? (
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-accent-2-100)', border: '1px solid var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }}>
                 <CheckCircle className="h-4 w-4" />Attendance confirmed
               </div>
             ) : booking?.status === 'RELEASED_NO_SHOW' ? (
-              <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--slot-almostfull-surface)', border: '1px solid var(--slot-almostfull-border)', color: 'var(--slot-almostfull-text)' }}>
                 <AlertTriangle className="h-4 w-4" />Confirmation cutoff passed
               </div>
             ) : (
               <button
-                className="w-full rounded-2xl bg-[var(--brand-primary)] px-5 py-3 font-bold text-white disabled:opacity-60"
+                className="w-full rounded-2xl px-5 py-3 font-bold disabled:opacity-60"
+                style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
                 disabled={!memberSession.canConfirm || confirmingAttendance}
                 onClick={handleConfirmAttendance}
                 id="confirm-member-attendance-btn"
@@ -465,20 +477,20 @@ function MainDashboard() {
         ) : null}
 
         {memberSession?.state === 'NO_SESSION_TODAY' ? (
-          <p className="text-sm text-ink-muted">No recurring member session is scheduled for you today.</p>
+          <p className="text-sm" style={{ color: 'var(--color-neutral-600)' }}>No recurring member session is scheduled for you today.</p>
         ) : null}
         {memberSession?.state === 'NO_ACTIVE_ASSIGNMENT' ? (
-          <p className="text-sm text-ink-muted">No active recurring member assignment is linked to this account.</p>
+          <p className="text-sm" style={{ color: 'var(--color-neutral-600)' }}>No active recurring member assignment is linked to this account.</p>
         ) : null}
         {memberSession?.state === 'SUBSCRIPTION_INACTIVE' ? (
-          <p className="text-sm text-amber-800">Your recurring slot is paused because the subscription is not active.</p>
+          <p className="text-sm" style={{ color: 'var(--slot-almostfull-text)' }}>Your recurring slot is paused because the subscription is not active.</p>
         ) : null}
         {memberSession?.state === 'WINDOW_NOT_FOUND' ? (
           // F-178: no longer a single cause (F-170/F-172 route two more into this state), and the
           // server doesn't distinguish them at this state — see resolveTodayMemberAssignment in
           // slot-engine's index.ts. Neutral copy, matching the admin attendance view's identical
           // 'Window not found' answer to the same ambiguity (index.ts:797).
-          <p className="text-sm text-amber-800">No session found for today.</p>
+          <p className="text-sm" style={{ color: 'var(--slot-almostfull-text)' }}>No session found for today.</p>
         ) : null}
       </section>
     );
@@ -486,40 +498,39 @@ function MainDashboard() {
 
   return (
     <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-      {/* Hero content */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-tr from-surface-mint to-surface p-8 border border-edge shadow-2xl">
-        <div className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 opacity-10">
-          <Activity className="h-96 w-96 text-[var(--brand-primary)]" />
+      {/* F-192 Slice F: hero -- gradient/shadow-2xl dropped, plain column on the Layout cream ground. */}
+      <div className="space-y-4">
+        <div
+          className="inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider"
+          style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-700)', fontFamily: 'var(--font-body-organic)' }}
+        >
+          <MapPin className="h-3.5 w-3.5" />
+          <span>{tenant?.name}</span>
         </div>
-        
-        <div className="relative max-w-lg space-y-4">
-          <div className="inline-flex items-center space-x-1 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 text-[var(--brand-primary)] px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider font-outfit">
-            <MapPin className="h-3.5 w-3.5" />
-            <span>{tenant?.name}</span>
-          </div>
-          <h2 className="text-4xl font-extrabold tracking-tight font-outfit md:text-5xl">
-            Welcome back to <span className="text-[var(--brand-primary)]">{tenant?.appName}</span>
-          </h2>
-          <p className="text-ink-muted text-sm md:text-base leading-relaxed font-medium">
-            Coimbatore's premium court booking platform. Find slots, book courts, and manage your matches.
-          </p>
-          <div className="pt-2 flex flex-wrap gap-4">
-            <button
-              onClick={handleBookNow}
-              className="py-3 px-6 rounded-2xl bg-[var(--brand-primary)] hover:opacity-95 text-white font-semibold flex items-center space-x-2 transition-all shadow-lg shadow-[var(--brand-primary)]/20"
-              id="book-court-dashboard-btn"
-            >
-              <span>Book Court Now</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => navigate('/bookings/my')}
-              className="py-3 px-6 rounded-2xl bg-surface-mint hover:bg-edge text-ink border border-edge-strong font-semibold transition-all"
-              id="view-my-bookings-btn"
-            >
-              View My Bookings
-            </button>
-          </div>
+        <h2 className="text-4xl md:text-5xl" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, lineHeight: 1.1, color: 'var(--color-text)' }}>
+          Welcome back to <span style={{ color: 'var(--color-accent-700)' }}>{tenant?.appName}</span>
+        </h2>
+        <p className="text-sm md:text-base leading-relaxed" style={{ fontFamily: 'var(--font-body-organic)', color: 'var(--color-neutral-700)' }}>
+          Coimbatore's premium court booking platform. Find slots, book courts, and manage your matches.
+        </p>
+        <div className="pt-2 flex flex-wrap gap-4">
+          <button
+            onClick={handleBookNow}
+            className="py-3 px-6 rounded-2xl font-semibold flex items-center space-x-2 transition-colors"
+            style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)', fontFamily: 'var(--font-body-organic)' }}
+            id="book-court-dashboard-btn"
+          >
+            <span>Book Court Now</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => navigate('/bookings/my')}
+            className="py-3 px-6 rounded-2xl font-semibold transition-colors"
+            style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', color: 'var(--color-text)', fontFamily: 'var(--font-body-organic)' }}
+            id="view-my-bookings-btn"
+          >
+            View My Bookings
+          </button>
         </div>
       </div>
 
@@ -527,20 +538,20 @@ function MainDashboard() {
 
       {/* Dashboard Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4">
-          <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
+        <div className="p-6 rounded-2xl space-y-4" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }}>
+          <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-700)' }}>
             <Calendar className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-bold font-outfit text-ink">Upcoming Slots</h3>
+          <h3 className="text-lg" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>Upcoming Slots</h3>
 
           {upcomingLoading ? (
-            <div className="flex items-center gap-2 text-xs text-ink-muted">
+            <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-neutral-600)' }}>
               <RefreshCw className="h-3.5 w-3.5 animate-spin" />Loading your upcoming slots
             </div>
           ) : upcomingError ? (
-            <p className="text-xs text-red-700" id="upcoming-slots-error">{upcomingError}</p>
+            <p className="text-xs" style={{ color: 'var(--color-destructive)' }} id="upcoming-slots-error">{upcomingError}</p>
           ) : upcomingSlots.length === 0 ? (
-            <p className="text-xs text-ink-muted" id="upcoming-slots-empty">
+            <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }} id="upcoming-slots-empty">
               No pre-scheduled matches today. Click "Book Court Now" to search for court times.
             </p>
           ) : (
@@ -553,17 +564,18 @@ function MainDashboard() {
                   <div
                     key={b.id}
                     id={`upcoming-slot-${b.id}`}
-                    className="rounded-xl border border-edge bg-surface p-3 space-y-1"
+                    className="rounded-xl p-3 space-y-1"
+                    style={{ background: '#fff', border: '1px solid var(--color-neutral-300)' }}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-ink truncate">
+                      <span className="text-xs font-bold truncate" style={{ color: 'var(--color-text)' }}>
                         {b.window.resourcePool?.name || 'Court booking'}
                       </span>
-                      <span className={`shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border ${badge.cls}`}>
+                      <span className="shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border" style={badge.style}>
                         {badge.label}
                       </span>
                     </div>
-                    <div className="text-[11px] text-ink-muted font-mono">
+                    <div className="text-[11px] font-mono" style={{ color: 'var(--color-neutral-600)' }}>
                       {start.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
                       {' · '}
                       {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -576,7 +588,8 @@ function MainDashboard() {
               {upcomingSlots.length > 3 && (
                 <Link
                   to="/bookings/my"
-                  className="block text-[11px] font-semibold text-[var(--brand-primary)] hover:underline pt-1"
+                  className="block text-[11px] font-semibold hover:underline pt-1"
+                  style={{ color: 'var(--color-accent-700)' }}
                   id="upcoming-slots-view-all"
                 >
                   View all {upcomingSlots.length} upcoming slots
@@ -586,29 +599,29 @@ function MainDashboard() {
           )}
         </div>
 
-        <div className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4">
-          <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
+        <div className="p-6 rounded-2xl space-y-4" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }}>
+          <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-700)' }}>
             <User className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-bold font-outfit text-ink">Profile Details</h3>
-          <div className="text-xs text-ink-muted space-y-2 font-mono">
+          <h3 className="text-lg" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>Profile Details</h3>
+          <div className="text-xs space-y-2 font-mono" style={{ color: 'var(--color-neutral-600)' }}>
             <div className="flex justify-between">
               <span>Signed in as:</span>
-              <span className="text-ink">{formatUserContact(user)}</span>
+              <span style={{ color: 'var(--color-text)' }}>{formatUserContact(user)}</span>
             </div>
             <div className="flex justify-between">
               <span>Account type:</span>
-              <span className="text-[var(--brand-primary)]">{user?.roles?.[0] || 'member'}</span>
+              <span style={{ color: 'var(--color-accent-700)' }}>{user?.roles?.[0] || 'member'}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-surface-mint p-6 rounded-2xl border border-edge space-y-4">
-          <div className="h-10 w-10 bg-[var(--brand-primary)]/10 border border-[var(--brand-primary)]/20 rounded-xl flex items-center justify-center text-[var(--brand-primary)]">
+        <div className="p-6 rounded-2xl space-y-4" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }}>
+          <div className="h-10 w-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-700)' }}>
             <Phone className="h-5 w-5" />
           </div>
-          <h3 className="text-lg font-bold font-outfit text-ink">Support & Info</h3>
-          <p className="text-xs text-ink-muted leading-relaxed">
+          <h3 className="text-lg" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>Support & Info</h3>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--color-neutral-600)' }}>
             If you have any feedback or require front desk support, reach out using the in-app chat or call our Coimbatore venue manager directly.
           </p>
         </div>
@@ -625,8 +638,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="h-screen w-screen bg-surface-alt flex items-center justify-center">
-        <RefreshCw className="h-8 w-8 animate-spin text-[var(--brand-primary)]" />
+      <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <RefreshCw className="h-8 w-8 animate-spin" style={{ color: 'var(--color-accent-700)' }} />
       </div>
     );
   }

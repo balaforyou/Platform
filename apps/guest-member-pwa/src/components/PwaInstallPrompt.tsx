@@ -143,12 +143,15 @@ export default function PwaInstallPrompt() {
 
   return (
     <div className="fixed bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-96 z-[100] animate-bounce-in">
-      <div className="bg-surface border border-edge-strong rounded-2xl p-5 shadow-2xl backdrop-blur-lg flex flex-col space-y-4">
-        
+      <div
+        className="rounded-2xl p-5 flex flex-col space-y-4"
+        style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', boxShadow: 'var(--shadow-lg)' }}
+      >
+
         {/* Header Block */}
         <div className="flex items-start justify-between">
           <div className="flex space-x-3">
-            <div className="h-10 w-10 rounded-xl bg-brand-primary/10 border border-brand-primary/20 flex items-center justify-center text-brand-primary shrink-0">
+            <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-700)' }}>
               {deviceType === 'ios' ? (
                 <Share className="h-5 w-5" />
               ) : (
@@ -156,20 +159,21 @@ export default function PwaInstallPrompt() {
               )}
             </div>
             <div className="space-y-0.5">
-              <h4 className="text-sm font-bold text-ink font-outfit">
+              <h4 className="text-sm font-bold" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>
                 Install {tenant?.appName || 'App'}
               </h4>
-              <p className="text-xs text-ink-muted leading-normal">
-                {deviceType === 'ios' 
+              <p className="text-xs leading-normal" style={{ color: 'var(--color-neutral-600)' }}>
+                {deviceType === 'ios'
                   ? 'Add to your Home Screen for fast booking access.'
                   : 'Install on your device for a native, fast booking experience.'
                 }
               </p>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleDismiss}
-            className="p-1 rounded-full text-ink-muted hover:text-ink hover:bg-surface-mint transition-colors"
+            className="p-1 rounded-full transition-colors"
+            style={{ color: 'var(--color-neutral-600)' }}
             title="Dismiss"
           >
             <X className="h-4 w-4" />
@@ -178,29 +182,31 @@ export default function PwaInstallPrompt() {
 
         {/* Action Content / Instructions */}
         {deviceType === 'ios' ? (
-          <div className="bg-surface-mint rounded-xl p-3 border border-edge text-xs text-ink-muted space-y-2">
-            <p className="font-semibold text-brand-primary flex items-center gap-1.5">
+          <div className="rounded-xl p-3 text-xs space-y-2" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', color: 'var(--color-neutral-600)' }}>
+            <p className="font-semibold flex items-center gap-1.5" style={{ color: 'var(--color-accent-700)' }}>
               <Share className="h-3.5 w-3.5" />
               Safari Instructions:
             </p>
-            <ol className="list-decimal list-inside space-y-1 text-ink-muted pl-1">
-              <li>Tap the <span className="text-ink font-medium">Share</span> button at the bottom.</li>
+            <ol className="list-decimal list-inside space-y-1 pl-1" style={{ color: 'var(--color-neutral-600)' }}>
+              <li>Tap the <span className="font-medium" style={{ color: 'var(--color-text)' }}>Share</span> button at the bottom.</li>
               <li>Scroll down the list of options.</li>
-              <li>Select <span className="text-ink font-medium">Add to Home Screen</span>.</li>
+              <li>Select <span className="font-medium" style={{ color: 'var(--color-text)' }}>Add to Home Screen</span>.</li>
             </ol>
           </div>
         ) : (
           <div className="flex items-center space-x-3 pt-1">
             <button
               onClick={handleInstallClick}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-brand-primary hover:opacity-95 text-white text-xs font-semibold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-brand-primary/20"
+              className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition-colors"
+              style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
             >
               <Download className="h-4 w-4" />
               <span>Install App</span>
             </button>
             <button
               onClick={handleDismiss}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-surface-mint hover:bg-edge text-ink-muted border border-edge-strong text-xs font-semibold transition-all"
+              className="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold transition-colors"
+              style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', color: 'var(--color-neutral-700)' }}
             >
               Later
             </button>
