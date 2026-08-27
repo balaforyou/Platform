@@ -65,6 +65,22 @@ unimplemented (see Description above, "not assumed automatic"), so it does not b
 trail of resolved work. No `findings_register.md` row exists for it. `Confirmed-ID`/`Confirmed` kept
 as-is; only the section changed.
 
+### closed-override-no-retroactive-window-suppression
+Batch: 21
+Surfaced: 27 Aug 2026
+Description: A CLOSED availability override only takes effect at generation time — it does not
+retroactively hide AvailabilityWindow rows already materialized for that date. Confirmed at
+services/slot-engine/src/availabilityGeneration.ts:213-221: when a CLOSED override exists,
+generation correctly reports createdCount: 0 (no new windows created), but still returns
+windowIds: existingForDate.map(w => w.id) — every window that already existed before the override
+was created, with no filtering applied against the override at all. Enforcement-gap bug, not a
+"CLOSED overrides are broken" bug — CLOSED overrides work correctly against ungenerated dates; they
+just don't reach back and suppress windows generated before the override existed. Found during
+F-190's live journey-check (admin block/remove-slot verification), confirmed pre-existing and
+unrelated to F-190. Not fixed here.
+Confirmed-ID: F-191
+Confirmed: 27 Aug 2026
+
 ## Promoted (audit trail)
 
 ### fast-grid-guest-booking-visual-revamp
