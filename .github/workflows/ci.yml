@@ -61,8 +61,17 @@ jobs:
         run: pnpm test:regression
 
   integration:
-    needs: checks
+    # needs regression too (not just checks) so the Docker Hub push below is gated on
+    # the whole pipeline — a regression failure must stop an in-flight integration run
+    # from pushing.
+    needs: [checks, regression]
     runs-on: ubuntu-latest
+    # Serialise main-push runs (they push to Docker Hub; a movable :<svc> tag must not be
+    # raced). PR runs never push, so give them a per-ref group and let a newer push cancel
+    # an older one for fast feedback.
+    concurrency:
+      group: dockerhub-publish-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -111,6 +120,30 @@ jobs:
 
       - name: Verify deployment — all 7 components at the built SHA
         run: node scripts/verify-deployment.mjs http://localhost:8080 "$GIT_SHA"
+
+      # F-193 Batch 3 — push the images that were JUST verified, no rebuild. The bytes
+      # tagged here are the exact container images verify-deployment.mjs approved above.
+      # Guarded to push-to-main only: build + verify still run on PRs, but Docker Hub
+      # credentials are never exercised there. Both tag forms, all 7 components, every run
+      # (F-193 decision 1) — unchanged layers dedup on Docker Hub for free.
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push all 7 images (movable + immutable)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          REPO: ${{ secrets.DOCKERHUB_USERNAME }}/badminton-platform
+        run: |
+          for svc in slot-engine identity-auth tenant-management payment notification caddy migrate; do
+            docker tag "gcp-vm-$svc" "$REPO:$svc"
+            docker tag "gcp-vm-$svc" "$REPO:$svc-$GIT_SHA"
+            docker push "$REPO:$svc"
+            docker push "$REPO:$svc-$GIT_SHA"
+          done
 
       - name: Provision and migrate badminton_db_e2e
         run: |

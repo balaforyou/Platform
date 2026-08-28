@@ -7,6 +7,13 @@ The proven workflow as of 12-13 Aug 2026: build locally (fast, your own CPU/netw
 - VM: `badminton-demo-vm`, zone `us-central1-a`, `HP@` user
 - Remote app path: `/home/HP/badminton-platform/deploy/gcp-vm/`
 
+> **Steps 2–4 are now automated (F-193 Batch 3).** Every push to `main` runs
+> `.github/workflows/ci.yml`'s `integration` job, which builds all 7 images, runs
+> `verify-deployment.mjs` against them, and then — only on `main` — pushes each to Docker
+> Hub as both `:<service>` (movable) and `:<service>-<full-sha>` (immutable). The manual
+> Steps 2–4 below remain for local builds and emergencies. Steps 0–1 and 5–10 are still
+> manual until Batch 4.
+
 ---
 
 ## Step 0 — Pull the latest commit locally
