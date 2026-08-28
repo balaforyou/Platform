@@ -76,31 +76,41 @@ Since the six backend images share most layers, most pushes after the first will
 ## Steps 5–10 — promote a SHA to the VM (F-193 Batch 4: `deploy/gcp-vm/promote.sh`)
 
 Since Batch 3, CI pushes `:<svc>-<full-sha>` immutable images for **every** `main` commit, so
-Steps 2–4 above are only for local/emergency builds. To promote an already-pushed SHA:
+Steps 2–4 above are only for local/emergency builds. To promote an already-pushed SHA, run
+`deploy/gcp-vm/promote.sh <SHA>` **on the VM** — it needs nothing but Docker.
+
+**The VM's app tree is a plain copy, not a git checkout** (no `.git`), so the script does not
+`git pull` and you must not `git checkout` there. `promote.sh` fetches the `docker-compose.yml`,
+`Caddyfile`, and `verify-deployment.mjs` it needs for the target SHA directly from
+`raw.githubusercontent.com`, SHA-pinned. Drive it from a laptop, bootstrapping the script the
+same way (fetch it for `<SHA>`, then run via `bash`):
 
 ```bash
 gcloud compute ssh badminton-demo-vm --zone=us-central1-a --tunnel-through-iap \
-  --command "cd ~/badminton-platform && git fetch origin && git checkout <SHA> && ./deploy/gcp-vm/promote.sh <SHA>"
+  --command "curl -fsSL https://raw.githubusercontent.com/balaforyou/Platform/<SHA>/deploy/gcp-vm/promote.sh -o ~/badminton-platform/deploy/gcp-vm/promote.sh && bash ~/badminton-platform/deploy/gcp-vm/promote.sh <SHA>"
 ```
 
 `&&` inside the quoted `--command` is safe (the local shell does not interpret it), and there
-is no `$VAR` for an intermediate shell to eat — `<SHA>` is a literal you substitute. One-time
-prerequisite on the VM: `sudo docker login`.
+is no `$VAR` for an intermediate shell to eat — `<SHA>` is a literal you substitute.
+`promote.sh` must land at `~/badminton-platform/deploy/gcp-vm/` so it sits beside `.env` and
+`docker-compose.yml`. One-time prerequisite on the VM: `sudo docker login`.
 
 `promote.sh <SHA>` runs entirely on the VM and does, in order:
 
 | # | doc step | what the script does |
 |---|---|---|
-| 0 | — | `docker tag gcp-vm-<svc> gcp-vm-<svc>:rollback` for all 7 — snapshot the running set |
+| 1 | — | `curl` the target SHA's `docker-compose.yml` / `Caddyfile` / `verify-deployment.mjs` from GitHub raw; install the compose file + Caddyfile on the VM only if they differ (CRLF-insensitive), with a dated `.bak.promote.<epoch>` audit copy |
+| 2 | — | snapshot **both** halves before any mutation: `gcp-vm-<svc>:rollback` image tags (all 7) and `docker-compose.yml.rollback` / `Caddyfile.rollback` |
 | 5 | Step 5 | `docker pull balamuralikrishna/badminton-platform:<svc>-<SHA>` ×7 |
 | 6 | Step 6 | retag each → `gcp-vm-<svc>` |
 | 7 | Step 7 | write `GIT_SHA=<SHA>` into `.env` (the key Compose interpolation actually reads for the migrate guard — **not** `EXPECTED_GIT_SHA`; see the comment in the script); assert `SITE_ADDRESS=` present |
-| 8 | Step 8 | `export GIT_SHA` + `sudo -E docker compose --env-file .env run --rm migrate` (F-077 guard — aborts on `FAIL: stale image`), then `up -d --force-recreate` the 7 app containers (postgres left running) |
+| 8 | Step 8 | `export GIT_SHA` + `sudo -E docker compose --env-file .env run --rm migrate` (F-077 guard — aborts on `FAIL: stale image`), then `up -d --force-recreate` the **6** long-running services (`migrate` is one-shot, `postgres`'s image is unchanged — neither is bounced) |
+| — | — | `wait_for_ready` — poll all 7 endpoints `verify-deployment.mjs` checks until each returns `200` (`up -d` returns on container-start, not app-ready) |
 | 10 | Step 10 | `docker compose logs caddy \| grep -c "listening only on the HTTP port"` must be `0` |
 | 9 | Step 9 | `verify-deployment.mjs https://elitecourts.duckdns.org <SHA>` in a throwaway `node:22` container — all 7 must PASS |
 
-Any failure prints `./deploy/gcp-vm/promote.sh <SHA> --rollback`, which restores the
-`gcp-vm-<svc>:rollback` snapshot and recreates.
+Any failure prints `<script> <SHA> --rollback`, which restores **both** the
+`gcp-vm-<svc>:rollback` image tags and the `*.rollback` config, then recreates.
 
 The manual Steps 5–10 below remain valid if you ever need to run them by hand.
 
