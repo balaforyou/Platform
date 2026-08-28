@@ -15,25 +15,18 @@ on:
 #
 # `regression` and `integration` both `needs: checks`, so a cheap failure never spends
 # Docker-build minutes, and neither heavy job starts if the checks are red.
+#
+# All three jobs start from `./.github/actions/setup`, which installs deps AND does the
+# Prisma-generate + shared-package builds that `pnpm install` alone does not — `tsc` and
+# the tsx-loaded e2e seed script need them to resolve `@badminton/*` imports.
 
 jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        # No `version:` — v3 reads `packageManager` (pnpm@11.17.0) from package.json,
-        # so the runner matches corepack and the shipped Docker images (one toolchain).
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       - run: pnpm run typecheck
       - run: pnpm register:check
@@ -58,24 +51,11 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Provide .env for the regression suites
-        run: cp .env.ci .env
-
-      - name: Generate Prisma client and migrate the test database
-        run: |
-          pnpm --filter @badminton/database run prisma:generate
-          pnpm --filter @badminton/database run prisma:deploy
+      # ./.github/actions/setup already did `cp .env.ci .env` + prisma:generate.
+      - name: Migrate the test database
+        run: pnpm --filter @badminton/database run prisma:deploy
 
       - name: Regression suites (5 services)
         run: pnpm test:regression
@@ -85,15 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Compute deploy SHA
         run: echo "GIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"

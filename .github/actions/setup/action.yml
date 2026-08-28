@@ -1,0 +1,38 @@
+name: Set up workspace
+description: >
+  pnpm + Node 22, a frozen install, then the two build steps `pnpm install` does
+  NOT do on its own (there is no postinstall/prepare in this repo): generate the
+  Prisma client and build the shared packages. Without these, `tsc --noEmit` and
+  the tsx-loaded e2e seed script cannot resolve `@badminton/database` /
+  `@badminton/shared-*` / `@badminton/ui-shared` and fail with "Cannot find
+  module". Shared by every CI job so the sequence lives in one place.
+
+runs:
+  using: composite
+  steps:
+    - name: Install pnpm
+      uses: pnpm/action-setup@v3
+      # No `version:` — v3 reads `packageManager` (pnpm@11.17.0) from package.json.
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Generate Prisma client and build shared packages
+      shell: bash
+      run: |
+        # prisma:generate is `dotenv -e ../../.env -- prisma generate`; it does not
+        # connect, but dotenv-cli needs the file to exist. .env.ci carries only a
+        # DATABASE_URL. Jobs that actually talk to a database still set their own.
+        cp .env.ci .env
+        pnpm --filter @badminton/database run prisma:generate
+        pnpm --filter @badminton/shared-types run build
+        pnpm --filter @badminton/shared-middleware run build
+        pnpm --filter @badminton/ui-shared run build
+        pnpm --filter @badminton/database run build
