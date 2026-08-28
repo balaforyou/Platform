@@ -116,8 +116,11 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
+          # --retries=0: this step is non-blocking, so paying playwright.config.ts's
+          # CI default of 2 retries on the known-failing specs (apps/guest-member-pwa/
+          # CLAUDE.md) just triples the wall-clock for no signal.
           DATABASE_URL="postgresql://badminton:ci-postgres-password@localhost:5432/badminton_db_e2e?schema=public" \
-            pnpm --filter @badminton/guest-member-pwa exec playwright test --reporter=list,html \
+            pnpm --filter @badminton/guest-member-pwa exec playwright test --retries=0 --reporter=list,html \
             | tee e2e-output.txt
 
       - name: e2e summary line
