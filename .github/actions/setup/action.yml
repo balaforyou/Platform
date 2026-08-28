@@ -24,7 +24,7 @@ runs:
       shell: bash
       run: pnpm install --frozen-lockfile
 
-    - name: Generate Prisma client and build shared packages
+    - name: Generate Prisma client and build the workspace packages
       shell: bash
       run: |
         # prisma:generate is `dotenv -e ../../.env -- prisma generate`; it does not
@@ -32,7 +32,9 @@ runs:
         # DATABASE_URL. Jobs that actually talk to a database still set their own.
         cp .env.ci .env
         pnpm --filter @badminton/database run prisma:generate
-        pnpm --filter @badminton/shared-types run build
-        pnpm --filter @badminton/shared-middleware run build
-        pnpm --filter @badminton/ui-shared run build
-        pnpm --filter @badminton/database run build
+        # Build every packages/* (topological order): tsc across the workspace and
+        # the tsx-loaded e2e/regression specs resolve @badminton/* via each
+        # package's `types`/`main` → its dist. Not enumerated, so it can't drift as
+        # packages are added — packages/test-harness (37 importers) was the exact
+        # miss that a hand-listed set caused.
+        pnpm --filter "./packages/*" run build
