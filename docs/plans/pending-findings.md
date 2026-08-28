@@ -100,6 +100,13 @@ Dockerfiles and equally the local manual-deploy path (`deploy_via_dockerhub_refe
 2-4 build from the same Dockerfiles), so it is its own finding, not a Batch 23 fold-in.
 Confirmed-ID: F-194
 Confirmed: 28 Aug 2026
+Addendum, 28 Aug 2026 (Chief-directed): Folding in a second item, confirmed during F-193's own
+closure review — the e2e suite in `integration` runs `continue-on-error: true` (pre-existing
+baseline: 4 passed / 4 failed / 1 skipped, documented in `apps/guest-member-pwa/CLAUDE.md`), so
+today's pipeline verifies deployment deterministically via `verify-deployment.mjs` but only
+advises on e2e/behavioral correctness. F-194 now also covers clearing that fixture debt so the
+e2e step can be flipped to blocking. Two related but separable reproducibility/coverage gaps,
+same finding, fix in due course — not urgent, not folded into a live batch.
 
 ## Promoted (audit trail)
 
