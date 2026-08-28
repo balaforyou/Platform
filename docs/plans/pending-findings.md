@@ -81,6 +81,26 @@ unrelated to F-190. Not fixed here.
 Confirmed-ID: F-191
 Confirmed: 27 Aug 2026
 
+### shipped-images-base-tags-not-digest-pinned
+Batch: 23
+Surfaced: 28 Aug 2026
+Description: The two Dockerfiles that build every shipped image use moving base-image tags, not
+digests: `deploy/gcp-vm/Dockerfile.node-service` builds and runs on `node:22-bookworm-slim`
+(lines 1 and 28); `deploy/gcp-vm/Dockerfile.caddy-static` uses `node:22-bookworm-slim` for its
+build stage and `caddy:2-alpine` for the final stage (lines 1 and 37). No `sha256:` pin appears
+anywhere in `deploy/gcp-vm/`. Consequence, surfaced by F-193 sub-batch 3 making CI push a
+`:<svc>-<full-sha>` "immutable" tag per commit: that tag is immutable once pushed, but it is not
+a reproducibility guarantee — re-running CI on the *same* application commit is not guaranteed
+to produce byte-identical images if an upstream base tag moved between runs (Debian point
+release, a new `caddy:2-alpine`). F-193's Option-1 push design does not make this worse (within
+a run, the bytes `verify-deployment.mjs` approves are the exact bytes pushed), so it was
+deliberately not folded into F-193. The fix — pin the two `FROM` base images by digest, with a
+refresh mechanism (Renovate/Dependabot or a documented periodic bump) — touches the shipped
+Dockerfiles and equally the local manual-deploy path (`deploy_via_dockerhub_reference.md` steps
+2-4 build from the same Dockerfiles), so it is its own finding, not a Batch 23 fold-in.
+Confirmed-ID:
+Confirmed:
+
 ## Promoted (audit trail)
 
 ### deploy-pipeline-consolidation
