@@ -740,10 +740,13 @@ implementing thread's in-progress record until then.
 ## Batch 23 — F-193 deploy pipeline + local compose
 
 **Findings:** F-193
-**Status:** In progress — sub-batch 1 of 4 done. Not `Done` until all four sub-batches are
-live-fire verified and F-193's register row is written (deferred to the end, per the plan).
+**Status:** In progress — sub-batch 2 of 4 implemented (CI run evidence pending on PR).
+Not `Done` until all four sub-batches are live-fire verified and F-193's register row is
+written (deferred to the end, per the plan).
 **Handed off:** 28 Aug 2026
-**Commits:** `f63b8be` (sub-batch 1 — local compose files)
+**Commits:** `f63b8be` (sub-batch 1 — local compose files); `46d510b` (sub-batch 2 — CI
+pipeline, on branch `f193-batch2-ci` / PR — CI only runs on PRs and main, so evidence
+requires the PR run before merge)
 
 F-193's brief has four internal sub-batches: (1) local compose files, (2) CI pipeline,
 (3) Docker Hub tag+push, (4) GCP promotion script. Each gets its own plan → sign-off →
@@ -772,6 +775,23 @@ Deviations from brief, both flagged and signed off: `docker-compose.gcp-verify.y
 root (not `deploy/gcp-vm/docker-compose.override.yml` — VM auto-load hazard); frontends via
 `pnpm exec vite` not the `dev` script (hardcoded `--host 127.0.0.1` can't be overridden by
 append); `node:22-bookworm` not `-slim` (slim omits openssl → Prisma engine load failure).
+
+**Sub-batch 2 — CI pipeline (`46d510b`).** `.github/workflows/ci.yml` rewritten from one
+`install/lint/typecheck` job into three: `checks` (adds `register:check` + `diagram:verify`
+as real gates; Node 22 + pnpm 11 via dropping the `version:` pin so `pnpm/action-setup@v3`
+reads `packageManager` — verified against the v3 README), `regression` (the 5 suites vs an
+ephemeral `postgres:16` service container, `badminton_db_test`), `integration` (build + up
+the real shipped stack via `docker-compose.gcp-verify.yml`, `verify-deployment.mjs`
+all-7-PASS as a hard gate, then Playwright e2e as `continue-on-error` with an explicit
+passed/failed/skipped summary — non-blocking because `apps/guest-member-pwa/CLAUDE.md`
+documents the suite as pre-existing 4/4/1 fixture debt; signed off). `regression` +
+`integration` both `needs: checks`. New committed CI templates `.env.ci` and
+`deploy/gcp-vm/.env.ci` (copied into place by the workflow — `env_file: .env` always reads
+the on-disk file regardless of `--env-file`). `docker-compose.gcp-verify.yml` extended to
+also publish the stack Postgres on `5432` for the e2e `badminton_db_e2e` seed/migrate step.
+Toolchain-alignment decision (Node 22 / pnpm 11) folded in as a precondition, not a separate
+change. Evidence pending: a green PR run (all stages visible), a deliberately-red run
+proving halt-on-red, and confirmation the e2e `continue-on-error` doesn't red the build.
 
 ## Queued, not yet batched
 
