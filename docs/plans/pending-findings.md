@@ -98,8 +98,8 @@ deliberately not folded into F-193. The fix — pin the two `FROM` base images b
 refresh mechanism (Renovate/Dependabot or a documented periodic bump) — touches the shipped
 Dockerfiles and equally the local manual-deploy path (`deploy_via_dockerhub_reference.md` steps
 2-4 build from the same Dockerfiles), so it is its own finding, not a Batch 23 fold-in.
-Confirmed-ID:
-Confirmed:
+Confirmed-ID: F-194
+Confirmed: 28 Aug 2026
 
 ## Promoted (audit trail)
 
