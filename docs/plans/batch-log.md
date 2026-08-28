@@ -740,16 +740,19 @@ implementing thread's in-progress record until then.
 ## Batch 23 — F-193 deploy pipeline + local compose
 
 **Findings:** F-193
-**Status:** In progress — sub-batches 1, 2, 3 of 4 done and signed off; sub-batch 4
-(promotion script) implemented, live-fire evidence pending. Not `Done` until all four are
-verified and F-193's register row is written (deferred to the end, per the plan).
-**Handed off:** 28 Aug 2026
-**Commits:** `f63b8be` (sub-batch 1 — local compose files); sub-batch 2 (PR #1, merged) —
-`46d510b` (pipeline), `bda310b` (pre-existing lint debt), `c79cd67` + `c706864` (CI must
-build the workspace packages before typecheck — `pnpm install` has no postinstall),
+**Status:** Done — all four sub-batches implemented, each independently verified against real
+code, real CI runs (`#167`/`#171` green), and a real production promotion of `354590012bdf`
+to the live VM. F-193 `Resolved` in `findings_register.md`; `pnpm register:check` +
+`pnpm diagram:verify` green.
+**Handed off:** 28 Aug 2026 · **Done:** 28 Aug 2026
+**Commits:** `f63b8be` + `7edf010` (sub-batch 1 — local compose files); sub-batch 2 (PR #1,
+merged) — `46d510b` (pipeline), `bda310b` (pre-existing lint debt), `c79cd67` + `c706864`
+(CI must build the workspace packages before typecheck — `pnpm install` has no postinstall),
 `3790d40` (`--retries=0` on the non-blocking e2e step); sub-batch 3 (PR #2, merged) —
 `0d93c17` (Batch 2 reliability: wait for all 7 components, not just slot-engine — main
-`#169` race), `0cadc98` (Docker Hub push from the integration job).
+`#169` race), `0cadc98` (Docker Hub push from the integration job); sub-batch 4 — `12c0e32`
+(`deploy/gcp-vm/promote.sh` + `.gitattributes` + doc reconciliation); this row + the F-193
+register row (register close-out).
 
 F-193's brief has four internal sub-batches: (1) local compose files, (2) CI pipeline,
 (3) Docker Hub tag+push, (4) GCP promotion script. Each gets its own plan → sign-off →

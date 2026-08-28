@@ -83,6 +83,25 @@ Confirmed: 27 Aug 2026
 
 ## Promoted (audit trail)
 
+### deploy-pipeline-consolidation
+Batch: 23
+Surfaced: 28 Aug 2026
+Description: Chief-directed, not surfaced during batch work — the ID was assigned in the F-193
+implementation handover brief itself (from the Chief thread). Every deploy to the GCP VM was
+fully manual: build locally, hand SHA-check, SSH, retag, bump .env, eyeball the UI; and
+locally every code change meant standing the whole stack up and tearing it down. Four
+sub-batches, each with its own plan → sign-off → live-fire evidence: (1) local compose files
+(docker-compose.dev.yml hot-reload loop, docker-compose.gcp-verify.yml shipped-stack overlay,
+Caddyfile.dev); (2) CI pipeline (.github/workflows/ci.yml — checks / regression / integration
+jobs, register:check + diagram:verify made real gates, Node 22 + pnpm 11); (3) Docker Hub
+push from the integration job (:<svc> movable + :<svc>-<full-sha> immutable, every main
+push); (4) deploy/gcp-vm/promote.sh — one script consolidating the reference doc's steps 5-10.
+Two pre-existing masked gates surfaced and fixed as separate commits (lint debt, typecheck
+needing a workspace build). Two readiness races (CI Wait-for-Caddy, promote.sh verify step)
+caught and fixed. Base-image digest-pinning raised as a separate finding for Chief.
+Confirmed-ID: F-193
+Confirmed: 28 Aug 2026
+
 ### guest-pwa-organic-migration-completion
 Batch: 22
 Surfaced: 27 Aug 2026
