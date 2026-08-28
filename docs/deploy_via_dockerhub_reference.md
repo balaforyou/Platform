@@ -185,3 +185,64 @@ the repo — verify them, rather than trusting that a repo change reached the VM
 
 Recreating caddy after an `.env` change needs `--force-recreate`; a plain `up -d` will report
 `Started` without applying the new environment.
+
+---
+
+## Local development stacks (F-193 Batch 1)
+
+Two compose overlays, for two different purposes. Neither touches the VM.
+
+### Fast loop — `docker-compose.dev.yml`
+
+Hot-reload every service and both frontends, in `node:22-bookworm` containers with the
+repo bind-mounted, so a source edit takes effect with **no image rebuild**. The five
+backend services run their existing `dev` script (`tsx watch src/index.ts`); the two
+frontends run `pnpm exec vite --host 0.0.0.0` directly, because their `dev` scripts
+hardcode `--host 127.0.0.1` which an appended flag cannot override.
+
+```bash
+pnpm dev:up      # docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+pnpm dev:down
+```
+
+- Reuses the base `docker-compose.yml` Postgres (`badminton_db`, service DNS `postgres:5432`).
+- First `up` runs a one-shot `install` service: `pnpm install`, `prisma:generate`, and the
+  shared-package builds. Every dev service waits for it. Subsequent `up`s reuse the deps —
+  they live in **named volumes** (one per `node_modules` / generated-client / `dist` path),
+  shared between `install` and the runtime services, so the Linux tree never collides with
+  the Windows host and only `install` ever installs.
+- App reachable at `http://localhost:8080` (guest PWA at `/`, admin at `/admin`), routed by
+  `Caddyfile.dev`.
+- Env values are fixed dev strings baked into the compose file — **not secrets**.
+
+`pnpm db:reset:dev` drops and re-migrates `badminton_db` inside the dev container
+(`prisma migrate reset --force --skip-seed`). On-demand only — Postgres data otherwise
+persists.
+
+- **Precondition:** the dev stack must have come up at least once (`pnpm dev:up`) so the
+  named dep volumes are populated. It runs `--no-deps` (to avoid re-triggering the whole
+  `install` chain), so on a cold machine with empty volumes it fails with `pnpm: not found`.
+- **No F-101 guard on this path.** `prisma migrate reset` runs directly, *not* through the
+  regression suites' `cleanDatabase()` where F-101's guard lives — so the guard does **not**
+  protect this command. It is safe as written only because the dev container's
+  `DATABASE_URL` is compose-internal (`postgres:5432`) and cannot reach the VM. A future
+  port of this pattern to any context where `DATABASE_URL` could point elsewhere must add
+  its own guard — do not assume protection that isn't there.
+
+### Verification gate — `docker-compose.gcp-verify.yml`
+
+Runs the **real shipped stack** (the production Dockerfiles/images) locally, for
+`verify-deployment.mjs` and the Playwright e2e suite. The only delta from the shipped file is
+Caddy published on host `8080` to match `playwright.config.ts`.
+
+```bash
+GIT_SHA=$(git rev-parse HEAD) \
+  docker compose -f deploy/gcp-vm/docker-compose.yml \
+                 -f docker-compose.gcp-verify.yml \
+                 --env-file deploy/gcp-vm/.env up -d --build
+
+node scripts/verify-deployment.mjs http://localhost:8080 $(git rev-parse HEAD)
+```
+
+Lives at the repo root, invoked explicitly — a `docker-compose.override.yml` under
+`deploy/gcp-vm/` would auto-apply to VM deploys. See `deploy/gcp-vm/CLAUDE.md`.

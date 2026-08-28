@@ -1,0 +1,51 @@
+# Caddyfile.dev — F-193 Batch 1.
+#
+# Mirrors the root Caddyfile's route table exactly, but targets docker-compose.dev.yml
+# service DNS names instead of 127.0.0.1:<port>. Used only by the caddy service in
+# docker-compose.dev.yml. The browser hits Caddy on :8080; the admin SPA's own /api/*
+# calls come back here (not to Vite's proxy), so these /api/* routes are load-bearing.
+
+:8080 {
+	# Admin Web Console (Vite dev server, port 5174)
+	@adminRoot {
+		path /admin
+	}
+	rewrite @adminRoot /admin/
+
+	handle /admin* {
+		reverse_proxy admin-web:5174
+	}
+
+	# Slot Engine (port 3001)
+	route /api/slot-engine/* {
+		uri strip_prefix /api/slot-engine
+		reverse_proxy slot-engine:3001
+	}
+
+	# Identity Auth (port 3002)
+	route /api/identity/* {
+		uri strip_prefix /api/identity
+		reverse_proxy identity-auth:3002
+	}
+
+	# Tenant Management (port 3003)
+	route /api/tenant/* {
+		uri strip_prefix /api/tenant
+		reverse_proxy tenant-management:3003
+	}
+
+	# Payment Service (port 3004)
+	route /api/payment/* {
+		uri strip_prefix /api/payment
+		reverse_proxy payment:3004
+	}
+
+	# Notification Service (port 3005)
+	route /api/notification/* {
+		uri strip_prefix /api/notification
+		reverse_proxy notification:3005
+	}
+
+	# Everything else → guest PWA Vite dev server (port 5173)
+	reverse_proxy guest-member-pwa:5173
+}

@@ -1,0 +1,192 @@
+# docker-compose.dev.yml — F-193 Batch 1: the zero-friction local dev loop.
+#
+# Runs as an OVERLAY on the base docker-compose.yml (which provides Postgres):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up      (or: pnpm dev:up)
+#
+# The 5 backend services run their EXISTING "dev" script (tsx watch src/index.ts)
+# inside a plain node:22 container with the repo bind-mounted, so a source edit
+# hot-reloads with no image rebuild. The 2 frontends run `pnpm exec vite --host
+# 0.0.0.0` directly rather than their "dev" script — the script hardcodes
+# `--host 127.0.0.1`, which an appended flag cannot override (see each below).
+# This is deliberately NOT the shipped image shape — that is what
+# deploy/gcp-vm/docker-compose.yml (+ docker-compose.gcp-verify.yml) is for.
+#
+# node_modules / generated-client / dist paths are masked with NAMED volumes (shared
+# between the one-shot `install` service and every runtime service) so the Linux
+# container deps never collide with the Windows host tree, and only `install`
+# installs.
+
+x-dev-mounts: &dev_mounts
+  - .:/app
+  - pnpm_store:/root/.local/share/pnpm
+  - corepack_cache:/root/.cache
+  - nm_root:/app/node_modules
+  - nm_pkg_database:/app/packages/database/node_modules
+  - gen_database:/app/packages/database/src/generated
+  - dist_database:/app/packages/database/dist
+  - nm_pkg_jobscheduler:/app/packages/job-scheduler/node_modules
+  - nm_pkg_sharedmw:/app/packages/shared-middleware/node_modules
+  - dist_sharedmw:/app/packages/shared-middleware/dist
+  - nm_pkg_sharedtypes:/app/packages/shared-types/node_modules
+  - dist_sharedtypes:/app/packages/shared-types/dist
+  - nm_pkg_testharness:/app/packages/test-harness/node_modules
+  - nm_pkg_uishared:/app/packages/ui-shared/node_modules
+  - dist_uishared:/app/packages/ui-shared/dist
+  - nm_svc_slot:/app/services/slot-engine/node_modules
+  - nm_svc_identity:/app/services/identity-auth/node_modules
+  - nm_svc_tenant:/app/services/tenant-management/node_modules
+  - nm_svc_payment:/app/services/payment/node_modules
+  - nm_svc_notification:/app/services/notification/node_modules
+  - nm_app_guest:/app/apps/guest-member-pwa/node_modules
+  - nm_app_admin:/app/apps/admin-web/node_modules
+
+x-common-env: &common_env
+  NODE_ENV: development
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  # Fixed dev values — NOT secrets. All services must agree on these two or the
+  # internal-key / JWT checks between services fail.
+  JWT_SECRET: dev-jwt-secret
+  INTERNAL_SERVICE_KEY: dev-internal-key
+  DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/badminton_db?schema=public
+  # Vite/chokidar file-watching over a Docker Desktop bind mount needs polling.
+  CHOKIDAR_USEPOLLING: "true"
+
+x-service-base: &service_base
+  # Full bookworm (not -slim): it bundles openssl, which Prisma's query engine needs
+  # to load libssl. -slim omits it and Prisma falls back to a wrong engine target.
+  image: node:22-bookworm
+  working_dir: /app
+  volumes: *dev_mounts
+  depends_on:
+    install:
+      condition: service_completed_successfully
+    postgres:
+      condition: service_healthy
+
+services:
+  # Base compose.yml defines no healthcheck; add one so dev services can gate on it.
+  postgres:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d badminton_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: install deps + generate the Prisma client + build the packages that
+  # services import as built dist. Every dev service waits for this to finish.
+  install:
+    image: node:22-bookworm
+    working_dir: /app
+    volumes: *dev_mounts
+    environment:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    command:
+      - sh
+      - -c
+      - >
+        corepack enable &&
+        pnpm install --frozen-lockfile &&
+        pnpm --filter @badminton/shared-types run build &&
+        pnpm --filter @badminton/shared-middleware run build &&
+        pnpm --filter @badminton/ui-shared run build &&
+        pnpm --filter @badminton/database run prisma:generate &&
+        pnpm --filter @badminton/database run build
+
+  slot-engine:
+    <<: *service_base
+    environment:
+      <<: *common_env
+      PORT: 3001
+      NOTIFICATION_SERVICE_URL: http://notification:3005
+    command: [sh, -c, "corepack enable && pnpm --filter @badminton/slot-engine run dev"]
+
+  identity-auth:
+    <<: *service_base
+    environment:
+      <<: *common_env
+      PORT: 3002
+      SLOT_ENGINE_URL: http://slot-engine:3001
+      TENANT_SERVICE_URL: http://tenant-management:3003
+    command: [sh, -c, "corepack enable && pnpm --filter @badminton/identity-auth run dev"]
+
+  tenant-management:
+    <<: *service_base
+    environment:
+      <<: *common_env
+      PORT: 3003
+    command: [sh, -c, "corepack enable && pnpm --filter @badminton/tenant-management run dev"]
+
+  payment:
+    <<: *service_base
+    environment:
+      <<: *common_env
+      PORT: 3004
+      SLOT_ENGINE_URL: http://slot-engine:3001
+      NOTIFICATION_SERVICE_URL: http://notification:3005
+      RAZORPAY_KEY_ID: rzp_test_dev
+      RAZORPAY_KEY_SECRET: dev-razorpay-secret
+      RAZORPAY_WEBHOOK_SECRET: dev-razorpay-webhook-secret
+    command: [sh, -c, "corepack enable && pnpm --filter @badminton/payment run dev"]
+
+  notification:
+    <<: *service_base
+    environment:
+      <<: *common_env
+      PORT: 3005
+      IDENTITY_SERVICE_URL: http://identity-auth:3002
+    command: [sh, -c, "corepack enable && pnpm --filter @badminton/notification run dev"]
+
+  guest-member-pwa:
+    <<: *service_base
+    environment:
+      <<: *common_env
+    # `exec vite` rather than `run dev`: the dev script hardcodes `--host 127.0.0.1`,
+    # which an appended flag cannot override. This runs the same Vite with the host
+    # the container needs.
+    command: [sh, -c, "corepack enable && pnpm --filter @badminton/guest-member-pwa exec vite --host 0.0.0.0"]
+
+  admin-web:
+    <<: *service_base
+    environment:
+      <<: *common_env
+    # See guest-member-pwa above. admin-web's vite.config.ts sets port 5174 + strictPort.
+    command: [sh, -c, "corepack enable && pnpm --filter @badminton/admin-web exec vite --host 0.0.0.0"]
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - slot-engine
+      - identity-auth
+      - tenant-management
+      - payment
+      - notification
+      - guest-member-pwa
+      - admin-web
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+
+volumes:
+  pnpm_store:
+  corepack_cache:
+  nm_root:
+  nm_pkg_database:
+  gen_database:
+  dist_database:
+  nm_pkg_jobscheduler:
+  nm_pkg_sharedmw:
+  dist_sharedmw:
+  nm_pkg_sharedtypes:
+  dist_sharedtypes:
+  nm_pkg_testharness:
+  nm_pkg_uishared:
+  dist_uishared:
+  nm_svc_slot:
+  nm_svc_identity:
+  nm_svc_tenant:
+  nm_svc_payment:
+  nm_svc_notification:
+  nm_app_guest:
+  nm_app_admin:

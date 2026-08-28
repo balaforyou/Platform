@@ -1,0 +1,27 @@
+# docker-compose.gcp-verify.yml — F-193 Batch 1: the verification-gate overlay.
+#
+# Runs the REAL shipped stack (deploy/gcp-vm/docker-compose.yml — the same images,
+# same Dockerfiles that go to production) locally, for verify-deployment.mjs and the
+# Playwright e2e suite. Invoked EXPLICITLY, from the repo root:
+#
+#   GIT_SHA=$(git rev-parse HEAD) \
+#   docker compose -f deploy/gcp-vm/docker-compose.yml \
+#                  -f docker-compose.gcp-verify.yml \
+#                  --env-file deploy/gcp-vm/.env up -d --build
+#
+# Relative paths (build context ../.., env_file .env) resolve against the FIRST -f
+# file's directory (deploy/gcp-vm/), so they stay correct.
+#
+# The ONLY change vs. the shipped file: Caddy is published on host 8080 (mapped to
+# the container's :80) to match playwright.config.ts's hardcoded
+# baseURL http://localhost:8080. 443 is dropped — no TLS locally.
+#
+# NOTE: this file lives at the repo root ON PURPOSE. A file named
+# docker-compose.override.yml inside deploy/gcp-vm/ would be auto-loaded by the VM
+# deploy commands (which run `docker compose` from that directory) and silently
+# remap production port 80. See deploy/gcp-vm/CLAUDE.md.
+
+services:
+  caddy:
+    ports: !override
+      - "8080:80"
