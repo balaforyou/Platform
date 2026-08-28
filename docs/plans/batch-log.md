@@ -740,13 +740,14 @@ implementing thread's in-progress record until then.
 ## Batch 23 — F-193 deploy pipeline + local compose
 
 **Findings:** F-193
-**Status:** In progress — sub-batch 2 of 4 implemented (CI run evidence pending on PR).
-Not `Done` until all four sub-batches are live-fire verified and F-193's register row is
-written (deferred to the end, per the plan).
+**Status:** In progress — sub-batches 1 and 2 of 4 done and signed off. Not `Done` until
+all four sub-batches are live-fire verified and F-193's register row is written (deferred to
+the end, per the plan).
 **Handed off:** 28 Aug 2026
-**Commits:** `f63b8be` (sub-batch 1 — local compose files); `46d510b` (sub-batch 2 — CI
-pipeline, on branch `f193-batch2-ci` / PR — CI only runs on PRs and main, so evidence
-requires the PR run before merge)
+**Commits:** `f63b8be` (sub-batch 1 — local compose files); sub-batch 2 on branch
+`f193-batch2-ci` / PR #1 — `46d510b` (pipeline), `bda310b` (pre-existing lint debt),
+`c79cd67` + `c706864` (CI must build the workspace packages before typecheck — `pnpm
+install` has no postinstall), `3790d40` (`--retries=0` on the non-blocking e2e step).
 
 F-193's brief has four internal sub-batches: (1) local compose files, (2) CI pipeline,
 (3) Docker Hub tag+push, (4) GCP promotion script. Each gets its own plan → sign-off →
@@ -790,8 +791,30 @@ documents the suite as pre-existing 4/4/1 fixture debt; signed off). `regression
 the on-disk file regardless of `--env-file`). `docker-compose.gcp-verify.yml` extended to
 also publish the stack Postgres on `5432` for the e2e `badminton_db_e2e` seed/migrate step.
 Toolchain-alignment decision (Node 22 / pnpm 11) folded in as a precondition, not a separate
-change. Evidence pending: a green PR run (all stages visible), a deliberately-red run
-proving halt-on-red, and confirmation the e2e `continue-on-error` doesn't red the build.
+change.
+
+Two masked gates surfaced when the pipeline first ran, both the same class as the debt this
+sub-batch exists to make real: (1) `pnpm run lint` had never passed — 11 pre-existing errors
+(5 `no-useless-escape`, one `no-extra-boolean-cast`, an unnecessary `@ts-ignore`, a dead
+`react-hooks` disable directive, one `prefer-const`, two in `wireframe/` uploads). Fixed in
+`bda310b` (separate commit — not F-193 scope, debt this batch surfaced); `wireframe/**` added
+to `.eslintrc.json` `ignorePatterns`. Confirmed pre-existing, not toolchain-caused: reproduces
+on Node 22 and 24. (2) `pnpm run typecheck` had never been *reached* (lint failed first) and
+needs the workspace packages built — `pnpm install` does no `prisma generate` or package
+build. Fixed via a `./.github/actions/setup` composite action (`c79cd67`, then `c706864` to
+build *all* `packages/*` after a hand-listed set missed `@badminton/test-harness`), verified
+against a genuinely fresh `git clone` + `pnpm install`.
+
+**Evidence — CI run `#167` (`33148070551`, head `3790d402`): conclusion `success`.**
+`checks` 0.7 min (lint, typecheck, register:check, diagram:verify all green), `regression`
+1.5 min (5 suites), `integration` 14.2 min (7 production images built, `Wait for Caddy`,
+**`verify-deployment.mjs` all-7-PASS — the hard gate**, `badminton_db_e2e` provisioned +
+migrated, Playwright e2e ran `continue-on-error` and the job still concluded `success`,
+report artifact uploaded, stack torn down). Cross-checked by `#166` (retries=2) also
+`success`. **Halt-on-red proven for real** by `#164` (lint fail) and `#165` (typecheck fail):
+both show `regression` and `integration` as `skipped` — the pipeline stops at the failing
+gate and spends no Docker-build minutes. e2e pass/fail/skip counts live on `#167`'s
+job-summary page (`e2e summary line` step); not retrievable via the token-less API.
 
 ## Queued, not yet batched
 
