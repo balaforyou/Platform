@@ -1158,7 +1158,7 @@ function SchedulingPage() {
         <MutationFeedback error={preview.error} />
         {preview.isFetching ? <p className="empty-state">Loading availability...</p> : null}
         {preview.isSuccess && preview.data.length === 0 ? <p className="empty-state">No bookable slots for this date.</p> : null}
-        {!!preview.data?.length ? (
+        {preview.data?.length ? (
           <div className="preview-list">
             {preview.data.map((slot) => (
               <div className="preview-row" key={slot.window.id}>

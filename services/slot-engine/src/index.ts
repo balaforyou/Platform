@@ -36,7 +36,7 @@ const notificationUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhos
 // Helpers: F-009 Phone Validation & Normalization
 // ---------------------------------------------------------------------------
 function normalizePhone(phone: string): string {
-  const cleaned = phone.replace(/[\s\-\(\)]/g, '');
+  const cleaned = phone.replace(/[\s\-()]/g, '');
   if (cleaned.startsWith('+')) {
     return '+' + cleaned.replace(/\D/g, '');
   }

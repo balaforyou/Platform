@@ -14,7 +14,8 @@
   "ignorePatterns": [
     "**/dist/**",
     "**/node_modules/**",
-    "packages/database/src/generated/**"
+    "packages/database/src/generated/**",
+    "wireframe/**"
   ],
   "rules": {
     "no-unused-vars": "off",

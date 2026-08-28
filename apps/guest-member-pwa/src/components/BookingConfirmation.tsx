@@ -20,7 +20,6 @@ export default function BookingConfirmation() {
     if (!bookingId) return;
 
     let isMounted = true;
-    let pollInterval: any;
 
     const checkStatus = async () => {
       try {
@@ -49,7 +48,7 @@ export default function BookingConfirmation() {
     checkStatus();
     // Poll every 1.5 seconds for up to 30 seconds
     let attempts = 0;
-    pollInterval = setInterval(() => {
+    const pollInterval = setInterval(() => {
       attempts++;
       if (attempts > 20) {
         clearInterval(pollInterval);

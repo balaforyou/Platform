@@ -195,7 +195,7 @@ export default function CourtBooking() {
       const firstNonEmpty = groupedSlots.find((g) => g.slots.length > 0);
       if (firstNonEmpty) setActivePeriod(firstNonEmpty.key);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Keys only on `slots` deliberately (see comment above) — not groupedSlots/activePeriod.
   }, [slots]);
 
   // F-153: make the consequence of a slot tap reachable on a phone.

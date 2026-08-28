@@ -5,7 +5,6 @@ import crypto from 'crypto';
 import { Readable } from 'stream';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
 import { PrismaClient, Prisma } from '@badminton/database';
-// @ts-ignore
 import Razorpay from 'razorpay';
 
 const razorpayClient = new Razorpay({

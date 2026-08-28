@@ -75,7 +75,7 @@ test.describe('Findings Verification (F-009 client-side rendering)', () => {
     await page.click('#reserve-court-btn');
 
     // Verify redirection to payment checkout overlay, which means reservation passed
-    await expect(page).toHaveURL(/\/bookings\/[a-f0-9\-]+\/pay/);
+    await expect(page).toHaveURL(/\/bookings\/[a-f0-9-]+\/pay/);
   });
 
 });
