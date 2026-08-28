@@ -740,14 +740,16 @@ implementing thread's in-progress record until then.
 ## Batch 23 — F-193 deploy pipeline + local compose
 
 **Findings:** F-193
-**Status:** In progress — sub-batches 1 and 2 of 4 done and signed off. Not `Done` until
-all four sub-batches are live-fire verified and F-193's register row is written (deferred to
-the end, per the plan).
+**Status:** In progress — sub-batches 1, 2, 3 of 4 done and signed off; sub-batch 4
+(promotion script) implemented, live-fire evidence pending. Not `Done` until all four are
+verified and F-193's register row is written (deferred to the end, per the plan).
 **Handed off:** 28 Aug 2026
-**Commits:** `f63b8be` (sub-batch 1 — local compose files); sub-batch 2 on branch
-`f193-batch2-ci` / PR #1 — `46d510b` (pipeline), `bda310b` (pre-existing lint debt),
-`c79cd67` + `c706864` (CI must build the workspace packages before typecheck — `pnpm
-install` has no postinstall), `3790d40` (`--retries=0` on the non-blocking e2e step).
+**Commits:** `f63b8be` (sub-batch 1 — local compose files); sub-batch 2 (PR #1, merged) —
+`46d510b` (pipeline), `bda310b` (pre-existing lint debt), `c79cd67` + `c706864` (CI must
+build the workspace packages before typecheck — `pnpm install` has no postinstall),
+`3790d40` (`--retries=0` on the non-blocking e2e step); sub-batch 3 (PR #2, merged) —
+`0d93c17` (Batch 2 reliability: wait for all 7 components, not just slot-engine — main
+`#169` race), `0cadc98` (Docker Hub push from the integration job).
 
 F-193's brief has four internal sub-batches: (1) local compose files, (2) CI pipeline,
 (3) Docker Hub tag+push, (4) GCP promotion script. Each gets its own plan → sign-off →
@@ -830,9 +832,8 @@ main-push runs serialise (no movable-tag race) while PR runs cancel-in-progress 
 feedback. Push steps `if: github.event_name == 'push' && github.ref == 'refs/heads/main'`
 — build + verify still run on PRs, credentials never exercised there.
 
-**Requires two GitHub repo secrets only Bala can add:** `DOCKERHUB_USERNAME`
-(`balamuralikrishna`) and `DOCKERHUB_TOKEN` (a Docker Hub Read/Write access token, not the
-password). Not `verified` until both exist and a real main-push run pushes 14 tags.
+Two GitHub repo secrets added by Bala: `DOCKERHUB_USERNAME` (`balamuralikrishna`) and
+`DOCKERHUB_TOKEN` (Docker Hub Read/Write access token).
 
 Known limitation, described to Chief for an ID (not fixed here): base images
 `node:22-bookworm-slim` / `caddy:2-alpine` are moving tags, not digest-pinned — a
@@ -840,9 +841,66 @@ Known limitation, described to Chief for an ID (not fixed here): base images
 guaranteed byte-reproducible. Touches the shipped Dockerfiles and the local deploy path, so
 its own finding.
 
-Evidence pending: PR run green with the two Docker Hub steps `skipped`; secrets confirmed
-present; main-push run's raw push log; independent `docker pull` of a `:<svc>-<sha>` tag
-from a clean state.
+**Evidence — CI run `#171` (merge commit `354590012bdfb279312c363e66f819e022212f13`):
+green.** `Log in to Docker Hub` + `Tag and push all 7 images` both ran (not skipped) on the
+real merge-triggered push; all 7 components present on Docker Hub with matching
+movable/immutable digests at that SHA. Also proved the Batch 2 readiness fix (`0d93c17`):
+`main #169` (identical tree to green PR run `#168`) had failed `Verify deployment` in 0s —
+`Wait for Caddy` only polled slot-engine while caddy `depends_on` services with
+`service_started`; the fix polls all 7 endpoints verify-deployment checks.
+
+**Sub-batch 4 — GCP promotion script (`deploy/gcp-vm/promote.sh`).** Consolidates
+`deploy_via_dockerhub_reference.md` steps 5–10 into one bash script that runs on the VM,
+takes a target SHA, and: **fetches `docker-compose.yml` / `Caddyfile` / `verify-deployment.mjs`
+for `<sha>` SHA-pinned from `raw.githubusercontent.com`** (the VM's app tree is a plain copy,
+not a git checkout — discovered during implementation; this makes the topology always match
+the images with no operator sync step) → snapshots **both** the running images
+(`gcp-vm-<svc>:rollback`) **and** the config (`*.rollback`) before any mutation → installs
+compose.yml / Caddyfile only if they differ CRLF-insensitively (F-149 reconciliation, dated
+audit copy on change) → pulls the 7 `:<svc>-<sha>` immutable images → retags → writes
+`GIT_SHA=<sha>` to `.env` (the key Compose interpolation actually reads for the migrate
+guard's `EXPECTED_GIT_SHA` — the old manual Step 7's `EXPECTED_GIT_SHA=` edit was dead
+weight) → `export GIT_SHA` + `sudo -E docker compose run --rm migrate` (F-077 guard, never
+bypassed) → `up -d --force-recreate` the **6** long-running services (`migrate` is one-shot,
+`postgres`'s image is unchanged — neither is bounced) → **`wait_for_ready`** polls all 7
+endpoints verify-deployment checks until 200 → Caddy HTTP-fallback grep must read `0` →
+`verify-deployment.mjs https://elitecourts.duckdns.org <sha>` in a throwaway `node:22`
+container, all 7 PASS. `--rollback` restores both halves. `set -euo pipefail`, ERR trap
+prints the rollback command, `bash -n` + `shellcheck` clean.
+
+Deviations from the approved plan, all flagged: (1) `up -d --force-recreate` scoped to the 6
+long-running services (not unscoped) so the live customer Postgres is not bounced — the only
+`.env` delta is `GIT_SHA`, which no running service reads; (2) git-checkout prerequisite
+replaced by SHA-pinned GitHub-raw fetch (VM is not a git repo); (3) `--rollback` extended to
+restore config, not just image tags (the fetch mechanism means the script now writes VM
+config, so a mid-run failure could leave new config against old images); (4) `wait_for_ready`
+added — the first live run deployed correctly but its verify step raced the recreated
+services' port-bind (Caddy 502) and the ERR trap reported failure; same class as `0d93c17`,
+same fix shape.
+
+**Evidence — real end-to-end promotion against the live VM, `354590012bdf…`:**
+
+- **First run** (`b86k…`): F-077 guard PASS (`[verify-build-sha] ok — image matches the
+  deploy target (354590…)`), migrations clean, 6 services recreated, Postgres untouched
+  (`Up 47 hours`), Caddy grep `0`, config `:ro` drift reconciled with audit copy. Verify
+  step raced the boot → 502 → exit 1 (the deploy itself was correct). `wait_for_ready` added.
+- **Clean re-run** (`blye2hn73`, exit 0): configs `already current` (idempotent — no
+  rewrite), images `up to date`, guard PASS, 6 recreated, Postgres `Up 2 days` (not
+  bounced), `wait_for_ready` visibly rode out `Connection refused` → `502` → `all 7
+  endpoints answering after ~12s`, Caddy grep `0`, **`verify-deployment.mjs` all 7 PASS at
+  `354590012bdf`**, `== PROMOTION COMPLETE ==`.
+- **Independent re-verification** (this session's shell): `verify-deployment.mjs
+  https://elitecourts.duckdns.org 354590…` → all 7 PASS; `elitecourts` / `jbc.elitecourts`
+  / `courtowner1.elitecourts` all HTTP 200, `ssl_verify_result=0`; live API calls return
+  `version: 354590012bdf…`. Fixed a **pre-existing split deploy** (services `eba3b93`,
+  frontends `5196a54c`).
+- **Rollback armed, not executed:** 7 `gcp-vm-<svc>:rollback` image tags +
+  `docker-compose.yml.rollback` + `Caddyfile.rollback` on the VM.
+
+Latent issue noted for the record (not blocking — both files exist on this VM): earlier
+`install_if_changed` / snapshot lines used `[ -f x ] && cp …`, which aborts under `set -e`
+when the file is absent (fresh/rebuilt VM). Fixed to `if [ -f x ]; then …; fi` before this
+sub-batch closed.
 
 ## Queued, not yet batched
 

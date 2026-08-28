@@ -73,7 +73,40 @@ Since the six backend images share most layers, most pushes after the first will
 
 ---
 
-## Step 5 — On the VM: connect and pull
+## Steps 5–10 — promote a SHA to the VM (F-193 Batch 4: `deploy/gcp-vm/promote.sh`)
+
+Since Batch 3, CI pushes `:<svc>-<full-sha>` immutable images for **every** `main` commit, so
+Steps 2–4 above are only for local/emergency builds. To promote an already-pushed SHA:
+
+```bash
+gcloud compute ssh badminton-demo-vm --zone=us-central1-a --tunnel-through-iap \
+  --command "cd ~/badminton-platform && git fetch origin && git checkout <SHA> && ./deploy/gcp-vm/promote.sh <SHA>"
+```
+
+`&&` inside the quoted `--command` is safe (the local shell does not interpret it), and there
+is no `$VAR` for an intermediate shell to eat — `<SHA>` is a literal you substitute. One-time
+prerequisite on the VM: `sudo docker login`.
+
+`promote.sh <SHA>` runs entirely on the VM and does, in order:
+
+| # | doc step | what the script does |
+|---|---|---|
+| 0 | — | `docker tag gcp-vm-<svc> gcp-vm-<svc>:rollback` for all 7 — snapshot the running set |
+| 5 | Step 5 | `docker pull balamuralikrishna/badminton-platform:<svc>-<SHA>` ×7 |
+| 6 | Step 6 | retag each → `gcp-vm-<svc>` |
+| 7 | Step 7 | write `GIT_SHA=<SHA>` into `.env` (the key Compose interpolation actually reads for the migrate guard — **not** `EXPECTED_GIT_SHA`; see the comment in the script); assert `SITE_ADDRESS=` present |
+| 8 | Step 8 | `export GIT_SHA` + `sudo -E docker compose --env-file .env run --rm migrate` (F-077 guard — aborts on `FAIL: stale image`), then `up -d --force-recreate` the 7 app containers (postgres left running) |
+| 10 | Step 10 | `docker compose logs caddy \| grep -c "listening only on the HTTP port"` must be `0` |
+| 9 | Step 9 | `verify-deployment.mjs https://elitecourts.duckdns.org <SHA>` in a throwaway `node:22` container — all 7 must PASS |
+
+Any failure prints `./deploy/gcp-vm/promote.sh <SHA> --rollback`, which restores the
+`gcp-vm-<svc>:rollback` snapshot and recreates.
+
+The manual Steps 5–10 below remain valid if you ever need to run them by hand.
+
+---
+
+## Step 5 (manual) — On the VM: connect and pull
 
 ```powershell
 gcloud compute ssh badminton-demo-vm --zone=us-central1-a --tunnel-through-iap

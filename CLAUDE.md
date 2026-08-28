@@ -95,7 +95,7 @@ Stop any manually-started dev services first, or the suite silently exercises th
 
 ## Deployment
 
-Docker Hub workflow (build locally, push, pull on VM) — see `docs/deploy_via_dockerhub_reference.md` and `deploy/gcp-vm/CLAUDE.md` for VM-specific mechanics (Caddy, compose, SSH quirks). Real verification: `pnpm diagram:verify`, `deploy:verify` script, confirm HTTPS genuinely live (not silently HTTP-only) before treating a deploy as done.
+Docker Hub workflow — see `docs/deploy_via_dockerhub_reference.md` and `deploy/gcp-vm/CLAUDE.md` for VM-specific mechanics (Caddy, compose, SSH quirks). As of F-193: CI (`.github/workflows/ci.yml`) builds all 7 images, runs `verify-deployment.mjs` against them, and pushes `:<svc>` + `:<svc>-<full-sha>` to Docker Hub on every `main` push; `./deploy/gcp-vm/promote.sh <sha>` (run on the VM) pulls that immutable set, drives the F-077 migrate guard, brings the stack up, and self-verifies (Steps 5–10 of the reference doc). Local dev stacks: `docker-compose.dev.yml` (hot reload) and `docker-compose.gcp-verify.yml` (the shipped stack, for `verify-deployment.mjs` / e2e). Real verification: `pnpm diagram:verify`, `deploy:verify` script, confirm HTTPS genuinely live (not silently HTTP-only) before treating a deploy as done.
 
 ## Before finishing any task
 

@@ -1,0 +1,3 @@
+# Shell scripts must stay LF even when checked out on Windows — deploy/gcp-vm/promote.sh
+# is scp'd to the Linux VM, and CRLF in a bash script breaks it (see deploy/gcp-vm/CLAUDE.md).
+*.sh text eol=lf
