@@ -61,8 +61,17 @@ jobs:
         run: pnpm test:regression
 
   integration:
-    needs: checks
+    # needs regression too (not just checks) so the Docker Hub push below is gated on
+    # the whole pipeline — a regression failure must stop an in-flight integration run
+    # from pushing.
+    needs: [checks, regression]
     runs-on: ubuntu-latest
+    # Serialise main-push runs (they push to Docker Hub; a movable :<svc> tag must not be
+    # raced). PR runs never push, so give them a per-ref group and let a newer push cancel
+    # an older one for fast feedback.
+    concurrency:
+      group: dockerhub-publish-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -81,20 +90,60 @@ jobs:
             --env-file deploy/gcp-vm/.env \
             up -d --build
 
-      - name: Wait for Caddy
+      - name: Wait for every component verify-deployment checks
         run: |
+          # caddy depends_on the services with `condition: service_started`, not
+          # `service_healthy` — so there is a window where caddy answers but a backend
+          # isn't listening yet (502). Poll ALL 7 endpoints verify-deployment.mjs hits,
+          # not just slot-engine, or that step races the stack coming up (main run #169).
+          endpoints="
+            /api/slot-engine/health
+            /api/identity/health
+            /api/tenant/health
+            /api/payment/health
+            /api/notification/health
+            /version.json
+            /admin/version.json
+          "
           for i in $(seq 1 60); do
-            if curl -fsS http://localhost:8080/api/slot-engine/health >/dev/null; then
-              echo "stack up after ~$((i * 5))s"; exit 0
-            fi
+            all_ok=1
+            for ep in $endpoints; do
+              curl -fsS --max-time 5 "http://localhost:8080${ep}" >/dev/null || { all_ok=0; break; }
+            done
+            if [ "$all_ok" = 1 ]; then echo "all 7 components up after ~$((i * 5))s"; exit 0; fi
             sleep 5
           done
-          echo "::error::stack did not come up within 5 minutes"
+          echo "::error::stack did not fully come up within 5 minutes (last failing endpoint: ${ep})"
+          docker compose -f deploy/gcp-vm/docker-compose.yml -f docker-compose.gcp-verify.yml ps
           docker compose -f deploy/gcp-vm/docker-compose.yml -f docker-compose.gcp-verify.yml logs
           exit 1
 
       - name: Verify deployment — all 7 components at the built SHA
         run: node scripts/verify-deployment.mjs http://localhost:8080 "$GIT_SHA"
+
+      # F-193 Batch 3 — push the images that were JUST verified, no rebuild. The bytes
+      # tagged here are the exact container images verify-deployment.mjs approved above.
+      # Guarded to push-to-main only: build + verify still run on PRs, but Docker Hub
+      # credentials are never exercised there. Both tag forms, all 7 components, every run
+      # (F-193 decision 1) — unchanged layers dedup on Docker Hub for free.
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push all 7 images (movable + immutable)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          REPO: ${{ secrets.DOCKERHUB_USERNAME }}/badminton-platform
+        run: |
+          for svc in slot-engine identity-auth tenant-management payment notification caddy migrate; do
+            docker tag "gcp-vm-$svc" "$REPO:$svc"
+            docker tag "gcp-vm-$svc" "$REPO:$svc-$GIT_SHA"
+            docker push "$REPO:$svc"
+            docker push "$REPO:$svc-$GIT_SHA"
+          done
 
       - name: Provision and migrate badminton_db_e2e
         run: |

@@ -816,6 +816,34 @@ both show `regression` and `integration` as `skipped` — the pipeline stops at 
 gate and spends no Docker-build minutes. e2e pass/fail/skip counts live on `#167`'s
 job-summary page (`e2e summary line` step); not retrievable via the token-less API.
 
+**Sub-batch 3 — tag + push to Docker Hub (branch `f193-batch3-push` / PR).** Automates
+`deploy_via_dockerhub_reference.md` steps 2–4. Two guarded steps added to the `integration`
+job **immediately after `verify-deployment.mjs`** — `docker/login-action@v3` then tag+push
+all 7 `gcp-vm-<svc>` images as `balamuralikrishna/badminton-platform:<svc>` (movable) and
+`:<svc>-<full-sha>` (immutable), every main run (F-193 decision 1). Push-from-`integration`,
+not a separate rebuild job: the pushed bytes are the exact images `verify-deployment.mjs`
+just approved — a rebuild on another runner could diverge (moved base tag, resolution
+timing) and relocate the "verified ≠ shipped" gap `verify-deployment.mjs` exists to close.
+Two shape changes to Batch 2: `integration` now `needs: [checks, regression]` (so the push
+is gated on the whole pipeline, +~1.5 min); job-level `concurrency` scoped per-ref so
+main-push runs serialise (no movable-tag race) while PR runs cancel-in-progress for fast
+feedback. Push steps `if: github.event_name == 'push' && github.ref == 'refs/heads/main'`
+— build + verify still run on PRs, credentials never exercised there.
+
+**Requires two GitHub repo secrets only Bala can add:** `DOCKERHUB_USERNAME`
+(`balamuralikrishna`) and `DOCKERHUB_TOKEN` (a Docker Hub Read/Write access token, not the
+password). Not `verified` until both exist and a real main-push run pushes 14 tags.
+
+Known limitation, described to Chief for an ID (not fixed here): base images
+`node:22-bookworm-slim` / `caddy:2-alpine` are moving tags, not digest-pinned — a
+`:<svc>-<sha>` tag is immutable once pushed but a re-run on the same commit is not
+guaranteed byte-reproducible. Touches the shipped Dockerfiles and the local deploy path, so
+its own finding.
+
+Evidence pending: PR run green with the two Docker Hub steps `skipped`; secrets confirmed
+present; main-push run's raw push log; independent `docker pull` of a `:<svc>-<sha>` tag
+from a clean state.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
