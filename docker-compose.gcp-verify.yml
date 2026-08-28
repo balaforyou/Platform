@@ -25,3 +25,12 @@ services:
   caddy:
     ports: !override
       - "8080:80"
+
+  # F-193 Batch 2: publish the stack's Postgres to the host so the CI `integration` job
+  # (and a local reviewer running the e2e suite) can CREATE/migrate badminton_db_e2e and
+  # let Playwright's `tests/seed-test-data.ts` reach it from the runner. The shipped
+  # deploy/gcp-vm/docker-compose.yml never publishes this — it is internal-only in
+  # production.
+  postgres:
+    ports:
+      - "5432:5432"
