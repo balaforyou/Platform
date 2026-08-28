@@ -737,6 +737,42 @@ recent register-touching commit). Deliberately **not** yet written into `finding
 landing alongside the real register row once all six slices are verified. This entry is the
 implementing thread's in-progress record until then.
 
+## Batch 23 — F-193 deploy pipeline + local compose
+
+**Findings:** F-193
+**Status:** In progress — sub-batch 1 of 4 done. Not `Done` until all four sub-batches are
+live-fire verified and F-193's register row is written (deferred to the end, per the plan).
+**Handed off:** 28 Aug 2026
+**Commits:** `f63b8be` (sub-batch 1 — local compose files)
+
+F-193's brief has four internal sub-batches: (1) local compose files, (2) CI pipeline,
+(3) Docker Hub tag+push, (4) GCP promotion script. Each gets its own plan → sign-off →
+evidence cycle.
+
+**Sub-batch 1 — local compose files.** New: `docker-compose.dev.yml` (fast hot-reload loop,
+overlay on the base `docker-compose.yml`; each backend runs its existing `tsx watch` dev
+script in `node:22-bookworm`, frontends run `pnpm exec vite --host 0.0.0.0` since the dev
+scripts pin `--host 127.0.0.1`; deps in shared named volumes; one-shot `install` service),
+`Caddyfile.dev` (root Caddyfile route table, compose-DNS targets), `docker-compose.gcp-verify.yml`
+(repo-root overlay remapping Caddy to `8080:80` via `!override`, for `verify-deployment.mjs`
+and Playwright — *not* placed in `deploy/gcp-vm/` because a `docker-compose.override.yml`
+there would auto-apply to VM deploys; trap recorded in `deploy/gcp-vm/CLAUDE.md`). Plus
+`dev:up`/`dev:down`/`db:reset:dev` scripts and a "Local development stacks" section in
+`docs/deploy_via_dockerhub_reference.md`.
+
+Evidence (live, not reasoned): both stacks brought up for real; dev stack — all 7 app
+containers + Postgres healthy, all 5 service `/health` + guest `/` + admin `/admin/` = 200
+through Caddy.dev; hot reload proven by editing `services/notification/src/index.ts` live
+(tsx `change … Restarting`, pid 48→78, probe field round-tripped, reverted, tree clean) with
+no `docker` command. Verification-gate stack — built all 7 production images, `migrate`
+applied all migrations (SHA guard passed), `verify-deployment.mjs http://localhost:8080
+5196a54c…` → **all 7 components PASS**, exit 0. Both stacks torn down after.
+
+Deviations from brief, both flagged and signed off: `docker-compose.gcp-verify.yml` at repo
+root (not `deploy/gcp-vm/docker-compose.override.yml` — VM auto-load hazard); frontends via
+`pnpm exec vite` not the `dev` script (hardcoded `--host 127.0.0.1` can't be overridden by
+append); `node:22-bookworm` not `-slim` (slim omits openssl → Prisma engine load failure).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
