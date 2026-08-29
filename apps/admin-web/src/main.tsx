@@ -13,12 +13,15 @@ import {
   Link as LinkIcon,
   LogOut,
   Menu,
+  Minus,
   Plus,
   RefreshCw,
   Save,
   ShieldAlert,
   SlidersHorizontal,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   Users,
   X,
 } from 'lucide-react';
@@ -144,6 +147,17 @@ type BranchGuestOccupancy = OccupancySummary & {
   resourcePoolName: string;
 };
 
+// Branch-level aggregate occupancy across every pool in the response.
+// Returns null (not 0) when no windows are configured for the date — a genuine "no data"
+// state, distinct from a real 0% (capacity exists, nothing confirmed against it).
+function aggregateOccupancy(rows: BranchGuestOccupancy[] | undefined): number | null {
+  if (!rows || rows.length === 0) return null;
+  const totalCapacity = rows.reduce((sum, row) => sum + row.totalCapacity, 0);
+  if (totalCapacity <= 0) return null;
+  const confirmedSeats = rows.reduce((sum, row) => sum + row.confirmedSeats, 0);
+  return Math.round((confirmedSeats / totalCapacity) * 100);
+}
+
 type MemberAttendanceRow = {
   memberPhone: string;
   resourcePoolName: string;
@@ -238,6 +252,52 @@ const branchScopes = (roles: string[] = []) => roles
   .filter(Boolean);
 
 const todayIsoDate = () => new Date().toISOString().slice(0, 10);
+
+// Shift a YYYY-MM-DD string by whole days. UTC epoch math — matches todayIsoDate above and
+// the slot-engine's UTC dayBounds(), so date-7d lands on the same calendar day the server
+// buckets occupancy into. No date library is a dependency in this app.
+const shiftIsoDate = (iso: string, deltaDays: number) => {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + deltaDays)).toISOString().slice(0, 10);
+};
+
+// Value-vs-prior-period trend line (wireframe "Utilization Rate … +3.2% vs Last Week").
+// Presentational only — the caller owns fetching and any domain-specific aggregation.
+// Candidate for promotion to @badminton/ui-shared once a second adminHub sub-area needs the
+// same treatment; kept local until then (ui-shared holds no React components today).
+function TrendIndicator({
+  current,
+  previous,
+  suffix = '%',
+  comparisonLabel = 'vs last week',
+}: {
+  current: number | null;
+  previous: number | null;
+  suffix?: string;
+  comparisonLabel?: string;
+}) {
+  if (current === null) return null;
+  if (previous === null) {
+    return <span className="occupancy-trend flat">No comparison {comparisonLabel}</span>;
+  }
+  // Percentage-point difference, not relative change — "vs last week" reads as a point delta.
+  const delta = Math.round((current - previous) * 10) / 10;
+  if (delta === 0) {
+    return (
+      <span className="occupancy-trend flat">
+        <Minus size={14} aria-hidden="true" /> No change {comparisonLabel}
+      </span>
+    );
+  }
+  const Icon = delta > 0 ? TrendingUp : TrendingDown;
+  const tone = delta > 0 ? 'positive' : 'negative';
+  const sign = delta > 0 ? '+' : '−';
+  return (
+    <span className={`occupancy-trend ${tone}`}>
+      <Icon size={14} aria-hidden="true" /> {sign}{Math.abs(delta)}{suffix} {comparisonLabel}
+    </span>
+  );
+}
 
 const weekdayOptions = [
   { value: '1', label: 'Mon' },
@@ -667,6 +727,16 @@ function Overview() {
     enabled: !!branchId,
     queryFn: () => api.get<MemberAttendanceRow[]>(`/slot-engine/branches/${branchId}/member-attendance?date=${date}`),
   });
+  // Week-over-week comparison. Same query-key shape as `occupancy`, so React Query dedupes
+  // when the user later views this date as "this week".
+  const lastWeekDate = useMemo(() => shiftIsoDate(date, -7), [date]);
+  const lastWeekOccupancy = useQuery({
+    queryKey: ['branch-guest-occupancy', branchId, lastWeekDate],
+    enabled: !!branchId,
+    queryFn: () => api.get<BranchGuestOccupancy[]>(`/slot-engine/branches/${branchId}/guest-occupancy?date=${lastWeekDate}`),
+  });
+  const thisWeekPct = aggregateOccupancy(occupancy.data);
+  const lastWeekPct = aggregateOccupancy(lastWeekOccupancy.data);
 
   React.useEffect(() => {
     if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
@@ -684,8 +754,14 @@ function Overview() {
           <div>
             <h2>Guest Occupancy</h2>
             <p className="muted">Confirmed guest slots by court for the selected branch and date.</p>
+            {thisWeekPct !== null && (
+              <div className="occupancy-summary">
+                <strong>{thisWeekPct}% branch occupancy</strong>
+                <TrendIndicator current={thisWeekPct} previous={lastWeekPct} />
+              </div>
+            )}
           </div>
-          {(occupancy.isFetching || memberAttendance.isFetching) && <RefreshCw className="spin" size={18} />}
+          {(occupancy.isFetching || memberAttendance.isFetching || lastWeekOccupancy.isFetching) && <RefreshCw className="spin" size={18} />}
         </div>
         <div className="form-grid compact">
           <label>Branch<select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
@@ -694,7 +770,7 @@ function Overview() {
           </select></label>
           <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
         </div>
-        <MutationFeedback error={branches.error || occupancy.error || memberAttendance.error} />
+        <MutationFeedback error={branches.error || occupancy.error || lastWeekOccupancy.error || memberAttendance.error} />
         {!branchId && <p className="empty-state">Select a branch to view guest occupancy.</p>}
         {branchId && occupancy.data?.length === 0 && (
           <p className="empty-state">{selectedBranch?.name || 'This branch'} has no resource pools configured yet.</p>

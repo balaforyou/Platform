@@ -108,6 +108,27 @@ advises on e2e/behavioral correctness. F-194 now also covers clearing that fixtu
 e2e step can be flipped to blocking. Two related but separable reproducibility/coverage gaps,
 same finding, fix in due course — not urgent, not folded into a live batch.
 
+### guest-occupancy-branch-endpoint-date-unvalidated
+Batch: 24 (adminHub week-over-week trend — Overview dashboard)
+Surfaced: 29 Aug 2026
+Description: `GET /branches/:id/guest-occupancy` (`services/slot-engine/src/index.ts:1686`) reads
+`const { date } = request.query` raw at `:1689` and forwards it straight into
+`computePoolGuestOccupancy(poolIds, date)` (`:1704`) with no validation. `dayBounds(date?)`
+(`:280-288`) does `new Date(date)` with no `Number.isNaN(day.getTime())` guard, unlike the
+sibling member-attendance compute path (`:676-692`) and the guarded helper at `:326-330`. An
+unparseable `?date=` therefore produces an Invalid-Date / downstream Prisma error rather than a
+clean `400 INVALID_DATE`. `dayBounds`'s own source comment (`:281`, `:290-297`) notes it is
+deliberately kept UTC-only and separate from `branchDayBounds` because it is shared with
+availability generation (Stage-2 / F-066 scope) — i.e. the UTC semantics are intentional; the
+missing NaN/format guard on the endpoint input is the gap, not the UTC behaviour. Surfaced during
+the adminHub week-over-week trend investigation (which adds a second frontend call to this same
+endpoint at `date − 7d`). That feature does NOT depend on a fix — its `shiftIsoDate` helper always
+emits a valid `YYYY-MM-DD` — so this was deliberately not folded into that batch (rule 9). Severity
+read: low — no live exploit path, existing authenticated branch-scoped endpoint, missing input
+hygiene only. Described here for Chief to assign an ID and prioritise separately; do not self-number.
+Confirmed-ID: F-201
+Confirmed: 29 Aug 2026
+
 ## Promoted (audit trail)
 
 ### deploy-pipeline-consolidation
