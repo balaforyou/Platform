@@ -1,7 +1,6 @@
 node_modules/
 .pnpm-store/
 dist/
-.env
 packages/database/src/generated/
 bin/
 *.exe
@@ -16,3 +15,12 @@ deploy-package.tar
 
 Implementation_Plan/UX Business Review/Evidence/
 Implementation_Plan/UX Business Review/F029 Screenshots/
+
+# Environment files — never commit real secrets
+.env
+**/.env
+deploy/gcp-vm/.env
+*.env.local
+
+# Local-only compose overrides (e.g. host port remaps for a dev machine)
+docker-compose.override.yml

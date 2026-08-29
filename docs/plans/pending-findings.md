@@ -108,6 +108,59 @@ advises on e2e/behavioral correctness. F-194 now also covers clearing that fixtu
 e2e step can be flipped to blocking. Two related but separable reproducibility/coverage gaps,
 same finding, fix in due course — not urgent, not folded into a live batch.
 
+### guest-occupancy-branch-endpoint-date-unvalidated
+Batch: 24 (adminHub week-over-week trend — Overview dashboard)
+Surfaced: 29 Aug 2026
+Description: `GET /branches/:id/guest-occupancy` (`services/slot-engine/src/index.ts:1686`) reads
+`const { date } = request.query` raw at `:1689` and forwards it straight into
+`computePoolGuestOccupancy(poolIds, date)` (`:1704`) with no validation. `dayBounds(date?)`
+(`:280-288`) does `new Date(date)` with no `Number.isNaN(day.getTime())` guard, unlike the
+sibling member-attendance compute path (`:676-692`) and the guarded helper at `:326-330`. An
+unparseable `?date=` therefore produces an Invalid-Date / downstream Prisma error rather than a
+clean `400 INVALID_DATE`. `dayBounds`'s own source comment (`:281`, `:290-297`) notes it is
+deliberately kept UTC-only and separate from `branchDayBounds` because it is shared with
+availability generation (Stage-2 / F-066 scope) — i.e. the UTC semantics are intentional; the
+missing NaN/format guard on the endpoint input is the gap, not the UTC behaviour. Surfaced during
+the adminHub week-over-week trend investigation (which adds a second frontend call to this same
+endpoint at `date − 7d`). That feature does NOT depend on a fix — its `shiftIsoDate` helper always
+emits a valid `YYYY-MM-DD` — so this was deliberately not folded into that batch (rule 9). Severity
+read: low — no live exploit path, existing authenticated branch-scoped endpoint, missing input
+hygiene only. Described here for Chief to assign an ID and prioritise separately; do not self-number.
+Confirmed-ID: F-201
+Confirmed: 29 Aug 2026
+
+### guest-occupancy-parallel-generation-transaction-exhaustion
+Batch: F-195 Phase 1 (admin-web toolchain upgrade — dependency-only)
+Surfaced: 29 Aug 2026
+Description: `computePoolGuestOccupancy` (`services/slot-engine/src/index.ts:616`) fans every pool's
+on-demand window generation out in parallel with no concurrency bound —
+`await Promise.all(pools.map((pool) => ensureAvailabilityWindowsForDate(pool.id, date)))` (`:625`).
+Each `ensureAvailabilityWindowsForDate` (`services/slot-engine/src/availabilityGeneration.ts:153`)
+opens its own interactive `prisma.$transaction` holding a connection + a `FOR UPDATE` row lock
+(`availabilityGeneration.ts:184`). So one `GET /branches/:id/guest-occupancy?date=<uncached date>`
+request opens N concurrent interactive transactions where N = pool count. On a branch with many
+pools this exceeds Prisma's connection/transaction-slot pool and the surplus transactions fail with
+`P2028: "Transaction API error: Unable to start a transaction in the given time."` → HTTP 500.
+Live-fire evidence (29 Aug 2026, dev stack, real `badminton_db`):
+  - courtowner1 branch `22222222-2222-2222-2222-222222222222`, **88 resource pools** (test-data
+    pollution from prior F-183/F-184/F-186 regression runs), date needing generation:
+    - single request → `200 OK`
+    - **two concurrent requests → both `500` with `P2028`** (request/response pair captured)
+  - JBC branch `6c9c1e5e-...`, **1 pool**, same date, two concurrent requests → both `200 OK`
+Exposure path: the adminHub week-over-week trend feature (F-201's batch) adds a *second* concurrent
+`guest-occupancy` call (`date` and `date − 7d`) from `Overview()`, and React `<StrictMode>` in dev
+double-invokes each `useQuery`, so a single dev page load can fire up to 4 concurrent requests →
+4 × N transactions. Production is not StrictMode-doubled, and a real tenant has 1–2 pools, so this
+is **dev-visible / large-pool-count-visible, not a general production 500** — but the unbounded
+`Promise.all` is a real latent scalability bug in the endpoint regardless of the adminHub feature.
+Pre-existing; not introduced by F-195 Phase 1 (proven: 1-pool concurrent = 200, and Phase 1 changes
+no backend code). Not fixed here — scope discipline (rule 9). Likely fix direction: bound the
+fan-out (`p-limit` / sequential-with-small-concurrency) in `computePoolGuestOccupancy`, and/or skip
+generation for pools that already have windows for the date. Revisit if courtowner1 becomes a real
+second demo tenant with a realistic pool count (that removes the "just test pollution" mitigation).
+Confirmed-ID: F-202
+Confirmed: 29 Aug 2026
+
 ## Promoted (audit trail)
 
 ### deploy-pipeline-consolidation

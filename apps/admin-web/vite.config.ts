@@ -4,6 +4,29 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: '/admin/',
   plugins: [react()],
+  // @badminton/ui-shared is a pnpm-linked workspace package consumed as its built
+  // `dist/`. Under Vite 8's dep optimizer it was served raw (`@fs/…?t=`), so its
+  // imports (react, react-dom, @tanstack/react-query, react-router-dom) were only
+  // discovered lazily — each discovery forced a re-optimize + full reload, and the
+  // mid-load reload left React 19 + StrictMode with a half-mounted tree
+  // (createRoot-twice / removeChild NotFoundError in dev). Pre-declaring the package
+  // and its React deps makes the optimizer bundle everything in one pass; `dedupe`
+  // guarantees a single physical React/react-dom across admin-web and ui-shared.
+  optimizeDeps: {
+    include: [
+      '@badminton/ui-shared',
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react/jsx-runtime',
+      '@tanstack/react-query',
+      'react-router-dom',
+      'lucide-react',
+    ],
+  },
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   server: {
     allowedHosts: true,
     host: '127.0.0.1',

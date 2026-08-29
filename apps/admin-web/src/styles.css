@@ -297,6 +297,38 @@ button:disabled {
   margin: 6px 0 0;
 }
 
+.occupancy-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-top: 8px;
+}
+
+.occupancy-summary strong {
+  font-size: 18px;
+}
+
+.occupancy-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.occupancy-trend.positive {
+  color: #059669;
+}
+
+.occupancy-trend.negative {
+  color: #dc2626;
+}
+
+.occupancy-trend.flat {
+  color: #64748b;
+}
+
 .occupancy-list {
   display: grid;
   gap: 10px;
