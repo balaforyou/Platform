@@ -350,12 +350,12 @@ Annotations: public flows bypass JWT; internal-key flows may bypass tenant/owner
 
 | Finding ID | Area | Actual Enforcement | Evidence | Status |
 |---|---|---|---|---|
-| AUTHZ-FINDING-001 | FLOW-035 check-in | Historical AS-IS: server-side caller auth/ownership/timing absent; only state guard is enforced. Findings register records F-090 fixed for authentication/ownership and F-094 still open for server timing. | BR-091, BR-092; STATE-CONFLICT-003; INVARIANT-FINDING-002; F-090; F-094 | AS-IS finding preserved; business interpretation resolved by DECISION-017; implementation conformance follows findings-register status only. |
-| AUTHZ-FINDING-002 | FLOW-052 payment verification | Auth/signature present, but PaymentIntent/booking ownership not explicitly checked. | BR-160, BR-161; INVARIANT-FINDING-005; F-061 | AS-IS finding preserved; business interpretation resolved by DECISION-005; implementation conformance not asserted. |
-| AUTHZ-FINDING-003 | FLOW-053 subscription creation | Body tenantId/userId not bound to authenticated identity. | BR-162, BR-169; INVARIANT-FINDING-007 | AS-IS finding preserved; business interpretation resolved by DECISION-010 and DECISION-015; implementation conformance not asserted. |
-| AUTHZ-FINDING-004 | FLOW-064 notification history | History filters by exact recipient rather than tenant plus user id. | BR-218 | AS-IS finding preserved; business interpretation resolved by DECISION-018; implementation conformance not asserted. |
+| AUTHZ-FINDING-001 | FLOW-035 check-in | Server-side caller auth/ownership/timing absent; only state guard is enforced. | BR-091, BR-092; STATE-CONFLICT-003; INVARIANT-FINDING-002 | WEAK |
+| AUTHZ-FINDING-002 | FLOW-052 payment verification | Auth/signature present, but PaymentIntent/booking ownership not explicitly checked. | BR-160, BR-161; INVARIANT-FINDING-005 | PARTIAL |
+| AUTHZ-FINDING-003 | FLOW-053 subscription creation | Body tenantId/userId not bound to authenticated identity. | BR-162, BR-169; INVARIANT-FINDING-007 | WEAK |
+| AUTHZ-FINDING-004 | FLOW-064 notification history | History filters by exact recipient rather than tenant plus user id. | BR-218 | UNRESOLVED |
 | AUTHZ-FINDING-005 | Internal-key operations | Internal key bypasses tenant/ownership checks in several trusted boundaries. | BR-023, BR-063, BR-078, BR-093, BR-099, BR-198; FLOW-012/FLOW-030/FLOW-034/FLOW-036/FLOW-037/FLOW-059 | TRUSTED_BOUNDARY |
-| AUTHZ-FINDING-006 | Provider webhooks | Provider signature/event trust substitutes for user auth; local ownership checks are entity-match based. | BR-170-BR-190; FLOW-054/FLOW-055 | AS-IS finding preserved; business interpretation resolved by DECISION-006 and DECISION-015; implementation conformance not asserted. |
+| AUTHZ-FINDING-006 | Provider webhooks | Provider signature/event trust substitutes for user auth; local ownership checks are entity-match based. | BR-170-BR-190; FLOW-054/FLOW-055 | CONTEXT_DEPENDENT |
 | AUTHZ-FINDING-007 | Notification queue/template/device auth | RE-005/RE-007 do not establish user/JWT authorization for all notification operations. | BR-212-BR-221; FLOW-061/FLOW-062/FLOW-063/FLOW-064/FLOW-065 | UNKNOWN |
 
 Weak/missing authorization findings: 7
@@ -370,9 +370,9 @@ Weak/missing authorization findings: 7
 | AUTHZ-VARIANT-004 | GUEST booking/payment | MEMBER attendance confirmation | FLOW-029/FLOW-050 vs FLOW-043/FLOW-044 | CONTEXT_DEPENDENT |
 | AUTHZ-VARIANT-005 | Direct user payment verification | Provider webhook capture | FLOW-052 vs FLOW-054 | CONTEXT_DEPENDENT |
 | AUTHZ-VARIANT-006 | Standard booking | Negotiated booking | FLOW-029 vs FLOW-030/FLOW-057 | CONTEXT_DEPENDENT |
-| AUTHZ-VARIANT-007 | Manual execution | Scheduler/internal due execution | FLOW-067 vs FLOW-066 | FUTURE_SCOPE |
+| AUTHZ-VARIANT-007 | Manual execution | Scheduler/internal due execution | FLOW-067 vs FLOW-066 | UNRESOLVED |
 | AUTHZ-VARIANT-008 | Admin refund override | Internal refund creation | FLOW-060 vs FLOW-059 | CONTEXT_DEPENDENT |
-| AUTHZ-VARIANT-009 | Notification recipient filter | Tenant/user ownership | FLOW-064 | BUSINESS_INTERPRETATION_RESOLVED_BY_DECISION-018 |
+| AUTHZ-VARIANT-009 | Notification recipient filter | Tenant/user ownership | FLOW-064 | UNRESOLVED |
 
 Context variants: 9
 
@@ -445,7 +445,7 @@ Context variants: 9
 | AUTHZ-RULE-005 | Public availability browse | Browse resource-pool availability | Public caller | No JWT | Contextual | No | No | No | No | No | Availability policies/capacity only | APPLICATION_ENFORCED | BR-037-BR-048 | FLOW-024-RULE-001 through FLOW-024-RULE-012 | FLOW-024 | POLICY-005-POLICY-008 | INVARIANT-010-INVARIANT-012 | STATE-MODEL-AVAILABILITY-WINDOW | FLOW-024-UNCERTAINTY-* | CONSISTENT |
 | AUTHZ-RULE-006 | Standard booking create | Create booking | Authenticated user | JWT | JWT tenant persisted | UserType not client-selected | No | Creator from JWT | No | No | Horizon/block/capacity/price/hold | APPLICATION_ENFORCED | BR-049-BR-062 | FLOW-029-RULE-001 through FLOW-029-RULE-014 | FLOW-029 | POLICY-009-POLICY-011 | INVARIANT-013-INVARIANT-018 | STATE-MODEL-BOOKING | FLOW-029-UNCERTAINTY-* | CONSISTENT |
 | AUTHZ-RULE-007 | Negotiated booking create | Create negotiated booking | Internal service | Internal key | Service context | No | No | Bypassed | Required | No | Capacity/block constraints retained | SERVICE_BOUNDARY_ENFORCED | BR-063, BR-064 | FLOW-030-RULE-001/002 | FLOW-030 | None | INVARIANT-019, INVARIANT-020 | STATE-MODEL-BOOKING | FLOW-030-UNCERTAINTY-001 | CONTEXT_DEPENDENT |
-| AUTHZ-RULE-008 | Booking check-in weak boundary | Check-in booking | Unauthenticated server caller | Not enforced | Not enforced | Not enforced | Not enforced | Not enforced | No | No | CONFIRMED state guard only | NOT_ENFORCED | BR-086-BR-092 | FLOW-035-RULE-001 through FLOW-035-RULE-007 | FLOW-035 | POLICY-013 | INVARIANT-024 | STATE-MODEL-BOOKING | FLOW-035-UNCERTAINTY-* | AS_IS_GAP_DECISION_RESOLVED |
+| AUTHZ-RULE-008 | Booking check-in weak boundary | Check-in booking | Unauthenticated server caller | Not enforced | Not enforced | Not enforced | Not enforced | Not enforced | No | No | CONFIRMED state guard only | NOT_ENFORCED | BR-086-BR-092 | FLOW-035-RULE-001 through FLOW-035-RULE-007 | FLOW-035 | POLICY-013 | INVARIANT-024 | STATE-MODEL-BOOKING | FLOW-035-UNCERTAINTY-* | UNRESOLVED |
 | AUTHZ-RULE-009 | Booking read boundary | View/list bookings | JWT or internal/admin | JWT/internal | Tenant scoped non-internal | Admin role for admin list | Branch filtered admin list | Owner or scoped admin | Alternative | No | Read filters | APPLICATION_ENFORCED | BR-065-BR-077 | FLOW-031-RULE-001/002/003/004, FLOW-032-RULE-001/002/003/004, FLOW-033-RULE-001/002/003/004/005 | FLOW-031, FLOW-032, FLOW-033 | None | INVARIANT-021 | STATE-MODEL-BOOKING | FLOW-031/032/033-UNCERTAINTY-* | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-010 | Internal booking confirmation | Confirm booking | Internal service | Internal key | Bypassed/trusted | No | No | Bypassed | Required | No | HELD guard; no expiry/payment proof | SERVICE_BOUNDARY_ENFORCED | BR-078-BR-085 | FLOW-034-RULE-001 through FLOW-034-RULE-008 | FLOW-034 | POLICY-012 | INVARIANT-022, INVARIANT-023 | STATE-MODEL-BOOKING | FLOW-034-UNCERTAINTY-* | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-011 | Booking preview/cancel access | Preview/cancel booking | JWT or internal | JWT booking access or internal | Booking access | Owner/admin | Conditional | Booking access | Alternative | No | Cancellable/refund rules | APPLICATION_ENFORCED | BR-093-BR-105 | FLOW-036-RULE-001 through FLOW-036-RULE-006, FLOW-037-RULE-001 through FLOW-037-RULE-007 | FLOW-036, FLOW-037 | POLICY-014, POLICY-015 | INVARIANT-025, INVARIANT-026 | STATE-MODEL-BOOKING | FLOW-036/037-UNCERTAINTY-* | CONTEXT_DEPENDENT |
@@ -454,14 +454,14 @@ Context variants: 9
 | AUTHZ-RULE-014 | Attendance roster admin access | Attendance view | Admin/internal | JWT admin or internal | Branch authorized | Admin/internal | Branch scoped | No | Alternative | No | Derived attendance only | APPLICATION_ENFORCED | BR-127-BR-129 | FLOW-046-RULE-001/002/003 | FLOW-046 | None | INVARIANT-030 | STATE-MODEL-ATTENDANCE-DERIVED | FLOW-046-UNCERTAINTY-001 | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-015 | PaymentIntent create/order ownership | Create intent/order | Authenticated user | JWT | Booking/intent context | No | No | Booking/intent owner | No | No | HELD booking, amount constraints | APPLICATION_ENFORCED | BR-131-BR-151 | FLOW-050-RULE-001 through FLOW-050-RULE-010, FLOW-051-RULE-001 through FLOW-051-RULE-011 | FLOW-050, FLOW-051 | POLICY-018 | INVARIANT-031-INVARIANT-034 | STATE-MODEL-PAYMENT-INTENT | FLOW-050/051-UNCERTAINTY-* | CONSISTENT |
 | AUTHZ-RULE-016 | Direct payment verification | Verify payment | Authenticated caller + signature | JWT plus Razorpay signature | Not enforced after signature | No | No | Not checked | No | Direct signature | Pending intent capture | PARTIALLY_ENFORCED | BR-152-BR-161 | FLOW-052-RULE-001 through FLOW-052-RULE-010 | FLOW-052 | POLICY-019 | INVARIANT-035 | STATE-MODEL-PAYMENT-INTENT | FLOW-052-UNCERTAINTY-* | CONTEXT_DEPENDENT |
-| AUTHZ-RULE-017 | Subscription creation weak boundary | Create subscription | Not authenticated | Not enforced | Body tenantId | No | No | Body userId | No | No | Required fields/mandate | NOT_ENFORCED | BR-162-BR-169 | FLOW-053-RULE-001 through FLOW-053-RULE-008 | FLOW-053 | None | INVARIANT-037 | STATE-MODEL-SUBSCRIPTION | FLOW-053-UNCERTAINTY-* | AS_IS_GAP_DECISION_RESOLVED |
+| AUTHZ-RULE-017 | Subscription creation weak boundary | Create subscription | Not authenticated | Not enforced | Body tenantId | No | No | Body userId | No | No | Required fields/mandate | NOT_ENFORCED | BR-162-BR-169 | FLOW-053-RULE-001 through FLOW-053-RULE-008 | FLOW-053 | None | INVARIANT-037 | STATE-MODEL-SUBSCRIPTION | FLOW-053-UNCERTAINTY-* | UNRESOLVED |
 | AUTHZ-RULE-018 | Payment webhook boundary | Payment webhook | Provider | Razorpay signature | Local intent match | No | No | No user ownership | No | Webhook signature/event id | pending intent capture | PROVIDER_SIGNATURE_ENFORCED | BR-170-BR-179 | FLOW-054-RULE-001 through FLOW-054-RULE-010 | FLOW-054 | POLICY-020 | INVARIANT-036 | STATE-MODEL-PAYMENT-INTENT | FLOW-054-UNCERTAINTY-* | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-019 | Autopay webhook boundary | Autopay webhook | Provider | Event/idempotency boundary | Local subscription match | No | No | No user ownership | No | Provider webhook | subscription/payment/notification effects | PROVIDER_SIGNATURE_ENFORCED | BR-180-BR-190 | FLOW-055-RULE-001 through FLOW-055-RULE-011 | FLOW-055 | None | INVARIANT-038, INVARIANT-039 | STATE-MODEL-SUBSCRIPTION | FLOW-055-UNCERTAINTY-* | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-020 | Negotiated payment link access | Payment link | Admin/internal | JWT or internal | Booking/branch context | Owner/branch manager/internal | Branch manager scoped | HELD booking linkage | Alternative | Provider later | HELD booking | APPLICATION_ENFORCED | BR-191-BR-194 | FLOW-056-RULE-001/002, FLOW-057-RULE-001/002 | FLOW-056, FLOW-057 | None | INVARIANT-033 | STATE-MODEL-PAYMENT-INTENT | FLOW-056/057-UNCERTAINTY-* | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-021 | Simulated capture boundary | Simulate capture | Technical caller | Environment boundary | No | No | No | No | No | Delegates to webhook | unavailable in production | SERVICE_BOUNDARY_ENFORCED | BR-195, BR-196 | FLOW-058-RULE-001/002 | FLOW-058 | POLICY-021 | None | STATE-MODEL-PAYMENT-INTENT | FLOW-058-UNCERTAINTY-001 | CONSISTENT |
 | AUTHZ-RULE-022 | Refund creation internal trust | Create refund | Internal service | Internal key | Trusted booking read | No | No | Trusted booking/payment linkage | Required | No | cancelled/positive/captured | SERVICE_BOUNDARY_ENFORCED | BR-197-BR-203 | FLOW-059-RULE-001 through FLOW-059-RULE-007 | FLOW-059 | POLICY-022 | INVARIANT-040, INVARIANT-041 | STATE-MODEL-REFUND | FLOW-059-UNCERTAINTY-* | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-023 | Refund override admin access | Override refund | Admin | Admin JWT | Admin context | Admin | Conditional | Admin id token | No | No | cancelled/captured/amount cap | APPLICATION_ENFORCED | BR-204-BR-211 | FLOW-060-RULE-001 through FLOW-060-RULE-008 | FLOW-060 | POLICY-023 | INVARIANT-040, INVARIANT-041 | STATE-MODEL-REFUND | FLOW-060-UNCERTAINTY-* | CONTEXT_DEPENDENT |
-| AUTHZ-RULE-024 | Notification history recipient filter | History | Unknown | Unknown | Not tenant+user | Unknown | No | Exact recipient | No | No | max 50 newest | PARTIALLY_ENFORCED | BR-218, BR-219 | FLOW-064-RULE-001/002 | FLOW-064 | None | INVARIANT-042 | STATE-MODEL-NOTIFICATION-REQUEST | FLOW-064-UNCERTAINTY-001 | AS_IS_GAP_DECISION_RESOLVED |
+| AUTHZ-RULE-024 | Notification history recipient filter | History | Unknown | Unknown | Not tenant+user | Unknown | No | Exact recipient | No | No | max 50 newest | PARTIALLY_ENFORCED | BR-218, BR-219 | FLOW-064-RULE-001/002 | FLOW-064 | None | INVARIANT-042 | STATE-MODEL-NOTIFICATION-REQUEST | FLOW-064-UNCERTAINTY-001 | UNRESOLVED |
 | AUTHZ-RULE-025 | Notification queue/template/device boundary | Queue/template/device | Unknown/service | Unknown | Tenant/channel/event or token context | Unknown | No | Recipient/token | No | No | Queue/template/device uniqueness | UNKNOWN | BR-212-BR-217 | FLOW-061-RULE-001/002, FLOW-062-RULE-001/002, FLOW-063-RULE-001/002 | FLOW-061, FLOW-062, FLOW-063 | None | INVARIANT-042, INVARIANT-043 | STATE-MODEL-NOTIFICATION-REQUEST | FLOW-061/062/063-UNCERTAINTY-* | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-026 | Notification worker | Queue worker | Internal worker | Internal process | No | No | No | No | No | No | due queued retry/dead_letter | SERVICE_BOUNDARY_ENFORCED | BR-220, BR-221 | FLOW-065-RULE-001/002 | FLOW-065 | POLICY-024 | INVARIANT-042 | STATE-MODEL-NOTIFICATION-REQUEST | FLOW-065-UNCERTAINTY-001 | CONTEXT_DEPENDENT |
 | AUTHZ-RULE-027 | Scheduler claim/manual | Due/manual jobs | Scheduler/internal | Internal operation | No | No | No | No | No | No | enabled/due/lease/manual unknown job | SERVICE_BOUNDARY_ENFORCED | BR-222-BR-225 | FLOW-066-RULE-001/002, FLOW-067-RULE-001/002 | FLOW-066, FLOW-067 | POLICY-025 | INVARIANT-044 | STATE-MODEL-SCHEDULED-JOB | FLOW-066/067-UNCERTAINTY-* | CONTEXT_DEPENDENT |
@@ -505,7 +505,7 @@ Context variants: 9
 | Branch manager/scoped admin | Branch/resource-pool scoped assignment/admin/payment-link operations | Scope depends on claimed branch | Tenant-wide OWNER-only contexts |
 | Internal service | Negotiated booking, booking confirm, refund creation, internal alternatives for reads/admin/member operations | Tenant/ownership bypass is trusted-boundary-specific | Public user session operations |
 | Razorpay provider | Payment/autopay webhook capture boundaries | Local entity match/idempotency determines effects | User-owned operations |
-| Scheduler/internal worker | Queue worker, scheduler claim, dispatch outcome | Manual execution lease semantics future scope | User/admin flows |
+| Scheduler/internal worker | Queue worker, scheduler claim, dispatch outcome | Manual execution lease semantics unresolved | User/admin flows |
 
 ## Tenant / Branch / Ownership Matrix
 
@@ -529,59 +529,27 @@ Context variants: 9
 | FLOW-060 | admin context | conditional | admin id from token | admin | No | APPLICATION_ENFORCED |
 | FLOW-064 | not tenant+user | N/A | recipient string | unknown | No | PARTIALLY_ENFORCED |
 
-## RE-012 Decision Propagation Delta
+## Authorization Questions Requiring Business Validation
 
-Decision propagation records approved TO-BE authorization semantics from RE-012 without rewriting AS-IS authorization evidence above. No AUTHZ-CONTEXT or AUTHZ-RULE identities are added, deleted, or repurposed by this delta.
+Public Access: Should AUTHZ-RULE-005 and AUTHZ-RULE-029 remain public as observed, and should AUTHZ-RULE-025 notification operations require explicit caller identity?
 
-| Decision ID | Validation ID | Disposition | Affected Authorization Contexts | Affected Authorization Rules | Affected AUTHZ Findings | Existing Evidence / Lineage | Approved Authorization Semantics |
-|---|---|---|---|---|---|---|---|
-| DECISION-002 | VALIDATION-002 | PROPAGATE | AUTHZ-CONTEXT-006 | AUTHZ-RULE-010 | AUTHZ-FINDING-005 | FLOW-034 internal key boundary; BR-078-BR-085; STATE-CONFLICT-002; POLICY-012; INVARIANT-022/023 | Internal-service identity may authorize the booking confirmation call boundary, but trusted service identity does not replace validation of booking/payment business state. This remains an internal operation, not customer authorization. |
-| DECISION-005 | VALIDATION-005 | PROPAGATE | AUTHZ-CONTEXT-002, AUTHZ-CONTEXT-007 | AUTHZ-RULE-016 | AUTHZ-FINDING-002 | FLOW-052 JWT plus Razorpay signature; PaymentIntent resolved from signed order identity; BR-152-BR-161; F-061 alignment | Provider signature proves payment authenticity, not customer authorization. Customer-initiated verification target semantics require the authenticated caller to be authorized for the corresponding PaymentIntent/booking resolved from the signed provider order identity. |
-| DECISION-006 | VALIDATION-006 | PROPAGATE | AUTHZ-CONTEXT-002, AUTHZ-CONTEXT-007 | AUTHZ-RULE-016, AUTHZ-RULE-018, AUTHZ-RULE-021 | AUTHZ-FINDING-006 | AUTHZ-VARIANT-005; FLOW-052 direct verify; FLOW-054 provider webhook; FLOW-058 simulated capture; BR-152-BR-179, BR-195-BR-196 | Direct verify remains an authenticated customer boundary and webhook remains a verified provider boundary. Both may converge on common internal capture semantics, but entry trust conditions stay distinct. |
-| DECISION-007 | VALIDATION-007 | ALREADY_REPRESENTED | AUTHZ-CONTEXT-006, AUTHZ-CONTEXT-005 | AUTHZ-RULE-007, AUTHZ-RULE-020 | None | AUTHZ-VARIANT-006; FLOW-030 internal negotiated booking; FLOW-056/FLOW-057 negotiated payment link; BR-063, BR-064, BR-191-BR-194 | RE-008 already represents negotiated booking/payment-link authorization as internal/admin/scoped branch-manager boundaries. ALREADY_REPRESENTED does not assert implementation conformance beyond AS-IS evidence; pricing/group-size variation is not an authorization defect. |
-| DECISION-010 | VALIDATION-010 | PROPAGATE | AUTHZ-CONTEXT-003, AUTHZ-CONTEXT-006 | AUTHZ-RULE-017 | AUTHZ-FINDING-003 | FLOW-053 body tenantId/userId; BR-162-BR-169; INVARIANT-FINDING-007 | Authorized subscription creation actors are authenticated member for self or trusted internal/payment service for permitted provisioning/admin paths. Body tenantId/userId alone cannot establish subscription ownership. |
-| DECISION-013 | VALIDATION-013 | ALREADY_REPRESENTED | AUTHZ-CONTEXT-009, AUTHZ-CONTEXT-006 | AUTHZ-RULE-025, AUTHZ-RULE-026 | AUTHZ-FINDING-007 | Notification queue/template/device/worker boundaries; FLOW-061-FLOW-065; BR-212-BR-221 | RE-008 already separates notification production/queue/worker trust from user authorization. ALREADY_REPRESENTED does not turn notification delivery reliability into an authorization rule; durable notification semantics remain policy/integration scope. |
-| DECISION-015 | VALIDATION-015 | PROPAGATE | AUTHZ-CONTEXT-002, AUTHZ-CONTEXT-003, AUTHZ-CONTEXT-004, AUTHZ-CONTEXT-005, AUTHZ-CONTEXT-006, AUTHZ-CONTEXT-007, AUTHZ-CONTEXT-008 | AUTHZ-RULE-003, AUTHZ-RULE-006, AUTHZ-RULE-008, AUTHZ-RULE-009, AUTHZ-RULE-010, AUTHZ-RULE-015, AUTHZ-RULE-016, AUTHZ-RULE-017, AUTHZ-RULE-018, AUTHZ-RULE-019, AUTHZ-RULE-024 | AUTHZ-FINDING-001, AUTHZ-FINDING-002, AUTHZ-FINDING-003, AUTHZ-FINDING-004, AUTHZ-FINDING-005, AUTHZ-FINDING-006 | Tenant/ownership evidence across JWT, stored entity, internal key, provider signature, body values, payload values, and recipient strings | User operations authorize via authenticated identity -> authoritative tenant membership -> stored entity ownership. Internal operations authorize via trusted internal identity -> explicit tenant context -> stored entity validation. Provider callbacks authorize via verified provider identity/signature -> stored internal reference -> stored tenant/ownership context. Body/query/provider payload/recipient strings alone do not establish authorization. |
-| DECISION-017 | VALIDATION-017 | PROPAGATE | AUTHZ-CONTEXT-002, AUTHZ-CONTEXT-005, AUTHZ-CONTEXT-006 | AUTHZ-RULE-008 | AUTHZ-FINDING-001 | FLOW-035; BR-086-BR-092; STATE-CONFLICT-003; F-090 fixed auth/ownership; F-094 open timing guard | Check-in target authorization permits booking customer and authorized branch staff. Required authorization conditions: authenticated caller, same tenant, booking ownership for customer, branch authorization for staff, Booking.status CONFIRMED, and server-side timing prerequisite. Historical AS-IS gap remains preserved. |
-| DECISION-018 | VALIDATION-018 | PROPAGATE | AUTHZ-CONTEXT-002, AUTHZ-CONTEXT-003 | AUTHZ-RULE-024 | AUTHZ-FINDING-004 | FLOW-064 exact-recipient history filter; BR-218; AUTHZ-VARIANT-009 | Notification-history access must use stable tenantId + userId. Recipient strings such as phone/email are delivery attributes only and are never sufficient ownership/authorization identities. |
+Internal Service Trust: Should AUTHZ-RULE-007, AUTHZ-RULE-010, AUTHZ-RULE-011, and AUTHZ-RULE-022 continue to bypass tenant/ownership via internal key?
 
-Decision disposition totals:
-- PROPAGATE: 7
-- ALREADY_REPRESENTED: 2
-- NO_AUTHORIZATION_DELTA: 0
+Tenant Isolation: Should AUTHZ-RULE-017 bind subscription create body tenantId/userId to authenticated identity?
 
-Decision propagation validation:
-- Mapped RE-012 decisions for RE-008: 9
-- Decision lineage complete for propagated decisions: yes
-- Mapped decisions not propagated: 2, explicitly ALREADY_REPRESENTED
-- Mapped decisions with NO_AUTHORIZATION_DELTA: 0
-- New authorization contexts: 0
-- New authorization rules: 0
-- AS-IS authorization evidence destructively replaced: 0
+Branch Scope: Should AUTHZ-RULE-020 branch-manager scoping be the canonical negotiated payment-link access model?
 
-## Resolved Authorization Decision Questions
+Ownership: Should AUTHZ-RULE-016 enforce PaymentIntent/booking ownership after direct Razorpay signature verification?
 
-Internal Service Trust: Original issue preserved: AUTHZ-RULE-010 and other internal-key operations authorize service boundaries while bypassing tenant/ownership where evidenced. Approved interpretation: DECISION-002 and DECISION-015.
+Member Identity: Should AUTHZ-RULE-013 keep MEMBER JWT plus subscription/cutoff as separate auth and eligibility layers?
 
-Payment Ownership: Original issue preserved: AUTHZ-RULE-016 authenticates caller and verifies provider signature but does not explicitly check PaymentIntent/booking ownership. Approved interpretation: DECISION-005 and DECISION-015.
+Provider Trust: Should AUTHZ-RULE-018 and AUTHZ-RULE-019 add business ownership validation beyond provider/entity match?
 
-Direct Verify vs Webhook Trust: Original issue preserved: AUTHZ-VARIANT-005 separates authenticated direct verification from provider webhook capture. Approved interpretation: DECISION-006.
+Technical Operations: Should AUTHZ-RULE-027 through AUTHZ-RULE-029 require operator/internal authentication?
 
-Negotiated Booking: Original issue preserved: AUTHZ-RULE-007 and AUTHZ-RULE-020 use internal/admin/scoped branch-manager boundaries. Approved interpretation: DECISION-007.
+Weak Enforcement: Should AUTHZ-FINDING-001 through AUTHZ-FINDING-007 be accepted context variants or remediation candidates?
 
-Subscription Identity: Original issue preserved: AUTHZ-RULE-017 and AUTHZ-FINDING-003 show body-bound tenant/user identity. Approved interpretation: DECISION-010 and DECISION-015.
-
-Notification Boundaries: Original issue preserved: AUTHZ-RULE-025/026 represent queue/template/device/worker trust and AUTHZ-RULE-024 represents notification history identity weakness. Approved interpretation: DECISION-013 and DECISION-018.
-
-Canonical Tenant / Ownership Authority: Original issue preserved: RE-008 contains user, internal, provider, body, payload, query, and recipient-string authority variants. Approved interpretation: DECISION-015.
-
-Booking Check-In: Original issue preserved: AUTHZ-RULE-008 and AUTHZ-FINDING-001 captured missing auth/ownership/timing. Approved interpretation: DECISION-017; findings register records F-090 fixed for authentication/ownership and F-094 open for timing.
-
-Public Access: AUTHZ-RULE-005 remains intentionally public for availability browse as AS-IS and is not changed by the mapped RE-012 authorization decisions. AUTHZ-RULE-029 public technical access remains REMAINS MODEL GAP / FUTURE SCOPE.
-
-Technical Operations: AUTHZ-RULE-027 through AUTHZ-RULE-029 operator/internal authentication remains REMAINS MODEL GAP / FUTURE SCOPE except where notification worker trust is already represented for DECISION-013.
-
-Context Variant: AUTHZ-VARIANT rows remain AS-IS authorization variants. RE-012 decisions resolve specific mapped variants above; other product-vs-drift classification remains future requirements scope unless explicitly mapped.
+Context Variant: Which AUTHZ-VARIANT rows are intended product differences versus implementation drift?
 
 ## Source Recheck
 
@@ -622,28 +590,6 @@ Context variants: 9
 Existing uncertainties referenced: 54
 
 New RE-008 uncertainties: 0
-
-Mapped RE-012 decisions: 9
-
-PROPAGATE: 7
-
-ALREADY_REPRESENTED: 2
-
-NO_AUTHORIZATION_DELTA: 0
-
-New authorization contexts: 0
-
-New authorization rules: 0
-
-Undefined DECISION references: 0
-
-Mapped decisions without disposition: 0
-
-Mapped PROPAGATE decisions without decision lineage: 0
-
-AS-IS authorization evidence destructively replaced: 0
-
-Cross-artifact semantic contradictions: 0
 
 ## Completion Status
 
@@ -692,8 +638,5 @@ PRESERVED
 UNCERTAINTY LINEAGE:
 PRESERVED
 
-DECISION LINEAGE:
-PRESERVED
-
 BUSINESS VALIDATION:
-18/18 RESOLVED IN RE-012 AS APPLICABLE
+REQUIRED
