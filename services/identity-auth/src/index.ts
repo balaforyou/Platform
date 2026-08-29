@@ -4,6 +4,12 @@ import fastifyJwt from '@fastify/jwt';
 import crypto from 'crypto';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
 import { PrismaClient, UserType } from '@badminton/database';
+import {
+  verifyGoogleIdToken,
+  resolveAdminUser,
+  googleRemoteJwks,
+  type VerifiedGoogleIdentity,
+} from './adminGoogleAuth';
 
 const server = fastify({ logger: true });
 
@@ -491,6 +497,129 @@ server.post('/auth/google/verify', async (request, reply) => {
     roles,
   }, { expiresIn: '15m' });
 
+  reply.setCookie('refresh_token', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60,
+    sameSite: 'lax',
+  });
+
+  return { accessToken, user };
+});
+
+// Admin-v2 Google login — real JWKS verification + cross-tenant admin resolution.
+// Separate from /auth/google/verify (members/staff, still a mock): different role gate
+// (OWNER / BRANCH_MANAGER only), distinct rejection codes, no tenantId in the request
+// (it is resolved from the RoleAssignment match). See src/adminGoogleAuth.ts and
+// docs/plans/admin-v2-slice1-plan-mode-SIGNED.md §2/§4.
+server.post('/auth/admin/google/verify', async (request, reply) => {
+  const { googleIdToken } = request.body as any;
+  if (!googleIdToken || typeof googleIdToken !== 'string') {
+    reply.status(400);
+    const err = new Error('googleIdToken is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  // Dev-only fallback for CI/e2e — same NODE_ENV !== 'production' fail-closed shape as
+  // the OTP dev-code path (index.ts:206-222). Mints a session for a seeded test admin
+  // with no Google round-trip; refuses outright in production.
+  let identity: VerifiedGoogleIdentity;
+  if (googleIdToken.startsWith('dev-admin-token-')) {
+    if (process.env.NODE_ENV === 'production') {
+      reply.status(403);
+      const err = new Error('Dev admin login is not available in production');
+      (err as any).statusCode = 403;
+      (err as any).code = 'DEV_LOGIN_DISABLED';
+      throw err;
+    }
+    const email = googleIdToken.replace('dev-admin-token-', '').toLowerCase();
+    identity = { email, googleId: `dev-admin-${email}` };
+    server.log.warn(`[DEV ADMIN LOGIN] Google verification bypassed for ${email}`);
+  } else {
+    try {
+      identity = await verifyGoogleIdToken(googleIdToken, {
+        jwks: googleRemoteJwks(),
+        clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+      });
+    } catch (e) {
+      reply.status(401);
+      const err = new Error(e instanceof Error ? e.message : 'Invalid Google ID token');
+      (err as any).statusCode = 401;
+      (err as any).code = 'INVALID_GOOGLE_TOKEN';
+      throw err;
+    }
+  }
+
+  const resolution = await resolveAdminUser(prisma, identity);
+  if (resolution.kind === 'not_found') {
+    reply.status(403);
+    const err = new Error('No admin account is registered for this Google account.');
+    (err as any).statusCode = 403;
+    (err as any).code = 'ADMIN_ACCOUNT_NOT_FOUND';
+    throw err;
+  }
+  if (resolution.kind === 'role_excluded') {
+    reply.status(403);
+    const err = new Error('This account does not have an owner or branch-manager role.');
+    (err as any).statusCode = 403;
+    (err as any).code = 'ADMIN_ROLE_REQUIRED';
+    throw err;
+  }
+  if (resolution.kind === 'multiple_tenant_match') {
+    reply.status(409);
+    const err = new Error('This Google account manages more than one tenant; admin sign-in is ambiguous.');
+    (err as any).statusCode = 409;
+    (err as any).code = 'MULTIPLE_TENANT_MATCH';
+    (err as any).details = { tenantIds: resolution.tenantIds };
+    throw err;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: resolution.userId } });
+  if (!user) {
+    // Row vanished between resolution and read — treat as not found rather than 500.
+    reply.status(403);
+    const err = new Error('No admin account is registered for this Google account.');
+    (err as any).statusCode = 403;
+    (err as any).code = 'ADMIN_ACCOUNT_NOT_FOUND';
+    throw err;
+  }
+
+  // Create session (same mechanism as /auth/google/verify).
+  const refreshToken = crypto.randomBytes(32).toString('hex');
+  const sessionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await prisma.authSession.create({
+    data: { userId: user.id, refreshToken, expiresAt: sessionExpiry },
+  });
+
+  // Call Tenant service for roles (self-contained internal-key read, F-140).
+  let roles: string[] = [];
+  const tenantServiceUrl = process.env.TENANT_SERVICE_URL || 'http://localhost:3003';
+  try {
+    const roleKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+    const res = await fetch(`${tenantServiceUrl}/users/${user.id}/roles`, {
+      headers: { Authorization: `Bearer ${roleKey}` },
+    });
+    if (res.ok) {
+      const body = await res.json() as any;
+      roles = body?.data?.roles || [];
+    }
+  } catch (e) {
+    roles = [];
+  }
+
+  const accessToken = server.jwt.sign({
+    userId: user.id,
+    tenantId: resolution.tenantId,
+    phone: user.phone,
+    userType: user.userType,
+    roles,
+  }, { expiresIn: '15m' });
+
+  // Host-only cookie (no `domain` attr) — admin.elitecourts.duckdns.org gets a
+  // naturally isolated session, same as index.ts:494-500.
   reply.setCookie('refresh_token', refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
