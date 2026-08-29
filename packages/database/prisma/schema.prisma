@@ -407,6 +407,7 @@ model User {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   sessions        AuthSession[]
+  webAuthnCredentials WebAuthnCredential[]
 
   @@unique([phone, tenantId])
   @@unique([email, tenantId])
@@ -422,6 +423,22 @@ model AuthSession {
   revoked      Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// F-196: WebAuthn / fingerprint step-up for admin-v2. A credential is only ever created
+// by an already-Google-authenticated admin (see identity-auth /auth/admin/webauthn/register).
+// Fields per docs/plans/admin-v2-slice1-plan-mode-SIGNED.md §3.
+model WebAuthnCredential {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String   @unique // base64url; the assertion lookup key for discoverable login
+  publicKey    Bytes
+  counter      BigInt   @default(0)
+  deviceLabel  String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
 }
 
 model PendingInvite {

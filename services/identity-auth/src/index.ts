@@ -8,8 +8,21 @@ import {
   verifyGoogleIdToken,
   resolveAdminUser,
   googleRemoteJwks,
+  ADMIN_ROLES,
   type VerifiedGoogleIdentity,
 } from './adminGoogleAuth';
+import {
+  resolveRpConfig,
+  newCredentialRow,
+  assertCounterProgress,
+  toAuthenticatorCredential,
+} from './adminWebAuthn';
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from '@simplewebauthn/server';
 
 const server = fastify({ logger: true });
 
@@ -508,6 +521,57 @@ server.post('/auth/google/verify', async (request, reply) => {
   return { accessToken, user };
 });
 
+// Shared admin session issuance — used by /auth/admin/google/verify and
+// /auth/admin/webauthn/login/verify so the two cannot drift. Creates the AuthSession
+// row, pulls the full role array from tenant-management (self-contained internal-key
+// read, F-140), signs the 15m access token, and sets the host-only refresh cookie
+// (no `domain` attr — admin.elitecourts.duckdns.org gets a naturally isolated session,
+// same as index.ts:494-500).
+async function issueAdminSession(
+  user: { id: string; phone: string | null; userType: UserType },
+  tenantId: string,
+  reply: any,
+): Promise<{ accessToken: string }> {
+  const refreshToken = crypto.randomBytes(32).toString('hex');
+  const sessionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await prisma.authSession.create({
+    data: { userId: user.id, refreshToken, expiresAt: sessionExpiry },
+  });
+
+  let roles: string[] = [];
+  const tenantServiceUrl = process.env.TENANT_SERVICE_URL || 'http://localhost:3003';
+  try {
+    const roleKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+    const res = await fetch(`${tenantServiceUrl}/users/${user.id}/roles`, {
+      headers: { Authorization: `Bearer ${roleKey}` },
+    });
+    if (res.ok) {
+      const body = await res.json() as any;
+      roles = body?.data?.roles || [];
+    }
+  } catch (e) {
+    roles = [];
+  }
+
+  const accessToken = server.jwt.sign({
+    userId: user.id,
+    tenantId,
+    phone: user.phone,
+    userType: user.userType,
+    roles,
+  }, { expiresIn: '15m' });
+
+  reply.setCookie('refresh_token', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60,
+    sameSite: 'lax',
+  });
+
+  return { accessToken };
+}
+
 // Admin-v2 Google login — real JWKS verification + cross-tenant admin resolution.
 // Separate from /auth/google/verify (members/staff, still a mock): different role gate
 // (OWNER / BRANCH_MANAGER only), distinct rejection codes, no tenantId in the request
@@ -587,47 +651,251 @@ server.post('/auth/admin/google/verify', async (request, reply) => {
     throw err;
   }
 
-  // Create session (same mechanism as /auth/google/verify).
-  const refreshToken = crypto.randomBytes(32).toString('hex');
-  const sessionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  await prisma.authSession.create({
-    data: { userId: user.id, refreshToken, expiresAt: sessionExpiry },
-  });
+  const { accessToken } = await issueAdminSession(user, resolution.tenantId, reply);
+  return { accessToken, user };
+});
 
-  // Call Tenant service for roles (self-contained internal-key read, F-140).
-  let roles: string[] = [];
-  const tenantServiceUrl = process.env.TENANT_SERVICE_URL || 'http://localhost:3003';
-  try {
-    const roleKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
-    const res = await fetch(`${tenantServiceUrl}/users/${user.id}/roles`, {
-      headers: { Authorization: `Bearer ${roleKey}` },
-    });
-    if (res.ok) {
-      const body = await res.json() as any;
-      roles = body?.data?.roles || [];
-    }
-  } catch (e) {
-    roles = [];
-  }
+// ── Admin-v2 WebAuthn / fingerprint step-up (F-196) ────────────────────────────
+// docs/plans/admin-v2-slice1-plan-mode-SIGNED.md §3. Step-up only: a credential is
+// enrolled by an already-authenticated admin, and login/verify re-checks the admin
+// role gate before issuing a session. The challenge from each /options call is round-
+// tripped in a short-lived signed httpOnly cookie (no server-side challenge table).
 
-  const accessToken = server.jwt.sign({
-    userId: user.id,
-    tenantId: resolution.tenantId,
-    phone: user.phone,
-    userType: user.userType,
-    roles,
-  }, { expiresIn: '15m' });
+const WEBAUTHN_CHALLENGE_COOKIE = 'admin_webauthn_challenge';
 
-  // Host-only cookie (no `domain` attr) — admin.elitecourts.duckdns.org gets a
-  // naturally isolated session, same as index.ts:494-500.
-  reply.setCookie('refresh_token', refreshToken, {
+function setChallengeCookie(reply: any, kind: 'register' | 'auth', challenge: string, userId?: string) {
+  const token = server.jwt.sign(
+    { purpose: 'webauthn', kind, challenge, userId },
+    { expiresIn: '5m' },
+  );
+  reply.setCookie(WEBAUTHN_CHALLENGE_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 5 * 60,
     sameSite: 'lax',
   });
+}
 
+function readChallengeCookie(request: any, reply: any, kind: 'register' | 'auth'): { challenge: string; userId?: string } {
+  const raw = request.cookies[WEBAUTHN_CHALLENGE_COOKIE];
+  const fail = () => {
+    reply.status(400);
+    const err = new Error('WebAuthn challenge is missing or expired — restart the ceremony.');
+    (err as any).statusCode = 400;
+    (err as any).code = 'WEBAUTHN_CHALLENGE_INVALID';
+    return err;
+  };
+  if (!raw) throw fail();
+  let decoded: any;
+  try {
+    decoded = server.jwt.verify(raw);
+  } catch {
+    throw fail();
+  }
+  if (decoded?.purpose !== 'webauthn' || decoded?.kind !== kind || typeof decoded?.challenge !== 'string') {
+    throw fail();
+  }
+  return { challenge: decoded.challenge, userId: decoded.userId };
+}
+
+async function requireAdminJwt(request: any, reply: any): Promise<any> {
+  try {
+    return await request.jwtVerify();
+  } catch {
+    reply.status(401);
+    const err = new Error('Invalid or expired token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+}
+
+// Begin enrolling a fingerprint/passkey for the currently signed-in admin.
+server.post('/auth/admin/webauthn/register/options', async (request, reply) => {
+  const decoded = await requireAdminJwt(request, reply);
+  const user = await prisma.user.findUnique({
+    where: { id: decoded.userId },
+    include: { webAuthnCredentials: true },
+  });
+  if (!user) {
+    reply.status(401);
+    const err = new Error('Invalid or expired token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+
+  const rp = resolveRpConfig();
+  const options = await generateRegistrationOptions({
+    rpName: rp.rpName,
+    rpID: rp.rpID,
+    userName: user.email ?? user.id,
+    userID: new TextEncoder().encode(user.id),
+    attestationType: 'none',
+    excludeCredentials: user.webAuthnCredentials.map((c) => ({ id: c.credentialId })),
+    authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+  });
+
+  setChallengeCookie(reply, 'register', options.challenge, user.id);
+  return options;
+});
+
+// Finish enrollment: verify the attestation and persist the credential.
+server.post('/auth/admin/webauthn/register/verify', async (request, reply) => {
+  const decoded = await requireAdminJwt(request, reply);
+  const { response, deviceLabel } = request.body as any;
+  if (!response) {
+    reply.status(400);
+    const err = new Error('response is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const challengeState = readChallengeCookie(request, reply, 'register');
+  if (challengeState.userId !== decoded.userId) {
+    reply.status(400);
+    const err = new Error('WebAuthn challenge does not belong to this session.');
+    (err as any).statusCode = 400;
+    (err as any).code = 'WEBAUTHN_CHALLENGE_INVALID';
+    throw err;
+  }
+
+  const rp = resolveRpConfig();
+  let verification;
+  try {
+    verification = await verifyRegistrationResponse({
+      response,
+      expectedChallenge: challengeState.challenge,
+      expectedOrigin: rp.origin,
+      expectedRPID: rp.rpID,
+      requireUserVerification: false,
+    });
+  } catch (e) {
+    reply.status(400);
+    const err = new Error(e instanceof Error ? e.message : 'WebAuthn registration verification failed');
+    (err as any).statusCode = 400;
+    (err as any).code = 'WEBAUTHN_VERIFICATION_FAILED';
+    throw err;
+  }
+  if (!verification.verified) {
+    reply.status(400);
+    const err = new Error('WebAuthn registration could not be verified.');
+    (err as any).statusCode = 400;
+    (err as any).code = 'WEBAUTHN_VERIFICATION_FAILED';
+    throw err;
+  }
+
+  const row = newCredentialRow(decoded.userId, verification, deviceLabel);
+  try {
+    await prisma.webAuthnCredential.create({ data: row });
+  } catch (e: any) {
+    if (e?.code === 'P2002') {
+      reply.status(409);
+      const err = new Error('This authenticator is already enrolled.');
+      (err as any).statusCode = 409;
+      (err as any).code = 'WEBAUTHN_CREDENTIAL_EXISTS';
+      throw err;
+    }
+    throw e;
+  }
+
+  reply.clearCookie(WEBAUTHN_CHALLENGE_COOKIE, { path: '/' });
+  return { verified: true, credentialId: row.credentialId, deviceLabel: row.deviceLabel };
+});
+
+// Begin a fingerprint fast-path login. Discoverable credentials — the authenticator
+// tells us which account, so no email is collected up front.
+server.post('/auth/admin/webauthn/login/options', async (_request, reply) => {
+  const rp = resolveRpConfig();
+  const options = await generateAuthenticationOptions({
+    rpID: rp.rpID,
+    allowCredentials: [],
+    userVerification: 'preferred',
+  });
+  setChallengeCookie(reply, 'auth', options.challenge);
+  return options;
+});
+
+// Finish the fast-path login: verify the assertion, re-check the admin gate, issue a session.
+server.post('/auth/admin/webauthn/login/verify', async (request, reply) => {
+  const { response } = request.body as any;
+  if (!response?.id) {
+    reply.status(400);
+    const err = new Error('response is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const challengeState = readChallengeCookie(request, reply, 'auth');
+
+  const credential = await prisma.webAuthnCredential.findUnique({ where: { credentialId: response.id } });
+  if (!credential) {
+    reply.status(401);
+    const err = new Error('This authenticator is not enrolled.');
+    (err as any).statusCode = 401;
+    (err as any).code = 'WEBAUTHN_CREDENTIAL_NOT_FOUND';
+    throw err;
+  }
+
+  const rp = resolveRpConfig();
+  let verification;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge: challengeState.challenge,
+      expectedOrigin: rp.origin,
+      expectedRPID: rp.rpID,
+      credential: toAuthenticatorCredential(credential),
+      requireUserVerification: false,
+    });
+  } catch (e) {
+    reply.status(401);
+    const err = new Error(e instanceof Error ? e.message : 'WebAuthn authentication verification failed');
+    (err as any).statusCode = 401;
+    (err as any).code = 'WEBAUTHN_VERIFICATION_FAILED';
+    throw err;
+  }
+  if (!verification.verified) {
+    reply.status(401);
+    const err = new Error('WebAuthn assertion could not be verified.');
+    (err as any).statusCode = 401;
+    (err as any).code = 'WEBAUTHN_VERIFICATION_FAILED';
+    throw err;
+  }
+
+  // Cloned-authenticator replay guard (throws CounterRegressionError → 401).
+  assertCounterProgress(credential.counter, verification.authenticationInfo.newCounter);
+  await prisma.webAuthnCredential.update({
+    where: { id: credential.id },
+    data: { counter: BigInt(verification.authenticationInfo.newCounter) },
+  });
+
+  const user = await prisma.user.findUnique({ where: { id: credential.userId } });
+  if (!user) {
+    reply.status(401);
+    const err = new Error('This authenticator is not enrolled.');
+    (err as any).statusCode = 401;
+    (err as any).code = 'WEBAUTHN_CREDENTIAL_NOT_FOUND';
+    throw err;
+  }
+
+  // Re-check the admin gate — the role could have been revoked since enrolment.
+  const adminAssignments = await prisma.roleAssignment.count({
+    where: { userId: user.id, tenantId: user.tenantId, role: { in: ADMIN_ROLES } },
+  });
+  if (adminAssignments === 0) {
+    reply.status(403);
+    const err = new Error('This account no longer has an owner or branch-manager role.');
+    (err as any).statusCode = 403;
+    (err as any).code = 'ADMIN_ROLE_REQUIRED';
+    throw err;
+  }
+
+  const { accessToken } = await issueAdminSession(user, user.tenantId, reply);
+  reply.clearCookie(WEBAUTHN_CHALLENGE_COOKIE, { path: '/' });
   return { accessToken, user };
 });
 
