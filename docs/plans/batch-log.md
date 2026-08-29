@@ -912,7 +912,7 @@ still ahead — same "track stays Open while its slices land" treatment as F-088
 surfaced and staged (see `docs/plans/pending-findings.md`).
 **Handed off:** 29 Aug 2026
 **Status:** In progress — two sub-pieces landed and independently verified; Phase 2 next.
-**Commits:** `<sub-1>` (adminHub trend), `<sub-2>` (F-195 Phase 1 deps)
+**Commits:** `c90a362` (adminHub trend), `91ad666` (F-195 Phase 1 deps)
 
 Two unrelated changes that shared a working tree only because the dev stack stayed up between
 them — committed separately.
