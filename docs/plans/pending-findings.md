@@ -161,6 +161,44 @@ second demo tenant with a realistic pool count (that removes the "just test poll
 Confirmed-ID: F-202
 Confirmed: 29 Aug 2026
 
+### f043-claude-md-fixture-note-stale
+Batch: F-195 Phase 2 (admin re-theme — surfaced during the Tier A e2e baseline check)
+Surfaced: 29 Aug 2026
+Description: `apps/guest-member-pwa/CLAUDE.md` states the e2e suite is pre-existing "4 passed /
+4 failed / 1 skipped" and that "`f043` and `f061` expect fixtures like
+`admin-seed-booking-refundable-cancelled` that nothing in the suite creates." For **`f043`** this
+is no longer true — `f043-phase-c.spec.ts:108` now has a `seedF043()` function, called from
+`beforeAll` (`:203`) and again in the test body (`:235`), that creates its own fixtures. Verified
+across 4 isolated runs on the F-195 Phase 2 Tier A commit: `f043`'s **test body completes and
+passes every run** (`F043_PHASE_C_EVIDENCE {…"bookingStatus":"HELD"}` — the last line of the test
+— prints every time; all admin-web assertions green: `.success-box` "Pattern saved."/"Override
+saved.", `#scheduling-pattern-panel`/`#scheduling-override-panel`/`#scheduling-preview-panel`,
+`.preview-row` `toHaveCount(2)`). `f043`'s intermittent *spec* failure is entirely the `afterAll`
+teardown timeout — see the finding below. The CLAUDE.md note should be corrected/removed so it
+stops misdirecting the next reader into treating `f043` as unfixable fixture debt. (`f061` still
+genuinely fails on a missing `admin-seed-*` fixture; `f041` on a missing
+`admin-seed-branch-coimbatore` — those parts of the note stand.) Test-infra doc accuracy only, no
+product code. Described for Chief to assign an ID; do not self-number.
+Confirmed-ID: F-203
+Confirmed: 29 Aug 2026
+
+### f043-afterall-teardown-timeout-windows
+Batch: F-195 Phase 2 (admin re-theme — surfaced during the Tier A e2e baseline check)
+Surfaced: 29 Aug 2026
+Description: `f043-phase-c.spec.ts`'s `test.afterAll` (`:222-230`) tears down the 5 processes it
+spawned in `beforeAll` (3 tsx services + 2 Vite dev servers) with, on Windows,
+`spawnSync('taskkill', ['/pid', <pid>, '/T', '/F'])` per child, sequentially. On this dev machine
+that sweep exceeds Playwright's default 30 000 ms hook timeout, so the spec reports **failed** even
+though the test body passed (see F-203). Reproduced 3-of-4 isolated runs (the 4th happened to
+tear down fast enough). Not caused by or related to any Phase 2 change — it is a pre-existing
+test-infra reliability issue that just wasn't isolated before, because `f043` was assumed to be
+fixture debt (F-203). Likely fix: raise the `afterAll` hook timeout for this spec (e.g.
+`test.setTimeout` / a per-hook timeout of ~90s), and/or run the `taskkill` calls concurrently
+(`Promise.all` over the children) instead of one at a time. Low severity — pure test-infra, no
+product code, e2e is non-blocking in CI. Described for Chief to assign an ID; do not self-number.
+Confirmed-ID: F-204
+Confirmed: 29 Aug 2026
+
 ## Promoted (audit trail)
 
 ### deploy-pipeline-consolidation
