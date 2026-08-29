@@ -905,6 +905,57 @@ Latent issue noted for the record (not blocking — both files exist on this VM)
 when the file is absent (fresh/rebuilt VM). Fixed to `if [ -f x ]; then …; fi` before this
 sub-batch closed.
 
+## Batch 24 — F-195 adminHub build track (Phase 1: dependency upgrade + week-over-week trend)
+
+**Findings:** F-195 — **Open / In progress** (one dedicated track; Phase 2 + build-order slots 2–6
+still ahead — same "track stays Open while its slices land" treatment as F-088). F-201, F-202
+surfaced and staged (see `docs/plans/pending-findings.md`).
+**Handed off:** 29 Aug 2026
+**Status:** In progress — two sub-pieces landed and independently verified; Phase 2 next.
+**Commits:** `<sub-1>` (adminHub trend), `<sub-2>` (F-195 Phase 1 deps)
+
+Two unrelated changes that shared a working tree only because the dev stack stayed up between
+them — committed separately.
+
+**Sub-1 — adminHub week-over-week guest-occupancy trend** (`apps/admin-web/src/main.tsx`,
+`styles.css`). Branch-level aggregate occupancy % + a WoW delta in the Overview Guest Occupancy
+panel header. Reuses `GET /branches/:id/guest-occupancy` twice from the client (`date`,
+`date − 7d`), aggregates client-side (Option A, Chief-approved — a display %, not a money total).
+New `shiftIsoDate` / `aggregateOccupancy` pure helpers + a named local `TrendIndicator` component
+(built as a promotion candidate for `@badminton/ui-shared` — Phase 2 will port/re-theme it first).
+`.metric-card` / `.occupancy-*` untouched; the wireframe token architecture is deferred to one
+later cross-cutting adminHub pass. Live-fire on both tenants: every TrendIndicator branch matched
+hand-computed values; regression 5/5, `f023` e2e green. Stages **F-201**
+(`guest-occupancy-branch-endpoint-date-unvalidated`, low).
+
+**Sub-2 — F-195 Phase 1: `apps/admin-web` toolchain upgrade** (dependency-only, no visual/mockup
+changes). React 18→19.2.8, Vite 5→8.2.2, `@vitejs/plugin-react` 4→6.1.1, lucide-react
+0.435→1.34, react-router-dom 6.26→6.30.6, `@tanstack/react-query` 5.52→5.101.4; `typescript`
+specifier `^5.4.5`→`^5.9.0` workspace-wide (lockfile-neutral — already resolved 5.9.3).
+- **Not admin-web-scoped in the end** (Q1's flagged risk, realized): pnpm hoists one
+  `@types/react`; with two majors present, `guest-member-pwa`'s transitive React libs
+  (`react-router@7`, `lucide@1.27`) resolved the hoisted 19 and broke its typecheck. Fix
+  (Option B, Chief-approved): explicit `@types/react@^19.2.18` / `@types/react-dom@^19.2.5` in
+  `guest-member-pwa`'s own devDependencies — **runtime `react`/`react-dom` stay 18.3.1**. Its type
+  env now compiles against React 19 defs (a compatible superset; its router/query/lucide all
+  support 19); build byte-identical.
+- **Vite 8 dev-server fix (Option 1, Chief-approved retroactively):** `@badminton/ui-shared` gains a
+  `"type": "module"` + `"exports"` field so Vite 8's dep optimizer pre-bundles it instead of
+  serving it raw (`@fs/…?t=`), which had caused repeat re-optimization → a second React instance →
+  `createRoot`-twice / `removeChild` NotFoundError in dev under React 19 + StrictMode.
+  `apps/admin-web/vite.config.ts` gains `optimizeDeps.include` + `resolve.dedupe`. Same fix will be
+  needed when guest-pwa moves to Vite 8 — solved once, in the shared package. `ui-shared` peer
+  ranges also widened (`react`/`react-dom` `|| ^19`, lucide `|| ^1`).
+- Evidence (0–9): Node floor ✓; `pnpm install` clean, zero peer warnings; admin-web typecheck +
+  Vite 8 build clean (374 kB / 108 kB gz, up from 333/96 — React 19 runtime); full `pnpm -r
+  typecheck` green; regression 5/5 (identity-auth isolation pattern as usual); `f023` e2e green;
+  7-section × 2-tenant smoke with zero console errors; production `Dockerfile.caddy-static` builds
+  + serves under Vite 8; `register:check` green. guest-pwa re-verified (byte-identical build,
+  clean dev server). Stages **F-202**
+  (`guest-occupancy-parallel-generation-transaction-exhaustion` — unbounded `Promise.all` fan-out
+  of per-pool window generation, each its own interactive transaction; courtowner1's 88 polluted
+  pools × concurrent calls → `P2028`; 1-pool tenant unaffected; pre-existing, low live exposure).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

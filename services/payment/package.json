@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "tsx": "^4.10.5",
-    "typescript": "^5.4.5",
+    "typescript": "^5.9.0",
     "dotenv-cli": "^7.4.2",
     "@badminton/test-harness": "workspace:*"
   }

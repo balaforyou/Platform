@@ -129,6 +129,38 @@ hygiene only. Described here for Chief to assign an ID and prioritise separately
 Confirmed-ID: F-201
 Confirmed: 29 Aug 2026
 
+### guest-occupancy-parallel-generation-transaction-exhaustion
+Batch: F-195 Phase 1 (admin-web toolchain upgrade — dependency-only)
+Surfaced: 29 Aug 2026
+Description: `computePoolGuestOccupancy` (`services/slot-engine/src/index.ts:616`) fans every pool's
+on-demand window generation out in parallel with no concurrency bound —
+`await Promise.all(pools.map((pool) => ensureAvailabilityWindowsForDate(pool.id, date)))` (`:625`).
+Each `ensureAvailabilityWindowsForDate` (`services/slot-engine/src/availabilityGeneration.ts:153`)
+opens its own interactive `prisma.$transaction` holding a connection + a `FOR UPDATE` row lock
+(`availabilityGeneration.ts:184`). So one `GET /branches/:id/guest-occupancy?date=<uncached date>`
+request opens N concurrent interactive transactions where N = pool count. On a branch with many
+pools this exceeds Prisma's connection/transaction-slot pool and the surplus transactions fail with
+`P2028: "Transaction API error: Unable to start a transaction in the given time."` → HTTP 500.
+Live-fire evidence (29 Aug 2026, dev stack, real `badminton_db`):
+  - courtowner1 branch `22222222-2222-2222-2222-222222222222`, **88 resource pools** (test-data
+    pollution from prior F-183/F-184/F-186 regression runs), date needing generation:
+    - single request → `200 OK`
+    - **two concurrent requests → both `500` with `P2028`** (request/response pair captured)
+  - JBC branch `6c9c1e5e-...`, **1 pool**, same date, two concurrent requests → both `200 OK`
+Exposure path: the adminHub week-over-week trend feature (F-201's batch) adds a *second* concurrent
+`guest-occupancy` call (`date` and `date − 7d`) from `Overview()`, and React `<StrictMode>` in dev
+double-invokes each `useQuery`, so a single dev page load can fire up to 4 concurrent requests →
+4 × N transactions. Production is not StrictMode-doubled, and a real tenant has 1–2 pools, so this
+is **dev-visible / large-pool-count-visible, not a general production 500** — but the unbounded
+`Promise.all` is a real latent scalability bug in the endpoint regardless of the adminHub feature.
+Pre-existing; not introduced by F-195 Phase 1 (proven: 1-pool concurrent = 200, and Phase 1 changes
+no backend code). Not fixed here — scope discipline (rule 9). Likely fix direction: bound the
+fan-out (`p-limit` / sequential-with-small-concurrency) in `computePoolGuestOccupancy`, and/or skip
+generation for pools that already have windows for the date. Revisit if courtowner1 becomes a real
+second demo tenant with a realistic pool count (that removes the "just test pollution" mitigation).
+Confirmed-ID: F-202
+Confirmed: 29 Aug 2026
+
 ## Promoted (audit trail)
 
 ### deploy-pipeline-consolidation
