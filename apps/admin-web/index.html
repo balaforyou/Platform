@@ -3,7 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>Admin Web Console</title>
+    <script>
+      // Pre-paint theme resolution — set data-theme before first paint so there is
+      // no light/dark flash. Only an explicit stored choice ('light'|'dark') writes
+      // the attribute; 'system' (or nothing stored) leaves it off and the CSS falls
+      // back to the prefers-color-scheme media query. Mirrors apps/admin-web/src/theme.ts.
+      (function () {
+        try {
+          var t = localStorage.getItem('admin-theme');
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.dataset.theme = t;
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   base: '/admin/',
-  plugins: [react()],
+  // Tailwind v4 runs entirely through its Vite plugin — no tailwind.config / postcss.config.
+  plugins: [react(), tailwindcss()],
   // @badminton/ui-shared is a pnpm-linked workspace package consumed as its built
   // `dist/`. Under Vite 8's dep optimizer it was served raw (`@fs/…?t=`), so its
   // imports (react, react-dom, @tanstack/react-query, react-router-dom) were only

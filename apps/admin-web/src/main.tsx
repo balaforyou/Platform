@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import {
   AlertTriangle,
@@ -14,11 +14,13 @@ import {
   LogOut,
   Menu,
   Minus,
+  Moon,
   Plus,
   RefreshCw,
   Save,
   ShieldAlert,
   SlidersHorizontal,
+  Sun,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -26,6 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import { apiRequest, AuthProvider, TenantProvider, useAuth, useTenant } from '@badminton/ui-shared';
+import { useTheme } from './theme';
 import './styles.css';
 
 type Branch = {
@@ -520,6 +523,22 @@ function RequireAdmin() {
   return <Outlet />;
 }
 
+function ThemeToggle() {
+  const { resolved, toggle } = useTheme();
+  const goingDark = resolved === 'light';
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      onClick={toggle}
+      aria-label={goingDark ? 'Switch to dark mode' : 'Switch to light mode'}
+      title={goingDark ? 'Switch to dark mode' : 'Switch to light mode'}
+    >
+      {goingDark ? <Moon size={18} /> : <Sun size={18} />}
+    </button>
+  );
+}
+
 function Shell() {
   const { tenant } = useTenant();
   const { user, logout } = useAuth();
@@ -569,7 +588,7 @@ function Shell() {
         <nav>
           {navItems.map((item) => {
             const Icon = item.icon;
-            return <Link key={item.to} to={item.to} onClick={closeMobileNav}><Icon size={17} />{item.label}</Link>;
+            return <NavLink key={item.to} to={item.to} end={item.to === '/'} onClick={closeMobileNav}><Icon size={17} />{item.label}</NavLink>;
           })}
         </nav>
         <button className="ghost-btn" onClick={logout}><LogOut size={16} />Sign out</button>
@@ -585,7 +604,7 @@ function Shell() {
         <nav>
           {navItems.map((item) => {
             const Icon = item.icon;
-            return <Link key={item.to} to={item.to}><Icon size={17} />{item.label}</Link>;
+            return <NavLink key={item.to} to={item.to} end={item.to === '/'}><Icon size={17} />{item.label}</NavLink>;
           })}
         </nav>
         <button className="ghost-btn" onClick={logout}><LogOut size={16} />Sign out</button>
@@ -596,6 +615,7 @@ function Shell() {
             <h1>Admin Console</h1>
             <p>{user?.roles?.join(', ')}</p>
           </div>
+          <ThemeToggle />
         </header>
         <Outlet />
       </div>
