@@ -763,78 +763,122 @@ function Overview() {
   }, [branchId, branches.data]);
 
   return (
-    <main className="overview-stack">
-      <section className="page-grid">
-        <div className="metric-card"><span>Branches</span><strong>{branches.data?.length || 0}</strong></div>
-        <div className="metric-card"><span>Active</span><strong>{active}</strong></div>
-        <div className="metric-card"><span>Workflows</span><strong>5</strong></div>
+    <main className="mx-auto grid max-w-6xl gap-5 p-6 max-[820px]:p-4">
+      <section className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+        {[
+          { label: 'Branches', value: branches.data?.length || 0 },
+          { label: 'Active', value: active },
+          { label: 'Workflows', value: 5 },
+        ].map((stat) => (
+          <div
+            key={stat.label}
+            className="grid gap-1.5 rounded-2xl border border-border-token bg-surface p-4 [box-shadow:var(--shadow-card)]"
+          >
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">{stat.label}</span>
+            <strong className="text-3xl font-black text-text">{stat.value}</strong>
+          </div>
+        ))}
       </section>
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>Guest Occupancy</h2>
-            <p className="muted">Confirmed guest slots by court for the selected branch and date.</p>
+
+      <section className="rounded-2xl border border-border-token bg-surface p-5 [box-shadow:var(--shadow-card)]">
+        <div className="flex items-start justify-between gap-4 max-[820px]:flex-col">
+          <div className="grid gap-1.5">
+            <h2 className="m-0 text-lg font-black text-text">Guest Occupancy</h2>
+            <p className="m-0 text-sm text-text-muted">Confirmed guest slots by court for the selected branch and date.</p>
             {thisWeekPct !== null && (
-              <div className="occupancy-summary">
-                <strong>{thisWeekPct}% branch occupancy</strong>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <strong className="font-mono text-2xl font-black text-accent">{thisWeekPct}%</strong>
+                <span className="text-xs text-text-muted">branch occupancy</span>
                 <TrendIndicator current={thisWeekPct} previous={lastWeekPct} />
               </div>
             )}
           </div>
-          {(occupancy.isFetching || memberAttendance.isFetching || lastWeekOccupancy.isFetching) && <RefreshCw className="spin" size={18} />}
+          {(occupancy.isFetching || memberAttendance.isFetching || lastWeekOccupancy.isFetching) && (
+            <RefreshCw className="spin shrink-0 text-text-muted" size={18} />
+          )}
         </div>
-        <div className="form-grid compact">
-          <label>Branch<select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
-            <option value="">Select branch</option>
-            {(branches.data || []).map((branch) => <option value={branch.id} key={branch.id}>{branch.name}</option>)}
-          </select></label>
-          <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+
+        <div className="mt-4 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))] items-end">
+          <label className="grid gap-1.5 text-[13px] font-bold text-text-label">
+            Branch
+            <select
+              value={branchId}
+              onChange={(event) => setBranchId(event.target.value)}
+              className="min-h-[38px] rounded-lg border border-border-strong bg-surface px-2.5 py-2 font-semibold text-text"
+            >
+              <option value="">Select branch</option>
+              {(branches.data || []).map((branch) => <option value={branch.id} key={branch.id}>{branch.name}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1.5 text-[13px] font-bold text-text-label">
+            Date
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              className="min-h-[38px] rounded-lg border border-border-strong bg-surface px-2.5 py-2 text-text"
+            />
+          </label>
         </div>
+
         <MutationFeedback error={branches.error || occupancy.error || lastWeekOccupancy.error || memberAttendance.error} />
         {!branchId && <p className="empty-state">Select a branch to view guest occupancy.</p>}
         {branchId && occupancy.data?.length === 0 && (
           <p className="empty-state">{selectedBranch?.name || 'This branch'} has no resource pools configured yet.</p>
         )}
         {!!occupancy.data?.length && (
-          <div className="occupancy-list">
+          <div className="mt-4 grid gap-2.5">
             {occupancy.data.map((pool) => (
-              <div className="occupancy-row" key={pool.resourcePoolId}>
-                <div>
-                  <strong>{pool.resourcePoolName}</strong>
-                  <span>{pool.confirmedSeats} of {pool.totalCapacity} guest slots confirmed</span>
+              <div
+                key={pool.resourcePoolId}
+                className="grid items-center gap-3.5 rounded-xl border border-border-token bg-surface p-3 [grid-template-columns:minmax(180px,1.2fr)_minmax(160px,2fr)_minmax(72px,auto)] max-[820px]:grid-cols-1"
+              >
+                <div className="grid gap-1">
+                  <strong className="text-text">{pool.resourcePoolName}</strong>
+                  <span className="text-sm text-text-muted">{pool.confirmedSeats} of {pool.totalCapacity} guest slots confirmed</span>
                 </div>
-                <div className="occupancy-meter" aria-label={`${pool.occupancyPercentage}% occupied`}>
-                  <span style={{ width: `${Math.min(pool.occupancyPercentage, 100)}%` }} />
+                <div
+                  className="h-2.5 overflow-hidden rounded-pill border border-border-token bg-surface-sunken"
+                  aria-label={`${pool.occupancyPercentage}% occupied`}
+                >
+                  <span
+                    className="block h-full rounded-[inherit] bg-accent transition-[width] duration-300"
+                    style={{ width: `${Math.min(pool.occupancyPercentage, 100)}%` }}
+                  />
                 </div>
-                <strong className="occupancy-value">{pool.totalCapacity > 0 ? `${pool.occupancyPercentage}%` : 'No windows'}</strong>
+                <strong className="text-right font-mono text-text max-[820px]:text-left">
+                  {pool.totalCapacity > 0 ? `${pool.occupancyPercentage}%` : 'No windows'}
+                </strong>
               </div>
             ))}
           </div>
         )}
       </section>
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>Member Attendance</h2>
-            <p className="muted">Members whose confirmation windows are open or already past cutoff.</p>
-          </div>
+
+      <section className="rounded-2xl border border-border-token bg-surface p-5 [box-shadow:var(--shadow-card)]">
+        <div className="grid gap-1.5">
+          <h2 className="m-0 text-lg font-black text-text">Member Attendance</h2>
+          <p className="m-0 text-sm text-text-muted">Members whose confirmation windows are open or already past cutoff.</p>
         </div>
         {branchId && memberAttendance.data?.length === 0 && (
           <p className="empty-state">No member attendance windows are currently open for this branch.</p>
         )}
         {!!memberAttendance.data?.length && (
-          <div className="attendance-list">
+          <div className="mt-4 grid gap-2.5">
             {memberAttendance.data.map((row) => (
-              <div className="attendance-row" key={`${row.memberPhone}-${row.resourcePoolName}-${row.startTime}`}>
-                <div>
-                  <strong>{row.memberPhone}</strong>
-                  <span>{row.resourcePoolName}</span>
+              <div
+                className="attendance-row grid items-center gap-3.5 rounded-xl border border-border-token bg-surface p-3 [grid-template-columns:minmax(160px,1fr)_minmax(220px,1.4fr)_minmax(140px,auto)] max-[820px]:grid-cols-1"
+                key={`${row.memberPhone}-${row.resourcePoolName}-${row.startTime}`}
+              >
+                <div className="grid gap-1">
+                  <strong className="text-text">{row.memberPhone}</strong>
+                  <span className="text-sm text-text-muted">{row.resourcePoolName}</span>
                 </div>
-                <div>
-                  <strong>{formatMemberAttendanceWindow(row)}</strong>
-                  <span>{row.cutoffTime ? `Cutoff ${formatDateTime(row.cutoffTime)}` : 'Assigned window missing'}</span>
+                <div className="grid gap-1">
+                  <strong className="text-text">{formatMemberAttendanceWindow(row)}</strong>
+                  <span className="text-sm text-text-muted">{row.cutoffTime ? `Cutoff ${formatDateTime(row.cutoffTime)}` : 'Assigned window missing'}</span>
                 </div>
-                <span className={`status-pill attendance-${row.status.toLowerCase().replace(/_/g, '-')}`}>{row.statusLabel}</span>
+                <span className={`status-pill attendance-${row.status.toLowerCase().replace(/_/g, '-')} justify-self-end max-[820px]:justify-self-start`}>{row.statusLabel}</span>
               </div>
             ))}
           </div>

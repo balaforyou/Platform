@@ -467,25 +467,18 @@ button:disabled {
   background: var(--surface-nav-hover);
 }
 
-.page-grid,
+/* .page-grid retired with the Overview port (Tier B) — Overview was its only consumer. */
+
 .content-grid {
   padding: 24px;
   display: grid;
   gap: 18px;
 }
 
-.page-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
 .overview-stack {
   padding: 24px;
   display: grid;
   gap: 18px;
-}
-
-.overview-stack .page-grid {
-  padding: 0;
 }
 
 .content-grid.two {
@@ -528,24 +521,12 @@ button:disabled {
   margin: 6px 0 0;
 }
 
-.occupancy-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
-  margin-top: 8px;
-}
-
-.occupancy-summary strong {
-  font-size: 18px;
-  color: var(--text);
-}
-
+/* TrendIndicator (Overview) keeps its class hook; the mockup wants it small + semibold. */
 .occupancy-trend {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -561,80 +542,11 @@ button:disabled {
   color: var(--trend-flat);
 }
 
-.occupancy-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.occupancy-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(160px, 2fr) minmax(72px, auto);
-  align-items: center;
-  gap: 14px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.occupancy-row > div:first-child {
-  display: grid;
-  gap: 4px;
-}
-
-.occupancy-row span {
-  color: var(--text-muted);
-}
-
-.occupancy-meter {
-  height: 10px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-sunken);
-  border: 1px solid var(--border);
-}
-
-.occupancy-meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-}
-
-.occupancy-value {
-  text-align: right;
-  color: var(--text);
-}
-
-.attendance-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.attendance-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.4fr) minmax(140px, auto);
-  align-items: center;
-  gap: 14px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.attendance-row > div {
-  display: grid;
-  gap: 4px;
-}
-
-.attendance-row span {
-  color: var(--text-muted);
-}
+/* .occupancy-summary/-list/-row/-meter/-value + .attendance-list/-row layout
+   retired with the Overview port (Tier B) — now Tailwind utilities on the tokens.
+   `.attendance-row` stays as a bare class hook for f023's locator. */
 
 .status-pill {
-  justify-self: end;
   min-height: 30px;
   display: inline-flex;
   align-items: center;
@@ -1004,7 +916,6 @@ button:disabled {
     display: none;
   }
 
-  .page-grid,
   .content-grid {
     padding: 16px;
   }
@@ -1013,24 +924,9 @@ button:disabled {
     padding: 16px;
   }
 
-  .overview-stack .page-grid {
-    padding: 0;
-  }
-
-  .panel-header,
-  .occupancy-row,
-  .attendance-row {
-    grid-template-columns: 1fr;
-  }
-
   .panel-header {
     display: grid;
-  }
-
-  .occupancy-value,
-  .status-pill {
-    justify-self: start;
-    text-align: left;
+    grid-template-columns: 1fr;
   }
 
   .panel {
