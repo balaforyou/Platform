@@ -591,14 +591,17 @@ server.post('/auth/admin/google/verify', async (request, reply) => {
     throw err;
   }
 
-  // Dev-only fallback for CI/e2e — same NODE_ENV !== 'production' fail-closed shape as
-  // the OTP dev-code path (index.ts:206-222). Mints a session for a seeded test admin
-  // with no Google round-trip; refuses outright in production.
+  // Dev-only fallback for CI/e2e — mints a session for a seeded test admin with no
+  // Google round-trip. Gated on its OWN opt-in flag (ADMIN_DEV_LOGIN=true), NOT on
+  // NODE_ENV: the deployed demo runs NODE_ENV=development so guest/member OTP can use the
+  // fixed 123456 code, and that guest-side UAT convenience must not also unlock an admin
+  // auth bypass. Default-off (absent flag = disabled), fail-closed. Production never
+  // sets it; CI/e2e do.
   let identity: VerifiedGoogleIdentity;
   if (googleIdToken.startsWith('dev-admin-token-')) {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.ADMIN_DEV_LOGIN !== 'true') {
       reply.status(403);
-      const err = new Error('Dev admin login is not available in production');
+      const err = new Error('Dev admin login is not enabled in this environment');
       (err as any).statusCode = 403;
       (err as any).code = 'DEV_LOGIN_DISABLED';
       throw err;

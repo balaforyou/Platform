@@ -79,6 +79,9 @@ export default async function globalSetup() {
   const tm = startService('tenant-management', resolve(root, 'services/tenant-management/dist/index.js'), 3003, {});
   const ia = startService('identity-auth', resolve(root, 'services/identity-auth/dist/index.js'), 3002, {
     TENANT_SERVICE_URL: 'http://localhost:3003',
+    // The spec's devSignIn helper posts `dev-admin-token-<email>` — that path is now
+    // gated on ADMIN_DEV_LOGIN, not NODE_ENV. Opt in here; production never sets it.
+    ADMIN_DEV_LOGIN: 'true',
     // localhost RP defaults are fine — the Vite dev server is http://127.0.0.1:5175,
     // and RP ID "localhost" covers 127.0.0.1 for the virtual authenticator.
     WEBAUTHN_RP_ID: 'localhost',

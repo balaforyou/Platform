@@ -84,6 +84,12 @@ services:
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-admin.elitecourts.duckdns.org}
       WEBAUTHN_RP_ORIGIN: ${WEBAUTHN_RP_ORIGIN:-https://admin.elitecourts.duckdns.org}
       WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-Slotflow Admin}
+      # SECURITY-CRITICAL, default-off. Enables the `dev-admin-token-<email>` bypass on
+      # /auth/admin/google/verify (no Google verification). Set ONLY in CI/e2e (.env.ci).
+      # The production VM's .env MUST NOT set this — empty here means the bypass returns
+      # 403. Deliberately NOT `NODE_ENV`-gated: the demo runs NODE_ENV=development so
+      # guest/member OTP can use the fixed 123456 code, and that must not unlock admin auth.
+      ADMIN_DEV_LOGIN: ${ADMIN_DEV_LOGIN:-}
     depends_on:
       postgres:
         condition: service_healthy
