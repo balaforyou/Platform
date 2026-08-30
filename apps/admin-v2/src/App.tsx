@@ -1,28 +1,37 @@
-import { useTenant } from '@badminton/ui-shared';
+import { useEffect, useState } from 'react';
+import { useAdminAuth } from './auth/AdminAuthContext';
+import { LoadingState } from './components';
+import { LoginScreen } from './screens/LoginScreen';
+import { LandingPage } from './screens/LandingPage';
+import { EnrollPasskeyPrompt, wasPasskeyPromptDismissed } from './screens/EnrollPasskeyPrompt';
+import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 
 /**
- * Scaffold placeholder. Slice 1's real surface — login screen, post-login landing,
- * fingerprint enrollment prompt — lands in build step 4 (frontend flows).
+ * Slice 1 has three states, gated by auth — no URL router needed yet:
+ *   1. not signed in           → LoginScreen
+ *   2. signed in, first time   → EnrollPasskeyPrompt (skippable)
+ *   3. signed in, prompt done  → LandingPage
  */
 export default function App() {
-  const { tenant } = useTenant();
+  const { loading, isAuthenticated, user } = useAdminAuth();
+  const [promptResolved, setPromptResolved] = useState(false);
+
+  // Reset the one-time prompt gate whenever the signed-in identity changes.
+  useEffect(() => {
+    setPromptResolved(user ? wasPasskeyPromptDismissed(user.userId) : false);
+  }, [user?.userId]);
+
+  if (loading) return <LoadingState label="Checking your session…" />;
+  if (!isAuthenticated || !user) return <LoginScreen />;
+
+  if (!promptResolved) {
+    return <EnrollPasskeyPrompt onResolved={() => setPromptResolved(true)} />;
+  }
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        padding: 24,
-      }}
-    >
-      <h1 style={{ margin: 0, fontSize: 20 }}>Slotflow Admin</h1>
-      <p style={{ margin: 0, color: 'var(--av2-muted)' }}>
-        admin-v2 scaffold — {tenant?.name ?? 'resolving tenant…'}
-      </p>
-    </main>
+    <>
+      <LandingPage />
+      <PwaInstallPrompt />
+    </>
   );
 }

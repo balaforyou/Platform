@@ -528,7 +528,7 @@ server.post('/auth/google/verify', async (request, reply) => {
 // (no `domain` attr — admin.elitecourts.duckdns.org gets a naturally isolated session,
 // same as index.ts:494-500).
 async function issueAdminSession(
-  user: { id: string; phone: string | null; userType: UserType },
+  user: { id: string; phone: string | null; email: string | null; userType: UserType },
   tenantId: string,
   reply: any,
 ): Promise<{ accessToken: string }> {
@@ -557,6 +557,10 @@ async function issueAdminSession(
     userId: user.id,
     tenantId,
     phone: user.phone,
+    // F-203: admin-v2's landing page (and the fingerprint prompt) show the signed-in
+    // identity; /auth/refresh returns only { accessToken }, so email has to travel in
+    // the token to survive a page reload.
+    email: user.email,
     userType: user.userType,
     roles,
   }, { expiresIn: '15m' });
@@ -957,6 +961,9 @@ server.post('/auth/refresh', async (request, reply) => {
     userId: session.userId,
     tenantId: session.user.tenantId,
     phone: session.user.phone,
+    // F-203: carried so admin-v2's landing page survives a reload (silent refresh
+    // returns only { accessToken }). Ignored by every other consumer.
+    email: session.user.email,
     userType: session.user.userType,
     roles,
   }, { expiresIn: '15m' });

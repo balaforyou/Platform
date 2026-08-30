@@ -9,6 +9,7 @@ bin/
 test-results/
 playwright-report/
 .playwright/
+e2e/.pids.json
 .claude/
 
 deploy-package.tar

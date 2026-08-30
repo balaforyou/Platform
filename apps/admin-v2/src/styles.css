@@ -1,39 +1,89 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   Admin-v2 design tokens.
+   Admin-v2 design tokens — single source of truth.
 
-   Scaffold placeholder — the real token values come from the admin mockup /
-   design-system source (per §5 of the signed plan) and land with the component
-   library in build step 4. For now this establishes the single-source-of-truth
-   layout: bare :root = light, :root[data-theme="dark"] = explicit dark, the
-   prefers-color-scheme block = follow the OS.
+   Scaffold-era placeholder values; the real palette comes from the admin
+   design-system source (§5 of the signed plan). Fixed emerald/slate per the
+   F-195 "build generic, ship fixed" theming decision — only tenant name/logo
+   are swapped dynamically, not the palette.
+
+   Three theme states: bare :root = light; :root[data-theme="dark"] = explicit
+   dark; the prefers-color-scheme block = follow the OS.
    ========================================================================== */
 
 :root {
   --av2-bg: #f8fafc;
   --av2-surface: #ffffff;
+  --av2-surface-alt: #f1f5f9;
+  --av2-border: #e2e8f0;
   --av2-text: #0f172a;
-  --av2-muted: #475569;
+  --av2-muted: #64748b;
   --av2-accent: #059669;
+  --av2-accent-hover: #047857;
+  --av2-accent-fg: #ffffff;
+  --av2-accent-soft: #ecfdf5;
+  --av2-danger: #dc2626;
+  --av2-danger-soft: #fef2f2;
+  --av2-danger-border: #fecaca;
+  --av2-info-soft: #eff6ff;
+  --av2-info-border: #bfdbfe;
+  --av2-info-text: #1e40af;
+  --av2-radius: 12px;
+  --av2-radius-sm: 8px;
+  --av2-shadow: 0 1px 3px rgb(15 23 42 / 0.08), 0 1px 2px rgb(15 23 42 / 0.04);
+  --av2-shadow-lg: 0 10px 30px -10px rgb(15 23 42 / 0.25);
+  --av2-ring: #34d399;
 }
 
 :root[data-theme="dark"] {
-  --av2-bg: #0f172a;
-  --av2-surface: #1e293b;
-  --av2-text: #f1f5f9;
+  --av2-bg: #0b1120;
+  --av2-surface: #111c30;
+  --av2-surface-alt: #1e293b;
+  --av2-border: #263449;
+  --av2-text: #e2e8f0;
   --av2-muted: #94a3b8;
-  --av2-accent: #34d399;
+  --av2-accent: #10b981;
+  --av2-accent-hover: #34d399;
+  --av2-accent-fg: #04121a;
+  --av2-accent-soft: #06281f;
+  --av2-danger: #f87171;
+  --av2-danger-soft: #2a1414;
+  --av2-danger-border: #7f1d1d;
+  --av2-info-soft: #10233f;
+  --av2-info-border: #1e3a5f;
+  --av2-info-text: #bfdbfe;
+  --av2-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+  --av2-shadow-lg: 0 20px 40px -12px rgb(0 0 0 / 0.6);
+  --av2-ring: #34d399;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --av2-bg: #0f172a;
-    --av2-surface: #1e293b;
-    --av2-text: #f1f5f9;
+    --av2-bg: #0b1120;
+    --av2-surface: #111c30;
+    --av2-surface-alt: #1e293b;
+    --av2-border: #263449;
+    --av2-text: #e2e8f0;
     --av2-muted: #94a3b8;
-    --av2-accent: #34d399;
+    --av2-accent: #10b981;
+    --av2-accent-hover: #34d399;
+    --av2-accent-fg: #04121a;
+    --av2-accent-soft: #06281f;
+    --av2-danger: #f87171;
+    --av2-danger-soft: #2a1414;
+    --av2-danger-border: #7f1d1d;
+    --av2-info-soft: #10233f;
+    --av2-info-border: #1e3a5f;
+    --av2-info-text: #bfdbfe;
+    --av2-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+    --av2-shadow-lg: 0 20px 40px -12px rgb(0 0 0 / 0.6);
+    --av2-ring: #34d399;
   }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -41,4 +91,10 @@ body {
   background: var(--av2-bg);
   color: var(--av2-text);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--av2-ring);
+  outline-offset: 2px;
 }
