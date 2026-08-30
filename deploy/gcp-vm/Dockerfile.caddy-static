@@ -13,6 +13,10 @@ RUN corepack enable
 ARG VITE_RAZORPAY_KEY_ID
 ENV VITE_RAZORPAY_KEY_ID=$VITE_RAZORPAY_KEY_ID
 
+# F-203: the shared Google OAuth client id, baked into the admin-v2 bundle at build.
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+
 # F-077: the SHA this bundle was built from, emitted as a static asset per app below.
 ARG GIT_SHA=unknown
 
@@ -25,6 +29,11 @@ RUN pnpm --filter @badminton/shared-types run build
 RUN pnpm --filter @badminton/ui-shared run build
 RUN pnpm --filter @badminton/guest-member-pwa run build
 RUN pnpm --filter @badminton/admin-web run build
+# GIT_SHA passed as env (not just the ARG) so admin-v2's scripts/stamp-sw.mjs bakes the
+# same SHA into dist/sw.js's cache name that the version.json line below stamps — one
+# source, no drift (.git is not in the build context, so stamp-sw.mjs cannot resolve it
+# on its own).
+RUN GIT_SHA="$GIT_SHA" pnpm --filter @badminton/admin-v2 run build
 
 # WHY (F-077): the frontend has no /health to report a version through, and a stale bundle
 # produces NO symptom — the guest app looked entirely normal while shipping a known race
@@ -32,10 +41,12 @@ RUN pnpm --filter @badminton/admin-web run build
 # and Caddy already serves these directories statically so no Caddyfile change either.
 # Contains the SHA and nothing else: no build paths, no environment.
 RUN printf '{"sha":"%s"}' "$GIT_SHA" > apps/guest-member-pwa/dist/version.json \
- && printf '{"sha":"%s"}' "$GIT_SHA" > apps/admin-web/dist/version.json
+ && printf '{"sha":"%s"}' "$GIT_SHA" > apps/admin-web/dist/version.json \
+ && printf '{"sha":"%s"}' "$GIT_SHA" > apps/admin-v2/dist/version.json
 
 FROM caddy:2-alpine
 
 COPY deploy/gcp-vm/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/apps/guest-member-pwa/dist /srv/guest-member-pwa
 COPY --from=build /app/apps/admin-web/dist /srv/admin-web
+COPY --from=build /app/apps/admin-v2/dist /srv/admin-v2

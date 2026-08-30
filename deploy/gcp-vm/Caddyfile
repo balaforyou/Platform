@@ -44,6 +44,16 @@
 		reverse_proxy notification:3005
 	}
 
+	# admin-v2 (F-197): its own dedicated host, served from root. Placed after the
+	# /api/* handlers (so admin-v2's own API calls still proxy) and before the
+	# guest-member-pwa catch-all (which every other unmatched host falls through to).
+	@adminV2Host host admin.elitecourts.duckdns.org
+	handle @adminV2Host {
+		root * /srv/admin-v2
+		try_files {path} /index.html
+		file_server
+	}
+
 	handle {
 		root * /srv/guest-member-pwa
 		try_files {path} /index.html

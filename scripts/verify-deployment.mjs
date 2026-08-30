@@ -13,18 +13,23 @@
  *
  * HTTP-only by design: no database credentials, so it runs from anywhere.
  *
- *   node scripts/verify-deployment.mjs <baseUrl> <expectedSha>
+ *   node scripts/verify-deployment.mjs <baseUrl> <expectedSha> [adminV2BaseUrl]
+ *
+ * admin-v2 (F-197) lives on its own hostname, not under <baseUrl>. Pass its base URL
+ * as the third argument and its version.json is checked alongside the rest; omit it
+ * and admin-v2 is simply not verified (e.g. a local gcp-verify stack with no admin host).
  */
 
-const [, , baseUrl, expectedSha] = process.argv;
+const [, , baseUrl, expectedSha, adminV2BaseUrl] = process.argv;
 
 if (!baseUrl || !expectedSha) {
-  console.error('Usage: node scripts/verify-deployment.mjs <baseUrl> <expectedSha>');
-  console.error('   eg: node scripts/verify-deployment.mjs https://elitecourts.duckdns.org $(cat BUILD_SHA)');
+  console.error('Usage: node scripts/verify-deployment.mjs <baseUrl> <expectedSha> [adminV2BaseUrl]');
+  console.error('   eg: node scripts/verify-deployment.mjs https://elitecourts.duckdns.org $(cat BUILD_SHA) https://admin.elitecourts.duckdns.org');
   process.exit(2);
 }
 
 const base = baseUrl.replace(/\/+$/, '');
+const adminV2Base = adminV2BaseUrl ? adminV2BaseUrl.replace(/\/+$/, '') : null;
 
 // Caddy's API path prefixes, per deploy/gcp-vm/Caddyfile.
 const SERVICES = [
@@ -36,10 +41,14 @@ const SERVICES = [
 ];
 
 // Static bundles have no /health, so each carries a version.json emitted at build time.
+// Entries are absolute URLs — guest-pwa/admin-web share <baseUrl>, admin-v2 does not.
 const FRONTENDS = [
-  ['guest-pwa', '/version.json'],
-  ['admin-web', '/admin/version.json'],
+  ['guest-pwa', `${base}/version.json`],
+  ['admin-web', `${base}/admin/version.json`],
 ];
+if (adminV2Base) {
+  FRONTENDS.push(['admin-v2', `${adminV2Base}/version.json`]);
+}
 
 // WHY: an explicit controller with clearTimeout rather than AbortSignal.timeout(). The
 // latter leaves a live timer handle, and exiting through process.exit() while it is still
@@ -47,11 +56,11 @@ const FRONTENDS = [
 // printed correct results, then died with exit 127 instead of 1. A deploy gate that
 // crashes on exit, reporting a code conventionally meaning "command not found", is worse
 // than no gate: it fails in a way nobody would diagnose as a stale deploy.
-async function fetchJson(path) {
+async function fetchJson(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   try {
-    const res = await fetch(`${base}${path}`, { signal: controller.signal });
+    const res = await fetch(url, { signal: controller.signal });
     const text = await res.text();
     let json;
     try { json = JSON.parse(text); } catch { json = null; }
@@ -65,7 +74,7 @@ const results = [];
 
 for (const [name, path] of SERVICES) {
   try {
-    const { status, json, raw } = await fetchJson(path);
+    const { status, json, raw } = await fetchJson(`${base}${path}`);
     // The envelope plugin wraps success responses in { data: ... }.
     const version = json?.data?.version ?? json?.version;
     results.push({
@@ -79,12 +88,12 @@ for (const [name, path] of SERVICES) {
   }
 }
 
-for (const [name, path] of FRONTENDS) {
+for (const [name, url] of FRONTENDS) {
   try {
-    const { status, json, raw } = await fetchJson(path);
+    const { status, json, raw } = await fetchJson(url);
     const sha = json?.sha;
     results.push({
-      name, path, status,
+      name, path: url, status,
       version: sha ?? '(absent)',
       ok: status === 200 && sha === expectedSha,
       note: status !== 200 ? `HTTP ${status}: ${raw}` : sha ? '' : 'no version.json — bundle predates F-077',

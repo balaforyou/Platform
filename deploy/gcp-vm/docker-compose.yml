@@ -76,6 +76,14 @@ services:
       PORT: 3002
       SLOT_ENGINE_URL: http://slot-engine:3001
       TENANT_SERVICE_URL: http://tenant-management:3003
+      # F-203: explicit rather than relying on env_file, so the admin Google verify
+      # endpoint's `aud` check is visibly wired. Same value as the caddy build-arg above.
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      # F-196: WebAuthn relying-party — admin-v2's dedicated host. Defaults are the
+      # production values; override in .env for any non-prod stack.
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-admin.elitecourts.duckdns.org}
+      WEBAUTHN_RP_ORIGIN: ${WEBAUTHN_RP_ORIGIN:-https://admin.elitecourts.duckdns.org}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-Slotflow Admin}
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,6 +153,9 @@ services:
       dockerfile: deploy/gcp-vm/Dockerfile.caddy-static
       args:
         VITE_RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+        # F-203: same .env value the identity-auth backend reads (below), reused as the
+        # admin-v2 frontend build-arg — mirrors the VITE_RAZORPAY_KEY_ID precedent.
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
         GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     ports:
