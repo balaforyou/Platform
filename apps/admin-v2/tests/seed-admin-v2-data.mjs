@@ -35,13 +35,19 @@ async function main() {
     },
   });
 
-  const role = await prisma.roleAssignment.upsert({
-    where: {
-      userId_tenantId_branchId: { userId: user.id, tenantId: jbc.id, branchId: null },
-    },
-    update: { role: 'OWNER' },
-    create: { userId: user.id, tenantId: jbc.id, branchId: null, role: 'OWNER' },
+  // Not `roleAssignment.upsert`: Prisma 5.14's generated compound-unique `where` input
+  // rejects an explicit `branchId: null` ("Argument branchId must not be null"), even
+  // though the real DB index is `NULLS NOT DISTINCT` and handles it fine — the exact
+  // F-115 limitation `schema.prisma`'s own comment (lines 111-117) calls out. findFirst
+  // + create/update instead, matching the manual seed that worked.
+  const existing = await prisma.roleAssignment.findFirst({
+    where: { userId: user.id, tenantId: jbc.id, branchId: null },
   });
+  const role = existing
+    ? await prisma.roleAssignment.update({ where: { id: existing.id }, data: { role: 'OWNER' } })
+    : await prisma.roleAssignment.create({
+        data: { userId: user.id, tenantId: jbc.id, branchId: null, role: 'OWNER' },
+      });
 
   console.log(`Tenant:  ${jbc.name} (${jbc.subdomain}) — ${jbc.id}`);
   console.log(`User:    ${user.email} — ${user.id} — userType=${user.userType}`);
