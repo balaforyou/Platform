@@ -49,10 +49,65 @@ test('criterion 1 — installable PWA (manifest + service worker)', async ({ pag
 
   const swReady = await page.evaluate(async () => {
     if (!('serviceWorker' in navigator)) return false;
-    const reg = await navigator.serviceWorker.getRegistration();
-    return !!reg || !!(await navigator.serviceWorker.ready.catch(() => null));
+    await navigator.serviceWorker.ready;
+    return true;
   });
   expect(swReady).toBeTruthy();
+});
+
+test('§7 — service worker caches the shell, names the cache by build, and clears stale caches on re-activation', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+
+  // 1. Shell cache is populated after first load, and there is exactly one of ours.
+  const first = await page.evaluate(async () => {
+    // give install()'s addAll() a beat to settle
+    await new Promise((r) => setTimeout(r, 300));
+    const keys = await caches.keys();
+    const ours = keys.filter((k) => k.startsWith('admin-v2-shell-'));
+    const entries = ours.length ? await (await caches.open(ours[0])).keys() : [];
+    return { ours, entryPaths: entries.map((r) => new URL(r.url).pathname) };
+  });
+  expect(first.ours).toHaveLength(1);
+  // dev server serves the un-stamped sw.js -> SHA falls back to "dev"; a stamped
+  // build produces admin-v2-shell-<git-sha> (asserted separately in the build step).
+  expect(first.ours[0]).toMatch(/^admin-v2-shell-[\w-]+$/);
+  expect(first.entryPaths).toEqual(expect.arrayContaining(['/', '/manifest.json', '/icon-192.png']));
+
+  // 2. Plant a stale cache of ours + an unrelated cache, then force re-activation.
+  await page.evaluate(async () => {
+    await caches.open('admin-v2-shell-stale0000');
+    await caches.open('some-other-app-cache');
+    const reg = await navigator.serviceWorker.getRegistration();
+    await reg?.unregister();
+  });
+  await page.reload();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+
+  const after = await page.evaluate(async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    return caches.keys();
+  });
+  expect(after).not.toContain('admin-v2-shell-stale0000'); // ours, non-current -> deleted
+  expect(after).toContain('some-other-app-cache'); // not ours -> untouched
+  expect(after.filter((k: string) => k.startsWith('admin-v2-shell-'))).toHaveLength(1);
+
+  // 3. Both cache and network miss -> a real 503 Response, not a thrown rejection.
+  await page.context().setOffline(true);
+  const offline = await page.evaluate(async () => {
+    try {
+      const res = await fetch(`/not-cached-${Date.now()}.json`);
+      return { threw: false, status: res.status, body: await res.json() };
+    } catch (e) {
+      return { threw: true, error: String(e) };
+    }
+  });
+  await page.context().setOffline(false);
+  expect(offline.threw).toBe(false);
+  expect(offline.status).toBe(503);
+  expect(offline.body?.error?.code).toBe('OFFLINE');
 });
 
 test('criterion 6 — a non-admin account is rejected with a clear message, no crash', async ({ page }) => {
