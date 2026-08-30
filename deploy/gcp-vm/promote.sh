@@ -42,6 +42,7 @@ SERVICES=(slot-engine identity-auth tenant-management payment notification caddy
 
 HERE="$(cd "$(dirname "$0")" && pwd)"          # .../deploy/gcp-vm
 SITE="https://elitecourts.duckdns.org"
+ADMIN_V2_SITE="https://admin.elitecourts.duckdns.org"   # F-197: its own host
 STAMP="$(date +%s)"
 
 cd "$HERE"
@@ -85,7 +86,13 @@ wait_for_ready() {
     for ep in $paths; do
       curl -fsS --max-time 5 "${SITE}${ep}" >/dev/null || { ok=0; break; }
     done
-    if [ "$ok" = 1 ]; then echo "   all 7 endpoints answering after ~$((i * 3))s"; return 0; fi
+    # F-197: admin-v2 on its own host — the bundle's version.json, plus /api/identity
+    # via the same Caddy (proves the @adminV2Host block did not shadow the API handlers).
+    if [ "$ok" = 1 ]; then
+      curl -fsS --max-time 5 "${ADMIN_V2_SITE}/version.json" >/dev/null || ok=0
+      curl -fsS --max-time 5 "${ADMIN_V2_SITE}/api/identity/health" >/dev/null || ok=0
+    fi
+    if [ "$ok" = 1 ]; then echo "   all endpoints answering after ~$((i * 3))s"; return 0; fi
     sleep 3
   done
   echo "!! stack did not become ready within 2 minutes (last failing: ${SITE}${ep})"
@@ -235,9 +242,9 @@ echo "   grep -c 'listening only on the HTTP port' = $fb   (must be 0)"
 
 # 9. All 7 components report the target SHA over real HTTPS. Run the fetched script in a
 #    throwaway container so the VM host needs no Node install.
-echo "-- verify-deployment.mjs $SITE $SHA"
+echo "-- verify-deployment.mjs $SITE $SHA (+ admin-v2 at $ADMIN_V2_SITE)"
 sudo docker run --rm --network host -v "/tmp/promote-verify-$SHA.mjs:/verify.mjs:ro" \
-  node:22-bookworm-slim node /verify.mjs "$SITE" "$SHA"
+  node:22-bookworm-slim node /verify.mjs "$SITE" "$SHA" "$ADMIN_V2_SITE"
 
 echo ""
 echo "== PROMOTION COMPLETE — $SHA is live at $SITE =="

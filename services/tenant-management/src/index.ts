@@ -174,6 +174,26 @@ server.get('/tenants/by-subdomain/:subdomain', async (request, reply) => {
   return tenant;
 });
 
+// Tenant lookup by id — sibling of /tenants/by-subdomain/:subdomain. Same public
+// branding data (name / appName / logo / themeColor), same no-auth posture as its
+// sibling. F-203: admin-v2 resolves its tenant from the signed-in admin's JWT
+// tenantId (not from the hostname), so it needs a by-id lookup the hostname flow
+// never required.
+server.get('/tenants/:id', async (request, reply) => {
+  const { id } = request.params as any;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+  });
+  if (!tenant) {
+    reply.status(404);
+    const err = new Error('Tenant not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'TENANT_NOT_FOUND';
+    throw err;
+  }
+  return tenant;
+});
+
 // Dynamic PWA manifest.json endpoint
 // WHY: Bypasses standard preSerialization hook via raw stream to serve strict JSON root layout.
 server.get('/tenants/:id/manifest.json', async (request, reply) => {

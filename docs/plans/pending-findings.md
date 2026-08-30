@@ -108,6 +108,32 @@ advises on e2e/behavioral correctness. F-194 now also covers clearing that fixtu
 e2e step can be flipped to blocking. Two related but separable reproducibility/coverage gaps,
 same finding, fix in due course — not urgent, not folded into a live batch.
 
+Addendum, 30 Aug 2026 (surfaced during admin-v2 Slice 1 close-out — new evidence about this
+existing finding, staged as a candidate, not merged into the text above):
+
+The e2e suite's current CI state is **0 passed / 8 failed / 1 skipped**, not the "4 / 4 / 1"
+baseline recorded in `apps/guest-member-pwa/CLAUDE.md` and hardcoded into `ci.yml`'s summary line.
+Verified identical across four `main` runs spanning 28–29 Aug at different times of day
+(runs 33183500194, 33227663577, 33227758953, 33242182694) and on the admin-v2-slice-1 PR run
+(33287588578) — so this is a stable regression on `main`, not the admin-v2 branch, and not pure
+time-of-day flake.
+
+Two distinct failure modes, which should not be folded together:
+1. **Documented, time-of-day-dependent** — `tests/seed-test-data.ts`'s `alignTimeToBoundary`
+   mixes local-hour `getHours`/`setHours` with a +2h offset; near a day boundary the generated
+   booking window and the booking screen's default date disagree, failing `guest-booking` and
+   window-dependent specs. This is the mechanism `CLAUDE.md:22` warns about.
+2. **Apparently newer, time-stable** — the guest-pwa login screen never renders its phone input
+   in the CI stack: all seven login-based specs (`f023`, `f041`, `f061`×2, `guest-booking`,
+   `member-self-confirm`, `pwa-install-dismissal`) time out on
+   `locator('input[placeholder="9999999999"]')` in `loginByOtp`/`loginAs` — i.e. the app is not
+   reaching the phone-entry screen at all, structurally different from (1)'s date-misalignment.
+   `f043` fails separately in `beforeAll` (`spawn … node ENOENT`).
+
+Not investigated further here (out of scope for that batch — F-194 already owns it). Flagged for
+whoever picks up F-194: mode (2) is the bigger lift and its onset should be bisected before the
+"flip e2e to blocking" work the addendum-of-28-Aug describes.
+
 ### guest-occupancy-branch-endpoint-date-unvalidated
 Batch: 24 (adminHub week-over-week trend — Overview dashboard)
 Surfaced: 29 Aug 2026
@@ -162,6 +188,108 @@ Confirmed-ID: F-202
 Confirmed: 29 Aug 2026
 
 ## Promoted (audit trail)
+
+### admin-v2-build-initiative
+Batch: 25 (Slice 1; track opened Batch 24)
+Surfaced: 29 Aug 2026
+Description: Umbrella track for the admin console rebuild. Originally the "adminHub build track"
+in `batch-log.md` Batch 24 — a retrofit of the existing `apps/admin-web`. Superseded mid-course
+by the decision to build a wholly separate PWA, `apps/admin-v2`, on its own domain
+`admin.elitecourts.duckdns.org`. The original 9-sub-area `admin-web` investigation (guest
+bookings, inventory, ledger, analytics, member management, …) stays valid as reference material,
+feeding the new app one slice at a time — it is not being implemented on `admin-web`. Stays
+Open / in-progress: Slice 1 (login foundation — Google OAuth F-203, WebAuthn step-up F-196,
+installable PWA + service worker F-197, landing page) delivered in Batch 25; further slices ahead.
+Honest note (30 Aug 2026): F-195 has been used as a work-track ID in `batch-log.md` since Batch 24
+and in the Slice 1 plan/handover documents and commit messages since 29 Aug 2026, but no
+`Confirmed-ID` line or register row existed for it until this entry. Chief confirmed the number
+as-is (no renaming) on 30 Aug 2026 during Slice 1 close-out. Recorded as a dated append, not a
+silent backfill.
+Confirmed-ID: F-195
+Confirmed: 30 Aug 2026
+
+### admin-v2-real-google-oauth
+Batch: 25
+Surfaced: 29 Aug 2026
+Description: New capability — real Google OAuth for admin sign-in, replacing (not extending) the
+dev-mock as the only admin login method (no phone/OTP for admin, confirmed decision). New
+`POST /auth/admin/google/verify` in `identity-auth`, separate from the members/staff mock.
+Client-side ID-token flow: Google Identity Services issues the token to the browser,
+`identity-auth` verifies the signature against Google's JWKS via `jose` and checks `iss`/`aud`/
+`exp`; only the Client ID is needed, no server-side code exchange. `src/adminGoogleAuth.ts` (pure,
+unit-tested): `resolveAdminUser()` matches `User` by `googleId` OR `email` with no `tenantId`
+filter, then `roleAssignment.count` scoped explicitly to `(userId, that user's own tenantId)` with
+`role in (OWNER, BRANCH_MANAGER)` — zero-match / role-excluded / multiple-tenant each a distinct
+rejection code, never a silent tenant pick. `NODE_ENV !== 'production'` dev fallback
+(`dev-admin-token-<email>`) so CI/e2e never touches live Google. First `vitest` in the repo
+(package-local to `identity-auth`). Frontend: `apps/admin-v2` login screen (Google button only,
+no phone/OTP) + landing page showing the signed-in email and role.
+Honest note (30 Aug 2026): implementation (commit `8979467`, 29 Aug 2026), its commit message,
+and the `.env.example` / `docker-compose.yml` comments all cite F-203 — written before any
+`Confirmed-ID` line existed for the number (the register's confirmed IDs ran F-194 → F-201 at the
+time). Chief confirmed F-203 as-is on 30 Aug 2026 during Slice 1 close-out. Recorded as a dated
+append, not a silent backfill.
+Confirmed-ID: F-203
+Confirmed: 30 Aug 2026
+
+### admin-v2-webauthn-fingerprint-stepup
+Batch: 25
+Surfaced: 29 Aug 2026
+Description: New capability — WebAuthn / passkey step-up for admin-v2. Step-up, not a replacement:
+Google OAuth (F-203) stays primary/fallback; a passkey is a device shortcut enrolled by an
+already-authenticated admin, and a successful assertion re-checks the OWNER/BRANCH_MANAGER gate
+before a session is issued. New `WebAuthnCredential` model + `User` back-relation + migration
+`20260829120000_webauthn_credential_f196` (additive `CREATE TABLE`; `prisma migrate diff` against
+the applied schema is empty). `@simplewebauthn/server` 13. Four routes under
+`/auth/admin/webauthn/`: register options+verify (admin JWT), login options+verify (unauthenticated,
+discoverable credentials). Challenge round-tripped in a 5-minute signed httpOnly cookie — no
+challenge table. Cloned-authenticator replay guard (`assertCounterProgress`). `resolveRpConfig`
+env-driven (`WEBAUTHN_RP_ID`/`_ORIGIN`/`_NAME`), localhost dev default, prod
+`admin.elitecourts.duckdns.org`, throws on a non-suffix rpID. Session issuance extracted to a
+shared `issueAdminSession` helper used by both the Google and WebAuthn login paths so they cannot
+drift.
+Honest note (30 Aug 2026): implementation (commit `7638695`, 29 Aug 2026), its commit message,
+the migration filename, and the schema comments all cite F-196 — written before any `Confirmed-ID`
+line existed for the number. Chief confirmed F-196 as-is on 30 Aug 2026 during Slice 1 close-out.
+Recorded as a dated append, not a silent backfill.
+Confirmed-ID: F-196
+Confirmed: 30 Aug 2026
+
+### admin-v2-pwa-installability-and-service-worker
+Batch: 25
+Surfaced: 29 Aug 2026
+Description: New capability — admin-v2 PWA installability plus a real (non-stub) service worker.
+Installability: static `public/manifest.json` (fixed "Slotflow Admin" branding, `standalone`,
+192/512 icons), `<link rel="manifest">` in `index.html`, root-scope `sw.js` registration from
+`main.tsx`. Service worker (plan §7, added retroactively after the step-4 pass-through stub):
+cache name `admin-v2-shell-<build-sha>` stamped post-build by `scripts/stamp-sw.mjs`; `activate()`
+deletes every other `admin-v2-shell-*` cache; cache-first shell with clone-to-cache; network-first
+`/api/*`; both-miss returns a real 503 `Response`; `push`/`notificationclick` listeners wired for
+F-044 Phase B (no backend trigger yet). Notification opt-in — the `POST /devices/register` flow —
+is explicitly deferred out of Slice 1 per the acceptance criteria, so F-197 stays Open for that
+half.
+Honest note (30 Aug 2026): `sw.js`'s own header, the §7 plan amendment (commit `e3909f9`), and
+the step-4a commit (`1d35b84`) all cite "F-197 / §7" — written before any `Confirmed-ID` line
+existed for the number. Chief confirmed F-197 as-is on 30 Aug 2026 during Slice 1 close-out.
+Recorded as a dated append, not a silent backfill.
+Confirmed-ID: F-197
+Confirmed: 30 Aug 2026
+
+### admin-v2-walkin-booking-manual-payment
+Batch: 25 (ID confirmed — not yet implemented)
+Surfaced: 29 Aug 2026
+Description: New capability, scoped and specified, not built. Admin creates a walk-in booking and
+records a manual payment. Final minimal shape (from the corrected Slice 1 handover): no QR
+handling of any kind in our system — the venue shares whatever QR they already have, entirely
+outside the app. Two fields only — payment mode (`cash` or `upi`) and a free-text reference
+number (required only when mode is `upi`). Booking created at the standard listed price, no
+custom-pricing logic. Not part of admin-v2 Slice 1 — sequenced later, independent of it.
+Honest note (30 Aug 2026): F-204 appears in the Slice 1 plan/handover finding table as an
+already-numbered item, but no `Confirmed-ID` line or register row existed for it. Chief confirmed
+F-204 as-is on 30 Aug 2026; its register row reflects Open / not-yet-implemented. Recorded as a
+dated append, not a silent backfill.
+Confirmed-ID: F-204
+Confirmed: 30 Aug 2026
 
 ### deploy-pipeline-consolidation
 Batch: 23

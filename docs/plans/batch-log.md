@@ -956,6 +956,116 @@ specifier `^5.4.5`→`^5.9.0` workspace-wide (lockfile-neutral — already resol
   of per-pool window generation, each its own interactive transaction; courtowner1's 88 polluted
   pools × concurrent calls → `P2028`; 1-pool tenant unaffected; pre-existing, low live exposure).
 
+## Batch 25 — F-195 admin-v2 build track (Slice 1: Google login + fingerprint + landing)
+
+**Findings:** F-195 — still **Open / In progress** (Slice 1 of the new-app build; further slices
+ahead). F-203 (Google OAuth) and F-196 (WebAuthn step-up) — **Resolved** this batch. F-197 (PWA
+installability + service worker) — installability + the real service worker delivered; **stays
+Open** for the deferred notification opt-in half. F-204 (walk-in booking + manual payment) — ID
+confirmed, **not implemented**, sequenced later. F-194 gains a Chief-approved addendum (the e2e
+suite's two failure modes, found while checking this batch caused no e2e regression — see
+`docs/plans/pending-findings.md`). All five IDs were referenced in the Slice 1 plan/handover
+documents and commit messages before Chief formally confirmed them; confirmed as-is (no renaming)
+on 30 Aug 2026, recorded as dated appends in `pending-findings.md`, not silent backfills.
+**Handed off:** 30 Aug 2026
+**Branch:** `admin-v2-slice-1` (off `main` `cfe41ce` — NOT off the Phase 2 branch; see the
+scaffold note below)
+**Commits (code):** `61feda8` scaffold · `8979467` step 2 OAuth · `7638695` step 3 WebAuthn ·
+`fb132c1` .env staging · `b62f073` step 4 frontend · `1d35b84` step 4a service worker ·
+`52830e9` step 5 Caddy/Docker/deploy-verify. Plan-doc amendment: `e3909f9` (§7 added
+retroactively). Register/pending-findings/batch-log close-out: this commit.
+
+A wholly new PWA (`apps/admin-v2`), not a retrofit of `admin-web` — this supersedes F-195's
+original 9-sub-area `admin-web` retrofit scope. The old investigation stays valid as reference
+material feeding the new app's stories one at a time.
+
+**Scaffold — branch-base correction.** First scaffold landed on `f195-phase2-tier-a` (the
+checked-out branch), not `main`. Caught in review before backend work; re-scaffolded off `main`
+`cfe41ce` as `admin-v2-slice-1`. Verified zero real dependency on the Phase 2 branch (admin-web
+was already React 19.2.8 / Vite 8.2.2 with the `optimizeDeps`/`dedupe` block on `main`; Tailwind
+v4 is added fresh to admin-v2's own `package.json`). `pnpm install` clean, zero peer warnings.
+
+**Step 2 — admin Google OAuth** (`services/identity-auth`). New `POST /auth/admin/google/verify`,
+separate from the members/staff mock. `src/adminGoogleAuth.ts`: `verifyGoogleIdToken()` — real
+`jose` JWKS signature/iss/aud/exp verification, injectable key source (tests sign a local RS256
+keypair, zero live Google). `resolveAdminUser()` — two-step, no `tenantId` filter on the `User`
+match, then `roleAssignment.count` scoped explicitly to `(userId, that user's own tenantId)` with
+`role in (OWNER, BRANCH_MANAGER)`; distinct outcomes not_found / role_excluded /
+multiple_tenant_match (never a silent pick) / ok. Error codes: BAD_REQUEST 400 /
+INVALID_GOOGLE_TOKEN 401 / ADMIN_ACCOUNT_NOT_FOUND 403 / ADMIN_ROLE_REQUIRED 403 /
+MULTIPLE_TENANT_MATCH 409 / DEV_LOGIN_DISABLED 403. Dev fallback `dev-admin-token-<email>`, gated
+`NODE_ENV !== 'production'` (OTP dev-code pattern). First `vitest` in the repo, package-local.
+Seed: `apps/admin-v2/tests/seed-admin-v2-data.mjs` resolves JBC by subdomain at runtime, upserts
+`User{balaforyou@gmail.com, STAFF}` + `RoleAssignment{OWNER, branchId:null}`, JBC only. Evidence:
+19 vitest; live-fire 200 + 403×2 + 401 + 400 against a running stack; `identity-auth` regression 7/7.
+
+**Step 3 — WebAuthn / fingerprint step-up.** New `WebAuthnCredential` model + `User` back-relation
++ migration `20260829120000_webauthn_credential_f196` (additive `CREATE TABLE`; `prisma migrate
+diff` against the applied schema is empty). `@simplewebauthn/server` 13. Four routes under
+`/auth/admin/webauthn/`: register options+verify (admin JWT), login options+verify (unauth,
+discoverable credentials). Challenge in a 5-min signed httpOnly cookie — no challenge table.
+Cloned-authenticator replay guard (`assertCounterProgress`). `resolveRpConfig` env-driven,
+localhost dev default, throws on a non-suffix rpID. Session issuance refactored to a shared
+`issueAdminSession` helper — both `google/verify` and `webauthn/login/verify` call it (cannot
+drift); `identity-auth` regression 7/7 re-verified after the refactor. Evidence: 17 vitest (36
+total); live-fire shape+rejection on all four routes; full register→login ceremony deferred to
+step 4's browser virtual authenticator.
+
+**Step 4 — frontend flows** (`apps/admin-v2`). Five design decisions, all reviewed and approved:
+(1) no `ui-shared` `TenantProvider` — its hostname resolution hard-blocks the single-domain admin
+app; tenant comes from the JWT. (2) own `src/auth/AdminAuthContext.tsx` — copies `ui-shared`
+AuthContext's proven refresh/parseJwt/timer/dedupe pattern but not the provider (it is
+`TenantProvider`-coupled); `ui-shared` untouched. (3) `email` added to the admin JWT
+(`issueAdminSession` + `/auth/refresh`) so the landing page survives a reload; new `GET
+/tenants/:id` in `tenant-management` (mirrors `by-subdomain`, same no-auth posture) for the venue
+name. (4) static `public/manifest.json` — guest-pwa's per-tenant injected manifest doesn't fit a
+single-domain app and is too late for Chrome's install check. (5) Playwright CDP virtual
+authenticator as the register→login ceremony proof (neither MCP browser exposes
+`WebAuthn.addVirtualAuthenticator`; Playwright is the repo's existing e2e tool and drives the
+same CDP virtual authenticator). Components local to `src/components` (Button, Card, TextField,
+Banner/InlineError, Spinner, PwaInstallPrompt — ported from guest-pwa, tenant-branding dropped).
+Screens: LoginScreen (GIS Google button + passkey fast-path + `import.meta.env.DEV` dev-token
+form), LandingPage (email + role chips + venue), EnrollPasskeyPrompt (skippable, per-user
+localStorage gate). Evidence: 9 vitest; Playwright e2e against a CDP virtual authenticator —
+criterion 2 (Google-only), criterion 1 (manifest + SW), criterion 6 (non-admin rejected cleanly),
+criteria 3–5 end to end (enrol via real UI → sign out → passkey fast-path → remove authenticator
+→ clean fallback), plus the §7 SW test. Zero live Google (criterion 7). `tenant-management`
+regression 5/5 (first touch this slice).
+
+**Step 4a — real service worker** (retroactive, plan §7 added at `e3909f9`). Replaced the step-4
+pass-through stub: cache name `admin-v2-shell-<build-sha>` (stamped post-build by
+`scripts/stamp-sw.mjs` from `GIT_SHA` → git short SHA → 'dev'); `activate()` deletes every other
+`admin-v2-shell-*` cache; cache-first shell with clone-to-cache; network-first `/api/*`; both-miss
+→ a real 503 `Response`; `push`/`notificationclick` listeners wired for F-044 Phase B (no backend
+trigger yet). e2e extended: shell cache populated, cache-name format, stale-cache cleanup on a
+real unregister+reload re-activation, offline → 503. Build-step proves SHA-in-cache-name
+(`GIT_SHA=deadbeef1234` → `admin-v2-shell-deadbeef1234`). Not covered by e2e: push delivery (needs
+F-044 Phase B backend); stale-content-after-deploy (needs two SW builds in one run) — both noted
+in the step-4a report.
+
+**Step 5 — Caddy + Docker + deploy-verify** (plan §8). Caddyfile: `@adminV2Host host
+admin.elitecourts.duckdns.org` + a `/srv/admin-v2` handle block, after the `/api/*` handlers,
+before the guest-pwa catch-all. `Dockerfile.caddy-static`: `VITE_GOOGLE_CLIENT_ID` ARG/ENV; third
+`RUN GIT_SHA="$GIT_SHA" pnpm --filter @badminton/admin-v2 run build` (same `$GIT_SHA` the
+`version.json` line uses — one source, no drift); `version.json` + `COPY` for admin-v2.
+`docker-compose.yml`: caddy build-arg `VITE_GOOGLE_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}`;
+`identity-auth` env `GOOGLE_OAUTH_CLIENT_ID` + `WEBAUTHN_RP_ID`/`_ORIGIN`/`_NAME` (prod defaults —
+beyond §8's text but required, or prod WebAuthn 500s). `verify-deployment.mjs`: optional 3rd arg
+`<adminV2BaseUrl>` (8 components when given, 7 when omitted). `promote.sh`: `wait_for_ready` +
+verify extended for the admin host, incl. `admin.…/api/identity/health` (proves the host block
+doesn't shadow the API handlers). `.env.ci`: `GOOGLE_OAUTH_CLIENT_ID` placeholder. Requires at
+deploy: `$SITE_ADDRESS` extended in the VM `.env`, `caddy` recreated for the cert, the VM's
+`promote.sh` copy updated. Evidence: `docker compose config` resolves clean; `verify-deployment.mjs`
+3rd-arg + stale-bundle-FAIL tested against a mock; **the Docker image build was confirmed via the
+CI `integration` job on the PR (run 33287588578, success, 14m 17s)** — a local build was blocked
+all session by Docker Desktop instability.
+
+**Close-out (Phase A/C):** full regression **5/5 suites, 81/81 sections** on freshly-rebuilt
+`dist` against `badminton_db_test` (identity-auth 7/7, tenant-management 5/5, slot-engine 50/50,
+payment 12/12, notification 7/7). `register:check` green. `diagram:verify` green (no admin-v2
+finding is diagram-tagged). The e2e suite (F-194, non-blocking) sits at 8 failed / 1 skipped —
+**identical to `main`** across four recent `main` runs; this branch adds zero e2e delta.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
