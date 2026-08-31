@@ -1066,6 +1066,72 @@ payment 12/12, notification 7/7). `register:check` green. `diagram:verify` green
 finding is diagram-tagged). The e2e suite (F-194, non-blocking) sits at 8 failed / 1 skipped —
 **identical to `main`** across four recent `main` runs; this branch adds zero e2e delta.
 
+## Batch 26 — admin-v2 Slice 1 production cutover (seed script + deploy config + manual-test bug fixes)
+
+**Findings:** [[F-195]] — still **Open / In progress** (Slice 1 now live in production; further slices
+ahead). No new register row — the seed script and the bug fixes below are Slice 1 operational
+close-out under the F-195 umbrella. **Chief IDs still unassigned** for: the `seed-admin-v2-data.mjs`
+`branchId: null` bug (Bug 1), the CI-placeholder-secrets-in-production bug (Bug 2), and the
+`ADMIN_DEV_LOGIN` decoupling — all three are fixed and merged but not yet numbered; do not
+self-assign.
+**Handed off:** 31 Aug 2026
+**Status:** Done
+**Branch/PRs:** `fix-admin-dev-login` → PR #5 (`85b2731`) · `seed-admin-v2-script` → PR #6 (`5c4b532`)
+**Commits:** `d55524e` (Bug 1) · `0288d97` (Bug 2) · `1c90f8f` (ADMIN_DEV_LOGIN) · `666975a` /
+merge `5c4b532` (production seed script)
+
+**Production seed script** — `packages/database/scripts/seed-admin-v2.mjs` (new, sibling of
+`verify-build-sha.mjs`). One-off idempotent seed of the Slice 1 admin (`balaforyou@gmail.com`, JBC
+`OWNER`, `branchId` null) into the real `badminton_db`. `findFirst` + `create`/`update` (not
+`roleAssignment.upsert` — Prisma compound-unique `where` rejects explicit `null`, F-115).
+F-077 guard wired via `spawnSync` of `verify-build-sha.mjs`, aborts non-zero before any DB write.
+Hard-fails if the `jbc` tenant is absent. `DATABASE_URL` from `process.env` directly; imports
+`../dist/index.js`. JBC only, no `courtowner1`. Evidence (`badminton_db_test`): run 1 creates
+User + Role; re-run reports "already existed (updated in place)" with identical ids, no error.
+Negative F-077: missing `EXPECTED_GIT_SHA` and a stale image both refuse the write. `identity-auth`
+regression 7/7, `tenant-management` 5/5, `@badminton/database` build + repo typecheck clean. CI on
+PR #6 green (checks + regression + integration). **Run against production by Bala** via the reviewed
+bind-mount `docker compose run --rm -v <script>:…:ro --entrypoint sh migrate` (with `GIT_SHA`
+exported for the guard) — end-to-end verified live 31 Aug 2026: Google login, WebAuthn on desktop
+and mobile, and `curl`.
+
+**Bug 1 — `seed-admin-v2-data.mjs` `roleAssignment.upsert` on `branchId: null`** (`d55524e`). The
+local (dev/e2e) seed used `roleAssignment.upsert` with `branchId: null` in a compound-unique
+`where`; Prisma 5.x rejects explicit `null` there (F-115 / `NULLS NOT DISTINCT` limitation).
+Replaced with `findFirst` + `create`/`update`. Same pattern later reused verbatim in the production
+seed script above. Both create and update paths proven.
+
+**Bug 2 — CI placeholder secrets shipped to production** (`0288d97`). `promote.sh` PULLS
+CI-built images without a rebuild (F-193), so any value CI consumed at build time ships to
+production verbatim — the guest-pwa bundle was serving `rzp_test_ci`, a broken Razorpay checkout.
+Fix (Option A, Chief-approved): real **public-by-design** values in `deploy/gcp-vm/.env.ci` for the
+two `VITE_*` build-args only — `RAZORPAY_KEY_ID` (publishable test key `rzp_test_TJllXnaezST7MV`)
+and `GOOGLE_OAUTH_CLIENT_ID` — with a "PUBLIC vs SECRET" header comment. Every `*_SECRET`,
+`JWT_SECRET`, `POSTGRES_PASSWORD`, `INTERNAL_SERVICE_KEY` stays fake (backend-runtime, the VM
+supplies real ones). Rebuilt `:caddy` via the exact CI path; greps confirm the real values and zero
+placeholders. Likely an F-038 addendum rather than a new finding — Chief to rule.
+
+**ADMIN_DEV_LOGIN — decouple admin dev-login from `NODE_ENV`** (`1c90f8f`, PR #5). The
+`dev-admin-token-<email>` bypass on `/auth/admin/google/verify` was gated `NODE_ENV !== 'production'`
+(mirroring the OTP dev-code pattern). But the demo VM runs `NODE_ENV=development` on purpose (guest
+OTP `123456`, phone self-register), so the bypass was **live on `admin.elitecourts.duckdns.org`**.
+Fix: new default-off / fail-closed `ADMIN_DEV_LOGIN` env flag; the gate is now
+`ADMIN_DEV_LOGIN !== 'true'` → `DEV_LOGIN_DISABLED` 403. Wired `true` into `.env.ci`,
+`docker-compose.yml` (`${ADMIN_DEV_LOGIN:-}` with a SECURITY-CRITICAL comment), and the admin-v2
+e2e `global-setup.ts`; documented commented-out in `.env.example`. **The production VM `.env` must
+never set it.** Live-fire: flag unset/empty → `DEV_LOGIN_DISABLED` while guest OTP still works on
+the same stack; flag `true` → 200 + session. `identity-auth` regression 7/7. Confirmed live on
+production after the PR #5 deploy: `dev-admin-token-*` → `DEV_LOGIN_DISABLED`.
+
+**Operational note (not a finding yet):** the GCP VM ran out of disk from accumulated old Docker
+images — `promote.sh` pulls a fresh 7-image `:<svc>-<sha>` set every deploy and never prunes the
+previous one. Bala + the Technical Lead pruned manually 31 Aug 2026. Candidate fix: a filtered
+`docker image prune` at the tail of `promote.sh` after health checks pass, keeping current +
+previous SHA for rollback.
+
+**Close-out:** `register:check` green. `diagram:verify` green (no F-195-track finding is
+diagram-tagged). F-195 Description carries a dated Batch-26 production-cutover note.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
