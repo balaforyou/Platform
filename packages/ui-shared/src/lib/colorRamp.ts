@@ -30,7 +30,12 @@ function linearToSrgb(c: number): number {
   return c <= 0.0031308 ? c * 12.92 : 1.055 * Math.max(c, 0) ** (1 / 2.4) - 0.055;
 }
 
-function hexToOklch(hex: string): { l: number; c: number; h: number } {
+/**
+ * sRGB hex -> OKLCH. Exported so callers can inspect a colour's chroma (e.g. admin-v2's
+ * accent-ramp guard skips near-neutral tenant brand colours — chroma < 0.02 — that would
+ * otherwise generate a fully grey "accent" ramp).
+ */
+export function hexToOklch(hex: string): { l: number; c: number; h: number } {
   const clean = hex.replace('#', '');
   const r = parseInt(clean.slice(0, 2), 16);
   const g = parseInt(clean.slice(2, 4), 16);

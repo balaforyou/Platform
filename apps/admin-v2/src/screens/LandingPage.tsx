@@ -1,16 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { LogOut, ShieldCheck } from 'lucide-react';
-import { apiRequest } from '@badminton/ui-shared';
 import { useAdminAuth } from '../auth/AdminAuthContext';
+import { useAdminTenant } from '../auth/AdminTenantContext';
 import { Button, Card } from '../components';
 import { roleLabel } from '../lib/claims';
-
-interface TenantBrief {
-  id: string;
-  name: string;
-  appName?: string | null;
-  logo?: string | null;
-}
 
 /**
  * Slice 1 landing page — confirms authentication and shows who is signed in and
@@ -18,18 +11,8 @@ interface TenantBrief {
  */
 export function LandingPage() {
   const { user, logout } = useAdminAuth();
-  const [tenant, setTenant] = useState<TenantBrief | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    let alive = true;
-    apiRequest<TenantBrief>(`/tenant/tenants/${user.tenantId}`)
-      .then((t) => alive && setTenant(t))
-      .catch(() => alive && setTenant(null));
-    return () => {
-      alive = false;
-    };
-  }, [user?.tenantId]);
+  const { tenant } = useAdminTenant();
+  const [logoLoaded, setLogoLoaded] = useState(false);
 
   if (!user) return null;
 
@@ -49,9 +32,23 @@ export function LandingPage() {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {tenant?.logo ? (
-            <img src={tenant.logo} alt="" height={24} style={{ borderRadius: 4 }} />
+            <img
+              src={tenant.logo}
+              alt=""
+              onLoad={() => setLogoLoaded(true)}
+              style={{
+                // Sizing must be in `style`, not the height/width attributes — Tailwind v4's
+                // preflight (`img { height: auto }`, @layer base) overrides HTML attributes,
+                // which rendered the real logo at its natural 512px once the asset resolved.
+                height: 24,
+                width: 'auto',
+                borderRadius: 4,
+                opacity: logoLoaded ? 1 : 0,
+                transition: 'opacity var(--av2-duration-slow) var(--av2-ease-standard)',
+              }}
+            />
           ) : (
-            <img src="/icon-192.png" alt="" width={24} height={24} style={{ borderRadius: 6 }} />
+            <img src="/icon-192.png" alt="" style={{ height: 24, width: 24, borderRadius: 6 }} />
           )}
           <strong style={{ fontSize: 14 }}>Slotflow Admin</strong>
         </div>

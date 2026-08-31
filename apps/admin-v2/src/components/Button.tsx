@@ -14,16 +14,17 @@ const base: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 8,
-  padding: '10px 18px',
+  gap: 'var(--av2-space-2)',
+  padding: 'var(--av2-space-3) var(--av2-space-5)',
   borderRadius: 'var(--av2-radius-sm)',
-  fontSize: 14,
+  fontSize: 'var(--av2-text-base)',
   fontWeight: 600,
-  lineHeight: 1.2,
+  lineHeight: 'var(--av2-leading-tight)',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
   border: '1px solid transparent',
-  transition: 'background 120ms ease, border-color 120ms ease, opacity 120ms ease',
+  transition:
+    'background var(--av2-duration-fast) var(--av2-ease-standard), border-color var(--av2-duration-fast) var(--av2-ease-standard), opacity var(--av2-duration-fast) var(--av2-ease-standard)',
 };
 
 const variants: Record<Variant, React.CSSProperties> = {

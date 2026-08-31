@@ -39,6 +39,22 @@ self.addEventListener('activate', (event) => {
           .filter((key) => key.startsWith(OWNED_CACHE_PREFIX) && key !== SHELL_CACHE)
           .map((key) => caches.delete(key)),
       );
+      // Self-heal devices that cached Vite dev modules under an earlier SW (see
+      // isShellRequest) — drop any such entries so a stale module can't be served.
+      try {
+        const cache = await caches.open(SHELL_CACHE);
+        const cached = await cache.keys();
+        await Promise.all(
+          cached
+            .filter((req) => {
+              const p = new URL(req.url).pathname;
+              return p.startsWith('/node_modules/') || p.startsWith('/@') || p.startsWith('/src/');
+            })
+            .map((req) => cache.delete(req)),
+        );
+      } catch {
+        /* best effort */
+      }
       await self.clients.claim();
     })(),
   );
@@ -98,6 +114,18 @@ function isShellRequest(request, url) {
   if (request.method !== 'GET') return false;
   if (url.origin !== self.location.origin) return false;
   if (url.pathname.startsWith('/api/')) return false;
+  // Vite dev-server internals — never cache-first these. Their `?v=<hash>` query rotates
+  // on every dependency re-optimization, and cacheFirst's `ignoreSearch: true` would pin
+  // a stale module indefinitely (a pre-token-slice bundle that lacks a newer export ->
+  // SyntaxError -> blank page). Absent in production builds (everything lands in /assets/),
+  // so this is a no-op there. Added in sub-slice 0.1 (dated plan addendum).
+  if (
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/')
+  ) {
+    return false;
+  }
   return (
     request.mode === 'navigate' ||
     url.pathname === '/' ||

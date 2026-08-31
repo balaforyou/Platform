@@ -21,14 +21,14 @@ export function Banner({ tone = 'info', children }: { tone?: Tone; children: Rea
       style={{
         display: 'flex',
         alignItems: 'flex-start',
-        gap: 10,
-        padding: '10px 12px',
+        gap: 'var(--av2-space-3)',
+        padding: 'var(--av2-space-2) var(--av2-space-3)',
         borderRadius: 'var(--av2-radius-sm)',
         background: t.bg,
         border: `1px solid ${t.border}`,
         color: t.fg,
-        fontSize: 13,
-        lineHeight: 1.45,
+        fontSize: 'var(--av2-text-sm)',
+        lineHeight: 'var(--av2-leading-normal)',
       }}
     >
       <t.Icon size={16} style={{ flex: 'none', marginTop: 1 }} />
@@ -40,7 +40,7 @@ export function Banner({ tone = 'info', children }: { tone?: Tone; children: Rea
 /** Inline field-adjacent error text. */
 export function InlineError({ children }: { children: ReactNode }) {
   return (
-    <p role="alert" style={{ margin: 0, fontSize: 12, color: 'var(--av2-danger)' }}>
+    <p role="alert" style={{ margin: 0, fontSize: 'var(--av2-text-xs)', color: 'var(--av2-danger)' }}>
       {children}
     </p>
   );

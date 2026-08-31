@@ -16,7 +16,7 @@ export function Card({
         border: '1px solid var(--av2-border)',
         borderRadius: 'var(--av2-radius)',
         boxShadow: 'var(--av2-shadow)',
-        padding: 24,
+        padding: 'var(--av2-space-6)',
         ...style,
       }}
     >

@@ -27,12 +27,12 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 14,
+        gap: 'var(--av2-space-4)',
         color: 'var(--av2-muted)',
       }}
     >
       <Spinner size={36} />
-      <span style={{ fontSize: 14 }}>{label}</span>
+      <span style={{ fontSize: 'var(--av2-text-base)' }}>{label}</span>
     </div>
   );
 }
