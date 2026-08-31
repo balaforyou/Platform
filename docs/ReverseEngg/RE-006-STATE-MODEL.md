@@ -327,23 +327,23 @@ Transitions without traceable evidence: 0
 
 | State Conflict ID | Description | Evidence | Impact |
 |---|---|---|---|
-| STATE-CONFLICT-001 | Capacity consumers use different active-state sets: browse counts HELD/CONFIRMED; guest occupancy counts non-member CONFIRMED/CHECKED_IN. | BR-043; resource journey rule 17 | Availability and occupancy can disagree; validation required |
-| STATE-CONFLICT-002 | FLOW-034 performs HELD -> CONFIRMED while omitting hold-expiry and payment proof/state validation; payment capture paths treat capture as the upstream precondition before invoking booking confirmation. | BR-083 HELD -> CONFIRMED mutation; BR-084 no hold-expiry validation; BR-085 no payment proof/state validation; BR-158 FLOW-052 capture invokes booking-confirm boundary; BR-177 FLOW-054 pending intent becomes captured; BR-178 FLOW-054 triggers booking confirmation only after capture | Internal confirm can bypass payment/expiry assumptions |
-| STATE-CONFLICT-003 | FLOW-035 server check-in lacks auth/timing enforcement while UI/timing semantics imply constraints. | BR-091, BR-092 | Server transition broader than UI workflow |
+| STATE-CONFLICT-001 | Capacity consumers use different active-state sets: browse counts HELD/CONFIRMED; guest occupancy counts non-member CONFIRMED/CHECKED_IN. | BR-043; resource journey rule 17 | AS-IS conflict preserved; intended business semantics resolved by DECISION-001. Implementation conformance is not asserted by RE-006. |
+| STATE-CONFLICT-002 | FLOW-034 performs HELD -> CONFIRMED while omitting hold-expiry and payment proof/state validation; payment capture paths treat capture as the upstream precondition before invoking booking confirmation. | BR-083 HELD -> CONFIRMED mutation; BR-084 no hold-expiry validation; BR-085 no payment proof/state validation; BR-158 FLOW-052 capture invokes booking-confirm boundary; BR-177 FLOW-054 pending intent becomes captured; BR-178 FLOW-054 triggers booking confirmation only after capture | AS-IS conflict preserved; intended business semantics resolved by DECISION-002 and DECISION-003. Implementation conformance is not asserted by RE-006. |
+| STATE-CONFLICT-003 | FLOW-035 server check-in lacks auth/timing enforcement while UI/timing semantics imply constraints. | BR-091, BR-092 | AS-IS conflict preserved; intended business semantics resolved by DECISION-017. Implementation conformance is not asserted by RE-006. |
 
 ## State Uncertainty Register
 
 | State Model | Uncertainty IDs | Impact |
 |---|---|---|
-| STATE-MODEL-BOOKING | FLOW-029-UNCERTAINTY-*, FLOW-030-UNCERTAINTY-001, FLOW-034-UNCERTAINTY-*, FLOW-035-UNCERTAINTY-*, FLOW-037-UNCERTAINTY-*, FLOW-044-UNCERTAINTY-*, FLOW-049-UNCERTAINTY-*, FLOW-052-UNCERTAINTY-*, FLOW-054-UNCERTAINTY-*, FLOW-059-UNCERTAINTY-* | Booking guards, release/no-show, auth/timing, and capture coupling require validation |
-| STATE-MODEL-PAYMENT-INTENT | FLOW-050-UNCERTAINTY-*, FLOW-051-UNCERTAINTY-*, FLOW-052-UNCERTAINTY-*, FLOW-054-UNCERTAINTY-*, FLOW-055-UNCERTAINTY-*, FLOW-056-UNCERTAINTY-001 | Provider and metadata/capture boundaries require validation |
-| STATE-MODEL-SUBSCRIPTION | FLOW-053-UNCERTAINTY-*, FLOW-055-UNCERTAINTY-* | Autopay charge/failure semantics require validation |
-| STATE-MODEL-MEMBER-ASSIGNMENT | FLOW-040-UNCERTAINTY-001, FLOW-042-UNCERTAINTY-001, FLOW-043-UNCERTAINTY-*, FLOW-044-UNCERTAINTY-*, FLOW-046-UNCERTAINTY-001 | Assignment and attendance consequences require validation |
-| STATE-MODEL-AVAILABILITY-WINDOW | FLOW-024-UNCERTAINTY-*, FLOW-048-UNCERTAINTY-* | Window generation/release semantics require validation |
-| STATE-MODEL-NOTIFICATION-REQUEST | FLOW-061-UNCERTAINTY-001, FLOW-065-UNCERTAINTY-001 | Queue concurrency and terminality require validation |
-| STATE-MODEL-SCHEDULED-JOB | FLOW-066-UNCERTAINTY-001, FLOW-067-UNCERTAINTY-001 | Lease/manual execution boundaries require validation |
-| STATE-MODEL-SCHEDULED-JOB-DISPATCH | FLOW-068-UNCERTAINTY-001, FLOW-069-UNCERTAINTY-001 | Dispatch dedupe/retry requires validation |
-| STATE-MODEL-REFUND | FLOW-059-UNCERTAINTY-001/002, FLOW-060-UNCERTAINTY-001/002 | Local refund vs provider expectations unresolved |
+| STATE-MODEL-BOOKING | FLOW-029-UNCERTAINTY-*, FLOW-030-UNCERTAINTY-001, FLOW-034-UNCERTAINTY-*, FLOW-035-UNCERTAINTY-*, FLOW-037-UNCERTAINTY-*, FLOW-044-UNCERTAINTY-*, FLOW-049-UNCERTAINTY-*, FLOW-052-UNCERTAINTY-*, FLOW-054-UNCERTAINTY-*, FLOW-059-UNCERTAINTY-* | AS-IS uncertainty/evidence preserved. Business interpretation resolved where mapped by DECISION-001, DECISION-002, DECISION-003, DECISION-004, DECISION-008, DECISION-009, DECISION-011, DECISION-016, and DECISION-017. Engineering implementation may remain open where findings indicate a gap. |
+| STATE-MODEL-PAYMENT-INTENT | FLOW-050-UNCERTAINTY-*, FLOW-051-UNCERTAINTY-*, FLOW-052-UNCERTAINTY-*, FLOW-054-UNCERTAINTY-*, FLOW-055-UNCERTAINTY-*, FLOW-056-UNCERTAINTY-001 | AS-IS uncertainty/evidence preserved. Business interpretation resolved where mapped by DECISION-002, DECISION-003, DECISION-004, and DECISION-016. Engineering implementation may remain open where findings indicate a gap. |
+| STATE-MODEL-SUBSCRIPTION | FLOW-053-UNCERTAINTY-*, FLOW-055-UNCERTAINTY-* | AS-IS uncertainty/evidence preserved. No subscription cancellation/expiry state decision is recorded in RE-012 for this model gap. Autopay-related implementation concerns may remain open where findings indicate a gap. |
+| STATE-MODEL-MEMBER-ASSIGNMENT | FLOW-040-UNCERTAINTY-001, FLOW-042-UNCERTAINTY-001, FLOW-043-UNCERTAINTY-*, FLOW-044-UNCERTAINTY-*, FLOW-046-UNCERTAINTY-001 | AS-IS uncertainty/evidence preserved. Business interpretation resolved where mapped by DECISION-008, DECISION-009, and DECISION-016. Engineering implementation may remain open where findings indicate a gap. |
+| STATE-MODEL-AVAILABILITY-WINDOW | FLOW-024-UNCERTAINTY-*, FLOW-048-UNCERTAINTY-* | AS-IS uncertainty/evidence preserved. Business interpretation resolved where mapped by DECISION-001 and DECISION-016. Engineering implementation may remain open where findings indicate a gap. |
+| STATE-MODEL-NOTIFICATION-REQUEST | FLOW-061-UNCERTAINTY-001, FLOW-065-UNCERTAINTY-001 | AS-IS uncertainty/evidence preserved. Business interpretation resolved where mapped by DECISION-004 and DECISION-013. Engineering implementation may remain open where findings indicate a gap. |
+| STATE-MODEL-SCHEDULED-JOB | FLOW-066-UNCERTAINTY-001, FLOW-067-UNCERTAINTY-001 | AS-IS uncertainty/evidence preserved. Business interpretation resolved where mapped by DECISION-004, DECISION-014, and DECISION-016. Engineering implementation may remain open where findings indicate a gap. |
+| STATE-MODEL-SCHEDULED-JOB-DISPATCH | FLOW-068-UNCERTAINTY-001, FLOW-069-UNCERTAINTY-001 | AS-IS uncertainty/evidence preserved. Business interpretation resolved where mapped by DECISION-014 and DECISION-016. Engineering implementation may remain open where findings indicate a gap. |
+| STATE-MODEL-REFUND | FLOW-059-UNCERTAINTY-001/002, FLOW-060-UNCERTAINTY-001/002 | AS-IS uncertainty/evidence preserved. Business interpretation resolved where mapped by DECISION-011, DECISION-012, and DECISION-016. Engineering implementation may remain open where findings indicate a gap. |
 
 New RE006 uncertainties: none.
 
@@ -368,6 +368,38 @@ New RE006 uncertainties: none.
 | STATE-MODEL-AUTH-SESSION | OTP/session/refresh/logout | FLOW-001, FLOW-002, FLOW-003, FLOW-004, FLOW-005 | BR-001-BR-010 | FLOW-001-RULE-*, FLOW-002-RULE-*, FLOW-003-RULE-*, FLOW-004-RULE-*, FLOW-005-RULE-* | FLOW-001/002/003/004/005-UNCERTAINTY-* |
 | STATE-MODEL-PENDING-INVITE | presence/upsert | FLOW-007, FLOW-002, FLOW-029 | BR-013, BR-014, BR-061, BR-062 | FLOW-007-RULE-001/002, FLOW-029-RULE-013/014 | FLOW-007/002/029-UNCERTAINTY-* |
 
+## RE-012 Decision Propagation Delta
+
+Decision propagation records approved TO-BE state semantics from RE-012 without rewriting AS-IS executable state/transition evidence above. No transition IDs are added, deleted, or repurposed by this delta.
+
+| Decision ID | Validation ID | Disposition | Affected State Models | Affected Transitions | Existing Evidence / Lineage | Approved State Semantics |
+|---|---|---|---|---|---|---|
+| DECISION-001 | VALIDATION-001 | PROPAGATE | STATE-MODEL-AVAILABILITY-WINDOW, STATE-MODEL-BOOKING, STATE-MODEL-ATTENDANCE-DERIVED | TRANSITION-BOOKING-001, TRANSITION-BOOKING-002, TRANSITION-BOOKING-006, TRANSITION-BOOKING-007, TRANSITION-BOOKING-009, TRANSITION-BOOKING-010, TRANSITION-BOOKING-012 | STATE-CONFLICT-001; BR-043, BR-044, BR-045, BR-046, BR-053, BR-054, BR-057-BR-059, BR-064, BR-101, BR-121, BR-125, BR-126, BR-129; FLOW-024, FLOW-029, FLOW-030, FLOW-037, FLOW-043, FLOW-044, FLOW-046, FLOW-049 | Canonical bookability/capacity consumption is a target state invariant distinct from occupancy/attendance. HELD and CONFIRMED consume bookable capacity; hold expiry, cancellation, no-show release, and authorized manual release release capacity. Guest occupancy and member attendance remain separate derived state metrics. |
+| DECISION-002 | VALIDATION-002 | PROPAGATE | STATE-MODEL-BOOKING, STATE-MODEL-PAYMENT-INTENT | TRANSITION-BOOKING-003, TRANSITION-BOOKING-004, TRANSITION-PAYMENT-INTENT-001, TRANSITION-PAYMENT-INTENT-002 | STATE-CONFLICT-002; BR-083 HELD -> CONFIRMED mutation; BR-084 no hold-expiry validation; BR-085 no payment proof/state validation; BR-157, BR-158, BR-176, BR-177, BR-178; FLOW-034, FLOW-052, FLOW-054 | Booking confirmation target semantics require valid booking/payment correspondence and applicable business invariants. Internal-service trust does not bypass invariants. Genuine payment capture in the hold-expiry race takes precedence over technical hold expiry, so paid bookings remain confirmable. |
+| DECISION-003 | VALIDATION-003 | PROPAGATE | STATE-MODEL-BOOKING, STATE-MODEL-PAYMENT-INTENT | TRANSITION-BOOKING-003, TRANSITION-BOOKING-009, TRANSITION-PAYMENT-INTENT-001, TRANSITION-PAYMENT-INTENT-002 | STATE-CONFLICT-002; TRANSITION-BOOKING-009 stale HELD release; payment capture triggers FLOW-034; FLOW-034, FLOW-049, FLOW-052, FLOW-054; FLOW-049-UNCERTAINTY-* | If expiry/release wins before capture, the booking remains non-confirmable by target semantics. If genuine capture occurred in the race window, confirmation remains permitted under DECISION-002. |
+| DECISION-004 | VALIDATION-004 | PROPAGATE | STATE-MODEL-BOOKING, STATE-MODEL-PAYMENT-INTENT, STATE-MODEL-SCHEDULED-JOB, STATE-MODEL-NOTIFICATION-REQUEST | TRANSITION-BOOKING-003, TRANSITION-PAYMENT-INTENT-001, TRANSITION-PAYMENT-INTENT-002, TRANSITION-SCHEDULED-JOB-001, TRANSITION-NOTIFICATION-001 | Payment capture and booking confirmation are cross-service boundaries; FLOW-052/FLOW-054 invoke FLOW-034 after capture; ScheduledJob state exists in FLOW-066/FLOW-067; NotificationRequest state exists in FLOW-061/FLOW-065 | Captured-payment/unconfirmed-booking mismatch requires reconciliation using the existing scheduled-job tick mechanism, PROCESSING customer state during reconciliation, and operator-visible escalation after 10 minutes. No automatic refund transition is implied solely by initial confirmation failure. |
+| DECISION-008 | VALIDATION-008 | ALREADY_REPRESENTED | STATE-MODEL-ATTENDANCE-DERIVED, STATE-MODEL-BOOKING | TRANSITION-BOOKING-010, TRANSITION-BOOKING-011 | FLOW-043 canConfirm derived state; FLOW-044 new-booking creation and existing-booking metadata update are already separated; BR-121, BR-125; FLOW-044-UNCERTAINTY-002 | RE-006 already models both read-side canConfirm derivation and write-side create/update paths accurately, so no new state/transition identity is required. ALREADY_REPRESENTED does not mean AS-IS read/write asymmetry already complies; the approved target remains that read-side eligibility must align with executable write-side eligibility, except explicit idempotency. |
+| DECISION-009 | VALIDATION-009 | PROPAGATE | STATE-MODEL-BOOKING, STATE-MODEL-ATTENDANCE-DERIVED | TRANSITION-BOOKING-012 | FLOW-049 member no-show creation; STATE-MODEL-BOOKING records synthetic Booking(RELEASED_NO_SHOW); STATE-MODEL-ATTENDANCE-DERIVED records no-show/release state | Target member-facing state semantics distinguish automatically generated attendance/no-show records from ordinary member-created bookings or Expired bookings. AS-IS synthetic Booking evidence remains preserved. |
+| DECISION-011 | VALIDATION-011 | PROPAGATE | STATE-MODEL-BOOKING, STATE-MODEL-REFUND | TRANSITION-BOOKING-006, TRANSITION-BOOKING-007, TRANSITION-REFUND-001 | FLOW-037 cancellation computes refundAmount but does not invoke refund creation; FLOW-059 local Refund row; FLOW-060 negotiated override; BR-102-BR-104, BR-198-BR-211 | Deterministic standard cancellation refunds should automatically enqueue refund processing; negotiated bookings require human refund approval through FLOW-060. This is target semantics and does not rewrite the observed cancellation/refund separation. |
+| DECISION-012 | VALIDATION-012 | PROPAGATE | STATE-MODEL-REFUND | TRANSITION-REFUND-001 | STATE-MODEL-REFUND currently documents only local refund/override row with provider call absent; FLOW-059/FLOW-060; BR-197-BR-211; FLOW-059/060-UNCERTAINTY-* | Refund target state model requires provider-aware lifecycle states beyond the observed local row: internal request, provider submission, provider result/confirmation, and failure/reconciliation. No new transition ID is invented in RE-006 for absent executable behaviour. |
+| DECISION-013 | VALIDATION-013 | PROPAGATE | STATE-MODEL-NOTIFICATION-REQUEST | TRANSITION-NOTIFICATION-001, TRANSITION-NOTIFICATION-002, TRANSITION-NOTIFICATION-003 | FLOW-061 creates queued rows; FLOW-065 sends/retries/dead_letters; notification producers include FLOW-055 and FLOW-049; BR-212, BR-213, BR-218, BR-220, BR-221, BR-186 | Business-required notification producers must guarantee durable NotificationRequest creation; provider delivery remains asynchronous with retry/failure/dead-letter state. Durable queue persistence is not provider-delivery proof. |
+| DECISION-014 | VALIDATION-014 | PROPAGATE | STATE-MODEL-SCHEDULED-JOB, STATE-MODEL-SCHEDULED-JOB-DISPATCH | TRANSITION-SCHEDULED-JOB-001, TRANSITION-SCHEDULED-JOB-DISPATCH-001, TRANSITION-SCHEDULED-JOB-DISPATCH-002, TRANSITION-SCHEDULED-JOB-DISPATCH-003 | FLOW-066/FLOW-067 ScheduledJob claimability; FLOW-068/FLOW-069 ScheduledJobDispatch lifecycle; FLOW-049 domain-specific dedupe/dispatch evidence; BR-222-BR-229 | Manual and automatic scheduled-job execution share lease/concurrency protection as target semantics. FLOW-049-specific dedupe markers may remain distinct where they serve domain purpose rather than generic dispatch state. |
+| DECISION-016 | VALIDATION-016 | PROPAGATE | STATE-MODEL-AVAILABILITY-WINDOW, STATE-MODEL-BOOKING, STATE-MODEL-ATTENDANCE-DERIVED, STATE-MODEL-REFUND, STATE-MODEL-SCHEDULED-JOB, STATE-MODEL-SCHEDULED-JOB-DISPATCH | TRANSITION-BOOKING-001, TRANSITION-BOOKING-006, TRANSITION-BOOKING-007, TRANSITION-BOOKING-010, TRANSITION-BOOKING-011, TRANSITION-REFUND-001, TRANSITION-SCHEDULED-JOB-001, TRANSITION-SCHEDULED-JOB-DISPATCH-001 | Time-bearing state guards and derived states across availability, booking cutoff, cancellation/refund eligibility, attendance, retry, and leases; F-066/F-087/F-088 lineage; BR-038, BR-042, BR-061, BR-102, BR-120, BR-121, BR-124, BR-128, BR-129, BR-220-BR-229 | Persisted/system timestamps use UTC, branch-local timezone defines business meaning, and elapsed time governs technical retry/lease durations. This clarifies target interpretation without rewriting UTC storage evidence. |
+| DECISION-017 | VALIDATION-017 | PROPAGATE | STATE-MODEL-BOOKING | TRANSITION-BOOKING-005 | STATE-CONFLICT-003; FLOW-035 check-in; BR-086-BR-092; F-090/F-094 linkage; FLOW-035-UNCERTAINTY-* | Check-in target semantics require an authenticated caller, tenant match, booking customer ownership or authorized branch staff scope, Booking.status CONFIRMED, and an authoritative branch-window timing guard from same-day <=2 hours before window.startTime through window.endTime. AS-IS server gap remains preserved. |
+
+Decision disposition totals:
+- PROPAGATE: 11
+- ALREADY_REPRESENTED: 1
+- NO_STATE_MODEL_DELTA: 0
+
+Decision propagation validation:
+- Mapped RE-012 decisions for RE-006: 12
+- Decision lineage complete for propagated decisions: yes
+- Mapped decisions not propagated: 1, explicitly ALREADY_REPRESENTED
+- Mapped decisions with NO_STATE_MODEL_DELTA: 0
+- Invented transitions: 0
+- AS-IS state/transition evidence destructively replaced: 0
+
 ## Coverage Check
 
 State-relevant flows inventoried: FLOW-001, FLOW-002, FLOW-003, FLOW-004, FLOW-005, FLOW-007, FLOW-015, FLOW-016, FLOW-017, FLOW-019, FLOW-020, FLOW-021, FLOW-022, FLOW-023, FLOW-024, FLOW-025, FLOW-026, FLOW-027, FLOW-028, FLOW-029, FLOW-030, FLOW-031, FLOW-032, FLOW-033, FLOW-034, FLOW-035, FLOW-036, FLOW-037, FLOW-040, FLOW-041, FLOW-042, FLOW-043, FLOW-044, FLOW-045, FLOW-046, FLOW-047, FLOW-048, FLOW-049, FLOW-050, FLOW-051, FLOW-052, FLOW-053, FLOW-054, FLOW-055, FLOW-056, FLOW-058, FLOW-059, FLOW-060, FLOW-061, FLOW-064, FLOW-065, FLOW-066, FLOW-067, FLOW-068, FLOW-069.
@@ -380,23 +412,35 @@ Cross-entity transition flows: 14
 
 Unmapped state-relevant flows: 0
 
-## State Questions Requiring Business Validation
+## Resolved State Decision Questions
 
-Transition Intent: Should FLOW-034 mutate HELD -> CONFIRMED while confirming without expiry/payment-state validation (STATE-MODEL-BOOKING, TRANSITION-BOOKING-003, BR-083, BR-084, BR-085, FLOW-034)? Should FLOW-049 release/no-show be terminal (TRANSITION-BOOKING-009)?
+Booking confirmation / expiry / payment: Original issue preserved: FLOW-034 mutates HELD -> CONFIRMED while AS-IS evidence omits hold-expiry and payment proof/state validation; FLOW-049 stale release/no-show terminality and race semantics needed business interpretation. Approved decisions: DECISION-002 and DECISION-003.
 
-Terminality: Are `CHECKED_IN`, `CANCELLED`, `RELEASED_NO_SHOW`, `sent`, and `dead_letter` intended terminal states?
+Capacity: Original issue preserved: capacity, occupancy, and attendance use different state sets. Approved decision: DECISION-001.
 
-Missing Transition: Is Subscription cancellation/expiry absent by design? Is PendingInvite consumption/deletion absent by design?
+Member canConfirm: Original issue preserved: read-side canConfirm and executable FLOW-044 confirmation paths needed alignment. Approved decision: DECISION-008.
 
-Context Variant: Should negotiated and standard bookings share the same post-HELD lifecycle? Should member booking confirmation remain a separate entry path?
+Member no-show: Original issue preserved: FLOW-049 can create synthetic Booking(RELEASED_NO_SHOW) records. Approved decision: DECISION-009.
 
-Timing Guard: Should server-side check-in enforce timing instead of only PWA display conditions (BR-092, FLOW-035)?
+Payment recovery: Original issue preserved: PaymentIntent capture and Booking confirmation are separate service-boundary operations. Approved decision: DECISION-004.
 
-Cross-Entity Coupling: Should PaymentIntent capture and Booking confirmation be atomic? Should subscription suspension and notification delivery be atomic or best-effort?
+Cancellation/refund continuation: Original issue preserved: FLOW-037 cancellation computes refund data but does not invoke refund creation. Approved decision: DECISION-011.
 
-Derived vs Persisted State: Should attendance labels, canConfirm, availability remaining capacity, and refund eligibility remain derived?
+Refund provider lifecycle: Original issue preserved: local Refund row does not evidence provider refund execution or provider outcome states. Approved decision: DECISION-012.
 
-Provider/External State: Should Refund have provider lifecycle states? Should PaymentIntent have failed/expired provider states?
+Notification lifecycle: Original issue preserved: queued NotificationRequest state is distinct from provider delivery success. Approved decision: DECISION-013.
+
+Scheduler lease: Original issue preserved: manual execution, automatic due-job execution, and dispatch dedupe/attempt state needed common lease interpretation. Approved decision: DECISION-014.
+
+Temporal semantics: Original issue preserved: state guards and derived labels depend on availability dates/times, booking cutoff, cancellation/refund eligibility, attendance, retry, and lease clocks. Approved decision: DECISION-016.
+
+Booking check-in: Original issue preserved: FLOW-035 server mutation is broader than UI timing/auth workflow. Approved decision: DECISION-017.
+
+Subscription cancellation/expiry: REMAINS MODEL GAP / FUTURE SCOPE. RE-012 does not record a business decision requiring a Subscription cancellation/expiry transition in RE-006.
+
+PendingInvite consumption/deletion: REMAINS MODEL GAP / FUTURE SCOPE. RE-012 does not record a business decision requiring a PendingInvite consumption/deletion transition in RE-006.
+
+PaymentIntent failed/expired provider states: REMAINS MODEL GAP / FUTURE SCOPE. RE-012 does not record a business decision requiring executable failed/expired PaymentIntent transition IDs in RE-006.
 
 ## Source Recheck
 
@@ -408,6 +452,15 @@ RE-006 - STATE MODEL
 
 RE-006 STATUS:
 COMPLETE
+
+AS-IS STATE RECONSTRUCTION:
+COMPLETE
+
+BUSINESS DECISION PROPAGATION:
+COMPLETE
+
+IMPLEMENTATION CONFORMANCE:
+NOT ASSERTED BY RE-006
 
 STATE MODELS: 16
 
@@ -434,5 +487,8 @@ PRESERVED
 UNCERTAINTY LINEAGE:
 PRESERVED
 
+DECISION LINEAGE:
+PRESERVED
+
 BUSINESS VALIDATION:
-REQUIRED
+18/18 RESOLVED IN RE-012 AS APPLICABLE

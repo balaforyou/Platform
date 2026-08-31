@@ -1163,6 +1163,46 @@ Access rules: 19
 - Missing Business Policy: source uncertainties around unauthenticated routes, body-derived tenant/user/amount, template usage, notification queue claims, and production/test helpers.
 - Technical Behaviour Requiring Business Decision: technical-support BRs, especially scheduler dispatch, webhook idempotency, notification retry/dead-letter, and health/deploy verification behaviours.
 
+## Decision Propagation Impact Register
+
+Decision propagation records approved TO-BE business semantics from RE-012 without rewriting AS-IS executable rule evidence above.
+
+| Decision ID | Validation ID | Affected FLOW IDs | Affected candidate-rule IDs | Affected BR IDs | Effect Classification | Decision Effect |
+|---|---|---|---|---|---|---|
+| DECISION-001 | VALIDATION-001 | FLOW-024, FLOW-029, FLOW-030, FLOW-037, FLOW-043, FLOW-044, FLOW-046 | FLOW-024-RULE-008, FLOW-024-RULE-009, FLOW-024-RULE-010, FLOW-029-RULE-005, FLOW-029-RULE-006, FLOW-029-RULE-009, FLOW-029-RULE-010, FLOW-029-RULE-011, FLOW-029-RULE-013, FLOW-030-RULE-002, FLOW-037-RULE-003, FLOW-043-RULE-004, FLOW-044-RULE-004, FLOW-044-RULE-005, FLOW-046-RULE-003 | BR-044, BR-045, BR-046, BR-053, BR-054, BR-057, BR-058, BR-059, BR-061, BR-064, BR-101, BR-121, BR-125, BR-126, BR-129 | ESTABLISHES_INVARIANT | Canonical bookability/capacity consumption is distinct from occupancy and attendance metrics. HELD and CONFIRMED consume bookable capacity; hold expiry, cancellation, no-show release, and authorized manual release release capacity. Guest occupancy and member attendance calculations remain separate operational metrics preserving F-035/F-041. |
+| DECISION-002 | VALIDATION-002 | FLOW-034, FLOW-050, FLOW-051, FLOW-052, FLOW-054 | FLOW-034-RULE-001, FLOW-034-RULE-004, FLOW-034-RULE-005, FLOW-034-RULE-006, FLOW-034-RULE-007, FLOW-034-RULE-008, FLOW-050-RULE-004, FLOW-050-RULE-005, FLOW-050-RULE-007, FLOW-050-RULE-008, FLOW-051-RULE-004, FLOW-051-RULE-005, FLOW-051-RULE-011, FLOW-052-RULE-006, FLOW-052-RULE-007, FLOW-052-RULE-008, FLOW-052-RULE-010, FLOW-054-RULE-007, FLOW-054-RULE-008, FLOW-054-RULE-009 | BR-078, BR-081, BR-082, BR-083, BR-084, BR-085, BR-134, BR-135, BR-137, BR-138, BR-144, BR-145, BR-151, BR-157, BR-158, BR-159, BR-161, BR-176, BR-177, BR-178 | SUPERSEDES_TARGET_SEMANTICS | Booking confirmation target semantics require valid booking eligibility, genuine required payment capture/verification, and payment-to-booking correspondence. Trusted internal-service status does not bypass business invariants. Genuine payment capture in the hold-expiry race takes precedence over technical hold expiry, so a genuinely paid booking remains confirmable. |
+| DECISION-007 | VALIDATION-007 | FLOW-030, FLOW-056, FLOW-057 | FLOW-030-RULE-001, FLOW-030-RULE-002, FLOW-056-RULE-001, FLOW-056-RULE-002, FLOW-057-RULE-001, FLOW-057-RULE-002 | BR-063, BR-064, BR-191, BR-192, BR-193, BR-194 | RESOLVES_VARIANT | Negotiated booking is an intentional business variant for group-size and pricing semantics, while remaining subject to DECISION-001 canonical bookability/capacity semantics. Existing negotiated-booking evidence remains valid AS-IS lineage. |
+| DECISION-010 | VALIDATION-010 | FLOW-053 | FLOW-053-RULE-001, FLOW-053-RULE-002, FLOW-053-RULE-003, FLOW-053-RULE-005, FLOW-053-RULE-008 | BR-162, BR-163, BR-164, BR-166, BR-169 | SUPERSEDES_TARGET_SEMANTICS | Authorized subscription creation must derive ownership from authenticated member identity or trusted internal-service identity. Request-body tenantId/userId alone cannot establish subscription ownership; AS-IS body-bound/public behaviour remains preserved evidence. |
+| DECISION-015 | VALIDATION-015 | FLOW-029, FLOW-034, FLOW-035, FLOW-037, FLOW-043, FLOW-044, FLOW-050, FLOW-051, FLOW-052, FLOW-053, FLOW-054, FLOW-057 | FLOW-029-RULE-001, FLOW-029-RULE-002, FLOW-034-RULE-001, FLOW-034-RULE-002, FLOW-035-RULE-006, FLOW-037-RULE-001, FLOW-043-RULE-001, FLOW-043-RULE-002, FLOW-044-RULE-001, FLOW-050-RULE-001, FLOW-050-RULE-004, FLOW-051-RULE-001, FLOW-051-RULE-004, FLOW-052-RULE-001, FLOW-052-RULE-010, FLOW-053-RULE-008, FLOW-054-RULE-001, FLOW-054-RULE-007, FLOW-057-RULE-002 | BR-049, BR-050, BR-078, BR-079, BR-091, BR-099, BR-118, BR-119, BR-122, BR-131, BR-134, BR-141, BR-144, BR-152, BR-161, BR-169, BR-170, BR-176, BR-194 | ESTABLISHES_INVARIANT | Target authority hierarchy is user authenticated identity to tenant membership to stored ownership; internal trusted identity to explicit tenant context to stored validation; provider verified identity/signature to stored internal reference and tenant/ownership context. Request/body/provider payload identity values alone do not establish authorization or ownership. |
+| DECISION-016 | VALIDATION-016 | FLOW-024, FLOW-029, FLOW-037, FLOW-043, FLOW-044, FLOW-046, FLOW-050, FLOW-055, FLOW-065 | FLOW-024-RULE-002, FLOW-024-RULE-006, FLOW-029-RULE-013, FLOW-037-RULE-004, FLOW-043-RULE-003, FLOW-043-RULE-004, FLOW-044-RULE-003, FLOW-046-RULE-002, FLOW-046-RULE-003, FLOW-050-RULE-003, FLOW-055-RULE-009, FLOW-055-RULE-010, FLOW-065-RULE-001, FLOW-065-RULE-002 | BR-038, BR-042, BR-061, BR-102, BR-120, BR-121, BR-124, BR-128, BR-129, BR-133, BR-188, BR-189, BR-220, BR-221 | CLARIFIES | UTC is the persisted/system timestamp representation; branch-local time supplies business meaning for availability, booking cutoff, cancellation/refund eligibility, and member attendance/confirmation; elapsed time governs technical retry/lease durations. This preserves F-066/F-087/F-088 linkage without rewriting existing UTC observations. |
+
+## Decision Semantic Validation
+
+- DECISION-001: Bookability/capacity consumption is represented separately from guest occupancy and member attendance; F-035/F-041 metric separation remains intact.
+- DECISION-002: Payment-capture precedence in the hold-expiry race is represented as target semantics attached to FLOW-034/FLOW-052/FLOW-054 lineage; BR-084 and BR-085 remain AS-IS evidence of weaker confirmation checks.
+- DECISION-007: Negotiated pricing/group-size variation remains intentional and is not normalized into standard booking semantics; DECISION-001 still governs negotiated bookability/capacity.
+- DECISION-010: Request-body tenantId/userId alone is not represented as target subscription authority; FLOW-053 AS-IS public/body-bound evidence remains preserved.
+- DECISION-015: Identity hierarchy is represented without rewriting AS-IS authorization evidence, including unauthenticated or body/provider-payload-derived observations.
+- DECISION-016: UTC storage, branch-local business meaning, and elapsed-time technical semantics are distinguished; F-066/F-087/F-088 remain supporting findings.
+
+## Decision Propagation Validation
+
+RE-005-targeting decisions from RE-012: 6
+
+RE-005-targeting decisions propagated: 6
+
+Mapped decisions not propagated: 0
+
+Propagated decisions without affected BR/rule lineage: 0
+
+AS-IS statements destructively replaced: 0
+
+Undefined DECISION references: 0
+
+DECISION references absent from RE-012: 0
+
+Decision lineage: PRESERVED
+
 ## Evidence Recheck
 
 SOURCE RECHECK REQUIRED: None. Candidate rules were understood and mapped from Phase 4 artifacts and RE-004 without returning to application source.
@@ -1178,6 +1218,8 @@ Capability lineage: PRESERVED
 Journey lineage: PRESERVED
 
 Uncertainty lineage: PRESERVED
+
+Decision lineage: PRESERVED
 
 Candidate rules inventoried: 231
 
@@ -1221,4 +1263,4 @@ CONTEXT VARIANTS:
 11
 
 BUSINESS VALIDATION:
-REQUIRED
+DECISION PROPAGATION DELTA APPLIED

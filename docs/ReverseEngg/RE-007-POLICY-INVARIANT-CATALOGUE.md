@@ -354,17 +354,17 @@ Cross-entity invariants: 10
 
 ## Broken / Weak Invariants
 
-| Finding ID | Expected-Looking Condition | Actual Enforcement | Source Evidence | Impact | Validation Needed |
+| Finding ID | Expected-Looking Condition | Actual Enforcement | Source Evidence | Impact | Business Decision Lineage |
 |---|---|---|---|---|---|
-| INVARIANT-FINDING-001 | Confirmed booking implies unexpired hold and valid captured payment. | PARTIAL / CONTEXT_DEPENDENT: FLOW-052/FLOW-054 capture before invoking FLOW-034, but FLOW-034 itself does not check hold expiry or payment proof/state. | STATE-CONFLICT-002; BR-083, BR-084, BR-085, BR-158, BR-177, BR-178 | Internal confirmation can bypass payment/expiry assumptions. | Should internal confirmation enforce expiry/payment validation or remain trusted-boundary only? |
-| INVARIANT-FINDING-002 | Check-in requires server-side caller auth/ownership and timing eligibility. | WEAK: FLOW-035 does not enforce caller authentication/ownership and timing is client-side display only. | STATE-CONFLICT-003; BR-091, BR-092 | Server transition broader than UI workflow. | Should check-in auth/timing be server-enforced? |
-| INVARIANT-FINDING-003 | All capacity consumers share one active-state formula. | CONFLICTING: browse counts HELD/CONFIRMED; guest occupancy counts non-member CONFIRMED/CHECKED_IN; member no-show/release paths differ. | STATE-CONFLICT-001; BR-043; FLOW-024; resource journey rule 17; FLOW-049 lineage | Availability and occupancy can disagree. | Which formula is intended per context? |
-| INVARIANT-FINDING-004 | Cancellation and refund are atomic. | PARTIAL: cancellation does not invoke refund creation; refund is a separate operation. | BR-104, BR-105, BR-197-BR-203; FLOW-037/FLOW-059 | Cancelled booking may exist before or without Refund row. | Should refund creation be orchestrated with cancellation? |
-| INVARIANT-FINDING-005 | Payment capture and booking confirmation are atomic. | PARTIAL: PaymentIntent capture invokes FLOW-034 across service boundary; no distributed atomicity evidenced. | BR-158, BR-177, BR-178; FLOW-052/FLOW-054; RE-006 cross-entity dependency | Captured intent and booking confirmation can diverge if boundary call fails. | Is compensating recovery expected? |
-| INVARIANT-FINDING-006 | Refund means provider refund executed. | WEAK: local Refund rows are created/processed without Razorpay refund provider call. | BR-203, BR-211; FLOW-059/FLOW-060 | Local refund state may not match provider money movement. | Should provider refund be introduced or local-only semantics accepted? |
-| INVARIANT-FINDING-007 | Subscription creation is identity-bound to authenticated caller. | WEAK: FLOW-053 stores body tenantId/userId and does not authenticate or bind body identity. | BR-164-BR-169; FLOW-053 | Subscription bookkeeping can be body-driven. | Should subscription creation require verified identity/internal boundary? |
-| INVARIANT-FINDING-008 | Notifications are guaranteed after upstream state changes. | WEAK / BEST_EFFORT: notification fetch exceptions do not fail autopay webhook processing. | BR-186, BR-187; FLOW-055 | Suspended subscription may not notify. | Is notification best effort acceptable? |
-| INVARIANT-FINDING-009 | Scheduler manual execution clears existing leases. | UNRESOLVED: manual execution does not release claimed due-job lease. | BR-225; FLOW-067 | Manual execution and scheduled lease semantics can diverge. | Should manual execution affect lease state? |
+| INVARIANT-FINDING-001 | Confirmed booking implies unexpired hold and valid captured payment. | PARTIAL / CONTEXT_DEPENDENT: FLOW-052/FLOW-054 capture before invoking FLOW-034, but FLOW-034 itself does not check hold expiry or payment proof/state. | STATE-CONFLICT-002; BR-083, BR-084, BR-085, BR-158, BR-177, BR-178 | Internal confirmation can bypass payment/expiry assumptions. | AS-IS finding preserved; intended business semantics resolved by DECISION-002 and DECISION-003. Implementation conformance not asserted. |
+| INVARIANT-FINDING-002 | Check-in requires server-side caller auth/ownership and timing eligibility. | WEAK: FLOW-035 does not enforce caller authentication/ownership and timing is client-side display only. | STATE-CONFLICT-003; BR-091, BR-092 | Server transition broader than UI workflow. | AS-IS finding preserved; intended business semantics resolved by DECISION-017. Implementation conformance not asserted. |
+| INVARIANT-FINDING-003 | All capacity consumers share one active-state formula. | CONFLICTING: browse counts HELD/CONFIRMED; guest occupancy counts non-member CONFIRMED/CHECKED_IN; member no-show/release paths differ. | STATE-CONFLICT-001; BR-043; FLOW-024; resource journey rule 17; FLOW-049 lineage | Availability and occupancy can disagree. | AS-IS finding preserved; intended business semantics resolved by DECISION-001. Implementation conformance not asserted. |
+| INVARIANT-FINDING-004 | Cancellation and refund are atomic. | PARTIAL: cancellation does not invoke refund creation; refund is a separate operation. | BR-104, BR-105, BR-197-BR-203; FLOW-037/FLOW-059 | Cancelled booking may exist before or without Refund row. | AS-IS finding preserved; intended business semantics resolved by DECISION-011. Implementation conformance not asserted. |
+| INVARIANT-FINDING-005 | Payment capture and booking confirmation are atomic. | PARTIAL: PaymentIntent capture invokes FLOW-034 across service boundary; no distributed atomicity evidenced. | BR-158, BR-177, BR-178; FLOW-052/FLOW-054; RE-006 cross-entity dependency | Captured intent and booking confirmation can diverge if boundary call fails. | AS-IS finding preserved; intended business semantics resolved by DECISION-004 and DECISION-006. Implementation conformance not asserted. |
+| INVARIANT-FINDING-006 | Refund means provider refund executed. | WEAK: local Refund rows are created/processed without Razorpay refund provider call. | BR-203, BR-211; FLOW-059/FLOW-060 | Local refund state may not match provider money movement. | AS-IS finding preserved; intended business semantics resolved by DECISION-012. Implementation conformance not asserted. |
+| INVARIANT-FINDING-007 | Subscription creation is identity-bound to authenticated caller. | WEAK: FLOW-053 stores body tenantId/userId and does not authenticate or bind body identity. | BR-164-BR-169; FLOW-053 | Subscription bookkeeping can be body-driven. | AS-IS finding preserved; intended business semantics resolved by DECISION-010 and DECISION-015. Implementation conformance not asserted. |
+| INVARIANT-FINDING-008 | Notifications are guaranteed after upstream state changes. | WEAK / BEST_EFFORT: notification fetch exceptions do not fail autopay webhook processing. | BR-186, BR-187; FLOW-055 | Suspended subscription may not notify. | AS-IS finding preserved; intended business semantics resolved by DECISION-013. Implementation conformance not asserted. |
+| INVARIANT-FINDING-009 | Scheduler manual execution clears existing leases. | AS-IS: manual execution does not release claimed due-job lease. | BR-225; FLOW-067 | Manual execution and scheduled lease semantics can diverge. | AS-IS finding preserved; intended business semantics resolved by DECISION-014. Implementation conformance not asserted. |
 
 Broken/weak invariant findings: 9
 
@@ -463,31 +463,73 @@ Existing uncertainty families referenced include FLOW-001 through FLOW-005, FLOW
 
 New RE-007 uncertainties: 0
 
-No existing uncertainty is resolved by RE-007.
+Existing uncertainty identities remain preserved. Business interpretation is resolved only where explicitly mapped by RE-012 decisions; implementation conformance is not asserted by RE-007.
 
-## Policy & Invariant Questions Requiring Business Validation
+## RE-012 Decision Propagation Delta
 
-Capacity: Should POLICY-005, INVARIANT-011, INVARIANT-012, INVARIANT-016, and STATE-CONFLICT-001 remain context-dependent, or should a canonical capacity formula be defined later?
+Decision propagation records approved TO-BE policy/invariant semantics from RE-012 without rewriting AS-IS policy/invariant evidence above. No POLICY or INVARIANT identities are added, deleted, or repurposed by this delta.
 
-Booking Eligibility: Should POLICY-009, POLICY-011, INVARIANT-022, INVARIANT-023, and BR-084/BR-085 be changed so internal confirmation enforces hold expiry and payment state?
+| Decision ID | Validation ID | Disposition | Affected Policies | Affected Invariants | Existing Evidence / Lineage | Approved Policy / Invariant Semantics |
+|---|---|---|---|---|---|---|
+| DECISION-001 | VALIDATION-001 | PROPAGATE | POLICY-005, POLICY-009, POLICY-015, POLICY-016 | INVARIANT-011, INVARIANT-012, INVARIANT-016, INVARIANT-020, INVARIANT-030 | STATE-CONFLICT-001; INVARIANT-FINDING-003; BR-043-BR-045, BR-053, BR-057, BR-058, BR-064, BR-101, BR-121, BR-125, BR-129; FLOW-024, FLOW-029, FLOW-030, FLOW-037, FLOW-044, FLOW-046, FLOW-049 | Canonical bookability/capacity consumption is distinct from occupancy and attendance. HELD and CONFIRMED consume bookable capacity; hold expiry, cancellation, no-show release, and authorized manual release release capacity. Occupancy/attendance metrics remain separate AS-IS-derived operational views. |
+| DECISION-002 | VALIDATION-002 | PROPAGATE | POLICY-011, POLICY-012, POLICY-019, POLICY-020 | INVARIANT-022, INVARIANT-023, INVARIANT-035, INVARIANT-036 | STATE-CONFLICT-002; INVARIANT-FINDING-001; BR-083, BR-084, BR-085, BR-157, BR-158, BR-177, BR-178; FLOW-034, FLOW-052, FLOW-054 | Confirmation target invariant requires valid booking/payment correspondence and applicable business invariants. Internal-service trust does not bypass these invariants. Genuine payment capture in the hold-expiry race takes precedence over technical hold expiry. |
+| DECISION-003 | VALIDATION-003 | PROPAGATE | POLICY-011, POLICY-012 | INVARIANT-022, INVARIANT-023, INVARIANT-035, INVARIANT-036 | STATE-CONFLICT-002; stale hold release and payment capture coupling; FLOW-034, FLOW-049, FLOW-052, FLOW-054 | If release wins before capture, later confirmation is not allowed by target semantics. If genuine capture occurred in the race window, confirmation remains permitted under DECISION-002. |
+| DECISION-004 | VALIDATION-004 | PROPAGATE | POLICY-019, POLICY-020, POLICY-024, POLICY-025 | INVARIANT-035, INVARIANT-036, INVARIANT-042, INVARIANT-044 | INVARIANT-FINDING-005; PaymentIntent capture invokes FLOW-034 across service boundary; ScheduledJob and NotificationRequest state evidence | Captured-payment/unconfirmed-booking mismatch requires reconciliation using the existing scheduled tick mechanism, customer PROCESSING state during reconciliation, and operator-visible escalation after 10 minutes. Automatic refund is not the first policy response. |
+| DECISION-006 | VALIDATION-006 | PROPAGATE | POLICY-019, POLICY-020, POLICY-021 | INVARIANT-035, INVARIANT-036, INVARIANT-039 | PI-VARIANT-004; BR-152-BR-159, BR-170-BR-178, BR-195, BR-196; FLOW-052, FLOW-054, FLOW-058 | Authenticated direct verification and provider webhook entry points remain distinct trust boundaries, but converge on common internal capture semantics, idempotency, booking confirmation, retry, and recovery. |
+| DECISION-007 | VALIDATION-007 | ALREADY_REPRESENTED | POLICY-010 | INVARIANT-016, INVARIANT-019, INVARIANT-020 | PI-VARIANT-001; BR-063, BR-064, BR-191-BR-194; FLOW-030, FLOW-056, FLOW-057 | RE-007 already represents negotiated booking as a context variant. ALREADY_REPRESENTED does not assert implementation conformance beyond AS-IS evidence; the approved target preserves negotiated pricing/group-size variation while DECISION-001 still governs bookability/capacity. |
+| DECISION-008 | VALIDATION-008 | ALREADY_REPRESENTED | POLICY-016, POLICY-017 | INVARIANT-029, INVARIANT-030 | PI-VARIANT-002; BR-121, BR-123-BR-126, BR-129; FLOW-043, FLOW-044, FLOW-046 | RE-007 already separates read-side canConfirm/attendance derivation and write-side member confirmation create/update paths. ALREADY_REPRESENTED does not mean AS-IS asymmetry complies; target eligibility must align with executable write-side eligibility except explicit idempotency. |
+| DECISION-009 | VALIDATION-009 | PROPAGATE | POLICY-016 | INVARIANT-030 | FLOW-049 lineage; synthetic Booking(RELEASED_NO_SHOW); STATE-MODEL-ATTENDANCE-DERIVED | Automatically generated no-show records must be attendance/no-show history, not ordinary member-created bookings or Expired bookings in member-facing policy semantics. AS-IS synthetic Booking evidence remains preserved. |
+| DECISION-010 | VALIDATION-010 | PROPAGATE | POLICY-017 | INVARIANT-037, INVARIANT-038 | INVARIANT-FINDING-007; BR-164-BR-169; FLOW-053 | Subscription creation authority must derive from authenticated member identity or trusted internal-service identity. Body tenantId/userId alone is not a sufficient ownership policy. |
+| DECISION-011 | VALIDATION-011 | PROPAGATE | POLICY-015, POLICY-022, POLICY-023 | INVARIANT-026, INVARIANT-040, INVARIANT-041 | INVARIANT-FINDING-004; BR-102-BR-105, BR-197-BR-211; FLOW-037, FLOW-059, FLOW-060 | Deterministic standard cancellation refunds should automatically enqueue refund processing. Negotiated bookings require human approval through FLOW-060 because negotiated/admin pricing is not governed by the standard formula. |
+| DECISION-012 | VALIDATION-012 | PROPAGATE | POLICY-022, POLICY-023 | INVARIANT-040, INVARIANT-041 | INVARIANT-FINDING-006; local Refund row evidence; provider call absent; FLOW-059, FLOW-060 | Refund policy requires provider-aware lifecycle semantics. A local Refund row is not proof that provider money movement occurred; provider submission/result/failure/reconciliation must be modeled as target semantics. |
+| DECISION-013 | VALIDATION-013 | PROPAGATE | POLICY-024 | INVARIANT-042, INVARIANT-043 | INVARIANT-FINDING-008; BR-212, BR-213, BR-218, BR-220, BR-221; FLOW-061, FLOW-064, FLOW-065 | Business-required notification producers must durably create NotificationRequest rows. Provider delivery remains asynchronous with retry, failure tracking, and dead-letter handling; queued is not delivered. |
+| DECISION-014 | VALIDATION-014 | PROPAGATE | POLICY-025 | INVARIANT-044, INVARIANT-045 | INVARIANT-FINDING-009; PI-VARIANT-008; BR-222-BR-229; FLOW-066, FLOW-067, FLOW-068, FLOW-069 | Manual and automatic scheduled-job execution share lease/concurrency protection. Domain-specific dedupe markers may remain distinct from generic ScheduledJobDispatch where their purpose differs. |
+| DECISION-015 | VALIDATION-015 | PROPAGATE | POLICY-003, POLICY-012, POLICY-013, POLICY-019, POLICY-020 | INVARIANT-005, INVARIANT-007, INVARIANT-013, INVARIANT-021, INVARIANT-035, INVARIANT-036, INVARIANT-037 | INVARIANT-FINDING-002, INVARIANT-FINDING-007; tenant/ownership authority evidence across JWT, internal key, provider callback, and body/payload boundaries | Target authority hierarchy is authenticated user identity to tenant membership to stored ownership; trusted internal identity to explicit tenant context to stored validation; verified provider identity/signature to stored internal reference and stored tenant/ownership context. Request/body/provider payload values alone do not establish authorization. |
+| DECISION-016 | VALIDATION-016 | PROPAGATE | POLICY-005, POLICY-009, POLICY-011, POLICY-014, POLICY-015, POLICY-016, POLICY-024, POLICY-025 | INVARIANT-010, INVARIANT-016, INVARIANT-022, INVARIANT-030, INVARIANT-040, INVARIANT-044, INVARIANT-045 | PI-VARIANT-007; F-066/F-087/F-088 lineage; time-bearing BR and FLOW evidence across availability, cutoff, refund, notification retry, and scheduler lease | Persisted/system timestamps use UTC, branch-local timezone defines business meaning, and elapsed duration governs technical retry/lease periods. This is not a blanket UTC business policy. |
+| DECISION-017 | VALIDATION-017 | PROPAGATE | POLICY-013 | INVARIANT-024 | STATE-CONFLICT-003; INVARIANT-FINDING-002; BR-091, BR-092; FLOW-035; F-090/F-094 linkage | Check-in target policy requires authenticated caller, same tenant, booking customer ownership or authorized branch staff, Booking.status CONFIRMED, and server-side timing from same-day <=2 hours before window.startTime through window.endTime. |
+| DECISION-018 | VALIDATION-018 | PROPAGATE | POLICY-024 | INVARIANT-043 | BR-218; FLOW-064; AUTHZ-FINDING-004; notification-history identity evidence | Notification-history authorization must use stable tenantId + userId. Recipient strings such as phone/email are delivery attributes only and are not sufficient authorization or ownership identities. |
 
-Payment/Confirmation: Should INVARIANT-035/036 and INVARIANT-FINDING-005 gain recovery or distributed consistency around FLOW-052/FLOW-054 -> FLOW-034?
+Decision disposition totals:
+- PROPAGATE: 15
+- ALREADY_REPRESENTED: 2
+- NO_POLICY_INVARIANT_DELTA: 0
 
-Membership: Should POLICY-016, POLICY-017, INVARIANT-027, INVARIANT-029, and INVARIANT-030 keep MemberAssignment, Subscription, Booking, and derived Attendance separated exactly as observed?
+Decision propagation validation:
+- Mapped RE-012 decisions for RE-007: 17
+- Decision lineage complete for propagated decisions: yes
+- Mapped decisions not propagated: 2, explicitly ALREADY_REPRESENTED
+- Mapped decisions with NO_POLICY_INVARIANT_DELTA: 0
+- New policy identities: 0
+- New invariant identities: 0
+- AS-IS policy/invariant statements destructively replaced: 0
 
-Cancellation/Refund: Should POLICY-015, POLICY-022, POLICY-023, INVARIANT-026, INVARIANT-040, and INVARIANT-041 remain separate operations, or should refund orchestration be introduced later?
+## Resolved Policy / Invariant Decision Questions
 
-Temporal Behaviour: Should timezone contexts in POLICY-005, POLICY-009, POLICY-016, POLICY-024, and POLICY-025 be normalized in a later requirements phase?
+Capacity: Original issue preserved: POLICY-005, INVARIANT-011, INVARIANT-012, INVARIANT-016, and STATE-CONFLICT-001 were context-dependent. Approved interpretation: DECISION-001.
 
-Notification: Should INVARIANT-042 and INVARIANT-FINDING-008 remain best effort for upstream-triggered notifications?
+Booking Eligibility / Hold Race: Original issue preserved: POLICY-009, POLICY-011, INVARIANT-022, INVARIANT-023, BR-084, and BR-085 exposed missing expiry/payment validation. Approved interpretation: DECISION-002 and DECISION-003.
 
-Scheduler: Should INVARIANT-044 and INVARIANT-045 have stronger DB/transaction enforcement for lease and dispatch dedupe semantics?
+Payment/Confirmation Recovery: Original issue preserved: INVARIANT-035/036 and INVARIANT-FINDING-005 showed non-atomic FLOW-052/FLOW-054 -> FLOW-034 coupling. Approved interpretation: DECISION-004 and DECISION-006.
 
-Tenant/Ownership: Should INVARIANT-035 and INVARIANT-FINDING-007 be tightened around payment verification and subscription creation identity binding?
+Negotiated Booking Variant: Original issue preserved: negotiated booking differs from standard group-size/pricing behaviour. Approved interpretation: DECISION-007.
 
-Weak Enforcement: Should STATE-CONFLICT-001, STATE-CONFLICT-002, and STATE-CONFLICT-003 be treated as accepted context variants or remediation candidates later?
+Membership / Attendance: Original issue preserved: POLICY-016, POLICY-017, INVARIANT-027, INVARIANT-029, and INVARIANT-030 keep MemberAssignment, Subscription, Booking, and derived Attendance separated. Approved interpretation: DECISION-008 and DECISION-009.
 
-Context Variant: Which PI-VARIANT rows represent intended product differences versus implementation drift?
+Subscription Identity: Original issue preserved: body-bound subscription creation is weakly identity-bound. Approved interpretation: DECISION-010 and DECISION-015.
+
+Cancellation/Refund: Original issue preserved: POLICY-015, POLICY-022, POLICY-023, INVARIANT-026, INVARIANT-040, and INVARIANT-041 are separate AS-IS operations. Approved interpretation: DECISION-011 and DECISION-012.
+
+Notification: Original issue preserved: INVARIANT-042 and INVARIANT-FINDING-008 include best-effort upstream notification behaviour, and notification history identity binding was separate. Approved interpretation: DECISION-013 and DECISION-018.
+
+Scheduler: Original issue preserved: INVARIANT-044 and INVARIANT-045 separate scheduled-job lease from dispatch dedupe/outcome. Approved interpretation: DECISION-014.
+
+Temporal Behaviour: Original issue preserved: timezone contexts in POLICY-005, POLICY-009, POLICY-016, POLICY-024, and POLICY-025 were not normalized. Approved interpretation: DECISION-016.
+
+Tenant/Ownership: Original issue preserved: tenant, ownership, internal, provider, request-body, and recipient-string authority boundaries varied by flow. Approved interpretation: DECISION-015 and DECISION-018.
+
+Check-in: Original issue preserved: POLICY-013, INVARIANT-FINDING-002, and STATE-CONFLICT-003 show weak server enforcement. Approved interpretation: DECISION-017.
+
+Context Variant: PI-VARIANT rows remain AS-IS context variants. RE-012 decisions resolve specific mapped variants above; other product-vs-drift classification remains future requirements scope unless explicitly mapped.
 
 ## Source Recheck
 
@@ -535,6 +577,28 @@ STATE-CONFLICT-002 preserved: YES
 
 STATE-CONFLICT-003 preserved: YES
 
+Mapped RE-012 decisions: 17
+
+PROPAGATE: 15
+
+ALREADY_REPRESENTED: 2
+
+NO_POLICY_INVARIANT_DELTA: 0
+
+New policy identities: 0
+
+New invariant identities: 0
+
+Undefined DECISION references: 0
+
+Mapped decisions without disposition: 0
+
+Mapped PROPAGATE decisions without decision lineage: 0
+
+AS-IS policy/invariant statements destructively replaced: 0
+
+Cross-artifact semantic contradictions: 0
+
 ## Completion Status
 
 RE-007 - POLICY & INVARIANT CATALOGUE
@@ -581,5 +645,8 @@ PRESERVED
 UNCERTAINTY LINEAGE:
 PRESERVED
 
+DECISION LINEAGE:
+PRESERVED
+
 BUSINESS VALIDATION:
-REQUIRED
+18/18 RESOLVED IN RE-012 AS APPLICABLE
