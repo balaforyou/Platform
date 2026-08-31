@@ -1,6 +1,22 @@
 import { useEffect, useState } from 'react';
+import { Bell, Home, Pencil, Plus, Search, Settings, Trash2, Users } from 'lucide-react';
 import { useAdminTenant } from '../auth/AdminTenantContext';
-import { Button, Card } from '../components';
+import {
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  IconButton,
+  Modal,
+  Select,
+  SidebarNavItem,
+  BottomNavItem,
+  Table,
+  Tabs,
+  useToast,
+  type Column,
+} from '../components';
 
 /**
  * Sub-slice 0.1 — dev-only design-token review surface, reached at /__dev/tokens
@@ -252,7 +268,7 @@ export function TokenKitchenSink() {
         `}</style>
       </Section>
 
-      <Section title="Components on the new tokens">
+      <Section title="0.1 primitives — Button">
         <Card style={{ display: 'flex', gap: 'var(--av2-space-3)', flexWrap: 'wrap' }}>
           <Button>Primary</Button>
           <Button variant="secondary">Secondary</Button>
@@ -261,6 +277,210 @@ export function TokenKitchenSink() {
           <Button disabled>Disabled</Button>
         </Card>
       </Section>
+
+      <Kitchen02 />
     </div>
+  );
+}
+
+/** Sub-slice 0.2 — generic reusable components, each with its variants + states. */
+function Kitchen02() {
+  const { push } = useToast();
+  const [tab, setTab] = useState('all');
+  const [sel, setSel] = useState('confirmed');
+  const [modal, setModal] = useState(false);
+  const [nav, setNav] = useState('dashboard');
+
+  type Member = { id: string; name: string; plan: string; status: string };
+  const members: Member[] = [
+    { id: '1', name: 'Aiko Tanaka', plan: 'Monthly', status: 'active' },
+    { id: '2', name: 'Ravi Kumar', plan: 'Day pass', status: 'expired' },
+    { id: '3', name: 'Mei Lin', plan: 'Quarterly', status: 'pending' },
+  ];
+  const memberCols: Column<Member>[] = [
+    { key: 'name', header: 'Member', render: (r) => (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--av2-space-2)' }}>
+        <Avatar name={r.name} size="sm" /> {r.name}
+      </span>
+    ) },
+    { key: 'plan', header: 'Plan' },
+    { key: 'status', header: 'Status', render: (r) => (
+      <Badge tone={r.status === 'active' ? 'success' : r.status === 'expired' ? 'danger' : 'warning'}>
+        {r.status}
+      </Badge>
+    ) },
+    { key: 'actions', header: '', align: 'right', render: () => (
+      <span style={{ display: 'inline-flex', gap: 'var(--av2-space-1)' }}>
+        <IconButton aria-label="Edit" icon={<Pencil size={14} />} />
+        <IconButton aria-label="Delete" icon={<Trash2 size={14} />} />
+      </span>
+    ) },
+  ];
+
+  return (
+    <>
+      <Section title="0.2 — Badge (5 tones)">
+        <Card style={{ display: 'flex', gap: 'var(--av2-space-2)', flexWrap: 'wrap' }}>
+          <Badge tone="neutral">Neutral</Badge>
+          <Badge tone="success">Active</Badge>
+          <Badge tone="warning">Pending</Badge>
+          <Badge tone="danger">Cancelled</Badge>
+          <Badge tone="info">Draft</Badge>
+        </Card>
+      </Section>
+
+      <Section title="0.2 — IconButton">
+        <Card style={{ display: 'flex', gap: 'var(--av2-space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
+          <IconButton aria-label="Search" icon={<Search size={16} />} />
+          <IconButton aria-label="Add" variant="primary" icon={<Plus size={16} />} />
+          <IconButton aria-label="Settings" variant="secondary" icon={<Settings size={16} />} />
+          <IconButton aria-label="Loading" loading icon={<Settings size={16} />} />
+          <IconButton aria-label="Disabled" disabled icon={<Settings size={16} />} />
+        </Card>
+      </Section>
+
+      <Section title="0.2 — Avatar (image, initials fallback, broken-src fallback)">
+        <Card style={{ display: 'flex', gap: 'var(--av2-space-4)', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Avatar name="Bala Murali" src="/logo-jbc.png" size="lg" />
+          <Avatar name="Aiko Tanaka" size="lg" />
+          <Avatar name="Mei Lin" size="md" />
+          <Avatar name="Ravi Kumar" size="sm" />
+          <Avatar name="Broken Image" src="/does-not-exist.png" size="md" />
+        </Card>
+      </Section>
+
+      <Section title="0.2 — Select">
+        <Card style={{ maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-4)' }}>
+          <Select label="Status" value={sel} onChange={(e) => setSel(e.target.value)} hint="Native select, styled wrapper">
+            <option value="confirmed">Confirmed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="no_show">No show</option>
+          </Select>
+          <Select label="With error" error="Pick a value" defaultValue="">
+            <option value="" disabled>Choose…</option>
+            <option value="a">A</option>
+          </Select>
+        </Card>
+      </Section>
+
+      <Section title="0.2 — Tabs (pill strip)">
+        <Card>
+          <Tabs
+            items={[
+              { key: 'all', label: 'All' },
+              { key: 'active', label: 'Active' },
+              { key: 'expired', label: 'Expired' },
+            ]}
+            activeKey={tab}
+            onChange={setTab}
+          />
+          <p style={{ marginTop: 'var(--av2-space-3)', fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
+            active: {tab}
+          </p>
+        </Card>
+      </Section>
+
+      <Section title="0.2 — Table (with Badge / Avatar / IconButton in cells)">
+        <Card>
+          <Table columns={memberCols} rows={members} rowKey={(r) => r.id} onRowClick={(r) => push(`Clicked ${r.name}`)} />
+        </Card>
+      </Section>
+
+      <Section title="0.2 — Table (empty → EmptyState fallback)">
+        <Card>
+          <Table<Member> columns={memberCols} rows={[]} rowKey={(r) => r.id} />
+        </Card>
+      </Section>
+
+      <Section title="0.2 — EmptyState">
+        <Card>
+          <EmptyState
+            icon={<Users size={24} />}
+            title="No members yet"
+            description="Members you add will show up here."
+            action={<Button leadingIcon={<Plus size={14} />}>Add your first member</Button>}
+          />
+        </Card>
+      </Section>
+
+      <Section title="0.2 — Toast (transient, auto-dismiss, max 3)">
+        <Card style={{ display: 'flex', gap: 'var(--av2-space-2)', flexWrap: 'wrap' }}>
+          <Button variant="secondary" onClick={() => push('Saved successfully.', 'success')}>Success</Button>
+          <Button variant="secondary" onClick={() => push('Heads up — unsaved changes.', 'info')}>Info</Button>
+          <Button variant="secondary" onClick={() => push('Something went wrong.', 'error')}>Error</Button>
+          <Button variant="ghost" onClick={() => push('Gone in 1.5s', 'info', 1500)}>Short (1.5s)</Button>
+        </Card>
+      </Section>
+
+      <Section title="0.2 — SidebarNavItem">
+        <Card style={{ maxWidth: 240, display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-1)' }}>
+          {[
+            { key: 'dashboard', label: 'Dashboard', icon: <Home size={16} /> },
+            { key: 'members', label: 'Members', icon: <Users size={16} />, badge: 3 },
+            { key: 'comms', label: 'Communications', icon: <Bell size={16} />, badge: 128 },
+            { key: 'settings', label: 'Settings', icon: <Settings size={16} /> },
+          ].map((i) => (
+            <SidebarNavItem
+              key={i.key}
+              icon={i.icon}
+              label={i.label}
+              badge={i.badge}
+              active={nav === i.key}
+              onClick={() => setNav(i.key)}
+            />
+          ))}
+        </Card>
+      </Section>
+
+      <Section title="0.2 — BottomNavItem">
+        <Card
+          style={{
+            display: 'flex',
+            justifyContent: 'space-around',
+            maxWidth: 360,
+            borderRadius: 'var(--av2-radius)',
+          }}
+        >
+          {[
+            { key: 'dashboard', label: 'Home', icon: <Home size={20} /> },
+            { key: 'members', label: 'Members', icon: <Users size={20} />, badge: 3 },
+            { key: 'comms', label: 'Inbox', icon: <Bell size={20} />, badge: 12 },
+            { key: 'settings', label: 'Settings', icon: <Settings size={20} /> },
+          ].map((i) => (
+            <BottomNavItem
+              key={i.key}
+              icon={i.icon}
+              label={i.label}
+              badge={i.badge}
+              active={nav === i.key}
+              onClick={() => setNav(i.key)}
+            />
+          ))}
+        </Card>
+      </Section>
+
+      <Section title="0.2 — Modal (Radix: focus trap, Escape, focus return, ARIA)">
+        <Card>
+          <Button onClick={() => setModal(true)}>Open modal</Button>
+          <Modal
+            open={modal}
+            onOpenChange={setModal}
+            title="Cancel this booking?"
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => setModal(false)}>Keep it</Button>
+                <Button onClick={() => { setModal(false); push('Booking cancelled.', 'success'); }}>
+                  Cancel booking
+                </Button>
+              </>
+            }
+          >
+            <p style={{ margin: 0 }}>
+              This frees the slot immediately. The member is notified. This can't be undone.
+            </p>
+          </Modal>
+        </Card>
+      </Section>
+    </>
   );
 }

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AdminAuthProvider } from './auth/AdminAuthContext';
 import { AdminTenantProvider } from './auth/AdminTenantContext';
+import { ToastProvider } from './components';
 import App from './App';
 import './styles.css';
 
@@ -35,7 +36,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AdminAuthProvider>
         <AdminTenantProvider>
-          <App />
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </AdminTenantProvider>
       </AdminAuthProvider>
     </QueryClientProvider>
