@@ -1177,7 +1177,71 @@ required checks `checks` + `regression`, block force-push and deletion. PRs #10 
 
 **Close-out:** `pnpm register:check` green (196 rows, Resolved 90). `pnpm diagram:verify` green — F-189 touches
 no diagram-tagged endpoint. PR #12 gated on `checks` + `regression`; `integration` runs post-merge
-per the Batch-23 pipeline as consolidated here.
+per the Batch-23 pipeline as consolidated here. Merged `094631b`; post-merge pipeline all green
+(checks + regression + integration), images pushed at that SHA.
+
+## Batch 28 — F-212 slot-exhaustion UX (date level)
+
+**Findings:** [[F-212]] — **Resolved**. Chief-assigned in the Slice-2 handover (31 Aug 2026),
+no register row or pending-findings entry until now — same backfill shape as [[F-205]] in Batch 27.
+**Handed off:** 2 Sep 2026
+**Status:** Done
+**Branch/PR:** `f212-next-available-date` → PR #13
+**Commits:** `02ee17c` (implementation) · this row (register + pending-findings + batch-log close-out)
+
+**What it was:** [[F-187]] auto-advances an empty period tab to the first non-empty one within a
+day; a fully-exhausted *date* only showed a generic "No slots available on this date" message,
+with no pointer to which date has availability.
+
+**What shipped:**
+- New unauthenticated `GET /resource-pools/:id/next-available-date?from=<YYYY-MM-DD>` in
+  `slot-engine` — forward-only server-side search, `{ date: <first date with a bookable window> }`
+  or `{ date: null }`. The per-window bookability rules ([[F-155]] started-window filter,
+  blocked-window overlap, HELD/CONFIRMED capacity) were factored out of `GET /availability`'s
+  loop into a shared `windowBookable` helper (behaviour-preserving refactor — that route still
+  scores every window); `poolHasAvailabilityOnDate` short-circuits on the first free window.
+- **Plan correction folded in** (rule 9 — scope-precision, not a new finding): the handover said
+  a flat "14-day forward search". A date past `today + guestOpenWindowDays` is one
+  `GET /availability` itself rejects (`BROWSE_AHEAD_LIMIT_EXCEEDED`), so pointing a guest there is
+  actively misleading. Real ceiling is `min(from + 14, today + guestOpenWindowDays)` — anchored
+  at today, the same anchor `GET /availability` uses; 14 stays only as an outer cap for a pool
+  with an unusually large `guestOpenWindowDays`. The TL plan already flagged and cleared this.
+- `CourtBooking.tsx`: a fetch-completed effect calls the endpoint when a date resolves empty,
+  `setBookingDate(next)`, and shows an **announced** inline notice ("No slots on {from} — showing
+  the next available date, {to}") — not [[F-187]]'s silent jump (Bala's call, 2 Sep 2026: a date
+  change is a bigger move than a tab switch). Guards mirror [[F-187]]: one search per distinct
+  date, no re-search off the endpoint's own navigation (a destination that is also empty — a real
+  race — shows the generic message, no bounce), any manual date pick re-arms. `{ date: null }` or
+  a failed call → the generic message stays as the honest fallback.
+
+**One implementation deviation, reported not hidden:** the plan's §2 asked for a per-query
+call-count assertion proving `poolHasAvailabilityOnDate` short-circuits. The HTTP black-box
+regression harness cannot express that without a unit-test framework slot-engine does not have.
+Covered instead by a correctness section (a date whose earliest window is full still counts,
+because the scan continues to a later free window) plus the 1-line `return true` being visible in
+the diff. Flagged for the TL — a package-local `vitest` for slot-engine is a possible follow-up
+if a real call-count assertion is wanted.
+
+**Evidence:** whole-repo typecheck (14 packages) + slot-engine + guest-member-pwa build clean;
+full 5-service regression green — **slot-engine 60/60** (55 pre-existing + 5 new
+`next-available-date.regression.ts` sections), identity-auth 7/7 (first full run flaked on the
+documented port/timing interaction, clean in isolation and on the full re-run), tenant-management
+5/5, payment 12/12, notification 7/7. Live-fire against the local dev stack (real JBC Coimbatore
+branch, `badminton_db`): a dedicated exhausted test pool — endpoint returned the exact free date
+3 days out (DB read-back confirmed that window genuinely had capacity), `{ date: null }` when
+fully exhausted, `{ date: null }` for a `from` past the horizon, 400 on a bad date. Browser pass:
+guest landed on an exhausted date → auto-advanced with the inline notice → booked from the new
+date; manual re-pick of an empty date re-searched; manual pick of a slotted date cleared the
+notice; whole-pool exhaustion fell back to the generic message with **no search loop** (network
+log: exactly one call per distinct date).
+
+**Left behind for cleanup:** the live-fire test pool `c9bdfcc3-cefb-42a8-bae5-092e9a8ea07f`
+("ZZ F-212 live test (safe to delete)") in `badminton_db` — one window, two cancelled bookings.
+No pool DELETE endpoint exists; needs a direct DB delete or can be left as clearly-named clutter.
+
+**Close-out:** `pnpm register:check` green (197 rows, Resolved 91). `pnpm diagram:verify` green —
+the new endpoint is not on any FLOW node (advisory only, like the existing F-100/F-147 entries).
+PR #13 gated on `checks` + `regression`; `integration` post-merge.
 
 ## Queued, not yet batched
 

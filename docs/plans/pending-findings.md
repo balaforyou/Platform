@@ -176,6 +176,37 @@ Confirmed: 29 Aug 2026
 
 ## Promoted (audit trail)
 
+### slot-exhaustion-ux-date-level
+Batch: F-212 close-out
+Surfaced: 31 Aug 2026 (discovery-admin-v2-slice2-guest-booking-mgmt.md; consolidated into the
+Slice-2 Chief→Technical Lead handover, "F-212 — Slot-exhaustion UX, date level")
+Description: F-187 auto-advances an empty period tab to the first non-empty one within a day, but
+a fully-exhausted date only showed a generic "No slots available on this date" message — no
+pointer to which date actually has availability. Fixed: new unauthenticated
+`GET /resource-pools/:id/next-available-date?from=<YYYY-MM-DD>` — forward-only server-side search,
+returns `{ date: <first date with a bookable window> }` or `{ date: null }`. The per-window
+bookability rules were factored out of `GET /availability`'s loop into a shared `windowBookable`
+helper (no behaviour change to that route); `poolHasAvailabilityOnDate` short-circuits on the
+first free window. Search ceiling is `min(from + 14, today + guestOpenWindowDays)`, not the
+handover's flat 14 — a date past `today + guestOpenWindowDays` is one `GET /availability` itself
+rejects (BROWSE_AHEAD_LIMIT_EXCEEDED), so returning it would mislead; 14 stays only as an outer
+cap. Frontend (`CourtBooking.tsx`): a fetch-completed effect calls the endpoint on an empty
+date, auto-navigates, and shows an announced inline notice (not F-187's silent jump — Bala's
+call, 2 Sep 2026). Guards mirror F-187: one search per distinct date, no re-search off the
+endpoint's own navigation, any manual pick re-arms. `{ date: null }` / failed call → the generic
+message stays. Verified: whole-repo typecheck + build clean; full 5-service regression green,
+slot-engine 60/60 (55 + 5 new `next-available-date.regression.ts` sections); live-fire against
+the local dev stack (real JBC Coimbatore branch, `badminton_db`) — exact free date returned with
+a DB read-back, `{ date: null }` when exhausted and when `from` is past the horizon, 400 on a bad
+date; browser pass on all paths including the fallback (no search loop). One implementation
+deviation from the plan, reported not hidden: the plan's §2 asked for a per-query call-count
+assertion proving `poolHasAvailabilityOnDate` short-circuits, which the HTTP black-box regression
+harness cannot express without a unit-test framework slot-engine does not have — covered instead
+by a correctness section (earliest window full → later free window on the same date still makes
+the date count) plus the 1-line `return true` being visible in the diff.
+Confirmed-ID: F-212
+Confirmed: 31 Aug 2026
+
 ### court-slot-index-guest-ui-display
 Batch: 20 (surfaced), F-189 close-out (implemented)
 Surfaced: 26 Aug 2026
