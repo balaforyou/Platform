@@ -6,7 +6,7 @@ import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { useAdminTenant } from '../../auth/AdminTenantContext';
 import { Avatar, IconButton, SidebarNavItem, BottomNavItem } from '../../components';
 import { applyTheme, effectiveTheme, setStoredTheme } from '../../lib/theme';
-import { NAV_DESTINATIONS, activeDestination } from './nav';
+import { NAV_DESTINATIONS, activeDestination, filterByEntitlement } from './nav';
 
 /**
  * The navigated-app shell (sub-slice 0.3). Both the desktop sidebar and the mobile
@@ -19,7 +19,7 @@ import { NAV_DESTINATIONS, activeDestination } from './nav';
  */
 export function AppShell() {
   const { user, logout } = useAdminAuth();
-  const { tenant } = useAdminTenant();
+  const { tenant, entitlements } = useAdminTenant();
   const location = useLocation();
   const navigate = useNavigate();
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -33,6 +33,10 @@ export function AppShell() {
   };
 
   const active = activeDestination(location.pathname);
+  // F-206: hide destinations for modules this tenant isn't entitled to. `activeDestination`
+  // above still matches against the full list, so a direct URL to a hidden route still
+  // highlights correctly if reached.
+  const visibleDestinations = filterByEntitlement(NAV_DESTINATIONS, entitlements);
   const pageTitle = location.pathname === '/apps' ? 'Apps' : active?.label ?? 'Slotflow Admin';
   const venue = tenant?.appName || tenant?.name || 'Slotflow Admin';
 
@@ -72,7 +76,7 @@ export function AppShell() {
     <div className="av2-shell">
       <nav className="av2-sidebar" aria-label="Primary">
         <div style={{ marginBottom: 'var(--av2-space-4)' }}>{brand}</div>
-        {NAV_DESTINATIONS.map((d) => (
+        {visibleDestinations.map((d) => (
           <SidebarNavItem
             key={d.key}
             icon={<d.Icon size={16} />}
@@ -121,7 +125,7 @@ export function AppShell() {
       </div>
 
       <nav className="av2-bottom-nav" aria-label="Primary">
-        {NAV_DESTINATIONS.filter((d) => d.mobileDirect).map((d) => (
+        {visibleDestinations.filter((d) => d.mobileDirect).map((d) => (
           <BottomNavItem
             key={d.key}
             icon={<d.Icon size={20} />}

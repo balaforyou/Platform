@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
-import { PrismaClient, BranchStatus, UserRole } from '@badminton/database';
+import { PrismaClient, BranchStatus, UserRole, TenantModule } from '@badminton/database';
+import { resolveEntitlementState } from '@badminton/shared-types';
 
 const server = fastify({ logger: true });
 
@@ -576,6 +577,184 @@ server.post('/tenants/:id/roles', async (request, reply) => {
   `;
 
   return rows[0];
+});
+
+// ---------------------------------------------------------------------------
+// F-206: module entitlement management.
+//
+// Grant/renew is INTERNAL_SERVICE_KEY only — same tier as POST /tenants, because granting a
+// tenant a paid module is a platform/business action, not tenant self-service (flag-and-gate
+// only, no billing integration). Reading entitlements is any authenticated admin (owner or
+// branch_manager:*) — every admin needs it for nav-gating. Early wind-down is Owner-only —
+// the one self-service action, "same restriction tier as Ledger access" per the handover
+// (read as: Owner-only, since no Ledger auth check exists in code yet).
+// ---------------------------------------------------------------------------
+
+const MODULE_VALUES = new Set<string>(Object.values(TenantModule));
+
+// Any authenticated admin for this tenant (owner OR branch_manager:*), or the internal key.
+const verifyTenantAdminOrInternal = async (request: any, reply: any, tenantId: string) => {
+  const authHeader = request.headers['authorization'];
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+  if (!authHeader) {
+    reply.status(401);
+    const err = new Error('Missing authorization header');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+  if (authHeader === `Bearer ${internalKey}`) return;
+  try {
+    const decoded = (await request.jwtVerify()) as any;
+    if (decoded.tenantId !== tenantId) {
+      reply.status(403);
+      const err = new Error('Forbidden: Tenant mismatch');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+    const roles: string[] = decoded.roles ?? [];
+    if (!roles.some((r) => r === 'owner' || r.startsWith('branch_manager:'))) {
+      reply.status(403);
+      const err = new Error('Forbidden: admin privilege required');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  } catch (e: any) {
+    if (e.statusCode) throw e;
+    reply.status(401);
+    const err = new Error('Invalid or expired token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+};
+
+// POST /tenants/:id/entitlements — grant or renew. Renewal = extending endDate on the one
+// row per (tenant, module), never a new row per term (same shape as F-207's renewal design).
+server.post('/tenants/:id/entitlements', async (request, reply) => {
+  requireInternalKey(request, reply);
+  const { id } = request.params as any;
+  const { module, startDate, endDate } = request.body as any;
+
+  if (!module || !MODULE_VALUES.has(module)) {
+    reply.status(400);
+    const err = new Error(`module must be one of: ${[...MODULE_VALUES].join(', ')}`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    reply.status(400);
+    const err = new Error('startDate and endDate must be valid dates with endDate after startDate');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const tenant = await prisma.tenant.findUnique({ where: { id }, select: { id: true } });
+  if (!tenant) {
+    reply.status(404);
+    const err = new Error('Tenant not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+
+  // Upsert on (tenantId, module). A renew that re-grants after an early wind-down clears
+  // disabledAt/disabledBy — the module is live again for the new term.
+  const row = await prisma.moduleEntitlement.upsert({
+    where: { tenantId_module: { tenantId: id, module } },
+    create: { tenantId: id, module, startDate: start, endDate: end },
+    update: { startDate: start, endDate: end, disabledAt: null, disabledBy: null },
+  });
+  return { ...row, state: resolveEntitlementState(row, new Date()) };
+});
+
+// GET /tenants/:id/entitlements — every row for the tenant, each with its computed state.
+server.get('/tenants/:id/entitlements', async (request, reply) => {
+  const { id } = request.params as any;
+  await verifyTenantAdminOrInternal(request, reply, id);
+  const rows = await prisma.moduleEntitlement.findMany({ where: { tenantId: id } });
+  const now = new Date();
+  return rows.map((r) => ({ ...r, state: resolveEntitlementState(r, now) }));
+});
+
+// POST /tenants/:id/entitlements/:module/disable — Owner early wind-down. Sets disabledAt;
+// endDate is left untouched, so data stays readable until it lapses naturally. Bodyless
+// action endpoint — a caller sending `Content-Type: application/json` must send `{}` (the
+// codebase convention, matching slot-engine's /bookings/:id/confirm etc.), or omit the header.
+server.post('/tenants/:id/entitlements/:module/disable', async (request, reply) => {
+  const { id, module } = request.params as any;
+
+  const authHeader = request.headers['authorization'];
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+  let disabledBy: string | null = null;
+  if (!authHeader) {
+    reply.status(401);
+    const err = new Error('Missing authorization header');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+  if (authHeader !== `Bearer ${internalKey}`) {
+    try {
+      const decoded = (await request.jwtVerify()) as any;
+      if (decoded.tenantId !== id) {
+        reply.status(403);
+        const err = new Error('Forbidden: Tenant mismatch');
+        (err as any).statusCode = 403;
+        (err as any).code = 'FORBIDDEN';
+        throw err;
+      }
+      if (!decoded.roles?.includes('owner')) {
+        reply.status(403);
+        const err = new Error('Forbidden: Owner privilege required');
+        (err as any).statusCode = 403;
+        (err as any).code = 'FORBIDDEN';
+        throw err;
+      }
+      disabledBy = decoded.userId ?? decoded.sub ?? null;
+    } catch (e: any) {
+      if (e.statusCode) throw e;
+      reply.status(401);
+      const err = new Error('Invalid or expired token');
+      (err as any).statusCode = 401;
+      (err as any).code = 'UNAUTHORIZED';
+      throw err;
+    }
+  }
+
+  if (!MODULE_VALUES.has(module)) {
+    reply.status(400);
+    const err = new Error(`module must be one of: ${[...MODULE_VALUES].join(', ')}`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const existing = await prisma.moduleEntitlement.findUnique({
+    where: { tenantId_module: { tenantId: id, module } },
+  });
+  if (!existing) {
+    reply.status(404);
+    const err = new Error('No entitlement for this tenant and module');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+  if (existing.disabledAt) {
+    return { ...existing, state: resolveEntitlementState(existing, new Date()) };
+  }
+
+  const row = await prisma.moduleEntitlement.update({
+    where: { tenantId_module: { tenantId: id, module } },
+    data: { disabledAt: new Date(), disabledBy },
+  });
+  return { ...row, state: resolveEntitlementState(row, new Date()) };
 });
 
 // Retrieve User Roles (called by Identity service at login/refresh)

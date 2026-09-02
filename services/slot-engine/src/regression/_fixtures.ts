@@ -141,6 +141,24 @@ export async function setupBaseFixtures(): Promise<SlotEngineContext> {
     create: { id: BRANCH_ID, tenantId: TENANT_ID, name: 'Regression Branch', status: 'ACTIVE', timezone: 'UTC' },
   });
 
+  // F-206: the regression tenant holds ACTIVE entitlements for both gated modules, so every
+  // pre-F-206 admin-config section (admin-operations, availability-generation-api) that hits
+  // a gated route with an owner / branch_manager JWT keeps passing. cleanDatabase() does not
+  // delete these (it stops at resourcePool), so one upsert here covers the whole run. Sections
+  // that need to exercise a *denied* state create their own tenant + entitlement row.
+  for (const module of ['GUEST_BOOKING', 'MEMBER_MANAGEMENT'] as const) {
+    await db.moduleEntitlement.upsert({
+      where: { tenantId_module: { tenantId: TENANT_ID, module } },
+      update: { startDate: new Date('2020-01-01'), endDate: new Date('2100-01-01'), disabledAt: null },
+      create: {
+        tenantId: TENANT_ID,
+        module,
+        startDate: new Date('2020-01-01'),
+        endDate: new Date('2100-01-01'),
+      },
+    });
+  }
+
   // FIXED_INSTANCE pool — one court, one bookable instance at a time.
   const fixedPoolRes = await fetch(`${baseUrl}/resource-pools`, {
     method: 'POST',

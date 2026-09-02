@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../components';
-import { OVERFLOW_DESTINATIONS } from './shell/nav';
+import { useAdminTenant } from '../auth/AdminTenantContext';
+import { OVERFLOW_DESTINATIONS, filterByEntitlement } from './shell/nav';
 
 /**
  * The /apps route's content (sub-slice 0.3) — the mobile "Apps" overflow, built as a
@@ -12,6 +13,8 @@ import { OVERFLOW_DESTINATIONS } from './shell/nav';
  */
 export function AppsOverflowScreen() {
   const navigate = useNavigate();
+  const { entitlements } = useAdminTenant();
+  const destinations = filterByEntitlement(OVERFLOW_DESTINATIONS, entitlements);
 
   return (
     <>
@@ -25,7 +28,7 @@ export function AppsOverflowScreen() {
           maxWidth: 480,
         }}
       >
-      {OVERFLOW_DESTINATIONS.map((d) => (
+      {destinations.map((d) => (
         <Card
           key={d.key}
           as="section"

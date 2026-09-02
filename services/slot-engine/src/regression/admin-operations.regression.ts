@@ -24,9 +24,9 @@ export const adminOperationsSections: Section<SlotEngineContext>[] = [
   {
     name: 'Admin config endpoints & scoping (pool PATCH, immutable branchId, booking-rule PUT, member-assignment scoping)',
     async run() {
-      const ownerJwt = signJwt({ userId: 'owner-user', roles: ['owner'] });
-      const branchManagerJwt = signJwt({ userId: 'manager-user', roles: [`branch_manager:${BRANCH_ID}`] });
-      const otherBranchManagerJwt = signJwt({ userId: 'other-manager', roles: ['branch_manager:other-branch'] });
+      const ownerJwt = signJwt({ userId: 'owner-user', tenantId: TENANT_ID, roles: ['owner'] });
+      const branchManagerJwt = signJwt({ userId: 'manager-user', tenantId: TENANT_ID, roles: [`branch_manager:${BRANCH_ID}`] });
+      const otherBranchManagerJwt = signJwt({ userId: 'other-manager', tenantId: TENANT_ID, roles: ['branch_manager:other-branch'] });
 
       const adminPoolRes = await fetch(`${baseUrl}/resource-pools`, {
         method: 'POST',
@@ -175,7 +175,7 @@ export const adminOperationsSections: Section<SlotEngineContext>[] = [
       // Relocated from availabilityGeneration.phaseB.test.ts — same "can this
       // admin touch another branch" question as the section above.
       const otherBranchId = 'phase-b-other-branch';
-      const branchManagerJwt = signJwt({ userId: 'phase-b-manager', roles: [`branch_manager:${BRANCH_ID}`] });
+      const branchManagerJwt = signJwt({ userId: 'phase-b-manager', tenantId: TENANT_ID, roles: [`branch_manager:${BRANCH_ID}`] });
 
       const unauthorizedPool = await db.resourcePool.create({
         data: {

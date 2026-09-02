@@ -176,6 +176,34 @@ Confirmed: 29 Aug 2026
 
 ## Promoted (audit trail)
 
+### tenant-module-entitlement-system
+Batch: F-206 close-out
+Surfaced: 31 Aug 2026 (discovery-admin-v2-slice2-guest-booking-mgmt.md §8; consolidated into
+the Slice-2 Chief→Technical Lead handover as "F-206 — Module entitlement system", sized "Large",
+sequenced ahead of F-207 because F-220 must land already entitlement-gated per Chief's Q7)
+Description: `Tenant.plan` was a decorative string with zero enforcement; no feature-flag/module
+concept existed. Delivered: `TenantModule` enum + `ModuleEntitlement` model (one row per
+(tenant, module), `@@unique`, no row = not entitled / fail-closed). State computed from
+(now, startDate, endDate, disabledAt) via `resolveEntitlementState` in `@badminton/shared-types`
+(shared by both services, no new dependency edge), never stored — active / read-only wind-down /
+hidden. slot-engine: `requireModuleEntitlement` composed into the existing getInternalOrAdminAuth
+chain on 18 admin-config endpoints (internal-key bypass); `GET /branches/:id/resource-pools` made
+caller-aware (guest tokens pass, admin tokens gated) since it serves both audiences — Bala's call,
+applying the handover's Decision 2 correctly rather than leaving a "never UI-only" gap.
+tenant-management: grant/renew (internal-key), read (any admin), Owner-only early wind-down.
+admin-v2: `AdminTenantContext` entitlements fetch + `nav.ts` module tags + sidebar/bottom-nav/
+overflow filtering (null fetch = hide nothing). Guest-facing booking endpoints deliberately not
+gated (larger scope, own future finding). JBC's two entitlement rows seeded by a migration that
+ships atomically with the gate. One plan-accuracy correction folded in: pre-F-206 regression
+sections that hit gated routes with admin JWTs needed the regression tenant seeded with an ACTIVE
+entitlement + `tenantId` on the fixture tokens. Verified: whole-repo typecheck + build clean;
+full 5-service regression green (slot-engine 68/68, tenant-management 9/9, +12 new sections);
+live-fire on the dev stack against real JBC data (entitled 200, no-row/lapsed 403, wind-down
+read-200/write-403, caller-aware endpoint); browser pass on admin-v2 (7 destinations entitled,
+"Manage Members" hidden when MEMBER_MANAGEMENT lapses, restored on re-grant).
+Confirmed-ID: F-206
+Confirmed: 31 Aug 2026
+
 ### slot-exhaustion-ux-date-level
 Batch: F-212 close-out
 Surfaced: 31 Aug 2026 (discovery-admin-v2-slice2-guest-booking-mgmt.md; consolidated into the

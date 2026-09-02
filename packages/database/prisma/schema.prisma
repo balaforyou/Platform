@@ -37,6 +37,15 @@ enum BranchStatus {
   INACTIVE
 }
 
+// F-206: per-tenant module entitlement. The four sellable modules; a tenant with no
+// ModuleEntitlement row for a given module is not entitled to it (fail-closed default).
+enum TenantModule {
+  GUEST_BOOKING
+  MEMBER_MANAGEMENT
+  STUDENT_MANAGEMENT
+  TOURNAMENT
+}
+
 enum UserRole {
   OWNER
   BRANCH_MANAGER
@@ -60,8 +69,30 @@ model Tenant {
   photos           String[]         @default([])
   branches         Branch[]
   roleAssignments  RoleAssignment[]
+  moduleEntitlements ModuleEntitlement[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
+}
+
+// F-206: one row per (tenant, module). Renewal extends this row's endDate — no new row per
+// term (same shape as F-207's confirmed renewal design). State is a pure function of
+// (now, startDate, endDate, disabledAt), computed at every access point, never stored:
+//   no row / now < startDate / now > endDate  -> denied
+//   startDate <= now <= endDate, no disabledAt -> read + write
+//   disabledAt set, now <= endDate             -> read only (Owner early wind-down)
+model ModuleEntitlement {
+  id         String       @id @default(uuid())
+  tenantId   String
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  module     TenantModule
+  startDate  DateTime
+  endDate    DateTime
+  disabledAt DateTime?    // set when an Owner confirms early wind-down; endDate is left untouched
+  disabledBy String?      // userId of the Owner who disabled it
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([tenantId, module])
 }
 
 model Branch {
