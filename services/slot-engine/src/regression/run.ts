@@ -15,6 +15,7 @@ import { coPlayerAndAlignmentSections } from './co-player-and-alignment.regressi
 import { multiSlotBookingSections } from './multi-slot-booking.regression';
 import { dailyBookingCapSections } from './daily-booking-cap.regression';
 import { courtSlotIndexSections } from './court-slot-index.regression';
+import { nextAvailableDateSections } from './next-available-date.regression';
 
 async function main() {
   console.log('Starting local Slot Engine server...');
@@ -49,6 +50,7 @@ async function main() {
         ...multiSlotBookingSections,
         ...dailyBookingCapSections,
         ...courtSlotIndexSections,
+        ...nextAvailableDateSections,
       ],
       context,
     );

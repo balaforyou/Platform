@@ -2171,6 +2171,72 @@ server.post('/blocked-windows', async (request, reply) => {
 // Availability check
 // ---------------------------------------------------------------------------
 
+// F-212: the per-window bookability check, factored out of GET /availability's loop so the
+// next-available-date search below reuses the exact same rules (F-155 started-window filter,
+// blocked-window overlap, HELD/CONFIRMED capacity) rather than carrying a second copy that can
+// drift. GET /availability still loops every window to build its full breakdown; this returns
+// one window's verdict.
+async function windowBookable(
+  pool: { allocationMode: AllocationMode },
+  window: { id: string; resourcePoolId: string; resourceId: string | null; capacity: number; startTime: Date; endTime: Date },
+  nowInstant: Date,
+): Promise<{ bookable: boolean; remainingCapacity: number }> {
+  if (window.startTime <= nowInstant) return { bookable: false, remainingCapacity: 0 };
+
+  const isBlocked = await prisma.blockedWindow.findFirst({
+    where: {
+      resourcePoolId: window.resourcePoolId,
+      OR: [
+        { resourceId: null },
+        ...(window.resourceId ? [{ resourceId: window.resourceId }] : []),
+      ],
+      startTime: { lte: window.endTime },
+      endTime: { gte: window.startTime },
+    },
+  });
+  if (isBlocked) return { bookable: false, remainingCapacity: 0 };
+
+  const activeBookings = await prisma.booking.findMany({
+    where: {
+      windowId: window.id,
+      status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
+    },
+  });
+
+  if (pool.allocationMode === AllocationMode.FIXED_INSTANCE) {
+    const isReserved = activeBookings.some((b: any) => b.resourceId === window.resourceId);
+    return { bookable: !isReserved, remainingCapacity: isReserved ? 0 : 1 };
+  }
+
+  const remainingCapacity = window.capacity - activeBookings.length;
+  return { bookable: remainingCapacity > 0, remainingCapacity };
+}
+
+// F-212: does this pool have at least one bookable window on this date? Short-circuits on the
+// first free window rather than scoring every one (GET /availability's job) — most candidate
+// dates in a forward search either have an early free window (fast exit) or need a full scan
+// to prove exhaustion, so this is the cheap check that search repeats per candidate date.
+async function poolHasAvailabilityOnDate(
+  pool: { id: string; allocationMode: AllocationMode },
+  dateString: string,
+  nowInstant: Date,
+): Promise<boolean> {
+  const { startOfDay, endOfDay } = dayBounds(dateString);
+  const windows = await prisma.availabilityWindow.findMany({
+    where: {
+      resourcePoolId: pool.id,
+      startTime: { gte: startOfDay },
+      endTime: { lte: endOfDay },
+    },
+    orderBy: { startTime: 'asc' },
+  });
+  for (const window of windows) {
+    const { bookable } = await windowBookable(pool, window, nowInstant);
+    if (bookable) return true;
+  }
+  return false;
+}
+
 server.get('/resource-pools/:id/availability', async (request, reply) => {
   const { id } = request.params as any;
   const { date, from, to } = request.query as any;
@@ -2248,43 +2314,81 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
   const nowInstant = new Date();
 
   for (const window of windows) {
-    if (window.startTime <= nowInstant) continue;
-
-    const isBlocked = await prisma.blockedWindow.findFirst({
-      where: {
-        resourcePoolId: id,
-        OR: [
-          { resourceId: null },
-          ...(window.resourceId ? [{ resourceId: window.resourceId }] : []),
-        ],
-        startTime: { lte: window.endTime },
-        endTime: { gte: window.startTime },
-      },
-    });
-
-    if (isBlocked) continue;
-
-    const activeBookings = await prisma.booking.findMany({
-      where: {
-        windowId: window.id,
-        status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
-      },
-    });
-
-    if (pool.allocationMode === AllocationMode.FIXED_INSTANCE) {
-      const isReserved = activeBookings.some((b: any) => b.resourceId === window.resourceId);
-      if (!isReserved) {
-        availableSlots.push({ window, remainingCapacity: 1 });
-      }
-    } else {
-      const remainingCapacity = window.capacity - activeBookings.length;
-      if (remainingCapacity > 0) {
-        availableSlots.push({ window, remainingCapacity });
-      }
+    // F-212: the per-window rules (started-window skip, blocked-window overlap, HELD/CONFIRMED
+    // capacity) now live in windowBookable so the next-available-date search can't drift from
+    // them. Behaviour here is unchanged — every window still scored, full breakdown returned.
+    const { bookable, remainingCapacity } = await windowBookable(pool, window, nowInstant);
+    if (bookable) {
+      availableSlots.push({ window, remainingCapacity });
     }
   }
 
   return availableSlots;
+});
+
+// ---------------------------------------------------------------------------
+// GET /resource-pools/:id/next-available-date?from=<YYYY-MM-DD>
+// F-212: when a guest lands on a fully-exhausted date, point them at the next date that has a
+// bookable window instead of a dead-end "no slots" message. Forward-only, server-side search —
+// mirrors F-187's period-level auto-advance, one level up (date, not time-of-day period).
+//
+// Search ceiling is the guest's REAL browse horizon, not a flat window. GET /availability
+// hard-rejects any date past `today + guestOpenWindowDays` (BROWSE_AHEAD_LIMIT_EXCEEDED), so a
+// date found beyond that is one the guest cannot actually book — pointing them at it, then
+// failing when they act, is worse than the generic message. Ceiling =
+// min(from + 14, today + guestOpenWindowDays): anchored at today (the same anchor
+// GET /availability uses), with 14 as an outer cap so a pool with a very large
+// guestOpenWindowDays can't drive an unbounded scan. Unauthenticated, matching GET /availability
+// (pre-auth guest browsing). Returns { date: <first hit> } or { date: null }.
+// ---------------------------------------------------------------------------
+server.get('/resource-pools/:id/next-available-date', async (request, reply) => {
+  const { id } = request.params as any;
+  const { from } = request.query as any;
+
+  const pool = await prisma.resourcePool.findUnique({
+    where: { id },
+    include: { bookingRules: { orderBy: { createdAt: 'asc' } } },
+  });
+  if (!pool) {
+    reply.status(404);
+    throw new Error('Resource pool not found');
+  }
+
+  if (!from) {
+    reply.status(400);
+    const err = new Error('from (YYYY-MM-DD) is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  const fromDate = dateOnly(String(from)); // throws 400 INVALID_DATE on a bad calendar date
+
+  const guestOpenWindowDays = pool.bookingRules[0]?.guestOpenWindowDays ?? 7;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const today = dateOnly(new Date());
+  const horizonEnd = new Date(today.getTime() + guestOpenWindowDays * DAY_MS);
+  const outerCap = new Date(fromDate.getTime() + 14 * DAY_MS);
+  const searchEnd = horizonEnd < outerCap ? horizonEnd : outerCap;
+
+  // The caller already knows `from` itself is empty — start the day after.
+  const firstCandidate = new Date(fromDate.getTime() + DAY_MS);
+  if (firstCandidate > searchEnd) {
+    return { date: null };
+  }
+
+  const candidates = datesInRange(dateOnlyString(firstCandidate), dateOnlyString(searchEnd), 15);
+
+  // A future date's windows may not be materialised yet.
+  await ensureGenerationForPoolDates(id, candidates);
+
+  const nowInstant = new Date();
+  for (const candidate of candidates) {
+    const candidateStr = dateOnlyString(candidate);
+    if (await poolHasAvailabilityOnDate(pool, candidateStr, nowInstant)) {
+      return { date: candidateStr };
+    }
+  }
+  return { date: null };
 });
 
 // ---------------------------------------------------------------------------

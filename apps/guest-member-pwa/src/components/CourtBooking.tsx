@@ -61,6 +61,15 @@ export default function CourtBooking() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
+  // F-212: when the guest's picked date is fully exhausted, GET .../next-available-date points
+  // them at the next bookable date and we auto-navigate there (mirrors F-187's period-level
+  // auto-advance, one level up). `autoAdvanceNotice` drives the inline "showing {new date}"
+  // banner; the refs stop the search re-triggering off its own navigation.
+  const [autoAdvanceNotice, setAutoAdvanceNotice] = useState<{ from: string; to: string } | null>(null);
+  const autoAdvancedToRef = useRef<string | null>(null);
+  const searchRanForRef = useRef<string | null>(null);
+  const prevSlotsLoadingRef = useRef(false);
+
   // F-190 Slice 2a: header shell data. Both are non-critical pill content -- the page works fine
   // if either fetch fails, so failures are swallowed rather than surfaced as a page-level error.
   const [branchAbout, setBranchAbout] = useState<any>(null);
@@ -197,6 +206,62 @@ export default function CourtBooking() {
     }
     // Keys only on `slots` deliberately (see comment above) — not groupedSlots/activePeriod.
   }, [slots]);
+
+  // F-212: after a slots fetch resolves empty, ask the server for the next date that actually
+  // has a bookable window and jump there. Keyed on the fetch completing (slotsLoading true->false)
+  // so it never fires before the first fetch or mid-fetch. Two guards, both deliberate and
+  // matching F-187's "don't yank a guest who chose this themselves" discipline:
+  //   - autoAdvancedToRef: if we auto-navigated to a date that is ALSO empty (a real race —
+  //     another guest took the last slot between the server check and this fetch), we show the
+  //     generic message rather than bouncing forward again.
+  //   - searchRanForRef: one search per distinct bookingDate value.
+  // On no result or a failed call, nothing changes — the existing "No slots available" message
+  // stays as the honest fallback.
+  useEffect(() => {
+    const justFinished = prevSlotsLoadingRef.current && !slotsLoading;
+    prevSlotsLoadingRef.current = slotsLoading;
+    if (!justFinished || slots.length > 0) return;
+    if (!poolId || !bookingDate) return;
+    if (autoAdvancedToRef.current === bookingDate) return;
+    if (searchRanForRef.current === bookingDate) return;
+    searchRanForRef.current = bookingDate;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiRequest<any>(
+          `/slot-engine/resource-pools/${poolId}/next-available-date?from=${bookingDate}`,
+          { token: accessToken },
+        );
+        if (cancelled) return;
+        const nextDate = (res as any)?.data?.date ?? (res as any)?.date ?? null;
+        if (nextDate && nextDate !== bookingDate) {
+          autoAdvancedToRef.current = nextDate;
+          setAutoAdvanceNotice({ from: bookingDate, to: nextDate });
+          setBookingDate(nextDate);
+        }
+      } catch {
+        // leave the generic "No slots available on this date" message as the honest fallback
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slots, slotsLoading, bookingDate, poolId, accessToken]);
+
+  // F-212: any manual date pick clears the auto-advance state so a fresh empty date searches
+  // again and the banner doesn't linger on a date the guest chose deliberately.
+  const pickDate = (d: string) => {
+    autoAdvancedToRef.current = null;
+    searchRanForRef.current = null;
+    setAutoAdvanceNotice(null);
+    setBookingDate(d);
+  };
+
+  // F-212: "Fri, Sep 4" — for the auto-advance banner, which names both the exhausted date and
+  // the one we moved to.
+  const formatDateReadable = (key: string) =>
+    new Date(`${key}T00:00:00`).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 
   // F-153: make the consequence of a slot tap reachable on a phone.
   //
@@ -456,7 +521,7 @@ export default function CourtBooking() {
                     <button
                       key={chip.key}
                       type="button"
-                      onClick={() => setBookingDate(chip.key)}
+                      onClick={() => pickDate(chip.key)}
                       className="shrink-0 flex flex-col items-center justify-center gap-0.5 rounded-2xl"
                       style={{
                         width: '46px',
@@ -507,12 +572,24 @@ export default function CourtBooking() {
               ref={dateInputRef}
               type="date"
               value={bookingDate}
-              onChange={(e) => setBookingDate(e.target.value)}
+              onChange={(e) => pickDate(e.target.value)}
               min={new Date().toISOString().split('T')[0]}
               max={maxDateKey}
               style={{ position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', border: 0, opacity: 0 }}
             />
           </div>
+
+          {/* F-212: shown only once we've actually landed (with slots) on an auto-advanced date,
+              so it never appears next to the generic "no slots" fallback. */}
+          {autoAdvanceNotice && autoAdvanceNotice.to === bookingDate && slots.length > 0 && (
+            <p
+              id="auto-advance-notice"
+              className="text-xs px-3 py-2 text-center"
+              style={{ color: 'var(--color-neutral-700)', background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: 'var(--radius-md)' }}
+            >
+              No slots on {formatDateReadable(autoAdvanceNotice.from)} &mdash; showing the next available date, {formatDateReadable(autoAdvanceNotice.to)}.
+            </p>
+          )}
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
