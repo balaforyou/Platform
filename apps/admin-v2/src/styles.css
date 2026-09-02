@@ -229,3 +229,87 @@ body {
     max-width: none;
   }
 }
+
+/* ── App shell (0.3) — desktop sidebar and mobile bottom-nav are BOTH always mounted;
+   this breakpoint (767px, admin-v2's first shell-level convention) shows one or the
+   other. Not a JS window.innerWidth check — the admin-web pattern. ── */
+.av2-shell {
+  min-height: 100vh;
+  display: flex;
+  background: var(--av2-bg);
+}
+.av2-sidebar {
+  width: 240px;
+  flex: none;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--av2-space-1);
+  padding: var(--av2-space-4);
+  border-right: 1px solid var(--av2-border);
+  background: var(--av2-surface);
+}
+.av2-shell-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.av2-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--av2-space-4);
+  padding: var(--av2-space-2) var(--av2-space-5);
+  border-bottom: 1px solid var(--av2-border);
+  background: var(--av2-surface);
+}
+.av2-topbar-brand {
+  display: none;
+}
+.av2-shell-main {
+  flex: 1;
+  padding: var(--av2-space-6);
+}
+.av2-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .av2-shell {
+    display: block;
+  }
+  .av2-sidebar {
+    display: none;
+  }
+  .av2-topbar-brand {
+    display: flex;
+    min-width: 0;
+  }
+  .av2-topbar h1 {
+    display: none;
+  }
+  .av2-shell-main {
+    padding: var(--av2-space-4);
+    /* room for the fixed bottom-nav */
+    padding-bottom: calc(56px + var(--av2-space-4));
+  }
+  .av2-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    align-items: stretch;
+    padding: var(--av2-space-1) var(--av2-space-1) calc(var(--av2-space-1) + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--av2-border);
+    background: var(--av2-surface);
+  }
+}

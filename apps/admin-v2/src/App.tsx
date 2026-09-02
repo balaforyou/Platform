@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { useAdminAuth } from './auth/AdminAuthContext';
 import { LoadingState } from './components';
 import { LoginScreen } from './screens/LoginScreen';
@@ -6,16 +7,19 @@ import { LandingPage } from './screens/LandingPage';
 import { EnrollPasskeyPrompt, wasPasskeyPromptDismissed } from './screens/EnrollPasskeyPrompt';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { TokenKitchenSink } from './dev/TokenKitchenSink';
+import { AppShell } from './screens/shell/AppShell';
+import { AppsOverflowScreen } from './screens/AppsOverflowScreen';
+import { StubScreen } from './screens/StubScreen';
 
 /**
- * Slice 1 has three states, gated by auth — no URL router needed yet:
+ * Auth gate → navigated app.
  *   1. not signed in           → LoginScreen
  *   2. signed in, first time   → EnrollPasskeyPrompt (skippable)
- *   3. signed in, prompt done  → LandingPage
+ *   3. signed in, prompt done  → the routed AppShell (sub-slice 0.3)
  *
- * Plus a dev-only token review surface at /__dev/tokens (0.1), gated behind real
- * sign-in so it reuses the real JWT→tenant path. 0.3 introduces real routing; this
- * is a plain pathname check, same spirit as LoginScreen's `import.meta.env.DEV` gate.
+ * A dev-only token review surface at /__dev/tokens (0.1) is a plain pathname check
+ * evaluated BEFORE the router mounts — it stays outside routing entirely.
+ * No `basename`: admin-v2 deploys at the root of its own subdomain (vite `base: '/'`).
  */
 export default function App() {
   const { loading, isAuthenticated, user } = useAdminAuth();
@@ -39,9 +43,67 @@ export default function App() {
   }
 
   return (
-    <>
-      <LandingPage />
+    <BrowserRouter>
       <PwaInstallPrompt />
-    </>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<LandingPage />} />
+          <Route
+            path="/communications"
+            element={
+              <StubScreen
+                title="Communications"
+                description="Announcements and messages to members and guests."
+              />
+            }
+          />
+          <Route
+            path="/ledger"
+            element={
+              <StubScreen
+                title="Subscription Ledger"
+                description="Payments collected and outstanding, by member and period."
+              />
+            }
+          />
+          <Route
+            path="/inventory"
+            element={
+              <StubScreen title="Inventory" description="Stock and equipment tracked per branch." />
+            }
+          />
+          <Route
+            path="/members"
+            element={
+              <StubScreen
+                title="Manage Members"
+                description="Member records, plans, and status."
+              />
+            }
+          />
+          <Route
+            path="/court-groups"
+            element={
+              <StubScreen
+                title="Manage Court Groups"
+                description="Court groupings and their availability windows."
+              />
+            }
+          />
+          <Route
+            path="/guests"
+            element={
+              <StubScreen
+                title="Guest Management"
+                description="Walk-in and one-off guest bookings."
+              />
+            }
+          />
+          <Route path="/apps" element={<AppsOverflowScreen />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }

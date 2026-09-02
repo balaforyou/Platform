@@ -55,7 +55,9 @@ export function BottomNavItem({ icon, label, active, onClick, badge }: NavItemPr
           </span>
         )}
       </span>
-      <span>{label}</span>
+      <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {label}
+      </span>
     </button>
   );
 }
