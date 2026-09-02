@@ -5,7 +5,13 @@ import { AdminAuthProvider } from './auth/AdminAuthContext';
 import { AdminTenantProvider } from './auth/AdminTenantContext';
 import { ToastProvider } from './components';
 import App from './App';
+import { applyTheme, getStoredTheme } from './lib/theme';
 import './styles.css';
+
+// Before first paint, synchronously — a wrong light/dark theme flashing on LoginScreen
+// (which precedes any provider mount) is a real correctness issue. No stored preference
+// leaves data-theme unset → the OS-follow default from 0.1's token layer.
+applyTheme(getStoredTheme());
 
 // Capture beforeinstallprompt before React mounts, so a fast-firing event isn't lost
 // (same guard as the guest PWA). PwaInstallPrompt picks this up on mount.

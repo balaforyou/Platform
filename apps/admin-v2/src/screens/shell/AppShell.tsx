@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Grid, LogOut } from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Grid, Moon, Sun } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { useAdminTenant } from '../../auth/AdminTenantContext';
-import { Button, SidebarNavItem, BottomNavItem } from '../../components';
+import { Avatar, IconButton, SidebarNavItem, BottomNavItem } from '../../components';
+import { applyTheme, effectiveTheme, setStoredTheme } from '../../lib/theme';
 import { NAV_DESTINATIONS, activeDestination } from './nav';
 
 /**
@@ -16,11 +18,19 @@ import { NAV_DESTINATIONS, activeDestination } from './nav';
  * (the mobile "Apps" overflow is a real route, /apps, not a modal).
  */
 export function AppShell() {
-  const { logout } = useAdminAuth();
+  const { user, logout } = useAdminAuth();
   const { tenant } = useAdminTenant();
   const location = useLocation();
   const navigate = useNavigate();
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const [theme, setTheme] = useState(effectiveTheme());
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    setStoredTheme(next);
+    setTheme(next);
+  };
 
   const active = activeDestination(location.pathname);
   const pageTitle = location.pathname === '/apps' ? 'Apps' : active?.label ?? 'Slotflow Admin';
@@ -77,9 +87,32 @@ export function AppShell() {
         <header className="av2-topbar">
           <span className="av2-topbar-brand">{brand}</span>
           <h1 style={{ margin: 0, fontSize: 'var(--av2-text-lg)', fontWeight: 700 }}>{pageTitle}</h1>
-          <Button variant="ghost" leadingIcon={<LogOut size={15} />} onClick={logout} style={{ marginLeft: 'auto' }}>
-            Sign out
-          </Button>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--av2-space-2)' }}>
+            <IconButton
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              icon={theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              onClick={toggleTheme}
+            />
+
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button aria-label="Account menu" className="av2-avatar-trigger">
+                  <Avatar name={user?.email ?? user?.userId ?? '?'} size="sm" />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content align="end" sideOffset={6} className="av2-account-menu">
+                  <div className="av2-account-menu-identity">{user?.email ?? user?.userId}</div>
+                  {user?.phone && <div className="av2-account-menu-phone">{user.phone}</div>}
+                  <DropdownMenu.Separator className="av2-account-menu-sep" />
+                  <DropdownMenu.Item onSelect={() => logout()} className="av2-account-menu-item">
+                    Log out
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          </div>
         </header>
 
         <main className="av2-shell-main">

@@ -1,6 +1,9 @@
 export interface AdminUser {
   userId: string;
   email: string | null;
+  /** Signed into the JWT by identity-auth; nullable in the schema and unset for a
+   *  Google-signup admin, so treat as usually absent. */
+  phone: string | null;
   tenantId: string;
   userType: string;
   roles: string[];
@@ -21,6 +24,7 @@ export function parseAdminClaims(token: string): AdminUser | null {
     return {
       userId: claims.userId,
       email: typeof claims.email === 'string' ? claims.email : null,
+      phone: typeof claims.phone === 'string' ? claims.phone : null,
       tenantId: claims.tenantId,
       userType: typeof claims.userType === 'string' ? claims.userType : 'STAFF',
       roles: Array.isArray(claims.roles) ? claims.roles : [],

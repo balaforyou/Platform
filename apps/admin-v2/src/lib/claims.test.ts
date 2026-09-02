@@ -15,21 +15,23 @@ describe('parseAdminClaims', () => {
       userId: 'u-1',
       tenantId: 't-1',
       email: 'owner@jbc.com',
+      phone: '+919876500011',
       userType: 'STAFF',
       roles: ['owner'],
     });
     expect(parseAdminClaims(token)).toEqual({
       userId: 'u-1',
       email: 'owner@jbc.com',
+      phone: '+919876500011',
       tenantId: 't-1',
       userType: 'STAFF',
       roles: ['owner'],
     });
   });
 
-  it('defaults email to null and roles to [] when absent', () => {
+  it('defaults email and phone to null and roles to [] when absent', () => {
     const parsed = parseAdminClaims(jwt({ userId: 'u', tenantId: 't' }));
-    expect(parsed).toMatchObject({ email: null, roles: [], userType: 'STAFF' });
+    expect(parsed).toMatchObject({ email: null, phone: null, roles: [], userType: 'STAFF' });
   });
 
   it('returns null when required claims are missing', () => {

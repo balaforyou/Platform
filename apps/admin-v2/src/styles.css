@@ -313,3 +313,61 @@ body {
     background: var(--av2-surface);
   }
 }
+
+/* ── Topbar account menu (0.3 addendum) — Radix DropdownMenu + token CSS. Static
+   (not inline <style>), enter-only animation — same Presence/animationend-strand
+   lesson 0.2's Modal already paid for. ── */
+.av2-avatar-trigger {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  display: inline-flex;
+}
+.av2-account-menu {
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--av2-surface);
+  border: 1px solid var(--av2-border);
+  border-radius: var(--av2-radius-sm);
+  box-shadow: var(--av2-shadow-lg);
+  padding: var(--av2-space-1);
+  z-index: 950;
+}
+.av2-account-menu[data-state="open"] {
+  animation: av2-account-menu-in var(--av2-duration-fast) var(--av2-ease-standard);
+}
+@keyframes av2-account-menu-in {
+  from { opacity: 0; transform: translateY(-4px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+.av2-account-menu-identity {
+  padding: var(--av2-space-2) var(--av2-space-3) 2px;
+  font-size: var(--av2-text-sm);
+  font-weight: 600;
+  color: var(--av2-text);
+  word-break: break-all;
+}
+.av2-account-menu-phone {
+  padding: 0 var(--av2-space-3) var(--av2-space-2);
+  font-size: var(--av2-text-xs);
+  color: var(--av2-muted);
+}
+.av2-account-menu-sep {
+  height: 1px;
+  margin: var(--av2-space-1) 0;
+  background: var(--av2-border);
+}
+.av2-account-menu-item {
+  padding: var(--av2-space-2) var(--av2-space-3);
+  font-size: var(--av2-text-sm);
+  color: var(--av2-text);
+  border-radius: calc(var(--av2-radius-sm) - 2px);
+  cursor: pointer;
+  outline: none;
+}
+.av2-account-menu-item[data-highlighted] {
+  background: var(--av2-surface-alt);
+}
