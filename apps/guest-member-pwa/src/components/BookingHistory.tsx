@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { Calendar, Clock, MapPin, Users, HelpCircle, Navigation } from 'lucide-react';
+import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
 
 export default function BookingHistory() {
@@ -300,6 +300,19 @@ export default function BookingHistory() {
                       <Users className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-neutral-700)' }} />
                       <span>{1 + (booking.players?.length || 0)} Players</span>
                     </div>
+                    {/* F-189: the assigned court — real Resource name (F-205), else the cosmetic
+                        "Court N" (F-186), else nothing (a legacy pre-F-205 booking). */}
+                    {(() => {
+                      const court =
+                        booking.resource?.name ??
+                        (booking.courtSlotIndex != null ? `Court ${booking.courtSlotIndex}` : null);
+                      return court ? (
+                        <div className="flex items-center space-x-1.5">
+                          <Hash className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-neutral-700)' }} />
+                          <span>{court}</span>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
 
                   {booking.players && booking.players.length > 0 && (

@@ -127,9 +127,10 @@ export default function BookingConfirmation() {
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '480px' }}>
       {/* F-190 Slice 4: success/pending banner (JBC Booking.dc.html:315-319). "Booking Confirmed!"
           is kept verbatim -- e2e-locked (guest-booking.spec.ts:82,127, f023-full-system.spec.ts:436
-          all assert exact text on #confirmation-title) and the right call regardless, since the
-          wireframe's own "Court 3 is yours" needs courtSlotIndex display, which F-189 owns, not
-          this slice. The pending state has no wireframe guidance (it only draws the success case)
+          all assert exact text on #confirmation-title) and the right call regardless. (F-189 has
+          since added the assigned-court row further down -- see #confirmation-court-name -- rather
+          than "Court 3 is yours" in the banner.)
+          The pending state has no wireframe guidance (it only draws the success case)
           -- adapted to the same banner structure. F-192 Slice F: pending state's amber routed
           through the one sanctioned amber token set (--slot-almostfull-*). */}
       <div
@@ -213,6 +214,20 @@ export default function BookingConfirmation() {
                 </span>
               </div>
             )}
+            {/* F-189: the assigned court. Real Resource name (F-205) when one was assigned;
+                the cosmetic "Court N" (F-186) as fallback; nothing at all when neither is set
+                (a legacy pre-F-205 booking) — never a blank row implying data that isn't real. */}
+            {(() => {
+              const court = booking.resource?.name ?? (booking.courtSlotIndex != null ? `Court ${booking.courtSlotIndex}` : null);
+              return court ? (
+                <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+                  <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Court</span>
+                  <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }} id="confirmation-court-name">
+                    {court}
+                  </span>
+                </div>
+              ) : null;
+            })()}
             <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
               <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Players</span>
               <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
