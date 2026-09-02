@@ -1,27 +1,27 @@
 name: CI
 
 on:
+  push:
+    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  # The merge queue runs CI once on the exact commit that will become `main` (no
-  # separate post-merge run). That merge_group run is also the only place the
-  # Docker Hub push happens — its SHA is the SHA that lands on main. Direct pushes
-  # to main are disallowed by the branch ruleset, so there is no `push:` trigger.
-  merge_group:
 
 # F-193 Batch 2 — the pipeline this repo's standing rules already assume exists.
 #
 #   checks       — lint, typecheck, register:check, diagram:verify   (fast, no services)
-#                  runs on: pull_request, merge_group
+#                  runs on: pull_request + push:main
 #   regression   — the 5 service regression suites against an ephemeral Postgres
-#                  runs on: pull_request, merge_group
+#                  runs on: pull_request + push:main  (both are ruleset-required on a PR)
 #   integration  — build + bring up the REAL shipped stack (the production Dockerfiles),
 #                  verify-deployment.mjs all-7-PASS, the Playwright e2e suite, then the
-#                  Docker Hub image push.  runs on: merge_group ONLY — the ~15-min stack
-#                  build + verify + push happens exactly once per change, on the commit
-#                  that lands on main. A PR gets correctness feedback from checks +
-#                  regression; a build/wiring break blocks the merge instead of landing
-#                  red on main.
+#                  Docker Hub image push.  runs on: push:main ONLY — the ~15-min stack
+#                  build + verify + push runs exactly ONCE per change, post-merge, on the
+#                  real main commit (which is the SHA promote.sh pulls). A PR gets fast
+#                  correctness feedback from checks + regression; if integration breaks
+#                  post-merge, main goes red and the fix is a follow-up PR (nothing
+#                  auto-deploys). GitHub merge queue — which would gate this pre-merge —
+#                  isn't available on a personal-account repo, so this is the next-best:
+#                  one integration run per change instead of the old pre+post double-run.
 #
 # `regression` and `integration` both `needs: checks`, so a cheap failure never spends
 # Docker-build minutes, and neither heavy job starts if the checks are red.
@@ -71,19 +71,18 @@ jobs:
         run: pnpm test:regression
 
   integration:
-    # merge_group ONLY — the ~15-min Docker build + full-stack verify + image push runs
-    # exactly once per change, on the commit that will become main. PRs get fast
-    # correctness feedback from checks + regression; a Docker-build / compose-wiring
-    # break surfaces on the merge_group run and blocks the merge (PR stays open) rather
-    # than landing red on main.
-    if: github.event_name == 'merge_group'
+    # push:main ONLY — the ~15-min Docker build + full-stack verify + image push runs
+    # exactly ONCE per change, post-merge, on the real main commit. A PR never triggers
+    # it (fast feedback from checks + regression only); if it breaks post-merge, main
+    # goes red and the fix is a follow-up PR — nothing auto-deploys, promote.sh is manual.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # needs regression too (not just checks) so the Docker Hub push below is gated on
     # the whole pipeline — a regression failure must stop an in-flight integration run
     # from pushing.
     needs: [checks, regression]
     runs-on: ubuntu-latest
-    # One shared group so queued merges serialise (they push to Docker Hub; a movable
-    # :<svc> tag must not be raced).
+    # One shared group so consecutive main pushes serialise (they push to Docker Hub;
+    # a movable :<svc> tag must not be raced).
     concurrency:
       group: dockerhub-publish-main
       cancel-in-progress: false
@@ -138,9 +137,9 @@ jobs:
 
       # F-193 Batch 3 — push the images that were JUST verified, no rebuild. The bytes
       # tagged here are the exact container images verify-deployment.mjs approved above.
-      # The whole job is merge_group-only (see the job-level `if:`), so $GIT_SHA here is
-      # the commit the queue lands on main — the real deploy SHA. Both tag forms, all 7
-      # components, every run (F-193 decision 1) — unchanged layers dedup for free.
+      # The whole job is push:main-only (see the job-level `if:`), so $GIT_SHA is the real
+      # main commit — the SHA promote.sh pulls. Both tag forms, all 7 components, every
+      # run (F-193 decision 1) — unchanged layers dedup for free.
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
