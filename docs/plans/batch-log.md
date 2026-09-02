@@ -1132,6 +1132,53 @@ previous SHA for rollback.
 **Close-out:** `register:check` green. `diagram:verify` green (no F-195-track finding is
 diagram-tagged). F-195 Description carries a dated Batch-26 production-cutover note.
 
+## Batch 27 — F-189 guest court display + F-205 / pipeline record backfill
+
+**Findings:** [[F-189]] — **Resolved**. Also in this PR: [[F-205]] Resolved-row + pending-findings
+backfill (delivered and merged in Batch-less PR #9 → `c40d267`, never recorded), and the CI
+pipeline consolidation (PRs #10 + #11 → `bb21b3c`).
+**Handed off:** 2 Sep 2026
+**Status:** Done
+**Branch/PR:** `f189-guest-court-display` → PR #12
+**Commits:** `b1acb11` (F-189 implementation) · this row (register + pending-findings + batch-log close-out)
+
+**F-189 — real assigned court on guest confirmation/history.** `GET /bookings/:id` and
+`GET /bookings/my` gained `resource: true` on their `include` (additive — no schema change, no new
+route, `GET /bookings/my`'s `parentBookingId: null` filter untouched). `BookingConfirmation.tsx`
+renders a "Court" row (id `confirmation-court-name`) between Venue and Players; `BookingHistory.tsx`
+a hash-icon row per card. One fallback on both: real `resource.name` ([[F-205]]) → cosmetic
+`Court N` from `courtSlotIndex` ([[F-186]]) → row not rendered (legacy pre-[[F-205]] booking, both
+null). `BookingPay.tsx` deliberately unchanged (pre-payment screen, court not a payment-decision
+input); `main.tsx` "Upcoming Slots" widget out of scope ([[F-188]]). Evidence: whole-repo typecheck
+(14 pkgs) + slot-engine + guest-member-pwa build clean; slot-engine regression **55/55** unchanged
+(additive `include`); live-fire on the local dev stack against the real JBC Coimbatore pool in
+`badminton_db` — negotiated POOLED booking assigned `Resource` "Court 1", DB read-back + raw
+`GET /bookings/:id` and `GET /bookings/my` both carried `resource.name`, legacy `resourceId: null`
+booking fell back to `courtSlotIndex`; browser pass on both screens (test bookings cancelled after).
+TL independent verification: real remote SHA + diffstat + file-by-file diff on all 5 files,
+`register:check` / `diagram:verify` re-executed in a throwaway worktree — all matched. Signed off
+2 Sep 2026.
+
+**F-205 backfill** — POOLED booking-creation (`POST /bookings`, `POST /bookings/negotiated`)
+hardcoded `resourceId: null`; `assignPooledCourt` now picks the first free real Resource (stable
+`createdAt` order) across the booking's windows, `courtSlotIndex` derived from its position so
+[[F-186]]'s cosmetic number and the real court agree; fallback to `resourceId: null` + [[F-186]]'s
+scan when Resource count ≠ capacity. Delivered PR #9 → `c40d267`, commit `9ab2750`; CI regression
+55/55 on the merge commit, +5 sections. ID was Chief-assigned directly in the handover (never went
+through "Awaiting confirmation") — pending-findings entry labelled "F-205 close-out" accordingly.
+Two plan corrections + one design decision (`courtSlotIndex`/`Resource` forced to agree, settled
+with Bala) written up in `claude/technical-lead-f205-closeout-for-chief.md`.
+
+**CI pipeline consolidation** (Bala-approved, unrelated to the findings) — `integration` + the
+Docker Hub push now run on `push: main` only (once per change, post-merge), not on every PR;
+merge queue was unavailable on a personal-account public repo (HTTP 422), so this is Option B.
+A PR now runs `checks` + `regression` only. Branch ruleset `22084138` on `main`: require PR,
+required checks `checks` + `regression`, block force-push and deletion. PRs #10 + #11 → `bb21b3c`.
+
+**Close-out:** `pnpm register:check` green (196 rows, Resolved 90). `pnpm diagram:verify` green — F-189 touches
+no diagram-tagged endpoint. PR #12 gated on `checks` + `regression`; `integration` runs post-merge
+per the Batch-23 pipeline as consolidated here.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

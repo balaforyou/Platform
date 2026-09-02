@@ -3846,6 +3846,9 @@ server.get('/bookings/:id', async (request, reply) => {
         }
       },
       players: true,
+      // F-189: the real assigned court (F-205), for the guest confirmation screen's
+      // "Court N" row. Nullable — a legacy pre-F-205 booking has no resource.
+      resource: true,
       // F-187: guest-facing multi-window display (BookingConfirmation.tsx, BookingPay.tsx)
       // needs every additional hour's time range, not just the parent's own window.
       childBookings: {
@@ -3906,6 +3909,9 @@ server.get('/bookings/my', async (request, reply) => {
         }
       },
       players: true,
+      // F-189: the real assigned court (F-205), for BookingHistory.tsx's per-card court
+      // row. Nullable — a legacy pre-F-205 booking has no resource.
+      resource: true,
       // F-187: guest-facing multi-window display (BookingHistory.tsx) needs every
       // additional hour's time range, not just the parent's own window. The
       // parentBookingId: null filter above is unchanged and still governs which rows

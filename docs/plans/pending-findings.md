@@ -52,19 +52,6 @@ unimplemented (see Description above, "Not fixed here"), so it does not belong i
 resolved work. No `findings_register.md` row exists for it. `Confirmed-ID`/`Confirmed` kept as-is;
 only the section changed.
 
-### court-slot-index-guest-ui-display
-Batch: 20
-Surfaced: 26 Aug 2026
-Description: F-186 shipped courtSlotIndex as a backend field only — no guest-facing UI anywhere
-actually displays "Court N" to the guest. Real follow-on if the Chief wants the field surfaced,
-not assumed automatic from F-186 shipping.
-Confirmed-ID: F-189
-Confirmed: 26 Aug 2026
-26 Aug 2026 filing correction: moved back here from "Promoted" — this finding is still genuinely
-unimplemented (see Description above, "not assumed automatic"), so it does not belong in an audit
-trail of resolved work. No `findings_register.md` row exists for it. `Confirmed-ID`/`Confirmed` kept
-as-is; only the section changed.
-
 ### closed-override-no-retroactive-window-suppression
 Batch: 21
 Surfaced: 27 Aug 2026
@@ -188,6 +175,42 @@ Confirmed-ID: F-202
 Confirmed: 29 Aug 2026
 
 ## Promoted (audit trail)
+
+### court-slot-index-guest-ui-display
+Batch: 20 (surfaced), F-189 close-out (implemented)
+Surfaced: 26 Aug 2026
+Description: F-186 shipped courtSlotIndex as a backend field only, and F-205 later added a real
+assigned Resource — but no guest-facing UI anywhere displayed the court to the guest.
+`GET /bookings/:id` and `GET /bookings/my` returned the scalars but never the related `Resource`
+row. Fixed: `resource: true` added to the `include` on both endpoints (additive, no schema change,
+no new route); `BookingConfirmation.tsx` shows a "Court" row between Venue and Players,
+`BookingHistory.tsx` a hash-icon row per card. One fallback expression on both: real `resource.name`
+(F-205), else the cosmetic `Court N` from `courtSlotIndex` (F-186), else no row (a legacy
+pre-F-205 booking with both null). `BookingPay.tsx` deliberately unchanged; `main.tsx` "Upcoming
+Slots" widget out of scope (F-188). Verified: whole-repo typecheck + build clean; slot-engine
+regression 55/55 unchanged; live-fire against the local dev stack (real JBC Coimbatore pool in
+`badminton_db`) — real negotiated POOLED booking assigned "Court 1", DB read-back + raw API
+responses on both endpoints carried `resource.name`, legacy `resourceId: null` booking fell back
+correctly; browser pass on both screens.
+Confirmed-ID: F-189
+Confirmed: 26 Aug 2026
+
+### slot-engine-pooled-booking-real-court-assignment
+Batch: F-205 close-out
+Surfaced: 30 Aug 2026 (discovery-admin-v2-slice2-guest-booking-mgmt.md §3)
+Description: POOLED booking creation hardcoded `resourceId: null` in both booking-creation flows
+(`POST /bookings` and `POST /bookings/negotiated`), so per-court identity was never tracked at the
+booking level despite the pools having real Resource rows. 21 live JBC POOLED bookings carried
+resourceId=null. Fixed: `assignPooledCourt` picks the first free real Resource (stable createdAt
+order) across the booking's window(s); courtSlotIndex is derived from its position so F-186's
+cosmetic number and the real court always agree; graceful fallback to resourceId:null + F-186's
+occupancy scan when a pool's Resource count != capacity. Two plan corrections folded in during
+implementation (two code paths not one; two live JBC pools not one) — scope-precision, not new
+findings. courtSlotIndex/Resource consistency was a design decision (force agree), settled with
+Bala. Verified: CI regression 55/55 (its own run on the merge commit), +5 new sections with real
+DB read-backs on both JBC pool shapes and both flows, whole-repo typecheck + build clean.
+Confirmed-ID: F-205
+Confirmed: 30 Aug 2026
 
 ### admin-v2-enrollpasskeyprompt-render-phase-setstate-crash
 Batch: Phase 0 close-out
