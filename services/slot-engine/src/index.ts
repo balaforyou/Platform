@@ -98,6 +98,46 @@ function formatHHMM(date: Date, timeZone: string): string {
   return branchHHMM(date, timeZone);
 }
 
+/**
+ * F-205: automatic real-court assignment for a POOLED booking.
+ *
+ * Picks the first real `Resource` in the pool (stable `createdAt asc` order — matches
+ * provision order, so position lines up with the "Court N" numbering) that no active
+ * (HELD/CONFIRMED) booking already holds across the window(s) this booking touches, and
+ * derives `courtSlotIndex` from that resource's position (F-186's cosmetic number and
+ * the real resource are forced to agree — see the F-205 plan §1 step 4).
+ *
+ * Falls back to `resourceId: null` + F-186's original occupancy-scan index when the pool
+ * can't be assigned a real court: its `Resource` count doesn't match `capacity` (nothing
+ * enforces that at the schema level), or every real court is somehow already taken. That
+ * fallback path is unchanged from today's behaviour.
+ */
+function assignPooledCourt(
+  pool: { capacity: number; resources: { id: string; createdAt: Date }[] },
+  activeBookings: { courtSlotIndex: number | null; resourceId: string | null }[],
+): { resourceId: string | null; courtSlotIndex: number | null } {
+  const ordered = [...pool.resources].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  if (ordered.length === pool.capacity && ordered.length > 0) {
+    const taken = new Set(
+      activeBookings.map((b) => b.resourceId).filter((v): v is string => v !== null),
+    );
+    const free = ordered.findIndex((r) => !taken.has(r.id));
+    if (free !== -1) {
+      return { resourceId: ordered[free].id, courtSlotIndex: free + 1 };
+    }
+  }
+
+  // Fallback: F-186 occupancy scan over the cosmetic 1..capacity indices, unchanged.
+  const occupied = new Set(
+    activeBookings.map((b) => b.courtSlotIndex).filter((v): v is number => v !== null),
+  );
+  for (let i = 1; i <= pool.capacity; i++) {
+    if (!occupied.has(i)) return { resourceId: null, courtSlotIndex: i };
+  }
+  return { resourceId: null, courtSlotIndex: null };
+}
+
 // ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------
@@ -2374,7 +2414,11 @@ server.post('/bookings', async (request, reply) => {
       const window = lockedWindows[0];
 
       // 3. Fetch resource pool details.
-      const pool = await tx.resourcePool.findUnique({ where: { id: resourcePoolId } });
+      const pool = await tx.resourcePool.findUnique({
+        where: { id: resourcePoolId },
+        // F-205: the pool's real Resource rows, stable order, for automatic court assignment.
+        include: { resources: { orderBy: { createdAt: 'asc' } } },
+      });
       if (!pool) {
         const err = new Error('Resource pool not found');
         (err as any).statusCode = 404;
@@ -2607,35 +2651,30 @@ server.post('/bookings', async (request, reply) => {
         new Prisma.Decimal(0),
       );
 
-      // 9. F-186: display-only "Court N" number for POOLED pools with no real per-court
-      // resourceId tracking. Union the occupied courtSlotIndex values across every window
-      // this booking touches (not just lockedWindows[0] — a multi-window booking is checked
-      // independently against each), then take the lowest index in 1..pool.capacity absent
-      // from that union. If none exists, leave it null — the capacity check above (step 7)
-      // already independently governs validity; this is a cosmetic convenience over generic
-      // capacity, never a rejection reason.
+      // 9. Court assignment for POOLED pools. F-205: assign a real Resource (and derive
+      // courtSlotIndex from its position — the cosmetic "Court N" and the real court are
+      // forced to agree). Union the active bookings across every window this booking
+      // touches — a multi-window booking is checked independently against each. If the
+      // pool has no usable Resource list, assignPooledCourt falls back to F-186's original
+      // occupancy-scan index with resourceId null. Neither is a rejection reason — the
+      // capacity check above (step 7) already independently governs validity.
       let courtSlotIndex: number | null = null;
+      let pooledResourceId: string | null = null;
       if (pool.allocationMode === AllocationMode.POOLED) {
-        const occupiedIndices = new Set<number>();
+        const active: { courtSlotIndex: number | null; resourceId: string | null }[] = [];
         for (const w of lockedWindows) {
-          const occupied = await tx.booking.findMany({
+          const rows = await tx.booking.findMany({
             where: {
               windowId: w.id,
               status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
-              courtSlotIndex: { not: null },
             },
-            select: { courtSlotIndex: true },
+            select: { courtSlotIndex: true, resourceId: true },
           });
-          for (const b of occupied) {
-            if (b.courtSlotIndex !== null) occupiedIndices.add(b.courtSlotIndex);
-          }
+          active.push(...rows);
         }
-        for (let i = 1; i <= pool.capacity; i++) {
-          if (!occupiedIndices.has(i)) {
-            courtSlotIndex = i;
-            break;
-          }
-        }
+        const assigned = assignPooledCourt(pool, active);
+        pooledResourceId = assigned.resourceId;
+        courtSlotIndex = assigned.courtSlotIndex;
       }
 
       // 10. Create booking(s) in HELD state. The parent carries the real price and
@@ -2646,7 +2685,7 @@ server.post('/bookings', async (request, reply) => {
       const heldUntil = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes TTL
       const bookingResourceId = pool.allocationMode === AllocationMode.FIXED_INSTANCE
         ? targetResource
-        : null;
+        : pooledResourceId;
 
       const parent = await tx.booking.create({
         data: {
@@ -2800,7 +2839,11 @@ server.post('/bookings/negotiated', async (request, reply) => {
       const window = windows[0];
 
       // 2. Fetch pool.
-      const pool = await tx.resourcePool.findUnique({ where: { id: resourcePoolId } });
+      const pool = await tx.resourcePool.findUnique({
+        where: { id: resourcePoolId },
+        // F-205: the pool's real Resource rows, stable order, for automatic court assignment.
+        include: { resources: { orderBy: { createdAt: 'asc' } } },
+      });
       if (!pool) {
         const err = new Error('Resource pool not found');
         (err as any).statusCode = 404;
@@ -2862,31 +2905,26 @@ server.post('/bookings/negotiated', async (request, reply) => {
       const now = new Date();
       const heldUntil = new Date(now.getTime() + 5 * 60 * 1000);
 
-      // F-186: same computation as the self-service path, but this endpoint is
-      // single-window (no lockedWindows array, no child cascade) — the union collapses
-      // to occupancy on the one windowId. Confirmed at implementation time that the two
-      // endpoints share the same real capacity pool per window, so a negotiated booking
-      // with no index would otherwise be invisible to self-service's own computation
-      // and vice versa.
+      // F-205 / F-186: same assignment as the self-service path, but single-window (no
+      // lockedWindows array, no child cascade) — the union collapses to the one windowId.
+      // The two endpoints share the same real capacity pool per window, so a negotiated
+      // booking's court would otherwise be invisible to self-service's own computation and
+      // vice versa. assignPooledCourt picks a real Resource + a matching courtSlotIndex,
+      // or falls back to F-186's occupancy-scan index (resourceId null) for a pool with no
+      // usable Resource list.
       let courtSlotIndex: number | null = null;
+      let pooledResourceId: string | null = null;
       if (pool.allocationMode === AllocationMode.POOLED) {
-        const occupied = await tx.booking.findMany({
+        const active = await tx.booking.findMany({
           where: {
             windowId,
             status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
-            courtSlotIndex: { not: null },
           },
-          select: { courtSlotIndex: true },
+          select: { courtSlotIndex: true, resourceId: true },
         });
-        const occupiedIndices = new Set<number>(
-          occupied.map((b: any) => b.courtSlotIndex).filter((v: any) => v !== null),
-        );
-        for (let i = 1; i <= pool.capacity; i++) {
-          if (!occupiedIndices.has(i)) {
-            courtSlotIndex = i;
-            break;
-          }
-        }
+        const assigned = assignPooledCourt(pool, active);
+        pooledResourceId = assigned.resourceId;
+        courtSlotIndex = assigned.courtSlotIndex;
       }
 
       return await tx.booking.create({
@@ -2896,7 +2934,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
           resourcePoolId,
           resourceId: pool.allocationMode === AllocationMode.FIXED_INSTANCE
             ? (resourceId || window.resourceId)
-            : null,
+            : pooledResourceId,
           courtSlotIndex,
           windowId,
           userId,

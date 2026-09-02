@@ -58,6 +58,24 @@ async function createPooledPool(capacity: number, maxAdditionalWindows = 1): Pro
   return pool;
 }
 
+/**
+ * F-205: a POOLED pool with `capacity` real Resource rows, created in order so
+ * `courts[i]` is the (i+1)-th court — position lines up with the cosmetic "Court N".
+ */
+async function createResourcedPooledPool(capacity: number): Promise<{ pool: any; courts: any[] }> {
+  const pool = await createPooledPool(capacity);
+  const courts: any[] = [];
+  for (let i = 1; i <= capacity; i++) {
+    const res = await fetch(`${baseUrl}/resource-pools/${pool.id}/resources`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+      body: JSON.stringify({ name: `Court ${i}` }),
+    });
+    courts.push(((await res.json()) as any).data);
+  }
+  return { pool, courts };
+}
+
 async function createWindow(poolId: string, hoursFromNow: number, capacity: number): Promise<any> {
   const startTime = nextAlignedHour(hoursFromNow);
   const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
@@ -359,6 +377,115 @@ export const courtSlotIndexSections: Section<SlotEngineContext>[] = [
         throw new Error(
           `Expected the self-service booking to see the negotiated booking's index and take 2, got ${selfServiceBooking.courtSlotIndex}`,
         );
+      }
+    },
+  },
+
+  // ── F-205: automatic real-court assignment (resourced pools) ──────────────────────
+
+  {
+    name: 'F-205: a POOLED self-service booking is assigned a real Resource; courtSlotIndex matches its 1-based position',
+    async run() {
+      const { pool, courts } = await createResourcedPooledPool(4);
+      const window = await createWindow(pool.id, 30, 4);
+      const res = await bookWindow('f205-selfservice-user', 'f205-selfservice-key', {
+        branchId: BRANCH_ID,
+        resourcePoolId: pool.id,
+        windowId: window.id,
+      });
+      if (res.status !== 201) throw new Error(`Expected 201, got ${res.status}: ${res.raw}`);
+      const booking = res.json?.data ?? res.json;
+      // Real DB read-back, not just the API response.
+      const row = await db.booking.findUnique({
+        where: { id: booking.id },
+        select: { resourceId: true, courtSlotIndex: true },
+      });
+      console.log('F205_EVIDENCE selfservice_first', JSON.stringify(row));
+      if (row?.resourceId !== courts[0].id) {
+        throw new Error(`Expected resourceId ${courts[0].id} (Court 1), got ${row?.resourceId}`);
+      }
+      if (row?.courtSlotIndex !== 1) {
+        throw new Error(`Expected courtSlotIndex 1 to match Court 1's position, got ${row?.courtSlotIndex}`);
+      }
+    },
+  },
+
+  {
+    name: 'F-205: concurrent bookings on a resourced pool each get a distinct real Resource, courtSlotIndex tracking it',
+    async run() {
+      const { pool, courts } = await createResourcedPooledPool(3);
+      const window = await createWindow(pool.id, 31, 3);
+      const results = await Promise.all([
+        bookWindow('f205-conc-1', 'f205-conc-1-key', { branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id }),
+        bookWindow('f205-conc-2', 'f205-conc-2-key', { branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id }),
+        bookWindow('f205-conc-3', 'f205-conc-3-key', { branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id }),
+      ]);
+      for (const r of results) {
+        if (r.status !== 201) throw new Error(`Expected 201 for every concurrent hold, got ${r.status}: ${r.raw}`);
+      }
+      const rows = await db.booking.findMany({
+        where: { windowId: window.id },
+        select: { resourceId: true, courtSlotIndex: true },
+      });
+      console.log('F205_EVIDENCE concurrent', JSON.stringify(rows));
+      const ids = rows.map((x) => x.resourceId);
+      if (new Set(ids).size !== 3) throw new Error(`Expected 3 distinct real resourceIds, got ${JSON.stringify(ids)}`);
+      for (const x of rows) {
+        if (!courts.some((c) => c.id === x.resourceId)) {
+          throw new Error(`Assigned resourceId ${x.resourceId} is not one of the pool's real courts`);
+        }
+        const pos = courts.findIndex((c) => c.id === x.resourceId) + 1;
+        if (x.courtSlotIndex !== pos) {
+          throw new Error(`courtSlotIndex ${x.courtSlotIndex} does not match the assigned court's position ${pos}`);
+        }
+      }
+    },
+  },
+
+  {
+    name: 'F-205: a negotiated (single-slot flow) booking on a resourced pool is also assigned a real Resource',
+    async run() {
+      const { pool, courts } = await createResourcedPooledPool(2);
+      const window = await createWindow(pool.id, 32, 2);
+      const res = await bookNegotiated('f205-neg-user', 'f205-neg-key', {
+        resourcePoolId: pool.id,
+        windowId: window.id,
+        negotiatedPrice: 250,
+      });
+      if (res.status !== 201) throw new Error(`Expected 201, got ${res.status}: ${res.raw}`);
+      const booking = res.json?.data ?? res.json;
+      const row = await db.booking.findUnique({
+        where: { id: booking.id },
+        select: { resourceId: true, courtSlotIndex: true },
+      });
+      console.log('F205_EVIDENCE negotiated', JSON.stringify(row));
+      if (row?.resourceId !== courts[0].id) throw new Error(`Expected Court 1 (${courts[0].id}), got ${row?.resourceId}`);
+      if (row?.courtSlotIndex !== 1) throw new Error(`Expected courtSlotIndex 1, got ${row?.courtSlotIndex}`);
+    },
+  },
+
+  {
+    name: 'F-205: a POOLED pool with no Resource rows still falls back to resourceId null + occupancy-scan index (unchanged)',
+    async run() {
+      const pool = await createPooledPool(4); // deliberately no resources
+      const window = await createWindow(pool.id, 33, 4);
+      const res = await bookWindow('f205-fallback-user', 'f205-fallback-key', {
+        branchId: BRANCH_ID,
+        resourcePoolId: pool.id,
+        windowId: window.id,
+      });
+      if (res.status !== 201) throw new Error(`Expected 201, got ${res.status}: ${res.raw}`);
+      const booking = res.json?.data ?? res.json;
+      const row = await db.booking.findUnique({
+        where: { id: booking.id },
+        select: { resourceId: true, courtSlotIndex: true },
+      });
+      console.log('F205_EVIDENCE fallback', JSON.stringify(row));
+      if (row?.resourceId !== null) {
+        throw new Error(`Expected resourceId null for a resource-less pool, got ${row?.resourceId}`);
+      }
+      if (row?.courtSlotIndex !== 1) {
+        throw new Error(`Expected fallback courtSlotIndex 1 (F-186 scan), got ${row?.courtSlotIndex}`);
       }
     },
   },
