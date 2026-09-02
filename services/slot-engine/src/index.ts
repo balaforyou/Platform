@@ -1,7 +1,8 @@
 import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
-import { PrismaClient, BookingStatus, AllocationMode, PricingMode, Prisma, AvailabilityOverrideType } from '@badminton/database';
+import { PrismaClient, BookingStatus, AllocationMode, PricingMode, Prisma, AvailabilityOverrideType, TenantModule } from '@badminton/database';
+import { resolveEntitlementState, entitlementAllows } from '@badminton/shared-types';
 import { ensureAvailabilityWindowsForDate } from './availabilityGeneration.js';
 import {
   DEFAULT_TIME_ZONE,
@@ -244,6 +245,42 @@ const requirePoolScope = async (auth: AdminAuthContext, resourcePoolId: string, 
     throw err;
   }
   return pool;
+};
+
+// F-206: module-entitlement gate. Composes into the same chain as requirePoolScope — called
+// right after getInternalOrAdminAuth (cheapest/least-informative check first, matching the
+// booking-rules route's existing ordering comment) on every admin config endpoint that
+// belongs to a sellable module.
+//
+// The internal-key / platform caller bypasses unconditionally — the same established
+// precedent isAuthorizedForBranch already applies. A JWT caller's tenant comes straight from
+// the decoded token (auth.tenantId); no tenant on the token means no entitlement, denied.
+//
+// write: true  -> only ACTIVE passes.
+// write: false -> ACTIVE or READ_ONLY (Owner has wound the module down early but data stays
+//                 readable until endDate).
+const requireModuleEntitlement = async (
+  auth: AdminAuthContext,
+  module: TenantModule,
+  reply: any,
+  opts: { write: boolean },
+) => {
+  if (auth.isInternal) return;
+
+  const row = auth.tenantId
+    ? await prisma.moduleEntitlement.findUnique({
+        where: { tenantId_module: { tenantId: auth.tenantId, module } },
+      })
+    : null;
+
+  const state = resolveEntitlementState(row, new Date());
+  if (!entitlementAllows(state, opts.write)) {
+    reply.status(403);
+    const err = new Error(`Module not entitled: ${module}`);
+    (err as any).statusCode = 403;
+    (err as any).code = 'MODULE_NOT_ENTITLED';
+    throw err;
+  }
 };
 
 // WHY (F-071): the booking-scoped routes (cancel, read, cancel-preview) each carried an
@@ -1216,6 +1253,7 @@ function validateResourcePoolFields(
 
 server.post('/resource-pools', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
 
   const {
     tenantId: bodyTenantId, branchId, allocationMode, basePrice,
@@ -1283,6 +1321,7 @@ server.post('/resource-pools', async (request, reply) => {
 // is intentionally immutable here so a client cannot move a pool across authorization scopes.
 server.patch('/resource-pools/:id', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id } = request.params as any;
   const existing = await requirePoolScope(auth, id, reply);
   const body = request.body as any;
@@ -1313,6 +1352,7 @@ server.patch('/resource-pools/:id', async (request, reply) => {
 // pool.branchId from the database, so the path id cannot assert branch authority it does not have.
 server.post('/resource-pools/:id/resources', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id } = request.params as any;
   await requirePoolScope(auth, id, reply);
 
@@ -1337,6 +1377,7 @@ server.post('/resource-pools/:id/resources', async (request, reply) => {
 // inventory, so an unauthenticated caller could put guest-sellable slots on any pool's calendar.
 server.post('/resource-pools/:id/availability-windows', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id } = request.params as any;
   await requirePoolScope(auth, id, reply);
 
@@ -1465,6 +1506,7 @@ server.get('/resource-pools/:id/occupancy', async (request, reply) => {
 
 server.get('/resource-pools/:id/availability-patterns', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: false }); // F-206
   const { id } = request.params as any;
   await requirePoolScope(auth, id, reply);
 
@@ -1476,6 +1518,7 @@ server.get('/resource-pools/:id/availability-patterns', async (request, reply) =
 
 server.post('/resource-pools/:id/availability-patterns', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id } = request.params as any;
   await requirePoolScope(auth, id, reply);
   const data = patternDataFromBody(request.body as any, reply);
@@ -1492,6 +1535,7 @@ server.post('/resource-pools/:id/availability-patterns', async (request, reply) 
 
 server.patch('/resource-pools/:id/availability-patterns/:patternId', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id, patternId } = request.params as any;
   await requirePoolScope(auth, id, reply);
 
@@ -1520,6 +1564,7 @@ server.patch('/resource-pools/:id/availability-patterns/:patternId', async (requ
 
 server.delete('/resource-pools/:id/availability-patterns/:patternId', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id, patternId } = request.params as any;
   await requirePoolScope(auth, id, reply);
 
@@ -1541,6 +1586,7 @@ server.delete('/resource-pools/:id/availability-patterns/:patternId', async (req
 
 server.get('/resource-pools/:id/availability-overrides', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: false }); // F-206
   const { id } = request.params as any;
   const { fromDate, toDate } = request.query as any;
   await requirePoolScope(auth, id, reply);
@@ -1645,6 +1691,7 @@ function overrideDataFromBody(body: any, reply: any) {
 
 server.post('/resource-pools/:id/availability-overrides', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id } = request.params as any;
   const body = request.body as any;
   await requirePoolScope(auth, id, reply);
@@ -1683,6 +1730,7 @@ server.post('/resource-pools/:id/availability-overrides', async (request, reply)
 
 server.patch('/resource-pools/:id/availability-overrides/:overrideId', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id, overrideId } = request.params as any;
   await requirePoolScope(auth, id, reply);
 
@@ -1705,6 +1753,7 @@ server.patch('/resource-pools/:id/availability-overrides/:overrideId', async (re
 
 server.delete('/resource-pools/:id/availability-overrides/:overrideId', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id, overrideId } = request.params as any;
   await requirePoolScope(auth, id, reply);
 
@@ -1806,6 +1855,23 @@ server.get('/branches/:id/resource-pools', async (request, reply) => {
       (err as any).code = 'FORBIDDEN';
       throw err;
     }
+
+    // F-206: this route serves two audiences. Guest / member tokens (roles: []) list the pools
+    // they can browse and must pass through untouched, exactly as today. An admin token
+    // (owner / branch_manager:*) is reading this as the Guest Booking module's admin surface —
+    // so if that module is not entitled for the tenant, deny, matching "never UI-only": an
+    // admin on a hidden module must not still get real pool data from the API directly. The
+    // check is caller-aware (branch on roles), not route-level.
+    const roles: string[] = decoded.roles ?? [];
+    const isAdminCaller = roles.some((r) => r === 'owner' || r.startsWith('branch_manager:'));
+    if (isAdminCaller) {
+      await requireModuleEntitlement(
+        { isInternal: false, userId: decoded.userId ?? null, roles, tenantId: decoded.tenantId },
+        TenantModule.GUEST_BOOKING,
+        reply,
+        { write: false },
+      );
+    }
   }
 
   const pools = await prisma.resourcePool.findMany({
@@ -1824,6 +1890,7 @@ server.get('/branches/:id/resource-pools', async (request, reply) => {
 // Both-or-neither validation on pricing override (same rule as window creation).
 server.post('/resource-pools/:id/windows/:windowId/release', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
 
   const { id, windowId } = request.params as any;
   const { pricingMode, price, expectedUpdatedAt } = request.body as any;
@@ -2000,6 +2067,7 @@ function validateBookingRuleFields(body: any, reply: any): Record<string, any> {
 // authority it does not have.
 server.post('/booking-rules', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
 
   const { resourcePoolId } = request.body as any;
 
@@ -2111,6 +2179,7 @@ server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
 // Blocking a window removes real bookable capacity, so this is a mutation worth guarding.
 server.post('/blocked-windows', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
 
   const { resourcePoolId, resourceId, startTime, endTime, reason } = request.body as any;
 
@@ -3466,6 +3535,7 @@ server.post('/member/today-assignment/confirm', async (request, reply) => {
 // one-active-slot-per-member Basic-tier rule at DB level; P2002 is the enforcement signal.
 server.post('/member-group-assignments', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
 
   const { userId, resourcePoolId, daysOfWeek, startTime } = request.body as any;
 
@@ -3507,6 +3577,7 @@ server.post('/member-group-assignments', async (request, reply) => {
 // List assignments (internal only — admin tooling).
 server.get('/member-group-assignments', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: false }); // F-206
   const { resourcePoolId, userId } = request.query as any;
   let scopedPoolIds: string[] | undefined;
 
@@ -3573,6 +3644,7 @@ server.get('/member-group-assignments', async (request, reply) => {
 // Update assignment status (ACTIVE ↔ SUSPENDED). Internal or owner only.
 server.patch('/member-group-assignments/:id', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
 
   const { id } = request.params as any;
   const { status } = request.body as any;

@@ -1,6 +1,6 @@
 import { Section, signJwt } from '@badminton/test-harness';
 import { AllocationMode, Prisma, PricingMode } from '@badminton/database';
-import { db, baseUrl, SlotEngineContext } from './_fixtures';
+import { db, baseUrl, SlotEngineContext, TENANT_ID } from './_fixtures';
 
 /**
  * F-043 PHASE B — availability generation through the REAL HTTP API (lazy
@@ -173,7 +173,7 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
   {
     name: 'Lazy generation triggered by admin GET /availability on a different date',
     async run() {
-      const ownerJwt = signJwt({ userId: 'phase-b-owner', roles: ['owner'] });
+      const ownerJwt = signJwt({ userId: 'phase-b-owner', tenantId: TENANT_ID, roles: ['owner'] });
       const adminPool = await createPool('Phase B Admin Trigger Pool');
       const adminPattern = await addPattern(adminPool.id, daysFromToday(2), '12:00', '14:00', 3);
       const adminBefore = await windowsForDate(adminPool.id, daysFromToday(2));
@@ -203,7 +203,7 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
   {
     name: 'Occupancy endpoints (pool + branch) trigger generation before counting capacity',
     async run() {
-      const ownerJwt = signJwt({ userId: 'phase-b-owner', roles: ['owner'] });
+      const ownerJwt = signJwt({ userId: 'phase-b-owner', tenantId: TENANT_ID, roles: ['owner'] });
       const occupancyPool = await createPool('Phase B Occupancy Trigger Pool');
       occupancyPoolId = occupancyPool.id;
       await addPattern(occupancyPool.id, daysFromToday(3), '15:00', '17:00', 6);
@@ -317,7 +317,7 @@ export const availabilityGenerationApiSections: Section<SlotEngineContext>[] = [
   {
     name: 'Range-override expansion (fromDate/toDate → one AvailabilityOverride row per date)',
     async run() {
-      const ownerJwt = signJwt({ userId: 'phase-b-owner', roles: ['owner'] });
+      const ownerJwt = signJwt({ userId: 'phase-b-owner', tenantId: TENANT_ID, roles: ['owner'] });
       const rangePool = await createPool('Phase B Range Override Pool');
       const rangeResponse = await api<any[]>(`/resource-pools/${rangePool.id}/availability-overrides`, {
         method: 'POST',
