@@ -608,4 +608,63 @@ export const multiSlotBookingSections: Section<SlotEngineContext>[] = [
       }
     },
   },
+
+  {
+    name: 'F-205: a multi-window POOLED booking on a resourced pool assigns one real Resource to the parent and every child',
+    async run() {
+      const { pool, windows } = await createPooledPoolWithWindows({ hours: 2, maxAdditionalWindows: 1 });
+      // Add real Resource rows (capacity 4) so F-205's assignment path is exercised, not the fallback.
+      const courts: any[] = [];
+      for (let i = 1; i <= 4; i++) {
+        const r = await fetch(`${baseUrl}/resource-pools/${pool.id}/resources`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+          body: JSON.stringify({ name: `F-205 Court ${i}` }),
+        });
+        courts.push(((await r.json()) as any).data);
+      }
+
+      const userId = 'f205-multi-user';
+      const createRes = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${guestToken(userId)}`,
+            'idempotency-key': 'f205-multi-key',
+          },
+          body: JSON.stringify({
+            branchId: BRANCH_ID,
+            resourcePoolId: pool.id,
+            windowId: windows[0].id,
+            additionalWindowIds: [windows[1].id],
+          }),
+        }),
+      );
+      if (createRes.status !== 201) {
+        throw new Error(`Expected 201, got ${createRes.status}: ${createRes.raw}`);
+      }
+      const parent = createRes.json?.data ?? createRes.json;
+
+      const rows = await db.booking.findMany({
+        where: { OR: [{ id: parent.id }, { parentBookingId: parent.id }] },
+        select: { id: true, resourceId: true, courtSlotIndex: true, parentBookingId: true },
+      });
+      console.log('F205_EVIDENCE multi_window', JSON.stringify(rows));
+      if (rows.length !== 2) throw new Error(`Expected parent + 1 child, got ${rows.length} rows`);
+      const resourceIds = new Set(rows.map((r) => r.resourceId));
+      if (resourceIds.size !== 1 || rows[0].resourceId === null) {
+        throw new Error(`Expected one real resourceId across parent + child, got ${JSON.stringify([...resourceIds])}`);
+      }
+      if (!courts.some((c) => c.id === rows[0].resourceId)) {
+        throw new Error(`Assigned resourceId ${rows[0].resourceId} is not one of the pool's courts`);
+      }
+      const pos = courts.findIndex((c) => c.id === rows[0].resourceId) + 1;
+      for (const r of rows) {
+        if (r.courtSlotIndex !== pos) {
+          throw new Error(`courtSlotIndex ${r.courtSlotIndex} on ${r.id} does not match the assigned court position ${pos}`);
+        }
+      }
+    },
+  },
 ];
