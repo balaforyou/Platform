@@ -8,16 +8,26 @@ import { friendlyAuthError } from '../lib/errors';
 
 export function LoginScreen() {
   const { loginWithGoogle, loginWithDevToken, loginWithPasskey } = useAdminAuth();
-  const googleBtnRef = useRef<HTMLDivElement>(null);
+  const googleHostRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | 'google' | 'passkey' | 'dev'>(null);
   const [devEmail, setDevEmail] = useState('balaforyou@gmail.com');
   const [googleReady, setGoogleReady] = useState(false);
 
   useEffect(() => {
-    if (!googleBtnRef.current || !googleClientId) return;
+    const host = googleHostRef.current;
+    if (!host || !googleClientId) return;
     let alive = true;
-    renderGoogleButton(googleBtnRef.current, async (idToken) => {
+
+    // Google Identity Services injects an <iframe> + wrapper DOM into whatever node it's
+    // handed. Give it a detached child React never reconciles (and tear it down here on
+    // unmount), rather than letting it mutate a React-managed node — that keeps GIS's
+    // DOM churn from ever colliding with React's own commit/cleanup.
+    const mount = document.createElement('div');
+    mount.style.cssText = 'display:flex;justify-content:center';
+    host.appendChild(mount);
+
+    renderGoogleButton(mount, async (idToken) => {
       if (!alive) return;
       setBusy('google');
       setError(null);
@@ -31,8 +41,14 @@ export function LoginScreen() {
     })
       .then(() => alive && setGoogleReady(true))
       .catch((e) => alive && setError(friendlyAuthError(e)));
+
     return () => {
       alive = false;
+      try {
+        mount.remove();
+      } catch {
+        /* GIS may already have detached it */
+      }
     };
   }, [loginWithGoogle]);
 
@@ -89,7 +105,7 @@ export function LoginScreen() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {googleClientId ? (
-            <div ref={googleBtnRef} style={{ display: 'flex', justifyContent: 'center', minHeight: 40 }} />
+            <div ref={googleHostRef} style={{ display: 'flex', justifyContent: 'center', minHeight: 40 }} />
           ) : (
             <Banner tone="info">
               Google sign-in isn’t configured (<code>VITE_GOOGLE_CLIENT_ID</code> unset).

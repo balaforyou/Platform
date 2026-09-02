@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { useAdminAuth } from '../auth/AdminAuthContext';
 import { Button, Card, Banner } from '../components';
@@ -27,10 +27,16 @@ export function EnrollPasskeyPrompt({ onResolved }: { onResolved: () => void }) 
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  if (!user || !passkeysSupported()) {
-    onResolved();
-    return null;
-  }
+  // Nothing to enrol (no passkey support — e.g. an insecure-context LAN URL on mobile,
+  // where `window.PublicKeyCredential` is undefined). Resolve from an effect, never
+  // during render — calling the parent's setter mid-render is the "Cannot update a
+  // component while rendering a different component" anti-pattern and corrupts the commit.
+  const canEnrol = !!user && passkeysSupported();
+  useEffect(() => {
+    if (!canEnrol) onResolved();
+  }, [canEnrol, onResolved]);
+
+  if (!canEnrol) return null;
 
   const remember = () => {
     try {

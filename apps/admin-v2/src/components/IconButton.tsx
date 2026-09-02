@@ -3,50 +3,43 @@ import { Spinner } from './Spinner';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  icon: ReactNode;
+  /** Required — an icon-only control with no label is an accessibility gap; enforced by the type. */
+  'aria-label': string;
   variant?: Variant;
   loading?: boolean;
-  fullWidth?: boolean;
-  leadingIcon?: ReactNode;
 }
 
+// Same variant colour logic as Button, square hit target instead of auto width.
 const base: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 'var(--av2-space-2)',
-  padding: 'var(--av2-space-3) var(--av2-space-5)',
+  width: 36,
+  height: 36,
+  flex: 'none',
   borderRadius: 'var(--av2-radius-sm)',
-  fontSize: 'var(--av2-text-base)',
-  fontWeight: 600,
-  lineHeight: 'var(--av2-leading-tight)',
-  whiteSpace: 'nowrap',
-  cursor: 'pointer',
   border: '1px solid transparent',
+  cursor: 'pointer',
   transition:
     'background var(--av2-duration-fast) var(--av2-ease-standard), border-color var(--av2-duration-fast) var(--av2-ease-standard), opacity var(--av2-duration-fast) var(--av2-ease-standard)',
 };
 
 const variants: Record<Variant, React.CSSProperties> = {
   primary: { background: 'var(--av2-accent)', color: 'var(--av2-accent-fg)' },
-  secondary: {
-    background: 'var(--av2-surface)',
-    color: 'var(--av2-text)',
-    borderColor: 'var(--av2-border)',
-  },
+  secondary: { background: 'var(--av2-surface)', color: 'var(--av2-text)', borderColor: 'var(--av2-border)' },
   ghost: { background: 'transparent', color: 'var(--av2-muted)' },
 };
 
-export function Button({
-  variant = 'primary',
+export function IconButton({
+  icon,
+  variant = 'ghost',
   loading = false,
-  fullWidth = false,
-  leadingIcon,
   disabled,
-  children,
   style,
   ...rest
-}: ButtonProps) {
+}: IconButtonProps) {
   const isDisabled = disabled || loading;
   return (
     <button
@@ -56,14 +49,12 @@ export function Button({
       style={{
         ...base,
         ...variants[variant],
-        width: fullWidth ? '100%' : undefined,
         opacity: isDisabled ? 0.6 : 1,
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         ...style,
       }}
     >
-      {loading ? <Spinner size={16} /> : leadingIcon}
-      {children}
+      {loading ? <Spinner size={16} /> : icon}
     </button>
   );
 }

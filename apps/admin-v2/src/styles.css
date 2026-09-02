@@ -3,13 +3,31 @@
 /* ==========================================================================
    Admin-v2 design tokens — single source of truth.
 
-   Scaffold-era placeholder values; the real palette comes from the admin
-   design-system source (§5 of the signed plan). Fixed emerald/slate per the
-   F-195 "build generic, ship fixed" theming decision — only tenant name/logo
-   are swapped dynamically, not the palette.
+   THREE LAYERS (sub-slice 0.1):
 
-   Three theme states: bare :root = light; :root[data-theme="dark"] = explicit
-   dark; the prefers-color-scheme block = follow the OS.
+   1. Raw accent ramp — `--av2-accent-100..900`. NOT set here. Written onto
+      :root at runtime by `auth/AdminTenantContext` once the signed-in admin's
+      tenant resolves, via `generateAccentRamp(Tenant.themeColor)`. Absent until
+      then, and deliberately absent for tenants whose brand colour is missing or
+      near-neutral (the OKLCH-chroma < 0.02 guard in `auth/applyAccentRamp.ts`).
+
+   2. Semantic role tokens — `--av2-accent*` below. They ALIAS Layer 1 with the
+      Layer-3 fixed value as the CSS fallback: `var(--av2-accent-600, #059669)`.
+      Before the ramp resolves (or if the guard suppresses it), the fallback
+      renders — identical to the old hard-coded palette. `-fg` and `--av2-ring`
+      stay fixed (no ramp step is contrast-guaranteed at an arbitrary hue; the
+      focus ring is universal, matching guest-pwa's fixed `--color-accent-2`).
+
+   3. Fixed fallbacks — the hex literals inside the `var(..., X)` fallbacks, plus
+      everything non-accent (bg/surface/border/text/danger/info/radius/shadow).
+      Fixed emerald/slate per the F-195 "build generic, ship fixed" decision —
+      only the accent ramp is tenant-derived; name/logo are swapped in the UI.
+
+   Spacing / typography / motion scales are theme-invariant — defined once on
+   :root, not repeated in the dark blocks.
+
+   Theme states: bare :root = light; :root[data-theme="dark"] = explicit dark;
+   the prefers-color-scheme block = follow the OS.
    ========================================================================== */
 
 :root {
@@ -19,21 +37,52 @@
   --av2-border: #e2e8f0;
   --av2-text: #0f172a;
   --av2-muted: #64748b;
-  --av2-accent: #059669;
-  --av2-accent-hover: #047857;
+  --av2-accent: var(--av2-accent-600, #059669);
+  --av2-accent-hover: var(--av2-accent-700, #047857);
   --av2-accent-fg: #ffffff;
-  --av2-accent-soft: #ecfdf5;
+  --av2-accent-soft: var(--av2-accent-100, #ecfdf5);
   --av2-danger: #dc2626;
   --av2-danger-soft: #fef2f2;
   --av2-danger-border: #fecaca;
   --av2-info-soft: #eff6ff;
   --av2-info-border: #bfdbfe;
   --av2-info-text: #1e40af;
+  --av2-warning: #d97706;
+  --av2-warning-soft: #fffbeb;
+  --av2-warning-border: #fde68a;
   --av2-radius: 12px;
   --av2-radius-sm: 8px;
   --av2-shadow: 0 1px 3px rgb(15 23 42 / 0.08), 0 1px 2px rgb(15 23 42 / 0.04);
   --av2-shadow-lg: 0 10px 30px -10px rgb(15 23 42 / 0.25);
   --av2-ring: #34d399;
+
+  /* Spacing — 8px scale with 4px half-steps. */
+  --av2-space-1: 4px;
+  --av2-space-2: 8px;
+  --av2-space-3: 12px;
+  --av2-space-4: 16px;
+  --av2-space-5: 20px;
+  --av2-space-6: 24px;
+  --av2-space-8: 32px;
+  --av2-space-10: 40px;
+  --av2-space-12: 48px;
+
+  /* Typography — system-ui stack (no brand font imported for admin-v2). */
+  --av2-text-xs: 12px;
+  --av2-text-sm: 13px;
+  --av2-text-base: 14px;
+  --av2-text-lg: 16px;
+  --av2-text-xl: 20px;
+  --av2-text-2xl: 24px;
+  --av2-leading-tight: 1.2;
+  --av2-leading-normal: 1.45;
+  --av2-leading-relaxed: 1.6;
+
+  /* Motion (charter §2b). */
+  --av2-duration-fast: 120ms;
+  --av2-duration-base: 200ms;
+  --av2-duration-slow: 300ms;
+  --av2-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :root[data-theme="dark"] {
@@ -43,16 +92,19 @@
   --av2-border: #263449;
   --av2-text: #e2e8f0;
   --av2-muted: #94a3b8;
-  --av2-accent: #10b981;
-  --av2-accent-hover: #34d399;
+  --av2-accent: var(--av2-accent-400, #10b981);
+  --av2-accent-hover: var(--av2-accent-300, #34d399);
   --av2-accent-fg: #04121a;
-  --av2-accent-soft: #06281f;
+  --av2-accent-soft: var(--av2-accent-900, #06281f);
   --av2-danger: #f87171;
   --av2-danger-soft: #2a1414;
   --av2-danger-border: #7f1d1d;
   --av2-info-soft: #10233f;
   --av2-info-border: #1e3a5f;
   --av2-info-text: #bfdbfe;
+  --av2-warning: #fbbf24;
+  --av2-warning-soft: #2a1f0a;
+  --av2-warning-border: #78350f;
   --av2-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
   --av2-shadow-lg: 0 20px 40px -12px rgb(0 0 0 / 0.6);
   --av2-ring: #34d399;
@@ -66,16 +118,19 @@
     --av2-border: #263449;
     --av2-text: #e2e8f0;
     --av2-muted: #94a3b8;
-    --av2-accent: #10b981;
-    --av2-accent-hover: #34d399;
+    --av2-accent: var(--av2-accent-400, #10b981);
+    --av2-accent-hover: var(--av2-accent-300, #34d399);
     --av2-accent-fg: #04121a;
-    --av2-accent-soft: #06281f;
+    --av2-accent-soft: var(--av2-accent-900, #06281f);
     --av2-danger: #f87171;
     --av2-danger-soft: #2a1414;
     --av2-danger-border: #7f1d1d;
     --av2-info-soft: #10233f;
     --av2-info-border: #1e3a5f;
     --av2-info-text: #bfdbfe;
+    --av2-warning: #fbbf24;
+    --av2-warning-soft: #2a1f0a;
+    --av2-warning-border: #78350f;
     --av2-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
     --av2-shadow-lg: 0 20px 40px -12px rgb(0 0 0 / 0.6);
     --av2-ring: #34d399;
@@ -97,4 +152,222 @@ body {
 :focus-visible {
   outline: 2px solid var(--av2-ring);
   outline-offset: 2px;
+}
+
+/* Charter §2b — honour the OS "reduce motion" setting everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Modal (0.2) — static so a component re-render can't restart the animations and
+   strand Radix's exit-animation wait (the modal would then never unmount on close). ── */
+.av2-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: color-mix(in oklch, var(--av2-text) 45%, transparent);
+  backdrop-filter: blur(2px);
+}
+.av2-modal-content {
+  position: fixed;
+  z-index: 901;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100vw - var(--av2-space-8));
+  max-height: calc(100vh - var(--av2-space-10));
+  overflow-y: auto;
+  background: var(--av2-surface);
+  border: 1px solid var(--av2-border);
+  border-radius: var(--av2-radius);
+  box-shadow: var(--av2-shadow-lg);
+  padding: var(--av2-space-6);
+}
+/* Enter animation only. NOT a `[data-state="closed"]` exit animation: Radix's Presence
+   waits for `animationend` before unmounting, and if that event is delayed or dropped
+   (a backgrounded / non-compositing tab freezes CSS animations at time 0) the modal
+   never closes. Immediate unmount on close is the safe trade; the overlay fade still
+   softens the visual. */
+.av2-modal-overlay[data-state="open"] {
+  animation: av2-modal-overlay-in var(--av2-duration-fast) var(--av2-ease-standard);
+}
+.av2-modal-content[data-state="open"] {
+  animation: av2-modal-content-in var(--av2-duration-base) var(--av2-ease-standard);
+}
+@keyframes av2-modal-overlay-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes av2-modal-content-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96) }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1) }
+}
+
+/* ── Toast stack (0.2) — static, same reason as the modal rules above. ── */
+.av2-toast-stack {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--av2-space-2);
+  right: var(--av2-space-6);
+  bottom: var(--av2-space-6);
+  max-width: 360px;
+  pointer-events: none;
+}
+.av2-toast-stack > * {
+  pointer-events: auto;
+}
+@media (max-width: 640px) {
+  .av2-toast-stack {
+    right: var(--av2-space-3);
+    left: var(--av2-space-3);
+    bottom: var(--av2-space-3);
+    max-width: none;
+  }
+}
+
+/* ── App shell (0.3) — desktop sidebar and mobile bottom-nav are BOTH always mounted;
+   this breakpoint (767px, admin-v2's first shell-level convention) shows one or the
+   other. Not a JS window.innerWidth check — the admin-web pattern. ── */
+.av2-shell {
+  min-height: 100vh;
+  display: flex;
+  background: var(--av2-bg);
+}
+.av2-sidebar {
+  width: 240px;
+  flex: none;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--av2-space-1);
+  padding: var(--av2-space-4);
+  border-right: 1px solid var(--av2-border);
+  background: var(--av2-surface);
+}
+.av2-shell-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.av2-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--av2-space-4);
+  padding: var(--av2-space-2) var(--av2-space-5);
+  border-bottom: 1px solid var(--av2-border);
+  background: var(--av2-surface);
+}
+.av2-topbar-brand {
+  display: none;
+}
+.av2-shell-main {
+  flex: 1;
+  padding: var(--av2-space-6);
+}
+.av2-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .av2-shell {
+    display: block;
+  }
+  .av2-sidebar {
+    display: none;
+  }
+  .av2-topbar-brand {
+    display: flex;
+    min-width: 0;
+  }
+  .av2-topbar h1 {
+    display: none;
+  }
+  .av2-shell-main {
+    padding: var(--av2-space-4);
+    /* room for the fixed bottom-nav */
+    padding-bottom: calc(56px + var(--av2-space-4));
+  }
+  .av2-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    align-items: stretch;
+    padding: var(--av2-space-1) var(--av2-space-1) calc(var(--av2-space-1) + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--av2-border);
+    background: var(--av2-surface);
+  }
+}
+
+/* ── Topbar account menu (0.3 addendum) — Radix DropdownMenu + token CSS. Static
+   (not inline <style>), enter-only animation — same Presence/animationend-strand
+   lesson 0.2's Modal already paid for. ── */
+.av2-avatar-trigger {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 9999px;
+  cursor: pointer;
+  display: inline-flex;
+}
+.av2-account-menu {
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--av2-surface);
+  border: 1px solid var(--av2-border);
+  border-radius: var(--av2-radius-sm);
+  box-shadow: var(--av2-shadow-lg);
+  padding: var(--av2-space-1);
+  z-index: 950;
+}
+.av2-account-menu[data-state="open"] {
+  animation: av2-account-menu-in var(--av2-duration-fast) var(--av2-ease-standard);
+}
+@keyframes av2-account-menu-in {
+  from { opacity: 0; transform: translateY(-4px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+.av2-account-menu-identity {
+  padding: var(--av2-space-2) var(--av2-space-3) 2px;
+  font-size: var(--av2-text-sm);
+  font-weight: 600;
+  color: var(--av2-text);
+  word-break: break-all;
+}
+.av2-account-menu-phone {
+  padding: 0 var(--av2-space-3) var(--av2-space-2);
+  font-size: var(--av2-text-xs);
+  color: var(--av2-muted);
+}
+.av2-account-menu-sep {
+  height: 1px;
+  margin: var(--av2-space-1) 0;
+  background: var(--av2-border);
+}
+.av2-account-menu-item {
+  padding: var(--av2-space-2) var(--av2-space-3);
+  font-size: var(--av2-text-sm);
+  color: var(--av2-text);
+  border-radius: calc(var(--av2-radius-sm) - 2px);
+  cursor: pointer;
+  outline: none;
+}
+.av2-account-menu-item[data-highlighted] {
+  background: var(--av2-surface-alt);
 }

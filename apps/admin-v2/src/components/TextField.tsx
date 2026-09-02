@@ -13,8 +13,8 @@ export function TextField({ label, hint, error, id, style, ...rest }: TextFieldP
   const describedBy = error ? `${fieldId}-err` : hint ? `${fieldId}-hint` : undefined;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label htmlFor={fieldId} style={{ fontSize: 13, fontWeight: 600, color: 'var(--av2-text)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-2)' }}>
+      <label htmlFor={fieldId} style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 600, color: 'var(--av2-text)' }}>
         {label}
       </label>
       <input
@@ -23,8 +23,8 @@ export function TextField({ label, hint, error, id, style, ...rest }: TextFieldP
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         style={{
-          padding: '9px 12px',
-          fontSize: 14,
+          padding: 'var(--av2-space-2) var(--av2-space-3)',
+          fontSize: 'var(--av2-text-base)',
           borderRadius: 'var(--av2-radius-sm)',
           border: `1px solid ${error ? 'var(--av2-danger)' : 'var(--av2-border)'}`,
           background: 'var(--av2-surface)',
@@ -33,12 +33,12 @@ export function TextField({ label, hint, error, id, style, ...rest }: TextFieldP
         }}
       />
       {hint && !error && (
-        <span id={`${fieldId}-hint`} style={{ fontSize: 12, color: 'var(--av2-muted)' }}>
+        <span id={`${fieldId}-hint`} style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' }}>
           {hint}
         </span>
       )}
       {error && (
-        <span id={`${fieldId}-err`} style={{ fontSize: 12, color: 'var(--av2-danger)' }}>
+        <span id={`${fieldId}-err`} style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-danger)' }}>
           {error}
         </span>
       )}

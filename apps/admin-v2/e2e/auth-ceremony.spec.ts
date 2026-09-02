@@ -28,6 +28,12 @@ async function devSignIn(page: import('@playwright/test').Page, email: string) {
   await page.getByRole('button', { name: 'Dev sign-in' }).click();
 }
 
+// Sign-out moved from a standalone topbar button into the AppShell account menu (0.3 addendum).
+async function signOut(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Log out' }).click();
+}
+
 test('criterion 2 — login screen offers Google only, no phone/OTP', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Slotflow Admin' })).toBeVisible();
@@ -145,14 +151,14 @@ test('criteria 3–5 — enrol a passkey, then use it as the fast path, then fal
   expect(credentials[0].isResidentCredential).toBe(true);
 
   // ── criterion 5a: sign out, then fingerprint fast-path ──
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await signOut(page);
   await expect(page.getByRole('heading', { name: 'Slotflow Admin' })).toBeVisible();
   await page.getByRole('button', { name: /fingerprint \/ passkey/i }).click();
   await expect(page.locator('#admin-identity-email')).toHaveText(TEST_ADMIN_EMAIL);
   await expect(page.locator('#admin-identity-roles')).toContainText('Owner');
 
   // ── criterion 5b: unavailable authenticator falls back to Google cleanly ──
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await signOut(page);
   await client.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId });
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
