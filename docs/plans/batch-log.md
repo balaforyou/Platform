@@ -1241,7 +1241,91 @@ No pool DELETE endpoint exists; needs a direct DB delete or can be left as clear
 
 **Close-out:** `pnpm register:check` green (197 rows, Resolved 91). `pnpm diagram:verify` green —
 the new endpoint is not on any FLOW node (advisory only, like the existing F-100/F-147 entries).
-PR #13 gated on `checks` + `regression`; `integration` post-merge.
+PR #13 gated on `checks` + `regression`; `integration` post-merge. Merged `b23073f`; post-merge
+pipeline all green (checks + regression + integration), images pushed at that SHA.
+
+## Batch 29 — F-206 module entitlement system
+
+**Findings:** [[F-206]] — **Resolved**. Chief-assigned "Large" in the Slice-2 handover (31 Aug
+2026), sequenced ahead of [[F-207]] because [[F-220]] must land already entitlement-gated (Chief's
+Q7). No register row or pending-findings entry until now — same backfill shape as [[F-205]] /
+[[F-212]].
+**Handed off:** 2 Sep 2026
+**Status:** Done
+**Branch/PR:** `f206-module-entitlement` → PR #14
+**Commits:** `03f2187` (implementation) · this row (register + pending-findings + batch-log close-out)
+
+**Greenfield.** `Tenant.plan` was a decorative string; no feature-flag/module concept existed.
+
+**Schema** (`20260902120000_module_entitlement_f206`): `TenantModule` enum (GUEST_BOOKING,
+MEMBER_MANAGEMENT, STUDENT_MANAGEMENT, TOURNAMENT) + `ModuleEntitlement` model, `@@unique([tenantId,
+module])`, FK `onDelete: Cascade`. **No row = not entitled** (fail-closed) — STUDENT_MANAGEMENT and
+TOURNAMENT (zero real endpoints anywhere) need no seed rows. State is a pure function of `(now,
+startDate, endDate, disabledAt)`, **never stored**: `resolveEntitlementState` in
+`@badminton/shared-types` (both services already depend on it — no new service-to-service edge,
+avoids the coupling the deferred-debt note in root `CLAUDE.md` flags). no-row / not-started /
+lapsed → denied; active → read+write; `disabledAt` set & before `endDate` → read-only.
+
+**slot-engine:** `requireModuleEntitlement(auth, module, reply, {write})` composes into the
+existing `getInternalOrAdminAuth` chain immediately after auth (internal-key caller bypasses
+unconditionally — same precedent as `isAuthorizedForBranch`). Wired onto 18 endpoints —
+`GUEST_BOOKING` on the resource-pool / pattern / window / override / booking-rule / blocked-window
+routes, `MEMBER_MANAGEMENT` on the two `member-group-assignment` writes + the list read (Decision
+3). `GET /branches/:id/resource-pools` is shared guest+admin surface (the guest PWA lists bookable
+pools through it) — made **caller-aware** per Bala's 2 Sep call: guest/member tokens (`roles: []`)
+pass through untouched; an admin token (`owner` / `branch_manager:*`) additionally checks
+`GUEST_BOOKING` before the query, so a hidden module can't still leak pool data to an admin via a
+direct API call ("never UI-only"). The per-window bookability logic in `GET /availability` was
+factored into a shared `windowBookable` helper along the way (behaviour-preserving; also used by
+[[F-212]]'s `poolHasAvailabilityOnDate`).
+
+**tenant-management:** `POST /tenants/:id/entitlements` (grant/renew — `requireInternalKey` only,
+same tier as `POST /tenants`; renew extends `endDate` on the one row and clears any prior
+wind-down, never a new row per term — matching [[F-207]]'s confirmed renewal design),
+`GET /tenants/:id/entitlements` (any admin — `owner` or `branch_manager:*`; states computed per
+row), `POST /tenants/:id/entitlements/:module/disable` (Owner-only, sets `disabledAt`/`disabledBy`,
+idempotent, 404s an ungranted module; bodyless — send `{}`).
+
+**admin-v2:** `AdminTenantContext` gains a parallel **authenticated** entitlements fetch (the
+tenant fetch beside it is no-auth branding data — entitlement state must not ride on it), exposed
+as `entitlements: Record<module, state> | null`. `nav.ts` `NavDestination` carries an optional
+`module`; `filterByEntitlement` drops non-`ACTIVE`/`READ_ONLY` module destinations; a `null`
+entitlements value (fetch in flight / failed) hides nothing so a transient failure never strands
+an admin without navigation. Sidebar / bottom-nav / `/apps` overflow all filter through it.
+Dashboard / Communications / Ledger / Inventory map to no F-206 module and stay always-visible
+(Decision 1). The guest-facing booking/availability endpoints are **not** gated (Decision 2 — a
+materially larger, riskier scope the handover never asked for; its own future finding if wanted).
+
+**Seed ships atomically** (`20260902120100_seed_jbc_module_entitlements_f206`): JBC's real
+`GUEST_BOOKING` + `MEMBER_MANAGEMENT` rows, keyed on `subdomain = 'jbc'` (env-portable, not a
+hard-coded UUID), `ON CONFLICT DO NOTHING`, no-op on a fresh test DB. Without it JBC's live
+admin-web usage of the gated endpoints would 403 the instant the gate deploys — the inverted form
+of the "capture the before-state" rule.
+
+**One plan-accuracy correction, reported not hidden:** the plan's §"Blast radius" claimed "every
+existing regression section is unaffected by construction" because they use `internalKey`. False —
+`admin-operations` and `availability-generation-api` hit gated routes with `owner` /
+`branch_manager` JWTs. Fixed by seeding an ACTIVE entitlement for the regression tenant in
+`setupBaseFixtures` (cleanDatabase stops at resourcePool, so one upsert covers the run) and adding
+`tenantId: TENANT_ID` to those fixture tokens — which real admin tokens carry anyway (F-076).
+
+**Evidence:** whole-repo typecheck (14 packages) + full build clean. Full 5-service regression
+green — **slot-engine 68/68** (60 pre-existing + 8 new `module-entitlement.regression.ts`:
+no-row / not-started / active / read-only / hidden (×2 paths) / internal-key-bypass /
+caller-aware-branch-endpoint / MEMBER_MANAGEMENT-independent), **tenant-management 9/9** (5 + 4 new:
+grant-validation / renew-extends-same-row / GET-auth-and-states / disable-owner-only-idempotent-404),
+identity-auth 7/7, payment 12/12, notification 7/7. Live-fire on the dev stack against real JBC
+data in `badminton_db`: entitled admin `POST /resource-pools/:id/resources` + member-assignment
+list → 200; no-row and lapsed (past `endDate`) → 403 `MODULE_NOT_ENTITLED`; Owner wind-down →
+read 200 / write 403, `disabledBy` captured; `GET /branches/:id/resource-pools` — guest 200 with
+no entitlement, admin 403 then 200 once granted. Browser pass on admin-v2 (dev-login as JBC
+owner): both modules active → all 7 nav destinations; lapse `MEMBER_MANAGEMENT` → "Manage Members"
+gone from the desktop sidebar (6 left) and the `/apps` mobile overflow (2 left), bottom-nav
+unchanged; re-grant → restored. Test artifacts (livefire resource, two throwaway tenants) scrubbed.
+
+**Close-out:** `pnpm register:check` green (198 rows, Resolved 92). `pnpm diagram:verify` green —
+the new endpoints are not on any FLOW node (advisory only). PR #14 gated on `checks` + `regression`;
+`integration` post-merge.
 
 ## Queued, not yet batched
 
