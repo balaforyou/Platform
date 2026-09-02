@@ -189,6 +189,118 @@ Confirmed: 29 Aug 2026
 
 ## Promoted (audit trail)
 
+### admin-v2-enrollpasskeyprompt-render-phase-setstate-crash
+Batch: Phase 0 close-out
+Surfaced: 31 Aug 2026
+Description: `EnrollPasskeyPrompt` called `onResolved()` — a setter on the parent `App` component
+— synchronously during render when `!passkeysSupported()`, the "update a different component
+during render" anti-pattern that desyncs React's reconciler from the real DOM and throws
+`NotFoundError: Failed to execute 'removeChild' on 'Node'` on the next unmount. Pre-existing
+Slice-1 defect, not new code from sub-slice 0.1 — surfaced because 0.1's live-fire was the first
+real device pass since the defect landed. 100% reproducible on every mobile device tested:
+`passkeysSupported()` returns false without a secure context, and Android testing runs over
+`http://192.168.x.x:5175` (LAN IP, not HTTPS/localhost), so `window.PublicKeyCredential` is
+undefined and the bad branch fires on every sign-in. Intermittent on desktop (localhost is a secure
+context, so the branch doesn't normally fire; StrictMode's double-mount plus 0.1's new
+`AdminTenantProvider` render widened the timing window enough to trip it occasionally). Not seen
+during Slice 1 itself because a `localStorage` dismissal flag skipped this screen once dismissed;
+clearing site data while chasing a separate bug (the SW stale-cache defect, described separately)
+removed that flag and exposed the transition fresh. Fixed:
+`EnrollPasskeyPrompt.tsx` resolves from a `useEffect`, guarded by a `canEnrol` boolean, never during
+render; `App.tsx`'s `onResolved` is now a `useCallback`-stable reference. Verified: forced
+`window.PublicKeyCredential` undefined in sandbox — clean flow, no crash; 2 real Android devices +
+desktop Chrome/Edge clean; Playwright e2e criteria 3-5 (this exact transition) pass.
+Confirmed-ID: F-215
+Confirmed: 2 Sep 2026
+
+### admin-v2-service-worker-stale-vite-dev-module
+Batch: Phase 0 close-out
+Surfaced: 31 Aug 2026
+Description: `public/sw.js`'s `isShellRequest()` matched any `.js`/`.css` path too broadly,
+including Vite's pre-bundled dependency bundles at `/node_modules/.vite/deps/*.js`, routing them
+through `cacheFirst`, which does `cache.match(request, { ignoreSearch: true })`. Vite's deps carry a
+`?v=<hash>` query string that rotates on re-optimization; `ignoreSearch: true` matches a `?v=NEW`
+request against a cached `?v=OLD` response. Sub-slice 0.1 added a new export (`hexToOklch`) to
+`@badminton/ui-shared` — any device with a pre-0.1 cached dependency bundle kept being served the
+old one, so `applyAccentRamp.ts`'s import failed with `Uncaught SyntaxError: ... does not provide an
+export named 'hexToOklch'` and the whole module graph died, producing a blank page. Confirmed via
+direct `curl` against the stale dep URL, which returns Vite's own `504 Outdated Optimize Dep` signal
+— the service worker's `cacheFirst` served the cached `200` instead, so the app never saw the signal
+to reload. Pre-existing Slice-1/F-197-adjacent defect (the minimal install-ready service worker),
+dev-only in practice — production builds emit nothing under the affected paths, confirmed not
+assumed. Fixed: `isShellRequest()` now excludes `/node_modules/`, `/@`, `/src/` from `cacheFirst`;
+`activate()` also purges any already-cached dev-module entries so affected devices self-heal on next
+load. Verified: e2e service-worker cache-naming + stale-cache cleanup suite passes; confirmed on a
+real device after one cache clear, automatic thereafter.
+Confirmed-ID: F-216
+Confirmed: 2 Sep 2026
+
+### admin-v2-tailwind-preflight-img-height-override-audit
+Batch: Phase 0 close-out
+Surfaced: 31 Aug 2026
+Description: Tailwind v4's preflight ships `img, video { max-width: 100%; height: auto }` in
+`@layer base`. An HTML `height` *attribute* has CSS specificity 0, so `height: auto` from preflight
+silently wins over it; `width` is unaffected by preflight, so a square asset with both attributes
+survives by coincidence, not design. Sub-slice 0.1's `LandingPage.tsx` tenant-logo `<img>` used
+`height={24}` only; once 0.1 made `tenant.logo` resolve to a real, existing asset for the first time
+(previously 404ing), the logo rendered at its full 512px intrinsic height instead of 24px. Fixed at
+the two sites 0.1 touched (`LandingPage.tsx`, `TokenKitchenSink.tsx`) — sizing moved into inline
+`style={{ height: 24, width: 'auto' }}`. **Left deliberately unfixed and flagged as its own item,
+per rule 9**: `LoginScreen.tsx`'s `/icon-192.png` (`width={48} height={48}`) is the one other
+instance of this pattern in admin-v2, currently safe only by coincidence (square asset + surviving
+`width` attribute). Chief independently confirmed (2 Sep 2026) that `AppShell.tsx`'s own header
+logo, built later in sub-slice 0.3, already sizes via `style` and does not carry this trap — so the
+open scope is narrower than "every future logo site," specifically `LoginScreen.tsx` plus a
+systemic grep-based audit across admin-v2 and guest-member-pwa (same Tailwind v4 preflight) before
+more logo/icon instances land elsewhere.
+Confirmed-ID: F-217
+Confirmed: 2 Sep 2026
+
+### admin-v2-google-identity-services-detached-dom-mount
+Batch: Phase 0 close-out
+Surfaced: 31 Aug 2026
+Description: `LoginScreen` originally passed a React-managed `<div ref>` directly to
+`google.accounts.id.renderButton()`, which injects/mutates DOM inside it directly — a known
+fragility class when React later reconciles or unmounts that subtree (third-party DOM injection
+colliding with React's own commit cycle). A `?nogis` isolation switch used while diagnosing F-215
+(the render-phase crash) proved GIS was *not* the actual cause of that blank screen — the
+fragility is real and well-documented as a class of bug, but nothing live actually broke because of
+it during this project. Not a proven defect — a proactive hardening made while the area was already
+open, made explicit rather than presented as a fix for a confirmed symptom. Fixed:
+`LoginScreen.tsx`'s effect now creates a detached `<div>` (`document.createElement`), appends it to
+the React-managed host, hands that detached node to `renderGoogleButton`, and removes it on cleanup
+with try/catch. React only ever sees a host with zero children; GIS's own DOM churn is fully
+isolated from React's reconciliation. Chief's ruling (2 Sep 2026): keep, not revert — F-215 is
+itself the argument for keeping this, since it's the same underlying risk category (a render-phase/
+DOM-reconciliation desync) that produced a 100%-reproducible real crash elsewhere; foreclosing the
+same risk class here costs nothing. Verified: e2e login-screen and transition criteria pass; real
+desktop + Android sign-in via both Google and the dev-token path clean.
+Confirmed-ID: F-218
+Confirmed: 2 Sep 2026
+
+### admin-v2-identity-pipeline-discards-google-name-photo
+Batch: Phase 0 close-out
+Surfaced: 2 Sep 2026
+Description: Admin-v2's identity pipeline captures no real display name or profile photo anywhere,
+for either the Google-login or dev-login path — `AdminUser`
+(`apps/admin-v2/src/lib/claims.ts`) is `{ userId, email, phone, tenantId, userType, roles }`, no
+`name`, no `picture`. Traced to source: `verifyGoogleIdToken`
+(`services/identity-auth/src/adminGoogleAuth.ts:53-84`) extracts only `email` and `sub` from the
+verified Google ID token — Google's real `name`/`picture` claims are present in that same token
+(this is the plain `accounts.id` ID-token button flow, no scope restriction, so Google's default
+profile claims should already be arriving in every token — a code-level read, not yet live-fire
+confirmed) and are simply never read, never stored on the `User` row, never forwarded into the JWT.
+Surfaced while building a topbar account-menu addendum for sub-slice 0.3 — not an admin-v2 UI issue,
+a systemic identity-auth gap that would affect any future consumer of `AdminUser`, not just one
+topbar. Full remediation plan already written, not just described:
+`claude/technical-lead-plan-admin-v2-identity-name-photo.md` — persists `displayName`/`photoUrl` on
+the `User` row (chosen over a JWT-only forward, which would visibly flicker: appear after a fresh
+Google login, then silently revert to initials on the next token refresh or passkey login, since
+neither re-touches Google). Real migration, cross-service, own sign-off track — deliberately not
+folded into the topbar addendum itself, per rule 9.
+Confirmed-ID: F-219
+Confirmed: 2 Sep 2026
+
 ### admin-v2-build-initiative
 Batch: 25 (Slice 1; track opened Batch 24)
 Surfaced: 29 Aug 2026
