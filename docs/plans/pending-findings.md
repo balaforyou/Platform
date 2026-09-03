@@ -176,6 +176,37 @@ Confirmed: 29 Aug 2026
 
 ## Promoted (audit trail)
 
+### admin-v2-court-slot-configuration-port
+Batch: F-220 close-out
+Surfaced: 31 Aug 2026 (Slice-2 Chief→Technical Lead handover, "F-220 — port admin-web's court &
+slot configuration into admin-v2"; depends on F-206, sized so it lands already entitlement-gated
+per Chief's Q7)
+Description: admin-v2's `/court-groups` rendered a `StubScreen`; court/slot configuration only
+existed in admin-web (`ResourcesPage` + `SchedulingPage`). Delivered as a frontend-only port onto
+the already-shipped, already-F-206-gated slot-engine/tenant-management config API — zero backend
+change. New `CourtGroupsScreen`: one screen, two `Tabs` (Configuration = branch hours + pool +
+booking rule; Scheduling = recurring patterns + date overrides + live availability preview) over
+one shared branch/pool selection. Five zod schemas + the display helpers ported byte-identical;
+interaction model (dropdown-edit, New clears, Create-vs-Update by selected id, Delete on selection)
+preserved exactly. React Query for data + cache invalidation (admin-v2's first real use of it).
+New shared pieces kept small: `lib/useAdminApi.ts` (admin-web's verb wrapper, keyed on
+`useAdminAuth().accessToken`), `components/Textarea.tsx` (the one missing primitive). Feedback via
+`Banner`, not admin-web's `MutationFeedback`. Weekday picker: toggle `Badge` buttons. F-206 proof
+case: `court-groups` carries `module: 'GUEST_BOOKING'` so the nav hides it for an unentitled
+tenant, and the screen guards its own render when reached directly. Two scope corrections resolved
+with Bala before implementation (only `/court-groups` not `/guests`; port the real config
+functionality, not the wireframe's unrelated `groups` tab). Two deliberate deviations reported:
+(1) `apps/admin-v2/vite.config.ts` gained the missing `/api/slot-engine` dev proxy — a local-test
+blocker, production unaffected; (2) a `ZodError` is shown as its first issue's message rather than
+admin-web's raw JSON blob (display fix, not a rule change). Verified: whole-repo typecheck + build
+clean; lint 0 errors; no backend / regression impact; live-fire on the dev stack against real JBC
+data (all Configuration + Scheduling CRUD, both client-side rejection cases, availability-preview
+cache invalidation) + the F-206 gate (nav hides both GUEST_BOOKING destinations and the screen
+shows "Guest Booking isn't active" when the entitlement is lapsed; restored on re-grant). Test
+data restored. Production deployment deferred to end-of-task per Bala.
+Confirmed-ID: F-220
+Confirmed: 31 Aug 2026
+
 ### tenant-module-entitlement-system
 Batch: F-206 close-out
 Surfaced: 31 Aug 2026 (discovery-admin-v2-slice2-guest-booking-mgmt.md §8; consolidated into

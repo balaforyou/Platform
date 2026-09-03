@@ -10,6 +10,7 @@ import { TokenKitchenSink } from './dev/TokenKitchenSink';
 import { AppShell } from './screens/shell/AppShell';
 import { AppsOverflowScreen } from './screens/AppsOverflowScreen';
 import { StubScreen } from './screens/StubScreen';
+import { CourtGroupsScreen } from './screens/CourtGroupsScreen';
 
 /**
  * Auth gate → navigated app.
@@ -82,15 +83,7 @@ export default function App() {
               />
             }
           />
-          <Route
-            path="/court-groups"
-            element={
-              <StubScreen
-                title="Manage Court Groups"
-                description="Court groupings and their availability windows."
-              />
-            }
-          />
+          <Route path="/court-groups" element={<CourtGroupsScreen />} />
           <Route
             path="/guests"
             element={

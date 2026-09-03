@@ -1325,7 +1325,94 @@ unchanged; re-grant → restored. Test artifacts (livefire resource, two throwaw
 
 **Close-out:** `pnpm register:check` green (198 rows, Resolved 92). `pnpm diagram:verify` green —
 the new endpoints are not on any FLOW node (advisory only). PR #14 gated on `checks` + `regression`;
-`integration` post-merge.
+`integration` post-merge. Merged `ece5327`; post-merge pipeline all green (checks + regression +
+integration), images pushed at that SHA.
+
+## Batch 30 — F-220 court/slot configuration ported into admin-v2 (`/court-groups`)
+
+**Findings:** [[F-220]] — **Resolved**. Chief-assigned in the Slice-2 handover; depends on
+[[F-206]] and is its proof case (a genuinely module-gated nav destination). No register row or
+pending-findings entry until now — same backfill shape as [[F-205]] / [[F-206]] / [[F-212]].
+**Handed off:** 3 Sep 2026
+**Status:** Done
+**Branch/PR:** `f220-court-groups` → PR #15
+**Commits:** `PENDING` (implementation) · this row (register + pending-findings + batch-log close-out)
+
+**Frontend-only port — zero backend change.** admin-v2's `/court-groups` was a `StubScreen`; the
+only court/slot-config UI was admin-web's `ResourcesPage` + `SchedulingPage`, running against a
+real, working, already-F-206-gated API.
+
+**Two scope corrections resolved with Bala before implementation** (rule 9 — surfaced, confirmed,
+not assumed): (1) scope is "Manage Court Groups" (`/court-groups`) only — the guest-reservations
+console (`/guests`) is untouched, a separate future finding; (2) the Guest-Management wireframe's
+own `desktopTab === 'groups'` content is an unrelated member-subscription batch/roster manager with
+no real backend — Bala's call was to port the *real* config functionality (branch hours, pool
+capacity/pricing, booking rules, recurring patterns, date overrides, live preview) onto
+`/court-groups` using admin-v2's own design system, not a copy of that layout.
+
+**What shipped:**
+- `screens/CourtGroupsScreen.tsx` — one screen, two `Tabs`: "Configuration" (`ConfigurationPanel`:
+  branch schedule + pool + booking rule) and "Scheduling" (`SchedulingPanel`: recurring patterns +
+  date overrides + live availability preview), over one shared branch + pool `<Select>`.
+- `screens/courtGroups/schemas.ts` — the five zod schemas ported byte-identical (every refine
+  still mirrors a real server rule; `overrideSchema`'s deliberate no-`dividesADay` asymmetry
+  preserved). `screens/courtGroups/helpers.ts` — `weekdayOptions` / `formatDaysOfWeek` /
+  `formatTimeRange` / `todayIsoDate` / `resourcePoolFieldLabels` / `branchScopes`, verbatim.
+  `screens/courtGroups/{types,queries,feedback}.ts` — response types, React-Query hooks, and the
+  `ZodError → first-issue-message` display helper.
+- `lib/useAdminApi.ts` — the verb wrapper admin-web keeps local to its `main.tsx`, ported and
+  keyed on `useAdminAuth().accessToken` (not `ui-shared`'s hostname-bound `AuthContext`). First
+  shared `/slot-engine` consumer from admin-v2.
+- `components/Textarea.tsx` (+ barrel export) — the one primitive that didn't exist, for the
+  override `reason` field.
+- Interaction model preserved exactly: pick an existing row from a `<select>` to load it into the
+  edit form, "New" clears, Create-vs-Update by whether an id is selected, Delete on the selection.
+  Not a table/grid redesign.
+- React Query (`useQuery`/`useMutation` + `invalidateQueries` between them) — admin-v2's first
+  screen to actually use the client mounted at its root, matching admin-web's own pattern.
+- Feedback via `Banner` (admin-v2's idiom) in place of admin-web's bespoke `MutationFeedback`.
+  Weekday picker: toggle `Badge` buttons over the comma-separated `daysOfWeek` string (Decision 9).
+- **F-206 proof case:** `court-groups` carries `module: 'GUEST_BOOKING'` in `nav.ts`, so the nav
+  hides it for an unentitled tenant; the screen also refuses to render its config UI when reached
+  directly (matching F-206's "never UI-only" — the API 403s anyway).
+- Zero-pools → `EmptyState` (admin-v2 has no onboarding wizard — F-098's `/resources/new` is
+  admin-web-only; flagged as its own follow-up if admin-v2 fully replaces admin-web).
+- `App.tsx` — one route swap (`StubScreen` → `<CourtGroupsScreen />`).
+
+**Two deliberate deviations, reported:** (1) `apps/admin-v2/vite.config.ts` gained the
+`/api/slot-engine` dev proxy block (admin-web has one; admin-v2 didn't — every pool/pattern/
+override call in this screen hits `/slot-engine`, so local testing fails on the first fetch
+without it; production is unaffected — Caddy routes `/api/slot-engine/*` globally). (2) A client
+`ZodError` is surfaced as its first issue's message rather than admin-web's raw stringified-issues
+blob — a feedback-display fix; every validation rule is still ported byte-identical.
+
+**Evidence:** whole-repo typecheck (14 packages) + admin-v2 build clean. Lint: 0 errors (2 new
+warnings — the exact `_fromDate`/`_toDate` object-rest destructure idiom admin-web already carries
+at `main.tsx:1097`). No backend touched, so no regression suite is affected by construction — every
+endpoint this screen calls already exists and is exercised by admin-web today. Live-fire on the
+local dev stack against real JBC data (`badminton_db`), admin-v2 dev-login as JBC owner:
+- **Configuration:** branch hours saved (07:00 / 21:30, DB read-back confirmed); pool saved
+  (DB read-back); `capacity < minOccupancy` → client-rejected with "Capacity must be greater than
+  or equal to minimum occupancy" (zod refine via the new error helper), pool not written; booking
+  rule saved.
+- **Scheduling:** selecting an existing pattern loads its values into the form; pricing-mode-set /
+  price-empty → "Pricing mode and price must be set together", not written; pattern updated
+  ("Pattern saved."); CLOSED date override created → appears in the select as "Sun, Sep 20 |
+  Closed" → selected → deleted ("Override deleted."); the availability preview refetched and
+  reflected the pattern's new capacity after the update, no manual reload (cache invalidation).
+- **F-206 gate:** with JBC's `GUEST_BOOKING` `endDate` set to the past, the sidebar drops both
+  `GUEST_BOOKING` destinations (Manage Court Groups + Guest Management) and `/court-groups` renders
+  "Guest Booking isn't active for this account"; re-granting restores both.
+- Test-data changes reverted (branch hours, pool fields, pattern capacity, generated capacity-4
+  windows, JBC entitlement); dev stack + temp `ADMIN_DEV_LOGIN` patch torn down.
+
+**Production deployment explicitly deferred** to end-of-task per Bala — including running F-206's
+seed migration in prod and catching the VM up on the F-205/F-189/F-212/F-206 backlog (the VM still
+runs `85b2731a`, Aug 30). Not part of this pass.
+
+**Close-out:** `pnpm register:check` green (199 rows, Resolved 93). `pnpm diagram:verify` green —
+no diagram-tagged endpoint touched (no endpoint touched at all). PR #15 gated on `checks` +
+`regression`; `integration` post-merge.
 
 ## Queued, not yet batched
 
