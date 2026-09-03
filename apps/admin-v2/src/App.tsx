@@ -10,6 +10,7 @@ import { TokenKitchenSink } from './dev/TokenKitchenSink';
 import { AppShell } from './screens/shell/AppShell';
 import { AppsOverflowScreen } from './screens/AppsOverflowScreen';
 import { StubScreen } from './screens/StubScreen';
+import { BranchSettingsScreen } from './screens/BranchSettingsScreen';
 
 /**
  * Auth gate → navigated app.
@@ -100,6 +101,7 @@ export default function App() {
               />
             }
           />
+          <Route path="/branch-settings" element={<BranchSettingsScreen />} />
           <Route path="/apps" element={<AppsOverflowScreen />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
