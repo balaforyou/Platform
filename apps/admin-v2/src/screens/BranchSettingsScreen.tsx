@@ -20,6 +20,7 @@ import { errorMessage } from '../lib/errorMessage';
 import { branchSettingsSchema, WEEKDAYS } from './branchSettings/schema';
 import { cityFromAddress, describeSchedule, to12h } from './branchSettings/format';
 import { useBranchList, useSaveBranchSettings } from './branchSettings/queries';
+import { SpecialHours } from './branchSettings/SpecialHours';
 
 const HHMM = /^\d{2}:\d{2}$/;
 
@@ -333,6 +334,9 @@ export function BranchSettingsScreen() {
           })}
         </div>
       </Card>
+
+      {/* Special Hours (F-220 §1b) — the 4th card; own data-fetch + CRUD, no change to the three above. */}
+      <SpecialHours branchId={selected?.id} regularStart={start} regularEnd={end} />
 
       {zodError && <Banner tone="error">{zodError}</Banner>}
       {save.error && <Banner tone="error">{errorMessage(save.error)}</Banner>}

@@ -14,13 +14,24 @@ interface TimeFieldProps {
    *  Sun/Moon etc. to match a specific field, same convention the read-only display already
    *  uses elsewhere on this screen. */
   icon?: ReactNode;
+  /** F-220 §1b (Finding 3): restrict the minute wheel to multiples of this many minutes
+   *  (e.g. a pool's slot duration). Default 1 = every minute 00–59, so existing callers are
+   *  untouched. Only honoured for values that divide 60 (15/20/30/60); anything else falls
+   *  back to 1. When both fields on a screen share the same step, a range that isn't a whole
+   *  number of steps becomes unpickable — see the Special Hours modal. */
+  minuteStep?: number;
   id?: string;
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => pad2(i + 1)); // '01'..'12'
-const MINUTES = Array.from({ length: 60 }, (_, i) => pad2(i));
 const PERIODS = ['AM', 'PM'] as const;
+
+/** '00'..'59', or a coarser grid ('00','15',…) when minuteStep divides 60. */
+function minuteOptions(minuteStep?: number): string[] {
+  const step = minuteStep && minuteStep > 0 && 60 % minuteStep === 0 ? minuteStep : 1;
+  return Array.from({ length: 60 / step }, (_, i) => pad2(i * step));
+}
 const ITEM_H = 40;
 const VISIBLE = 5;
 const HHMM = /^(\d{2}):(\d{2})$/;
@@ -62,8 +73,9 @@ function from12h(h12: string, mm: string, period: 'AM' | 'PM'): string {
  * under the right-hand field would routinely run off the edge of a phone screen. A centred
  * modal sidesteps that regardless of which field opened it.
  */
-export function TimeField({ label, hint, error, value, onChange, disabled, icon, id }: TimeFieldProps) {
+export function TimeField({ label, hint, error, value, onChange, disabled, icon, minuteStep, id }: TimeFieldProps) {
   const [open, setOpen] = useState(false);
+  const minutes = useMemo(() => minuteOptions(minuteStep), [minuteStep]);
   const { h12: selHour, mm: selMin, period: selPeriod } = useMemo(() => to12hParts(value), [value]);
   const isSet = HHMM.test(value);
 
@@ -147,7 +159,7 @@ export function TimeField({ label, hint, error, value, onChange, disabled, icon,
           />
           <WheelColumn width={56} items={HOURS_12} selected={selHour} onSelect={(v) => setPart('h', v)} />
           <Divider />
-          <WheelColumn width={56} items={MINUTES} selected={selMin} onSelect={(v) => setPart('m', v)} />
+          <WheelColumn width={56} items={minutes} selected={selMin} onSelect={(v) => setPart('m', v)} />
           <Divider />
           <WheelColumn width={52} items={[...PERIODS]} selected={selPeriod} onSelect={(v) => setPart('p', v)} />
         </div>
