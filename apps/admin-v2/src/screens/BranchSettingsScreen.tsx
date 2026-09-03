@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Clock, Save } from 'lucide-react';
 import { useAdminAuth } from '../auth/AdminAuthContext';
-import { Badge, Banner, Button, Card, EmptyState, LoadingState, Select, TextField } from '../components';
+import { Badge, Banner, Button, Card, EmptyState, LoadingState, Select, TimeField } from '../components';
 import { errorMessage } from '../lib/errorMessage';
 import { branchSettingsSchema, WEEKDAYS } from './branchSettings/schema';
 import { useBranchList, useSaveBranchSettings } from './branchSettings/queries';
@@ -106,23 +106,23 @@ export function BranchSettingsScreen() {
           </Banner>
         )}
 
-        <TextField
+        <TimeField
           label="Opens"
           placeholder="06:00"
           value={start}
           disabled={!isOwner}
-          onChange={(e) => {
-            setStart(e.target.value);
+          onChange={(v) => {
+            setStart(v);
             setZodError(null);
           }}
         />
-        <TextField
+        <TimeField
           label="Closes"
           placeholder="22:00"
           value={end}
           disabled={!isOwner}
-          onChange={(e) => {
-            setEnd(e.target.value);
+          onChange={(v) => {
+            setEnd(v);
             setZodError(null);
           }}
         />

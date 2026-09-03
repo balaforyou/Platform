@@ -371,3 +371,12 @@ body {
 .av2-account-menu-item[data-highlighted] {
   background: var(--av2-surface-alt);
 }
+
+/* F-220: TimeField scroll-wheel columns — hide the scrollbar, the snap points are the affordance. */
+.av2-timewheel {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.av2-timewheel::-webkit-scrollbar {
+  display: none;
+}
