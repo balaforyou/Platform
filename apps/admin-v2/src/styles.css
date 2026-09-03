@@ -237,6 +237,10 @@ body {
   min-height: 100vh;
   display: flex;
   background: var(--av2-bg);
+  /* Defensive backstop: one un-guarded flex/grid child overflowing shouldn't be able to take
+     the whole page sideways (real bug hit on /branch-settings — a missing min-width: 0 on a
+     grid child bubbled up into page-wide horizontal scroll). */
+  overflow-x: hidden;
 }
 .av2-sidebar {
   width: 240px;

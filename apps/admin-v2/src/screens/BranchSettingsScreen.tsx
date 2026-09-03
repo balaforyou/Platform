@@ -103,7 +103,7 @@ export function BranchSettingsScreen() {
   const photo = selected?.photos?.[0] || tenant?.logo || null;
 
   return (
-    <div style={{ display: 'grid', gap: 'var(--av2-space-4)', maxWidth: 640 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--av2-space-4)', maxWidth: 640, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--av2-space-2)' }}>
         <button
           type="button"
@@ -130,7 +130,7 @@ export function BranchSettingsScreen() {
       </div>
 
       {/* Branch card — compact */}
-      <Card as="section" style={{ padding: 'var(--av2-space-4)', display: 'grid', gap: 'var(--av2-space-3)' }}>
+      <Card as="section" style={{ padding: 'var(--av2-space-4)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--av2-space-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-3)' }}>
           <div
             style={{
@@ -233,7 +233,7 @@ export function BranchSettingsScreen() {
         >
           <CalendarClock size={18} />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 'var(--av2-text-xs)', fontWeight: 700, color: 'var(--av2-accent-hover)' }}>
             Schedule overview
           </div>
@@ -254,7 +254,7 @@ export function BranchSettingsScreen() {
       </Card>
 
       {/* Regular operating hours */}
-      <Card as="section" style={{ display: 'grid', gap: 'var(--av2-space-4)' }}>
+      <Card as="section" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--av2-space-4)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--av2-space-3)' }}>
           <div style={{ display: 'flex', gap: 'var(--av2-space-3)' }}>
             <Clock size={18} style={{ color: 'var(--av2-accent-hover)', flex: 'none', marginTop: 2 }} />
@@ -292,25 +292,29 @@ export function BranchSettingsScreen() {
         )}
 
         {editingHours ? (
-          <div style={{ display: 'grid', gap: 'var(--av2-space-4)' }}>
-            <TimeField
-              label="Opening time"
-              placeholder="06:00"
-              value={start}
-              onChange={(v) => {
-                setStart(v);
-                setZodError(null);
-              }}
-            />
-            <TimeField
-              label="Closing time"
-              placeholder="22:00"
-              value={end}
-              onChange={(v) => {
-                setEnd(v);
-                setZodError(null);
-              }}
-            />
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--av2-space-3)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <TimeField
+                label="Opening time"
+                icon={<Sun size={16} />}
+                value={start}
+                onChange={(v) => {
+                  setStart(v);
+                  setZodError(null);
+                }}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <TimeField
+                label="Closing time"
+                icon={<Moon size={16} />}
+                value={end}
+                onChange={(v) => {
+                  setEnd(v);
+                  setZodError(null);
+                }}
+              />
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-3)' }}>
@@ -322,7 +326,7 @@ export function BranchSettingsScreen() {
       </Card>
 
       {/* Open days */}
-      <Card as="section" style={{ display: 'grid', gap: 'var(--av2-space-4)' }}>
+      <Card as="section" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--av2-space-4)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--av2-space-3)' }}>
           <div style={{ display: 'flex', gap: 'var(--av2-space-3)' }}>
             <CalendarDays size={18} style={{ color: 'var(--av2-accent-hover)', flex: 'none', marginTop: 2 }} />
@@ -415,6 +419,7 @@ function ReadonlyTime({ label, value, icon }: { label: string; value: string; ic
     <div
       style={{
         flex: 1,
+        minWidth: 0,
         padding: 'var(--av2-space-3)',
         borderRadius: 'var(--av2-radius-sm)',
         border: '1px solid var(--av2-border)',

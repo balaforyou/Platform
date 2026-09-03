@@ -1,198 +1,186 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Clock } from 'lucide-react';
+import { Modal } from './Modal';
 
 interface TimeFieldProps {
   label: string;
   hint?: string;
   error?: string;
-  /** 24-hour "HH:MM", or "" for unset. */
+  /** 24-hour "HH:MM", or "" for unset. Unchanged contract. */
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
-  placeholder?: string;
+  /** Shown in the trigger box and the picker title bar. Defaults to a clock icon — pass
+   *  Sun/Moon etc. to match a specific field, same convention the read-only display already
+   *  uses elsewhere on this screen. */
+  icon?: ReactNode;
   id?: string;
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
-const HOURS = Array.from({ length: 24 }, (_, i) => pad2(i));
+const HOURS_12 = Array.from({ length: 12 }, (_, i) => pad2(i + 1)); // '01'..'12'
 const MINUTES = Array.from({ length: 60 }, (_, i) => pad2(i));
-const ITEM_H = 34;
+const PERIODS = ['AM', 'PM'] as const;
+const ITEM_H = 40;
 const VISIBLE = 5;
+const HHMM = /^(\d{2}):(\d{2})$/;
 
-/** Typing filter: digits only, ':' auto-inserted after 2, capped at HH:MM. */
-function maskTyping(raw: string): string {
-  const d = raw.replace(/\D/g, '').slice(0, 4);
-  return d.length <= 2 ? d : `${d.slice(0, 2)}:${d.slice(2)}`;
+/** 24h "HH:MM" -> { h12, mm, period }. Falls back to a sane default (08:00 AM) when unset. */
+function to12hParts(value: string): { h12: string; mm: string; period: 'AM' | 'PM' } {
+  const m = HHMM.exec(value);
+  if (!m) return { h12: '08', mm: '00', period: 'AM' };
+  const h24 = Number(m[1]);
+  const period: 'AM' | 'PM' = h24 < 12 ? 'AM' : 'PM';
+  return { h12: pad2(h24 % 12 || 12), mm: m[2], period };
+}
+
+/** { h12, mm, period } -> 24h "HH:MM", the value this component always commits. */
+function from12h(h12: string, mm: string, period: 'AM' | 'PM'): string {
+  let h = Number(h12) % 12;
+  if (period === 'PM') h += 12;
+  return `${pad2(h)}:${mm}`;
 }
 
 /**
- * Blur normaliser. 0-1 digits -> clear (too little to guess). 2+ digits -> first two are the
- * hour, the rest are minutes, both padded and clamped to a real 24h time:
- *   "07"   -> "07:00"     "073"  -> "07:30"     "2599" -> "23:59"
+ * F-220: time input, wheel-only by design — no typed entry, so it can never end up mid-way
+ * through a malformed value. Tapping the field itself opens a picker Modal (Hour 1-12 / Minute
+ * / AM-PM, tinted centre-selection band, soft top/bottom fade — the "Schedule overview" card's
+ * accent-soft + accent-hairline recipe, not a new visual language). The picker displays and
+ * edits in 12h/AM-PM; it still only ever commits a 24h "HH:MM" string via onChange, so no
+ * caller or server contract changes.
+ *
+ * Renders as a compact label+value box (the same shape the read-only display already uses),
+ * so two of these sit comfortably side by side in one row — see the Opening/Closing time row
+ * in BranchSettingsScreen.
+ *
+ * Built on the existing `Modal` (Radix Dialog — focus trap, Escape, scroll lock, ARIA) rather
+ * than a custom anchored popover: with two fields sitting side by side, an anchored popover
+ * under the right-hand field would routinely run off the edge of a phone screen. A centred
+ * modal sidesteps that regardless of which field opened it.
  */
-function normalize(v: string): string {
-  const d = v.replace(/\D/g, '');
-  if (d.length < 2) return '';
-  const hh = Math.min(23, Number(d.slice(0, 2)) || 0);
-  const mm = Math.min(59, Number(d.slice(2, 4).padEnd(2, '0')) || 0);
-  return `${pad2(hh)}:${pad2(mm)}`;
-}
-
-/**
- * F-220: 24-hour time input, reusable. A masked text field (digits only, ':' auto-inserts,
- * clamps to 00:00-23:59 on blur, clears an incomplete value) plus a clock button that opens a
- * scroll-wheel picker (hours / minutes columns, scroll-snap, tap or scroll to pick). No
- * dependency - the wheel is plain scroll-snap CSS. Same prop shape as `TextField`.
- */
-export function TimeField({ label, hint, error, value, onChange, disabled, placeholder = 'HH:MM', id }: TimeFieldProps) {
-  const autoId = useId();
-  const fieldId = id ?? autoId;
-  const rootRef = useRef<HTMLDivElement>(null);
+export function TimeField({ label, hint, error, value, onChange, disabled, icon, id }: TimeFieldProps) {
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState(value);
+  const { h12: selHour, mm: selMin, period: selPeriod } = useMemo(() => to12hParts(value), [value]);
+  const isSet = HHMM.test(value);
 
-  // Re-sync the visible text when the value changes from outside (branch switch, wheel pick).
-  useEffect(() => {
-    setText(value);
-  }, [value]);
-
-  const [selHour, selMin] = useMemo(() => {
-    const m = /^(\d{2}):(\d{2})$/.exec(value);
-    return m ? [m[1], m[2]] : ['08', '00']; // wheel defaults when nothing is set yet
-  }, [value]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  const describedBy = error ? `${fieldId}-err` : hint ? `${fieldId}-hint` : undefined;
-
-  const commit = (v: string) => {
-    if (v !== value) onChange(v);
-  };
-
-  const setPart = (part: 'h' | 'm', v: string) => {
-    const next = part === 'h' ? `${v}:${selMin}` : `${selHour}:${v}`;
-    setText(next);
-    commit(next);
+  const setPart = (part: 'h' | 'm' | 'p', v: string) => {
+    const next = from12h(part === 'h' ? v : selHour, part === 'm' ? v : selMin, part === 'p' ? (v as 'AM' | 'PM') : selPeriod);
+    if (next !== value) onChange(next);
   };
 
   return (
-    <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-2)', position: 'relative' }}>
-      <label htmlFor={fieldId} style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 600, color: 'var(--av2-text)' }}>
-        {label}
-      </label>
-
-      <div style={{ display: 'flex', gap: 'var(--av2-space-2)' }}>
-        <input
-          id={fieldId}
-          inputMode="numeric"
-          autoComplete="off"
-          placeholder={placeholder}
-          value={text}
-          disabled={disabled}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={describedBy}
-          onChange={(e) => setText(maskTyping(e.target.value))}
-          onBlur={() => {
-            const n = normalize(text);
-            setText(n);
-            commit(n);
-          }}
-          style={{
-            flex: 1,
-            padding: 'var(--av2-space-2) var(--av2-space-3)',
-            fontSize: 'var(--av2-text-base)',
-            fontVariantNumeric: 'tabular-nums',
-            borderRadius: 'var(--av2-radius-sm)',
-            border: `1px solid ${error ? 'var(--av2-danger)' : 'var(--av2-border)'}`,
-            background: 'var(--av2-surface)',
-            color: 'var(--av2-text)',
-          }}
-        />
-        <button
-          type="button"
-          aria-label={open ? 'Close time picker' : 'Pick a time'}
-          aria-expanded={open}
-          disabled={disabled}
-          onClick={() => setOpen((o) => !o)}
-          style={{
-            flex: 'none',
-            width: 36,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 'var(--av2-radius-sm)',
-            border: '1px solid var(--av2-border)',
-            background: open ? 'var(--av2-accent-soft)' : 'var(--av2-surface)',
-            color: open ? 'var(--av2-accent-hover)' : 'var(--av2-muted)',
-            cursor: disabled ? 'default' : 'pointer',
-          }}
-        >
-          <Clock size={16} />
-        </button>
-      </div>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label={`${label} picker`}
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + var(--av2-space-1))',
-            left: 0,
-            zIndex: 50,
-            display: 'flex',
-            gap: 'var(--av2-space-1)',
-            padding: 'var(--av2-space-2)',
-            borderRadius: 'var(--av2-radius-sm)',
-            border: '1px solid var(--av2-border)',
-            background: 'var(--av2-surface)',
-            boxShadow: 'var(--av2-shadow-lg)',
-          }}
-        >
-          <WheelColumn items={HOURS} selected={selHour} onSelect={(v) => setPart('h', v)} />
-          <div style={{ alignSelf: 'center', fontWeight: 700, color: 'var(--av2-muted)' }}>:</div>
-          <WheelColumn items={MINUTES} selected={selMin} onSelect={(v) => setPart('m', v)} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-2)' }}>
+      <button
+        type="button"
+        id={id}
+        disabled={disabled}
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+        style={{
+          textAlign: 'left',
+          width: '100%',
+          padding: 'var(--av2-space-3)',
+          borderRadius: 'var(--av2-radius-sm)',
+          border: `1px solid ${error ? 'var(--av2-danger)' : 'var(--av2-border)'}`,
+          background: 'var(--av2-surface)',
+          color: 'var(--av2-text)',
+          cursor: disabled ? 'default' : 'pointer',
+          opacity: disabled ? 0.6 : 1,
+        }}
+      >
+        <div style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, gap: 'var(--av2-space-2)' }}>
+          <span style={{ fontSize: 'var(--av2-text-lg)', fontWeight: 700 }}>
+            {isSet ? `${selHour}:${selMin} ${selPeriod}` : 'Not set'}
+          </span>
+          <span style={{ flex: 'none', color: 'var(--av2-muted)' }}>{icon ?? <Clock size={16} />}</span>
         </div>
-      )}
+      </button>
 
       {hint && !error && (
-        <span id={`${fieldId}-hint`} style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' }}>
-          {hint}
-        </span>
+        <span style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' }}>{hint}</span>
       )}
-      {error && (
-        <span id={`${fieldId}-err`} style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-danger)' }}>
-          {error}
-        </span>
-      )}
+      {error && <span style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-danger)' }}>{error}</span>}
+
+      <Modal open={open} onOpenChange={setOpen} title={label} size="sm">
+        <div
+          style={{
+            textAlign: 'center',
+            fontWeight: 700,
+            fontSize: 'var(--av2-text-base)',
+            color: 'var(--av2-text)',
+            marginBottom: 'var(--av2-space-4)',
+          }}
+        >
+          {selHour}:{selMin} {selPeriod}
+        </div>
+
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            justifyContent: 'center',
+            borderRadius: 'var(--av2-radius-sm)',
+            background: 'var(--av2-surface-alt)',
+            overflow: 'hidden',
+            maskImage: 'linear-gradient(to bottom, transparent, black 24%, black 76%, transparent)',
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 24%, black 76%, transparent)',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: ITEM_H * Math.floor(VISIBLE / 2),
+              left: 4,
+              right: 4,
+              height: ITEM_H,
+              borderRadius: 'var(--av2-radius-sm)',
+              background: 'var(--av2-accent-soft)',
+              borderTop: '1px solid var(--av2-accent)',
+              borderBottom: '1px solid var(--av2-accent)',
+              pointerEvents: 'none',
+            }}
+          />
+          <WheelColumn width={56} items={HOURS_12} selected={selHour} onSelect={(v) => setPart('h', v)} />
+          <Divider />
+          <WheelColumn width={56} items={MINUTES} selected={selMin} onSelect={(v) => setPart('m', v)} />
+          <Divider />
+          <WheelColumn width={52} items={[...PERIODS]} selected={selPeriod} onSelect={(v) => setPart('p', v)} />
+        </div>
+      </Modal>
     </div>
   );
 }
 
-function WheelColumn({ items, selected, onSelect }: { items: string[]; selected: string; onSelect: (v: string) => void }) {
+function Divider() {
+  return (
+    <div
+      aria-hidden
+      style={{ flex: 'none', width: 1, alignSelf: 'stretch', background: 'var(--av2-border)', zIndex: 1 }}
+    />
+  );
+}
+
+function WheelColumn({
+  items,
+  selected,
+  onSelect,
+  width,
+}: {
+  items: string[];
+  selected: string;
+  onSelect: (v: string) => void;
+  width: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const touched = useRef(false);
   const settle = useRef<number | undefined>(undefined);
-
   const openSelected = useRef(selected);
 
-  // Centre the current selection once, when the wheel opens. This component remounts on every
-  // open, so the ref captured at mount is the value to land on — deliberately not re-run on
-  // later `selected` changes (that would fight the user's own scroll).
+  // Centre the current selection once, when the picker opens. This column remounts fresh every
+  // time the Modal opens (Radix unmounts Dialog.Content on close), so the ref captured at mount
+  // is the value to land on — deliberately not re-run on later `selected` changes (that would
+  // fight the user's own in-progress scroll).
   useEffect(() => {
     const idx = Math.max(0, items.indexOf(openSelected.current));
     const el = ref.current;
@@ -219,8 +207,11 @@ function WheelColumn({ items, selected, onSelect }: { items: string[]; selected:
       onWheel={() => (touched.current = true)}
       className="av2-timewheel"
       style={{
+        position: 'relative',
+        zIndex: 2,
+        flex: 'none',
+        width,
         height: ITEM_H * VISIBLE,
-        width: 48,
         overflowY: 'auto',
         scrollSnapType: 'y mandatory',
         textAlign: 'center',
@@ -244,13 +235,15 @@ function WheelColumn({ items, selected, onSelect }: { items: string[]; selected:
             height: ITEM_H,
             scrollSnapAlign: 'center',
             border: 'none',
-            borderRadius: 'var(--av2-radius-sm)',
-            background: it === selected ? 'var(--av2-accent-soft)' : 'transparent',
+            background: 'transparent',
             color: it === selected ? 'var(--av2-accent-hover)' : 'var(--av2-text)',
+            opacity: it === selected ? 1 : 0.55,
             fontWeight: it === selected ? 700 : 400,
-            fontSize: 'var(--av2-text-base)',
+            fontSize: it === selected ? 'var(--av2-text-xl)' : 'var(--av2-text-lg)',
             fontVariantNumeric: 'tabular-nums',
             cursor: 'pointer',
+            transition:
+              'opacity var(--av2-duration-fast) var(--av2-ease-standard), font-size var(--av2-duration-fast) var(--av2-ease-standard)',
           }}
         >
           {it}
