@@ -1,34 +1,52 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Clock, Save } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  Building2,
+  CalendarClock,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Moon,
+  Pencil,
+  Repeat,
+  Save,
+  Sun,
+} from 'lucide-react';
 import { useAdminAuth } from '../auth/AdminAuthContext';
+import { useAdminTenant } from '../auth/AdminTenantContext';
 import { Badge, Banner, Button, Card, EmptyState, LoadingState, Select, TimeField } from '../components';
 import { errorMessage } from '../lib/errorMessage';
 import { branchSettingsSchema, WEEKDAYS } from './branchSettings/schema';
+import { describeSchedule, to12h } from './branchSettings/format';
 import { useBranchList, useSaveBranchSettings } from './branchSettings/queries';
 
+const HHMM = /^\d{2}:\d{2}$/;
+
 /**
- * F-210 / F-220 — `/branch-settings`: operating hours + open days per branch.
+ * F-210 / F-220 §1a — `/branch-settings`: operating hours + open days per branch, redesigned
+ * to the mobile mockup (branch card, computed schedule-overview summary, read-only-by-default
+ * operating-hours card, open-days card with an "open every day" bulk toggle).
  *
- * The mockup has no branch-settings screen at all (branches are hardcoded filter dropdowns
- * everywhere they appear), so this is genuinely new UI over data that already exists on
- * `Branch` (workingHoursStart / workingHoursEnd / workingDays), saved with the existing
- * `PATCH /tenant/branches/:id`. First pass: just those three fields, nothing bigger.
- *
- * No F-206 module gate — branch hours aren't a sellable module, same as Dashboard / Ledger / etc.
+ * Data model is unchanged from §1 — `Branch.workingHoursStart` / `workingHoursEnd` / `workingDays`,
+ * saved with `PATCH /tenant/branches/:id`, stored as 24h HH:MM. The 12h display is a format-only
+ * change. Special Hours (`AvailabilityOverride`) is §1b, not here. No F-206 module gate.
  */
 export function BranchSettingsScreen() {
   const { user } = useAdminAuth();
+  const { tenant } = useAdminTenant();
   const branches = useBranchList();
-  const [branchId, setBranchId] = useState('');
-
-  const selected = branches.data?.find((b) => b.id === branchId) || branches.data?.[0];
   const isOwner = !!user?.roles?.includes('owner');
 
+  const [branchId, setBranchId] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [editingHours, setEditingHours] = useState(false);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [days, setDays] = useState<string[]>([]);
   const [zodError, setZodError] = useState<string | null>(null);
 
+  const selected = branches.data?.find((b) => b.id === branchId) || branches.data?.[0];
   const save = useSaveBranchSettings(selected?.id ?? '');
 
   useEffect(() => {
@@ -38,28 +56,27 @@ export function BranchSettingsScreen() {
     setEnd(selected.workingHoursEnd ?? '');
     setDays(selected.workingDays ?? []);
     setZodError(null);
+    setPickerOpen(false);
+    // Drop straight into edit mode if this branch has no hours to show yet.
+    setEditingHours(!(selected.workingHoursStart && selected.workingHoursEnd));
     save.reset();
-    // Keyed on the branch id only — re-syncing on every query refetch would clobber
-    // an in-progress edit.
+    // Keyed on the branch id only — re-syncing on every refetch would clobber an in-progress edit.
   }, [selected?.id]);
+
+  const hoursSet = HHMM.test(start) && HHMM.test(end);
 
   const dirty = useMemo(() => {
     if (!selected) return false;
+    const b = selected;
     const sameDays =
-      (selected.workingDays ?? []).length === days.length &&
-      (selected.workingDays ?? []).every((d) => days.includes(d));
-    return (
-      (selected.workingHoursStart ?? '') !== start ||
-      (selected.workingHoursEnd ?? '') !== end ||
-      !sameDays
-    );
+      (b.workingDays ?? []).length === days.length && (b.workingDays ?? []).every((d) => days.includes(d));
+    return (b.workingHoursStart ?? '') !== start || (b.workingHoursEnd ?? '') !== end || !sameDays;
   }, [selected, start, end, days]);
 
+  const setAllDays = () => setDays((prev) => (prev.length === 7 ? [] : [...WEEKDAYS]));
   const toggleDay = (day: string) =>
     setDays((prev) => {
       const next = prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day];
-      // Keep canonical Mon-first order so the stored array and the guest-facing
-      // "Days: Mon, Tue, …" display read consistently regardless of click order.
       const order = WEEKDAYS as readonly string[];
       return [...next].sort((a, b) => order.indexOf(a) - order.indexOf(b));
     });
@@ -71,7 +88,7 @@ export function BranchSettingsScreen() {
       setZodError(errorMessage(parsed.error));
       return;
     }
-    save.mutate(parsed.data);
+    save.mutate(parsed.data, { onSuccess: () => setEditingHours(false) });
   };
 
   if (branches.isLoading) return <LoadingState label="Loading branches…" />;
@@ -80,91 +97,270 @@ export function BranchSettingsScreen() {
     return <EmptyState icon={<Clock size={20} />} title="No branches yet" description="This account has no branches to configure." />;
   }
 
+  const photo = selected?.photos?.[0] || tenant?.logo || null;
+
   return (
-    <div style={{ display: 'grid', gap: 'var(--av2-space-6)', maxWidth: 560 }}>
+    <div style={{ display: 'grid', gap: 'var(--av2-space-4)', maxWidth: 640 }}>
       <div>
         <h2 style={{ margin: '0 0 var(--av2-space-1)', fontSize: 'var(--av2-text-lg)' }}>Branch Settings</h2>
         <p style={{ margin: 0, fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
-          When each branch opens and closes, and which days it runs.
+          Manage when this branch is open for bookings.
         </p>
       </div>
 
-      <Select label="Branch" value={selected?.id ?? ''} onChange={(e) => setBranchId(e.target.value)}>
-        {(branches.data ?? []).map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.name}
-          </option>
-        ))}
-      </Select>
+      {/* Branch card */}
+      <Card as="section" style={{ display: 'grid', gap: 'var(--av2-space-3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-4)' }}>
+          <div
+            style={{
+              flex: 'none',
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--av2-surface-alt)',
+              color: 'var(--av2-muted)',
+            }}
+          >
+            {photo ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Building2 size={24} />}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 'var(--av2-text-lg)', fontWeight: 700 }}>{selected?.name}</div>
+            {selected?.address && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
+                <MapPin size={13} /> {selected.address}
+              </div>
+            )}
+          </div>
+          {(branches.data ?? []).length > 1 && (
+            <Button variant="secondary" leadingIcon={<Repeat size={15} />} onClick={() => setPickerOpen((o) => !o)}>
+              Change branch
+            </Button>
+          )}
+        </div>
+        {pickerOpen && (
+          <Select
+            label="Branch"
+            value={selected?.id ?? ''}
+            onChange={(e) => {
+              setBranchId(e.target.value);
+              setPickerOpen(false);
+            }}
+          >
+            {(branches.data ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Card>
 
+      {/* Schedule overview */}
+      <Card
+        as="section"
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 'var(--av2-space-4)',
+          background: 'var(--av2-accent-soft)',
+          border: '1px solid var(--av2-accent)',
+        }}
+      >
+        <div
+          style={{
+            flex: 'none',
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--av2-surface)',
+            color: 'var(--av2-accent-hover)',
+          }}
+        >
+          <CalendarClock size={18} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 'var(--av2-text-xs)', fontWeight: 700, color: 'var(--av2-accent-hover)' }}>
+            Schedule overview
+          </div>
+          <div style={{ fontSize: 'var(--av2-text-base)', fontWeight: 700, margin: '2px 0' }}>
+            {describeSchedule(days, start, end)}
+          </div>
+          <div style={{ fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
+            This is the regular schedule for this branch.
+          </div>
+        </div>
+        {hoursSet && days.length > 0 ? (
+          <Badge tone="success">
+            <CheckCircle2 size={12} /> Active
+          </Badge>
+        ) : (
+          <Badge tone="neutral">Not set</Badge>
+        )}
+      </Card>
+
+      {/* Regular operating hours */}
       <Card as="section" style={{ display: 'grid', gap: 'var(--av2-space-4)' }}>
-        <h3 style={{ margin: 0, fontSize: 'var(--av2-text-base)' }}>Operating hours</h3>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--av2-space-3)' }}>
+          <div style={{ display: 'flex', gap: 'var(--av2-space-3)' }}>
+            <Clock size={18} style={{ color: 'var(--av2-accent-hover)', flex: 'none', marginTop: 2 }} />
+            <div>
+              <h3 style={{ margin: 0, fontSize: 'var(--av2-text-base)' }}>Regular operating hours</h3>
+              <p style={{ margin: 0, fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
+                Set the daily opening and closing time.
+              </p>
+            </div>
+          </div>
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setEditingHours((e) => !e)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontSize: 'var(--av2-text-sm)',
+                fontWeight: 600,
+                color: 'var(--av2-accent-hover)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Pencil size={14} /> {editingHours ? 'Done' : 'Edit hours'}
+            </button>
+          )}
+        </div>
 
         {!isOwner && (
-          <Banner tone="info">
-            Only an owner can change branch settings. You can review them here.
-          </Banner>
+          <Banner tone="info">Only an owner can change branch settings. You can review them here.</Banner>
         )}
 
-        <TimeField
-          label="Opens"
-          placeholder="06:00"
-          value={start}
-          disabled={!isOwner}
-          onChange={(v) => {
-            setStart(v);
-            setZodError(null);
-          }}
-        />
-        <TimeField
-          label="Closes"
-          placeholder="22:00"
-          value={end}
-          disabled={!isOwner}
-          onChange={(v) => {
-            setEnd(v);
-            setZodError(null);
-          }}
-        />
+        {editingHours ? (
+          <div style={{ display: 'grid', gap: 'var(--av2-space-4)' }}>
+            <TimeField
+              label="Opening time"
+              placeholder="06:00"
+              value={start}
+              onChange={(v) => {
+                setStart(v);
+                setZodError(null);
+              }}
+            />
+            <TimeField
+              label="Closing time"
+              placeholder="22:00"
+              value={end}
+              onChange={(v) => {
+                setEnd(v);
+                setZodError(null);
+              }}
+            />
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-3)' }}>
+            <ReadonlyTime label="Opening time" value={start} icon={<Sun size={16} />} />
+            <span style={{ color: 'var(--av2-muted)' }}>–</span>
+            <ReadonlyTime label="Closing time" value={end} icon={<Moon size={16} />} />
+          </div>
+        )}
+      </Card>
 
-        <div style={{ display: 'grid', gap: 'var(--av2-space-2)' }}>
-          <span style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 600 }}>Open days</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--av2-space-2)' }}>
-            {WEEKDAYS.map((day) => (
+      {/* Open days */}
+      <Card as="section" style={{ display: 'grid', gap: 'var(--av2-space-4)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--av2-space-3)' }}>
+          <div style={{ display: 'flex', gap: 'var(--av2-space-3)' }}>
+            <CalendarDays size={18} style={{ color: 'var(--av2-accent-hover)', flex: 'none', marginTop: 2 }} />
+            <div>
+              <h3 style={{ margin: 0, fontSize: 'var(--av2-text-base)' }}>Open days</h3>
+              <p style={{ margin: 0, fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
+                Select days when this branch is available.
+              </p>
+            </div>
+          </div>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--av2-text-sm)', fontWeight: 600, cursor: isOwner ? 'pointer' : 'default' }}>
+            <input
+              type="checkbox"
+              checked={days.length === 7}
+              disabled={!isOwner}
+              onChange={setAllDays}
+            />
+            Open every day
+          </label>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--av2-space-2)' }}>
+          {WEEKDAYS.map((day) => {
+            const on = days.includes(day);
+            return (
               <button
                 key={day}
                 type="button"
-                aria-pressed={days.includes(day)}
+                aria-pressed={on}
                 disabled={!isOwner}
                 onClick={() => toggleDay(day)}
                 style={{
-                  appearance: 'none',
-                  border: 'none',
-                  background: 'none',
-                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: 'var(--av2-space-2) var(--av2-space-3)',
+                  borderRadius: 'var(--av2-radius-sm)',
+                  border: `1px solid ${on ? 'var(--av2-accent)' : 'var(--av2-border)'}`,
+                  background: on ? 'var(--av2-accent)' : 'var(--av2-surface)',
+                  color: on ? 'var(--av2-accent-fg)' : 'var(--av2-text)',
+                  fontSize: 'var(--av2-text-sm)',
+                  fontWeight: 600,
                   cursor: isOwner ? 'pointer' : 'default',
                   opacity: isOwner ? 1 : 0.6,
                 }}
               >
-                <Badge tone={days.includes(day) ? 'success' : 'neutral'}>{day.slice(0, 3)}</Badge>
+                {day.slice(0, 3)}
+                {on && <Check size={13} />}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
-
-        {zodError && <Banner tone="error">{zodError}</Banner>}
-        {save.error && <Banner tone="error">{errorMessage(save.error)}</Banner>}
-        {save.isSuccess && !dirty && <Banner tone="success">Branch settings saved.</Banner>}
-
-        <Button
-          leadingIcon={<Save size={16} />}
-          loading={save.isPending}
-          disabled={!isOwner || !dirty || save.isPending}
-          onClick={submit}
-        >
-          Save settings
-        </Button>
       </Card>
+
+      {zodError && <Banner tone="error">{zodError}</Banner>}
+      {save.error && <Banner tone="error">{errorMessage(save.error)}</Banner>}
+      {save.isSuccess && !dirty && <Banner tone="success">Branch settings saved.</Banner>}
+
+      <Button
+        leadingIcon={<Save size={16} />}
+        loading={save.isPending}
+        disabled={!isOwner || !dirty || save.isPending}
+        onClick={submit}
+        fullWidth
+      >
+        Save changes
+      </Button>
+    </div>
+  );
+}
+
+function ReadonlyTime({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        padding: 'var(--av2-space-3)',
+        borderRadius: 'var(--av2-radius-sm)',
+        border: '1px solid var(--av2-border)',
+        background: 'var(--av2-surface)',
+      }}
+    >
+      <div style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+        <span style={{ fontSize: 'var(--av2-text-lg)', fontWeight: 700 }}>{HHMM.test(value) ? to12h(value) : 'Not set'}</span>
+        <span style={{ color: 'var(--av2-muted)' }}>{icon}</span>
+      </div>
     </div>
   );
 }

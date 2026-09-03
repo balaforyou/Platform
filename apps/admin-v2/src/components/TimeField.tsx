@@ -25,10 +25,14 @@ function maskTyping(raw: string): string {
   return d.length <= 2 ? d : `${d.slice(0, 2)}:${d.slice(2)}`;
 }
 
-/** Blur normaliser: pad + clamp to a real 24h time, or clear if it isn't a full one. */
+/**
+ * Blur normaliser. 0-1 digits -> clear (too little to guess). 2+ digits -> first two are the
+ * hour, the rest are minutes, both padded and clamped to a real 24h time:
+ *   "07"   -> "07:00"     "073"  -> "07:30"     "2599" -> "23:59"
+ */
 function normalize(v: string): string {
   const d = v.replace(/\D/g, '');
-  if (d.length < 3) return ''; // empty or single-segment -> not a time
+  if (d.length < 2) return '';
   const hh = Math.min(23, Number(d.slice(0, 2)) || 0);
   const mm = Math.min(59, Number(d.slice(2, 4).padEnd(2, '0')) || 0);
   return `${pad2(hh)}:${pad2(mm)}`;

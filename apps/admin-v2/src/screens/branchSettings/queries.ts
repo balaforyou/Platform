@@ -8,6 +8,8 @@ export interface Branch {
   id: string;
   name: string;
   status: string;
+  address?: string | null;
+  photos?: string[];
   workingDays?: string[];
   workingHoursStart?: string | null;
   workingHoursEnd?: string | null;
