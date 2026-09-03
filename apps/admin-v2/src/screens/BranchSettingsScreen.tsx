@@ -3,21 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Building2,
-  CalendarClock,
   CalendarDays,
   Check,
   CheckCircle2,
   Clock,
   MapPin,
   Moon,
-  Pencil,
   Repeat,
   Save,
   Sun,
 } from 'lucide-react';
 import { useAdminAuth } from '../auth/AdminAuthContext';
 import { useAdminTenant } from '../auth/AdminTenantContext';
-import { Badge, Banner, Button, Card, EmptyState, LoadingState, Select, TimeField } from '../components';
+import { Badge, Banner, Button, Card, EmptyState, LoadingState, Select, TimeField, Toggle } from '../components';
 import { errorMessage } from '../lib/errorMessage';
 import { branchSettingsSchema, WEEKDAYS } from './branchSettings/schema';
 import { cityFromAddress, describeSchedule, to12h } from './branchSettings/format';
@@ -207,84 +205,31 @@ export function BranchSettingsScreen() {
         )}
       </Card>
 
-      {/* Schedule overview */}
-      <Card
-        as="section"
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 'var(--av2-space-4)',
-          background: 'var(--av2-accent-soft)',
-          border: '1px solid var(--av2-accent)',
-        }}
-      >
-        <div
-          style={{
-            flex: 'none',
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--av2-surface)',
-            color: 'var(--av2-accent-hover)',
-          }}
-        >
-          <CalendarClock size={18} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 'var(--av2-text-xs)', fontWeight: 700, color: 'var(--av2-accent-hover)' }}>
-            Schedule overview
-          </div>
-          <div style={{ fontSize: 'var(--av2-text-base)', fontWeight: 700, margin: '2px 0' }}>
-            {describeSchedule(days, start, end)}
-          </div>
-          <div style={{ fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
-            This is the regular schedule for this branch.
-          </div>
-        </div>
-        {hoursSet && days.length > 0 ? (
-          <Badge tone="success">
-            <CheckCircle2 size={12} /> Active
-          </Badge>
-        ) : (
-          <Badge tone="neutral">Not set</Badge>
-        )}
-      </Card>
-
-      {/* Regular operating hours */}
+      {/* Regular operating hours — merged with what used to be a separate "Schedule overview"
+          card. Both showed the same information (a computed summary sentence duplicating the
+          Opening/Closing values right below it); now the summary is this card's own subtitle
+          and the Active/Not set badge sits next to its title, instead of a whole second card. */}
       <Card as="section" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 'var(--av2-space-4)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--av2-space-3)' }}>
-          <div style={{ display: 'flex', gap: 'var(--av2-space-3)' }}>
+          <div style={{ display: 'flex', gap: 'var(--av2-space-3)', minWidth: 0 }}>
             <Clock size={18} style={{ color: 'var(--av2-accent-hover)', flex: 'none', marginTop: 2 }} />
-            <div>
-              <h3 style={{ margin: 0, fontSize: 'var(--av2-text-base)' }}>Regular operating hours</h3>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-2)', flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, fontSize: 'var(--av2-text-base)' }}>Regular operating hours</h3>
+                {hoursSet && days.length > 0 ? (
+                  <Badge tone="success">
+                    <CheckCircle2 size={12} /> Active
+                  </Badge>
+                ) : (
+                  <Badge tone="neutral">Not set</Badge>
+                )}
+              </div>
               <p style={{ margin: 0, fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
-                Set the daily opening and closing time.
+                {describeSchedule(days, start, end)}
               </p>
             </div>
           </div>
-          {isOwner && (
-            <button
-              type="button"
-              onClick={() => setEditingHours((e) => !e)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                fontSize: 'var(--av2-text-sm)',
-                fontWeight: 600,
-                color: 'var(--av2-accent-hover)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <Pencil size={14} /> {editingHours ? 'Done' : 'Edit hours'}
-            </button>
-          )}
+          {isOwner && <Toggle checked={editingHours} onChange={setEditingHours} label="Edit hours" />}
         </div>
 
         {!isOwner && (
@@ -337,15 +282,7 @@ export function BranchSettingsScreen() {
               </p>
             </div>
           </div>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--av2-text-sm)', fontWeight: 600, cursor: isOwner ? 'pointer' : 'default' }}>
-            <input
-              type="checkbox"
-              checked={days.length === 7}
-              disabled={!isOwner}
-              onChange={setAllDays}
-            />
-            Open every day
-          </label>
+          <Toggle checked={days.length === 7} disabled={!isOwner} onChange={setAllDays} label="Open every day" />
         </div>
         {/* One row, all 7 — day name on top, tick below. */}
         <div style={{ display: 'flex', gap: 'var(--av2-space-1)' }}>
@@ -400,11 +337,16 @@ export function BranchSettingsScreen() {
       {zodError && <Banner tone="error">{zodError}</Banner>}
       {save.error && <Banner tone="error">{errorMessage(save.error)}</Banner>}
       {save.isSuccess && !dirty && <Banner tone="success">Branch settings saved.</Banner>}
+      {isOwner && dirty && days.length === 0 && (
+        <p style={{ margin: 0, fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)', textAlign: 'center' }}>
+          Pick at least one open day to save.
+        </p>
+      )}
 
       <Button
         leadingIcon={<Save size={16} />}
         loading={save.isPending}
-        disabled={!isOwner || !dirty || save.isPending}
+        disabled={!isOwner || !dirty || save.isPending || !hoursSet || days.length === 0}
         onClick={submit}
         fullWidth
       >

@@ -42,7 +42,11 @@ function from12h(h12: string, mm: string, period: 'AM' | 'PM'): string {
 }
 
 /**
- * F-220: time input, wheel-only by design — no typed entry, so it can never end up mid-way
+ * Generic time-of-day input, built for F-220 but intended as a reusable `components/`
+ * primitive from here on, not specific to Branch Settings — reach for this anywhere admin-v2
+ * needs a time value (e.g. Setup Rules' Dynamic Guest Scheduler, still to come).
+ *
+ * Wheel-only by design — no typed entry, so it can never end up mid-way
  * through a malformed value. Tapping the field itself opens a picker Modal (Hour 1-12 / Minute
  * / AM-PM, tinted centre-selection band, soft top/bottom fade — the "Schedule overview" card's
  * accent-soft + accent-hairline recipe, not a new visual language). The picker displays and

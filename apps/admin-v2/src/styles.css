@@ -384,3 +384,11 @@ body {
 .av2-timewheel::-webkit-scrollbar {
   display: none;
 }
+
+/* F-220: Toggle's focus ring. The real <input type="checkbox"> is visually hidden (opacity: 0)
+   under the styled track, so the browser's native focus ring lands on an invisible element —
+   draw our own on the track, only on keyboard focus, same as every other focusable control. */
+.av2-toggle-input:focus-visible + .av2-toggle-track {
+  outline: 2px solid var(--av2-ring);
+  outline-offset: 2px;
+}
