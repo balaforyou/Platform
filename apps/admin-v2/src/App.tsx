@@ -10,6 +10,8 @@ import { TokenKitchenSink } from './dev/TokenKitchenSink';
 import { AppShell } from './screens/shell/AppShell';
 import { AppsOverflowScreen } from './screens/AppsOverflowScreen';
 import { StubScreen } from './screens/StubScreen';
+import { BranchSettingsScreen } from './screens/BranchSettingsScreen';
+import { GuestManagementScreen } from './screens/GuestManagementScreen';
 
 /**
  * Auth gate → navigated app.
@@ -91,15 +93,8 @@ export default function App() {
               />
             }
           />
-          <Route
-            path="/guests"
-            element={
-              <StubScreen
-                title="Guest Management"
-                description="Walk-in and one-off guest bookings."
-              />
-            }
-          />
+          <Route path="/guests" element={<GuestManagementScreen />} />
+          <Route path="/branch-settings" element={<BranchSettingsScreen />} />
           <Route path="/apps" element={<AppsOverflowScreen />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

@@ -1769,6 +1769,73 @@ server.delete('/resource-pools/:id/availability-overrides/:overrideId', async (r
   return prisma.availabilityOverride.delete({ where: { id: overrideId } });
 });
 
+// F-222: read-only booking-conflict count for a prospective Special Hours override.
+// WHY: Special Hours (F-220 §1b) upserts AvailabilityOverride rows with no awareness of bookings
+// that already exist on that date. This gives the admin UI a non-blocking heads-up count only —
+// it changes nothing, cancels nothing, notifies no one. The real resolution (conflict handling +
+// notification) is deferred, tracked as F-222. Auth is identical to the availability-override
+// siblings above: internal-or-admin, GUEST_BOOKING entitlement (read), then pool scope.
+//   ?date=YYYY-MM-DD                              -> CLOSED: every active booking on that date
+//   ?date=YYYY-MM-DD&startTime=HH:MM&endTime=HH:MM -> MODIFIED: only bookings outside the new hours
+// F-066: all date/time math goes through the branch-clock helpers, never raw UTC.
+server.get('/resource-pools/:id/booking-conflicts', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: false }); // F-206
+  const { id } = request.params as any;
+  const { date, startTime, endTime } = request.query as any;
+  const pool = await requirePoolScope(auth, id, reply);
+
+  if (!date) {
+    reply.status(400);
+    const err = new Error('date is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const timeZone = await getBranchTimeZone(pool.branchId);
+  let startOfDay: Date;
+  let endOfDay: Date;
+  try {
+    ({ startOfDay, endOfDay } = branchDayBounds(String(date), timeZone));
+  } catch (err: any) {
+    const e = new Error(`Invalid date "${date}": ${err.message}`);
+    (e as any).statusCode = 400;
+    (e as any).code = 'INVALID_DATE';
+    throw e;
+  }
+
+  const activeOnDate = {
+    startTime: { gte: startOfDay, lte: endOfDay },
+  } as any;
+
+  // MODIFIED: narrow to bookings whose window starts before the new opening instant or ends
+  // after the new closing instant — i.e. the ones the shortened hours would strand.
+  if (startTime && endTime) {
+    let openInstant: Date;
+    let closeInstant: Date;
+    try {
+      openInstant = slotStartForDate(String(date), String(startTime), timeZone);
+      closeInstant = slotStartForDate(String(date), String(endTime), timeZone);
+    } catch (err: any) {
+      const e = new Error(`Invalid time: ${err.message}`);
+      (e as any).statusCode = 400;
+      (e as any).code = 'INVALID_TIME';
+      throw e;
+    }
+    activeOnDate.OR = [{ startTime: { lt: openInstant } }, { endTime: { gt: closeInstant } }];
+  }
+
+  const count = await prisma.booking.count({
+    where: {
+      resourcePoolId: id,
+      status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
+      window: activeOnDate,
+    },
+  });
+  return { count };
+});
+
 // Admin overview occupancy for all guest-bookable pools in a branch.
 // WHY: This is operational branch data, so it uses branch-scoped admin auth instead
 // of the public single-pool aggregate endpoint above.

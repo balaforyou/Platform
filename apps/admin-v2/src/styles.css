@@ -237,6 +237,10 @@ body {
   min-height: 100vh;
   display: flex;
   background: var(--av2-bg);
+  /* Defensive backstop: one un-guarded flex/grid child overflowing shouldn't be able to take
+     the whole page sideways (real bug hit on /branch-settings — a missing min-width: 0 on a
+     grid child bubbled up into page-wide horizontal scroll). */
+  overflow-x: hidden;
 }
 .av2-sidebar {
   width: 240px;
@@ -370,4 +374,21 @@ body {
 }
 .av2-account-menu-item[data-highlighted] {
   background: var(--av2-surface-alt);
+}
+
+/* F-220: TimeField scroll-wheel columns — hide the scrollbar, the snap points are the affordance. */
+.av2-timewheel {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.av2-timewheel::-webkit-scrollbar {
+  display: none;
+}
+
+/* F-220: Toggle's focus ring. The real <input type="checkbox"> is visually hidden (opacity: 0)
+   under the styled track, so the browser's native focus ring lands on an invisible element —
+   draw our own on the track, only on keyboard focus, same as every other focusable control. */
+.av2-toggle-input:focus-visible + .av2-toggle-track {
+  outline: 2px solid var(--av2-ring);
+  outline-offset: 2px;
 }

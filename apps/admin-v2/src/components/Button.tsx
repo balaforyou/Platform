@@ -2,9 +2,11 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Spinner } from './Spinner';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
+type Size = 'sm' | 'md';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  size?: Size;
   loading?: boolean;
   fullWidth?: boolean;
   leadingIcon?: ReactNode;
@@ -15,9 +17,7 @@ const base: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: 'var(--av2-space-2)',
-  padding: 'var(--av2-space-3) var(--av2-space-5)',
   borderRadius: 'var(--av2-radius-sm)',
-  fontSize: 'var(--av2-text-base)',
   fontWeight: 600,
   lineHeight: 'var(--av2-leading-tight)',
   whiteSpace: 'nowrap',
@@ -25,6 +25,11 @@ const base: React.CSSProperties = {
   border: '1px solid transparent',
   transition:
     'background var(--av2-duration-fast) var(--av2-ease-standard), border-color var(--av2-duration-fast) var(--av2-ease-standard), opacity var(--av2-duration-fast) var(--av2-ease-standard)',
+};
+
+const sizes: Record<Size, React.CSSProperties> = {
+  md: { padding: 'var(--av2-space-3) var(--av2-space-5)', fontSize: 'var(--av2-text-base)' },
+  sm: { padding: 'var(--av2-space-2) var(--av2-space-3)', fontSize: 'var(--av2-text-sm)' },
 };
 
 const variants: Record<Variant, React.CSSProperties> = {
@@ -39,6 +44,7 @@ const variants: Record<Variant, React.CSSProperties> = {
 
 export function Button({
   variant = 'primary',
+  size = 'md',
   loading = false,
   fullWidth = false,
   leadingIcon,
@@ -55,6 +61,7 @@ export function Button({
       aria-busy={loading || undefined}
       style={{
         ...base,
+        ...sizes[size],
         ...variants[variant],
         width: fullWidth ? '100%' : undefined,
         opacity: isDisabled ? 0.6 : 1,

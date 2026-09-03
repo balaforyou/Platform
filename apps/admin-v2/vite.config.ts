@@ -44,6 +44,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: path => path.replace(/^\/api\/tenant/, ''),
       },
+      // F-220: the Guest Management "Setup Rules" sections call slot-engine. admin-web's
+      // vite.config.ts has this entry; admin-v2 didn't until this screen needed it.
+      // Production is unaffected - Caddy already routes /api/slot-engine/* globally.
+      '/api/slot-engine': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/api\/slot-engine/, ''),
+      },
     },
   },
 });

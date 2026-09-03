@@ -1,4 +1,5 @@
 import {
+  Clock,
   DollarSign,
   FileSpreadsheet,
   FolderPlus,
@@ -46,8 +47,12 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   { key: 'ledger', label: 'Subscription Ledger', shortLabel: 'Ledger', path: '/ledger', Icon: DollarSign, mobileDirect: true },
   { key: 'inventory', label: 'Inventory', path: '/inventory', Icon: Package, mobileDirect: true },
   { key: 'members', label: 'Manage Members', path: '/members', Icon: Users, mobileDirect: false, module: 'MEMBER_MANAGEMENT' },
-  { key: 'court-groups', label: 'Manage Court Groups', path: '/court-groups', Icon: FolderPlus, mobileDirect: false, module: 'GUEST_BOOKING' },
+  // F-220 §2: /court-groups is a plain stub now (its real functionality moved to /guests) —
+  // no module gate, the stub is always visible.
+  { key: 'court-groups', label: 'Manage Court Groups', path: '/court-groups', Icon: FolderPlus, mobileDirect: false },
   { key: 'guests', label: 'Guest Management', path: '/guests', Icon: FileSpreadsheet, mobileDirect: false, module: 'GUEST_BOOKING' },
+  // F-210: branch operating hours. No module gate - branch hours aren't a sellable module.
+  { key: 'branch-settings', label: 'Branch Settings', path: '/branch-settings', Icon: Clock, mobileDirect: false },
 ];
 
 /** The 3 destinations behind the mobile "Apps" overflow screen. */

@@ -1327,6 +1327,59 @@ unchanged; re-grant → restored. Test artifacts (livefire resource, two throwaw
 the new endpoints are not on any FLOW node (advisory only). PR #14 gated on `checks` + `regression`;
 `integration` post-merge.
 
+## Batch 30 — F-220 admin-v2 §1a–§2 (Branch Settings + Guest Management shell)
+
+**Findings:** [[F-220]] — **still Open** (partial delivery; its own register row + full close-out
+are deferred to the end of the sequence, after §3). [[F-221]], [[F-222]], [[F-223]] — added to the
+register + `pending-findings.md` this batch (the three standalone findings this work surfaced, per
+Bala's direction to log them inline rather than at F-220's eventual close-out).
+**Handed off:** 3 Sep 2026 (Technical Lead thread — `Technical lead plan f220 v2 guest management
+branch settings.md`)
+**Status:** merged to `main`
+**Branch/PR:** `f220-guest-management` (kept, not deleted — the TL verification record cites its
+per-slice SHAs) → PR #15, **Squash and merged**
+
+Six independently-verified slices, each landed + TL-reviewed + Bala-signed-off before the next:
+
+- **§1a** (`04d948e`→`12bac59`) — `/branch-settings` (F-210) rebuilt to the mobile mockup: branch
+  card, merged operating-hours/schedule-overview card (12h AM/PM display, 24h `HH:MM` stored,
+  unchanged `PATCH /tenant/branches/:id`), open-days card. New reusable `TimeField` (wheel-only
+  picker in a `Modal`) and `Toggle` primitives. `gridTemplateColumns: minmax(0,1fr)` on the root
+  grid + cards (the real fix for a 375px horizontal blowout). Save-guard: ≥1 open day + hours set.
+  Same-time `.refine` (client-only — [[F-175]]/[[F-177]]'s server guard has no equivalent).
+- **§1b-i** (`912687b`) — new `GET /resource-pools/:id/booking-conflicts` on slot-engine (F-222
+  read-only stopgap: counts active bookings a prospective override would strand; changes nothing).
+  Auth identical to the `availability-overrides` siblings. +1 `module-entitlement.regression.ts`
+  section — **slot-engine 69/69**.
+- **§1b-ii** (`c7439b6`→`4b3d609`) — "Special Hours" card (4th on `/branch-settings`):
+  list/add/edit/delete `AvailabilityOverride` fanned across the branch's resource pools,
+  `slotDurationMinutes`/`capacity` auto-filled from the pool (Finding 1), `TimeField.minuteStep`
+  making an off-slot `MODIFIED` range unpickable by construction (Finding 3), non-blocking
+  booking-conflict `Banner` (F-222). Add/Edit/Delete UI-gated to `isOwner` (`4b3d609`, Bala's call)
+  — tracked as [[F-223]] that the backend routes have no matching owner check.
+- **§1b docs** (`590142f`) — [[F-223]] to register + pending-findings.
+- **§2** (`d98d558`) — `GuestManagementScreen.tsx` at `/guests` (swapped from `StubScreen`):
+  branch `Select`, `Tabs` "Reservations" | "Setup Rules" (both honest `EmptyState`s this pass — the
+  4 real Setup Rules sections are §3). `courtGroups/` subtree + `Textarea.tsx` ported verbatim
+  from the unmerged `f220-court-groups` branch as `guestManagement/`. `nav.ts`: dropped
+  `module: 'GUEST_BOOKING'` from `court-groups` (now a plain always-visible stub); `guests` keeps
+  its gate + a screen-level `moduleVisible` guard matching `CourtGroupsScreen`.
+
+**Evidence:** per-slice — typecheck + `vite build` + `eslint` clean every slice (8 pre-existing
+warnings, none in new/changed files); slot-engine regression 69/69 (§1b-i); live-fire on the dev
+stack against real JBC data (`badminton_db`) every slice — Special Hours CRUD with DB read-backs
+(CLOSED nulls / MODIFIED auto-fill / CLOSED↔MODIFIED edits / fan-out), the conflict route's five
+count cases against a real `CONFIRMED` booking (HELD excluded, CHECKED_IN counted), the 375px
+no-horizontal-scroll check every screen, and the F-206 lapsed-entitlement pass for §2 (`/guests`
+gate shows, "Guest Management" drops from nav, "Manage Court Groups" stays). TL independent
+re-verification of every slice against the real branch (ancestry, full diffs, fresh rebuilds).
+
+**Close-out:** `pnpm register:check` green — **201 rows, Open 109** (F-221/F-222/F-223 added).
+`pnpm diagram:verify` green (no tagged FLOW node touched). **[[F-220]]'s own register row and the
+`docs/plans/pending-findings.md` UI-only follow-ups entry are deliberately NOT written yet** —
+deferred to the end of §2+§3 per the TL plan; §3 (the 4 Setup Rules sections) is still to come.
+This batch row is the record that §1a–§2 reached `main`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
