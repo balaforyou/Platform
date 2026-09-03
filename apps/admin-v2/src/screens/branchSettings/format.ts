@@ -12,6 +12,17 @@ export function to12h(hhmm: string): string {
   return `${pad2(h)}:${m[2]} ${suffix}`;
 }
 
+/**
+ * Best-effort "city" line for the branch card. Addresses in this app are stored as free text,
+ * usually "<place>, <city>, <state>, <country>" — so the 2nd segment is the city. Falls back to
+ * the whole string when it isn't comma-structured.
+ */
+export function cityFromAddress(address?: string | null): string {
+  if (!address) return '';
+  const parts = address.split(',').map((p) => p.trim()).filter(Boolean);
+  return parts.length >= 2 ? parts[1] : address.trim();
+}
+
 const short = (day: string) => day.slice(0, 3);
 
 /** "Open every day" / "Open Mon–Fri" / "Open Mon, Wed, Fri" / "No open days set". */

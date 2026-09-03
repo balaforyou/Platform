@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
   Building2,
   CalendarClock,
   CalendarDays,
@@ -18,7 +20,7 @@ import { useAdminTenant } from '../auth/AdminTenantContext';
 import { Badge, Banner, Button, Card, EmptyState, LoadingState, Select, TimeField } from '../components';
 import { errorMessage } from '../lib/errorMessage';
 import { branchSettingsSchema, WEEKDAYS } from './branchSettings/schema';
-import { describeSchedule, to12h } from './branchSettings/format';
+import { cityFromAddress, describeSchedule, to12h } from './branchSettings/format';
 import { useBranchList, useSaveBranchSettings } from './branchSettings/queries';
 
 const HHMM = /^\d{2}:\d{2}$/;
@@ -33,6 +35,7 @@ const HHMM = /^\d{2}:\d{2}$/;
  * change. Special Hours (`AvailabilityOverride`) is §1b, not here. No F-206 module gate.
  */
 export function BranchSettingsScreen() {
+  const navigate = useNavigate();
   const { user } = useAdminAuth();
   const { tenant } = useAdminTenant();
   const branches = useBranchList();
@@ -101,21 +104,39 @@ export function BranchSettingsScreen() {
 
   return (
     <div style={{ display: 'grid', gap: 'var(--av2-space-4)', maxWidth: 640 }}>
-      <div>
-        <h2 style={{ margin: '0 0 var(--av2-space-1)', fontSize: 'var(--av2-text-lg)' }}>Branch Settings</h2>
-        <p style={{ margin: 0, fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
-          Manage when this branch is open for bookings.
-        </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--av2-space-2)' }}>
+        <button
+          type="button"
+          aria-label="Back to Apps"
+          onClick={() => navigate('/apps')}
+          style={{
+            flex: 'none',
+            marginTop: 2,
+            display: 'inline-flex',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            color: 'var(--av2-muted)',
+          }}
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <div>
+          <h2 style={{ margin: '0 0 var(--av2-space-1)', fontSize: 'var(--av2-text-lg)' }}>Branch Settings</h2>
+          <p style={{ margin: 0, fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
+            Manage when this branch is open for bookings.
+          </p>
+        </div>
       </div>
 
-      {/* Branch card */}
-      <Card as="section" style={{ display: 'grid', gap: 'var(--av2-space-3)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-4)' }}>
+      {/* Branch card — compact */}
+      <Card as="section" style={{ padding: 'var(--av2-space-4)', display: 'grid', gap: 'var(--av2-space-3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-3)' }}>
           <div
             style={{
               flex: 'none',
-              width: 56,
-              height: 56,
+              width: 40,
+              height: 40,
               borderRadius: '50%',
               overflow: 'hidden',
               display: 'flex',
@@ -125,18 +146,45 @@ export function BranchSettingsScreen() {
               color: 'var(--av2-muted)',
             }}
           >
-            {photo ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Building2 size={24} />}
+            {photo ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Building2 size={18} />}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 'var(--av2-text-lg)', fontWeight: 700 }}>{selected?.name}</div>
-            {selected?.address && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--av2-text-sm)', color: 'var(--av2-muted)' }}>
-                <MapPin size={13} /> {selected.address}
+            <div
+              style={{
+                fontSize: 'var(--av2-text-base)',
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {selected?.name}
+            </div>
+            {cityFromAddress(selected?.address) && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 'var(--av2-text-xs)',
+                  color: 'var(--av2-muted)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                <MapPin size={12} style={{ flex: 'none' }} /> {cityFromAddress(selected?.address)}
               </div>
             )}
           </div>
           {(branches.data ?? []).length > 1 && (
-            <Button variant="secondary" leadingIcon={<Repeat size={15} />} onClick={() => setPickerOpen((o) => !o)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              leadingIcon={<Repeat size={14} />}
+              onClick={() => setPickerOpen((o) => !o)}
+              style={{ flex: 'none' }}
+            >
               Change branch
             </Button>
           )}
@@ -295,7 +343,8 @@ export function BranchSettingsScreen() {
             Open every day
           </label>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--av2-space-2)' }}>
+        {/* One row, all 7 — day name on top, tick below. */}
+        <div style={{ display: 'flex', gap: 'var(--av2-space-1)' }}>
           {WEEKDAYS.map((day) => {
             const on = days.includes(day);
             return (
@@ -303,25 +352,41 @@ export function BranchSettingsScreen() {
                 key={day}
                 type="button"
                 aria-pressed={on}
+                aria-label={day}
                 disabled={!isOwner}
                 onClick={() => toggleDay(day)}
                 style={{
-                  display: 'inline-flex',
+                  flex: 1,
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 6,
-                  padding: 'var(--av2-space-2) var(--av2-space-3)',
+                  gap: 3,
+                  padding: 'var(--av2-space-2) 2px',
                   borderRadius: 'var(--av2-radius-sm)',
                   border: `1px solid ${on ? 'var(--av2-accent)' : 'var(--av2-border)'}`,
                   background: on ? 'var(--av2-accent)' : 'var(--av2-surface)',
                   color: on ? 'var(--av2-accent-fg)' : 'var(--av2-text)',
-                  fontSize: 'var(--av2-text-sm)',
-                  fontWeight: 600,
+                  fontSize: 'var(--av2-text-xs)',
+                  fontWeight: 700,
                   cursor: isOwner ? 'pointer' : 'default',
                   opacity: isOwner ? 1 : 0.6,
                 }}
               >
                 {day.slice(0, 3)}
-                {on && <Check size={13} />}
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    width: 15,
+                    height: 15,
+                    borderRadius: '50%',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: `1.5px solid ${on ? 'currentColor' : 'var(--av2-border)'}`,
+                  }}
+                >
+                  {on && <Check size={10} strokeWidth={3} />}
+                </span>
               </button>
             );
           })}
