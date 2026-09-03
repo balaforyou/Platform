@@ -815,3 +815,23 @@ notification — see the F-220 plan doc's §1b spec for the exact design), and r
 for real once real guest-slot volume exists to design and validate against, not before.
 Confirmed-ID: F-222
 Confirmed: 3 Sep 2026
+
+### branch-settings-special-hours-owner-gate-ui-only-not-backend-enforced
+Batch: F-220 §1b (Special Hours) — small patch before §2
+Surfaced: 3 Sep 2026
+Description: Special Hours' Add/Edit/Delete controls are now gated to `isOwner` in the UI
+(`SpecialHours.tsx`), matching Operating Hours/Open days' existing owner-only editability on the
+same `/branch-settings` screen. Confirmed directly this only closes the gap in the UI, not all the
+way down: Operating Hours/Open days' real save route (`PATCH /branches/:id`,
+`services/tenant-management/src/index.ts`) enforces a genuine server-side check
+(`verifyTenantOwnerOrInternal` — a non-owner caller gets a real 403 `FORBIDDEN`, "Owner privilege
+required"). Special Hours' backend routes (`requirePoolScope` + `requireModuleEntitlement` on
+`services/slot-engine/src/index.ts`'s `availability-overrides` CRUD) authorize by branch scope
+only, with no owner check — a `branch_manager` who calls these routes directly (not through the
+UI) can still create, edit, or delete Special Hours overrides today, unchanged by the UI patch.
+Low risk for JBC specifically (no real `branch_manager` account is expected to call the API
+directly), but a real inconsistency with how the sibling Operating Hours/Open days fields are
+actually enforced. Bala's call (3 Sep 2026): ship the UI-only patch now, track this gap
+separately rather than block the patch on a backend change.
+Confirmed-ID: F-223
+Confirmed: 3 Sep 2026
