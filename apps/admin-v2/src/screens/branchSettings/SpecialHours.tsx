@@ -38,6 +38,8 @@ interface Props {
   /** Regular operating hours (24h HH:MM), for the computed row subtitle. */
   regularStart: string;
   regularEnd: string;
+  /** Owner-only, matching the rest of the screen. Non-owners see the list, no write controls. */
+  canEdit: boolean;
 }
 
 /**
@@ -45,7 +47,7 @@ interface Props {
  * backed by `AvailabilityOverride` fanned out across every resource pool under the branch.
  * The 4th card on `/branch-settings`, edited in place via a Modal — no new route, no new nav.
  */
-export function SpecialHours({ branchId, regularStart, regularEnd }: Props) {
+export function SpecialHours({ branchId, regularStart, regularEnd, canEdit }: Props) {
   const { entries, pools, isLoading, error } = useSpecialHours(branchId);
   const save = useSaveSpecialHours(branchId);
   const del = useDeleteSpecialHours(branchId);
@@ -221,14 +223,16 @@ export function SpecialHours({ branchId, regularStart, regularEnd }: Props) {
                         : describeModified(e.startTime, e.endTime, regularStart, regularEnd)}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
-                    <IconButton aria-label="Edit" icon={<Pencil size={16} />} onClick={() => openEdit(e)} />
-                    <IconButton
-                      aria-label="Delete"
-                      icon={<Trash2 size={16} />}
-                      onClick={() => setConfirmingDelete(e.date)}
-                    />
-                  </div>
+                  {canEdit && (
+                    <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+                      <IconButton aria-label="Edit" icon={<Pencil size={16} />} onClick={() => openEdit(e)} />
+                      <IconButton
+                        aria-label="Delete"
+                        icon={<Trash2 size={16} />}
+                        onClick={() => setConfirmingDelete(e.date)}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -258,7 +262,7 @@ export function SpecialHours({ branchId, regularStart, regularEnd }: Props) {
 
       {del.error && <Banner tone="error">{errorMessage(del.error)}</Banner>}
 
-      {!isLoading && !error && (
+      {!isLoading && !error && canEdit && (
         <Button variant="secondary" leadingIcon={<Plus size={16} />} onClick={openAdd} fullWidth>
           Add special hours
         </Button>

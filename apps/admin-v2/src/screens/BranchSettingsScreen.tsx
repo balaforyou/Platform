@@ -336,7 +336,7 @@ export function BranchSettingsScreen() {
       </Card>
 
       {/* Special Hours (F-220 §1b) — the 4th card; own data-fetch + CRUD, no change to the three above. */}
-      <SpecialHours branchId={selected?.id} regularStart={start} regularEnd={end} />
+      <SpecialHours branchId={selected?.id} regularStart={start} regularEnd={end} canEdit={isOwner} />
 
       {zodError && <Banner tone="error">{zodError}</Banner>}
       {save.error && <Banner tone="error">{errorMessage(save.error)}</Banner>}
