@@ -234,4 +234,34 @@ export const moduleEntitlementSections: Section<SlotEngineContext>[] = [
       void branch;
     },
   },
+
+  {
+    name: 'F-222: GET /resource-pools/:id/booking-conflicts is GUEST_BOOKING-gated — entitled 200, lapsed 403',
+    async run() {
+      const active = await makeTenantBranchPool('conflict-active');
+      const activeOwner = signJwt({ userId: 'f222-active-owner', tenantId: active.tenant.id, roles: ['owner'] });
+      await setEntitlement(active.tenant.id, { startOffsetDays: -1, endOffsetDays: 30 });
+      const ok = await inspect(
+        await fetch(`${baseUrl}/resource-pools/${active.pool.id}/booking-conflicts?date=2026-09-05`, {
+          headers: { Authorization: `Bearer ${activeOwner}` },
+        }),
+      );
+      expectStatus(ok, 200, 'entitled booking-conflicts');
+      const count = ok.json?.data?.count ?? ok.json?.count;
+      if (typeof count !== 'number') {
+        throw new Error(`entitled booking-conflicts: expected { count: number }, got ${ok.raw}`);
+      }
+
+      const lapsed = await makeTenantBranchPool('conflict-lapsed');
+      const lapsedOwner = signJwt({ userId: 'f222-lapsed-owner', tenantId: lapsed.tenant.id, roles: ['owner'] });
+      await setEntitlement(lapsed.tenant.id, { startOffsetDays: -30, endOffsetDays: -1 });
+      const denied = await inspect(
+        await fetch(`${baseUrl}/resource-pools/${lapsed.pool.id}/booking-conflicts?date=2026-09-05`, {
+          headers: { Authorization: `Bearer ${lapsedOwner}` },
+        }),
+      );
+      expectStatus(denied, 403, 'lapsed booking-conflicts');
+      expectCode(denied, 'MODULE_NOT_ENTITLED', 'lapsed booking-conflicts');
+    },
+  },
 ];

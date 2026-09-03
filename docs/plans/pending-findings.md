@@ -766,3 +766,52 @@ on a field that only recently got its own server-side backstop. Surfaced during 
 ID separately.
 Confirmed-ID: F-182
 Confirmed: 22 Aug 2026
+
+### branch-settings-special-hours-guest-booking-entitlement-gate
+Batch: F-220 §1b (Special Hours)
+Surfaced: 3 Sep 2026
+Description: Branch Settings (`/branch-settings`, F-210) was deliberately designed with no F-206
+module gate — branch operating hours/closures aren't a sellable module, same reasoning as
+Dashboard/Communications/Ledger/Inventory (F-220 v2 plan, Decision 3). That's true at the
+navigation layer: the route and its nav entry carry no `module` in `nav.ts`, always visible. It is
+not true at the API layer for the Special Hours card (F-220 §1b): every real backend route it
+depends on — `GET /branches/:id/resource-pools` and all four
+`/resource-pools/:id/availability-overrides` routes (`services/slot-engine/src/index.ts`) — calls
+`requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, ...)` for any owner/branch_manager
+caller, inherited from these routes' other, guest-booking-facing callers. A tenant whose
+`GUEST_BOOKING` entitlement is inactive would see the Special Hours card render (no UI gate) but
+get a 403 on every list/add/edit/delete call — directly contradicting the "branch hours aren't a
+sellable module" premise the screen was built on. Confirmed directly by reading
+`requireModuleEntitlement`'s call sites, not assumed. Dormant for JBC specifically: the F-206 seed
+migration (`20260902120100_seed_jbc_module_entitlements_f206`) grants JBC's tenant `GUEST_BOOKING`
+from 1 Jan 2025 to 1 Jan 2030, so this doesn't affect the real customer today. Real fix is backend
+surgery — either exempt admin (owner/branch_manager) callers to these specific routes from the
+`GUEST_BOOKING` check, or split "browse a branch's pools for operational config" from "browse a
+branch's pools to book a guest slot" into genuinely separate authorization paths — not something
+to improvise as a side effect of the §1b UI hand-off. Bala's call (3 Sep 2026): track now, resolve
+after §1b ships and is verified, not before — doesn't block or risk JBC today.
+Confirmed-ID: F-221
+Confirmed: 3 Sep 2026
+
+### branch-settings-special-hours-no-booking-conflict-awareness
+Batch: F-220 §1b (Special Hours)
+Surfaced: 3 Sep 2026
+Description: Creating a Special Hours override (`AvailabilityOverride`, `CLOSED` or `MODIFIED`)
+has no awareness of existing bookings. Confirmed by tracing every read/write site of
+`availabilityOverride` in `services/slot-engine`: it is only ever consulted at future
+slot-generation time, never against `Booking` rows that already exist. An admin closing a branch
+or shortening its hours for a date that already has confirmed guest or member bookings gets no
+warning, and nothing cancels, flags, or notifies the affected bookings — real notification
+infrastructure exists (`services/notification`, a real event-type/channel-policy matrix) but no
+event type or call site exists for this case. Related but distinct from F-191
+(a `CLOSED` override not retroactively hiding already-generated, still-empty windows — a
+supply-visibility gap): this is about bookings that already exist, not slots that are still open.
+Real fix needs a write-time conflict query, a product decision on outcome (auto-cancel+refund vs.
+block-until-resolved vs. notify-only), a new notification event type, and admin review UX before
+committing a change — genuine scope, not improvised here. Bala's call (3 Sep 2026): ship a
+read-only stopgap as part of §1b itself (a non-blocking booking count shown in the Add/Edit
+modal, backed by a new `GET /resource-pools/:id/booking-conflicts` route, no auto-action, no
+notification — see the F-220 plan doc's §1b spec for the exact design), and resolve this finding
+for real once real guest-slot volume exists to design and validate against, not before.
+Confirmed-ID: F-222
+Confirmed: 3 Sep 2026
