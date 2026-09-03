@@ -83,7 +83,7 @@ export function Toggle({ id, checked, onChange, label, disabled }: ToggleProps) 
         />
       </span>
       {label && (
-        <span style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 600, color: 'var(--av2-text)' }}>{label}</span>
+        <span style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 600, color: 'var(--av2-text)', whiteSpace: 'nowrap' }}>{label}</span>
       )}
     </label>
   );
