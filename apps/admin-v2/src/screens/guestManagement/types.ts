@@ -33,6 +33,9 @@ export type BookingRule = {
 export type Resource = {
   id: string;
   name: string;
+  // F-225: true = authorised for walk-in guest bookings. Existing courts are backfilled to true;
+  // a court created after the F-225 migration defaults false (opt-in).
+  guestBookable?: boolean;
 };
 
 export type ResourcePool = {

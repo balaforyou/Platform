@@ -464,10 +464,12 @@ body {
 }
 
 .agc-footnote { font-size: var(--av2-text-xs); color: var(--av2-muted); line-height: 1.5; margin-top: var(--av2-space-4); }
+/* F-225: a real save bar now — count on the left, Save on the right. */
 .agc-savebar {
-  margin-top: var(--av2-space-4); width: 100%; text-align: center; padding: var(--av2-space-3);
-  border-radius: var(--av2-radius-sm); border: 1px dashed var(--av2-border); background: var(--av2-surface-alt);
-  font-size: var(--av2-text-sm); font-weight: 700; color: var(--av2-muted); cursor: not-allowed;
+  margin-top: var(--av2-space-4); width: 100%; padding: var(--av2-space-3);
+  border-radius: var(--av2-radius-sm); border: 1px solid var(--av2-border); background: var(--av2-surface-alt);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--av2-space-3);
+  font-size: var(--av2-text-sm); font-weight: 700; color: var(--av2-muted);
 }
 .agc-savebar b { color: var(--av2-text); }
 

@@ -86,6 +86,29 @@ export function useSaveGuestPricing(branchId?: string) {
   });
 }
 
+/**
+ * F-220 §3.1 / F-225 — save which courts guests may book, per pool. `authorizedByPool` maps a
+ * pool id to its authorised resource ids; each entry is a whole-pool replace on the server
+ * (`PATCH /slot-engine/resource-pools/:id/guest-court-eligibility`). Owner-only + GUEST_BOOKING-
+ * gated server-side. Fanned out per pool (JBC = one pool per branch → one call), the same shape
+ * as Special Hours.
+ */
+export function useSaveGuestCourts(branchId?: string) {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (authorizedByPool: Record<string, string[]>) =>
+      Promise.all(
+        Object.entries(authorizedByPool).map(([poolId, authorizedResourceIds]) =>
+          api.patch(`/slot-engine/resource-pools/${poolId}/guest-court-eligibility`, { authorizedResourceIds }),
+        ),
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: courtGroupsKeys.pools(branchId) });
+    },
+  });
+}
+
 /** Query-key builders so mutations can invalidate exactly what they touched. */
 export const courtGroupsKeys = {
   branches: (tenantId?: string) => ['court-groups', 'branches', tenantId] as const,
