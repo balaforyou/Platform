@@ -667,4 +667,115 @@ export const multiSlotBookingSections: Section<SlotEngineContext>[] = [
       }
     },
   },
+
+  {
+    // F-224: guest self-service pricing chain. Branch is timezone 'UTC' in these fixtures, so
+    // a window's branch-local start-of-day minutes == its UTC hour*60. cleanDatabase() never
+    // deletes the shared Branch row, so this section restores the guest-pricing columns in a
+    // finally block — otherwise the FLAT-100/200 assertions in the sections above would break
+    // on a re-run.
+    name: 'F-224: guest booking price = branch guestPeakRate in a peak window, guestStandardRate outside, window.price still wins, defaultRate when unset',
+    async run() {
+      const poolRes = await fetch(`${baseUrl}/resource-pools`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({
+          tenantId: TENANT_ID,
+          branchId: BRANCH_ID,
+          name: `F-224 Guest Pricing Pool ${Date.now()}`,
+          allocationMode: 'POOLED',
+          capacity: 4,
+        }),
+      });
+      const pool = ((await poolRes.json()) as any).data; // defaultRate defaults to 100.00
+      await fetch(`${baseUrl}/booking-rules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({ resourcePoolId: pool.id, cancellationPolicyJson: REGRESSION_TIERED_POLICY }),
+      });
+
+      let base = nextAlignedHour(3);
+      while (base.getUTCHours() > 19) base = new Date(base.getTime() + 60 * 60 * 1000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const H = base.getUTCHours();
+
+      const mkWindow = async (hourOffset: number) => {
+        const start = new Date(base.getTime() + hourOffset * 60 * 60 * 1000);
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        const r = await fetch(`${baseUrl}/resource-pools/${pool.id}/availability-windows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+          body: JSON.stringify({ startTime: start.toISOString(), endTime: end.toISOString(), capacity: 4 }),
+        });
+        return ((await r.json()) as any).data;
+      };
+
+      const book = async (windowId: string, user: string) => {
+        const res = await inspect(
+          await fetch(`${baseUrl}/bookings`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${guestToken(user)}`,
+              'idempotency-key': `f224-${user}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            },
+            body: JSON.stringify({ branchId: BRANCH_ID, resourcePoolId: pool.id, windowId }),
+          }),
+        );
+        if (res.status !== 201) throw new Error(`book ${windowId}: expected 201, got ${res.status}: ${res.raw}`);
+        return (res.json?.data ?? res.json) as any;
+      };
+
+      try {
+        const wStd = await mkWindow(0); // hour H
+        const wPeak = await mkWindow(1); // hour H+1
+        const wOverride = await mkWindow(2); // hour H+2
+
+        // Peak window covers only hour H+1.
+        await db.branch.update({
+          where: { id: BRANCH_ID },
+          data: {
+            guestStandardRate: 200,
+            guestPeakRate: 500,
+            guestPeakWindows: [{ start: `${pad(H + 1)}:00`, end: `${pad(H + 2)}:00` }],
+          },
+        });
+        // A per-window override on wOverride must still win ahead of the blanket rates.
+        await db.availabilityWindow.update({ where: { id: wOverride.id }, data: { price: '999', pricingMode: 'FLAT' } });
+
+        const bStd = await book(wStd.id, 'f224-std');
+        if (Number(bStd.price) !== 200) throw new Error(`outside peak: expected guestStandardRate 200, got ${bStd.price}`);
+
+        const bPeak = await book(wPeak.id, 'f224-peak');
+        if (Number(bPeak.price) !== 500) throw new Error(`inside peak: expected guestPeakRate 500, got ${bPeak.price}`);
+
+        const bOv = await book(wOverride.id, 'f224-ovr');
+        if (Number(bOv.price) !== 999) throw new Error(`window.price override: expected 999, got ${bOv.price}`);
+
+        // Peak window still set but peak rate cleared -> a booking in that same window now
+        // falls through to guestStandardRate (200). wPeak has capacity 4, only 1 booking so far.
+        await db.branch.update({ where: { id: BRANCH_ID }, data: { guestPeakRate: null } });
+        const bPeakNoPeakRate = await book(wPeak.id, 'f224-peak-norate');
+        if (Number(bPeakNoPeakRate.price) !== 200) {
+          throw new Error(`peak window, no peak rate: expected guestStandardRate 200, got ${bPeakNoPeakRate.price}`);
+        }
+
+        // All guest fields cleared -> pool.defaultRate (100).
+        await db.branch.update({
+          where: { id: BRANCH_ID },
+          data: { guestStandardRate: null, guestPeakRate: null, guestPeakWindows: [] },
+        });
+        const wPlain = await mkWindow(3);
+        const bPlain = await book(wPlain.id, 'f224-plain');
+        if (Number(bPlain.price) !== 100) throw new Error(`no guest fields: expected pool.defaultRate 100, got ${bPlain.price}`);
+
+        console.log('F224_EVIDENCE', JSON.stringify({ standard: bStd.price, peak: bPeak.price, override: bOv.price, fallback: bPlain.price }));
+      } finally {
+        await db.branch.update({
+          where: { id: BRANCH_ID },
+          data: { guestStandardRate: null, guestPeakRate: null, guestPeakWindows: [] },
+        });
+      }
+    },
+  },
 ];

@@ -117,6 +117,13 @@ model Branch {
   workingDays       String[]         @default([])  // e.g. ["Monday", "Tuesday", ...]
   workingHoursStart String?                        // e.g. "06:00" (HH:mm, branch local time)
   workingHoursEnd   String?                        // e.g. "22:00"
+  // F-224: guest-only court pricing. Branch-wide (not per-pool). All three nullable — a branch
+  // with none configured prices guest bookings at pool.defaultRate exactly as before. Member
+  // pricing is a separate concern (F-209) and never reads these. A per-window/pattern
+  // AvailabilityWindow.price override still wins ahead of these in resolvePrice().
+  guestStandardRate Decimal?         @db.Decimal(10, 2)  // guest rate outside every peak window
+  guestPeakRate     Decimal?         @db.Decimal(10, 2)  // guest rate inside any peak window
+  guestPeakWindows  Json?                                // [{ start: "HH:mm", end: "HH:mm" }, ...] — non-overlapping, non-duplicate, branch-local
   // Facilities / About — overrides tenant-level defaults when non-empty
   aboutDescription  String?
   facilities        String[]         @default([])

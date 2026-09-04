@@ -7,6 +7,7 @@ import { db, setupBaseFixtures, internalKey, tenantUrl, TenantContext } from './
 import { branchLifecycleSections } from './branch-lifecycle.regression';
 import { roleScopingSections } from './role-scoping.regression';
 import { moduleEntitlementSections } from './module-entitlement.regression';
+import { guestPricingSections } from './guest-pricing.regression';
 
 async function main() {
   console.log('Starting local servers (Slot Engine, Identity & Auth, Tenant Management)...');
@@ -38,7 +39,7 @@ async function main() {
     // Order matters: branch-lifecycle creates Branch A, which role-scoping reuses.
     const results = await runSections<TenantContext>(
       'tenant-management',
-      [...branchLifecycleSections, ...roleScopingSections, ...moduleEntitlementSections],
+      [...branchLifecycleSections, ...roleScopingSections, ...moduleEntitlementSections, ...guestPricingSections],
       context,
     );
     passed = allPassed(results);

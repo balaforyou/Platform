@@ -912,19 +912,55 @@ async function computeBranchMemberAttendance(branchId: string, date: string | un
 // Price resolution helper
 // ---------------------------------------------------------------------------
 
+// F-224: guest-only Standard/Peak blanket rates, branch-wide. Supplied ONLY by the guest
+// self-service booking call site; the member auto-booking call site passes no guestCtx and
+// this whole branch is skipped, so member pricing is byte-for-byte unchanged. A per-window
+// AvailabilityWindow.price override still wins ahead of all of this.
+type GuestPricingCtx = {
+  standardRate: Prisma.Decimal | null;
+  peakRate: Prisma.Decimal | null;
+  peakWindows: { start: string; end: string }[];
+  windowStartInstant: Date;
+  timeZone: string;
+};
+
+const hhmmToMinutes = (hhmm: string): number => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+};
+
+// F-224 resolution: peak when the window's branch-local start falls inside ANY configured peak
+// window (half-open [start, end)). peakRate only applies when it's actually set — a branch with
+// windows but no peak rate falls through to standard, and a branch with neither falls through
+// to pool.defaultRate exactly as before F-224.
+const resolveGuestBlanketRate = (pool: any, ctx: GuestPricingCtx): Prisma.Decimal => {
+  const startMin = branchMinutesOfDay(ctx.windowStartInstant, ctx.timeZone);
+  const inPeak = ctx.peakWindows.some((w) => {
+    const s = hhmmToMinutes(w.start);
+    const e = hhmmToMinutes(w.end);
+    return startMin >= s && startMin < e;
+  });
+  if (inPeak && ctx.peakRate != null) return ctx.peakRate;
+  if (ctx.standardRate != null) return ctx.standardRate;
+  return new Prisma.Decimal(pool.defaultRate);
+};
+
 // WHY: Server-side price is ALWAYS resolved here; callers have no influence over it.
-// Resolution chain: window override → pool default.
+// Resolution chain: window override → guest blanket rate (F-224, guest path only) → pool default.
 // Both pricingMode and price on the window must be set together (both-or-neither).
 // groupSize = 1 (booker) + coPlayers.length.
 const resolvePrice = (
   pool: any,
   window: any,
   groupSize: number,
+  guestCtx?: GuestPricingCtx,
 ): Prisma.Decimal => {
   const activePricingMode: string = window.pricingMode ?? pool.pricingMode ?? PricingMode.FLAT;
   const activeRate: Prisma.Decimal = window.price != null
     ? new Prisma.Decimal(window.price)
-    : new Prisma.Decimal(pool.defaultRate);
+    : guestCtx
+      ? resolveGuestBlanketRate(pool, guestCtx)
+      : new Prisma.Decimal(pool.defaultRate);
 
   if (activePricingMode === PricingMode.PER_PERSON) {
     return activeRate.mul(groupSize);
@@ -2753,6 +2789,18 @@ server.post('/bookings', async (request, reply) => {
       // the server's clock, so the cutoff drifted by the UTC offset.
       const horizonTimeZone = await getBranchTimeZone(pool.branchId);
 
+      // F-224: the branch's guest-only Standard/Peak rates + peak windows, read once for the
+      // price resolution below. Absent columns => resolvePrice falls back to pool.defaultRate.
+      const branchGuestPricing = await tx.branch.findUnique({
+        where: { id: pool.branchId },
+        select: { guestStandardRate: true, guestPeakRate: true, guestPeakWindows: true },
+      });
+      const guestPeakWindows: { start: string; end: string }[] = Array.isArray(branchGuestPricing?.guestPeakWindows)
+        ? (branchGuestPricing!.guestPeakWindows as any[]).filter(
+            (x) => x && typeof x.start === 'string' && typeof x.end === 'string',
+          )
+        : [];
+
       // F-184: guest-only daily booking cap, governed by the TARGET pool's own
       // BookingRule — if pools in the same branch carry different values, the
       // effective cap for a given request is whichever pool it targets (documented,
@@ -2887,7 +2935,16 @@ server.post('/bookings', async (request, reply) => {
       // F-183: summed across every locked window; identical to the original
       // single-window behavior when there are no additional windows.
       const resolvedPrice = lockedWindows.reduce(
-        (sum: Prisma.Decimal, w: any) => sum.add(resolvePrice(pool, w, groupSize)),
+        // F-224: guest self-service path — pass the branch's guest blanket rates so a peak
+        // window start uses guestPeakRate and everything else guestStandardRate, both falling
+        // back to pool.defaultRate when unset. A window.price override still wins inside resolvePrice.
+        (sum: Prisma.Decimal, w: any) => sum.add(resolvePrice(pool, w, groupSize, {
+          standardRate: branchGuestPricing?.guestStandardRate ?? null,
+          peakRate: branchGuestPricing?.guestPeakRate ?? null,
+          peakWindows: guestPeakWindows,
+          windowStartInstant: w.startTime,
+          timeZone: horizonTimeZone,
+        })),
         new Prisma.Decimal(0),
       );
 
