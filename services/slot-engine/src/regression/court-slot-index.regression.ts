@@ -61,8 +61,15 @@ async function createPooledPool(capacity: number, maxAdditionalWindows = 1): Pro
 /**
  * F-205: a POOLED pool with `capacity` real Resource rows, created in order so
  * `courts[i]` is the (i+1)-th court — position lines up with the cosmetic "Court N".
+ *
+ * F-225: courts created via POST /resources now default `guestBookable: false`. Authorize them
+ * here (all of them, or the 1-based subset in `authorizeIndices`) so the F-205 real-court
+ * assignment assertions below exercise the assignment path, not the resourceId:null fallback.
  */
-async function createResourcedPooledPool(capacity: number): Promise<{ pool: any; courts: any[] }> {
+async function createResourcedPooledPool(
+  capacity: number,
+  authorizeIndices?: number[],
+): Promise<{ pool: any; courts: any[] }> {
   const pool = await createPooledPool(capacity);
   const courts: any[] = [];
   for (let i = 1; i <= capacity; i++) {
@@ -73,6 +80,10 @@ async function createResourcedPooledPool(capacity: number): Promise<{ pool: any;
     });
     courts.push(((await res.json()) as any).data);
   }
+  const authorizedIds = authorizeIndices
+    ? courts.filter((_, i) => authorizeIndices.includes(i + 1)).map((c) => c.id)
+    : courts.map((c) => c.id);
+  await db.resource.updateMany({ where: { id: { in: authorizedIds } }, data: { guestBookable: true } });
   return { pool, courts };
 }
 
@@ -487,6 +498,100 @@ export const courtSlotIndexSections: Section<SlotEngineContext>[] = [
       if (row?.courtSlotIndex !== 1) {
         throw new Error(`Expected fallback courtSlotIndex 1 (F-186 scan), got ${row?.courtSlotIndex}`);
       }
+    },
+  },
+
+  // ── F-225: per-court guest eligibility ──────────────────────────────────────────────
+
+  {
+    name: 'F-225: a guest booking skips a court not authorized for guests; courtSlotIndex stays synced to real position',
+    async run() {
+      // Capacity 3, courts 1 and 3 authorized, court 2 NOT.
+      const { pool, courts } = await createResourcedPooledPool(3, [1, 3]);
+      const window = await createWindow(pool.id, 40, 3);
+
+      const first = await bookWindow('f225-guest-1', 'f225-guest-1-key', {
+        branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+      });
+      if (first.status !== 201) throw new Error(`first booking: expected 201, got ${first.status}: ${first.raw}`);
+      const b1 = first.json?.data ?? first.json;
+      const r1 = await db.booking.findUnique({ where: { id: b1.id }, select: { resourceId: true, courtSlotIndex: true } });
+      if (r1?.resourceId !== courts[0].id || r1?.courtSlotIndex !== 1) {
+        throw new Error(`first booking: expected Court 1 / index 1, got ${JSON.stringify(r1)}`);
+      }
+
+      const second = await bookWindow('f225-guest-2', 'f225-guest-2-key', {
+        branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+      });
+      if (second.status !== 201) throw new Error(`second booking: expected 201, got ${second.status}: ${second.raw}`);
+      const b2 = second.json?.data ?? second.json;
+      const r2 = await db.booking.findUnique({ where: { id: b2.id }, select: { resourceId: true, courtSlotIndex: true } });
+      // Court 2 is unauthorized → skipped. Assigned Court 3, and courtSlotIndex tracks its REAL
+      // position (3), not compacted to 2.
+      if (r2?.resourceId !== courts[2].id || r2?.courtSlotIndex !== 3) {
+        throw new Error(`second booking: expected Court 3 / index 3 (2 skipped, numbering not compacted), got ${JSON.stringify(r2)}`);
+      }
+      console.log('F225_EVIDENCE guest_skip', JSON.stringify({ first: r1, second: r2 }));
+    },
+  },
+
+  {
+    name: 'F-225: a negotiated booking still lands on a court not authorized for guests',
+    async run() {
+      const { pool, courts } = await createResourcedPooledPool(3, [1, 3]); // court 2 not guest-authorized
+      const window = await createWindow(pool.id, 41, 3);
+
+      // Fill courts 1 and 3 with guest bookings first.
+      for (const [i, key] of [['a', 'f225-neg-fill-a'], ['b', 'f225-neg-fill-b']] as const) {
+        const r = await bookWindow(`f225-neg-fill-${i}`, `${key}-key`, {
+          branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+        });
+        if (r.status !== 201) throw new Error(`fill ${i}: expected 201, got ${r.status}: ${r.raw}`);
+      }
+
+      // A negotiated booking now must take court 2 — the only one free — even though it is not
+      // guest-authorized. The admin/negotiated path does not filter on guestBookable.
+      const neg = await bookNegotiated('f225-neg-user', 'f225-neg-key', {
+        resourcePoolId: pool.id, windowId: window.id, negotiatedPrice: 200,
+      });
+      if (neg.status !== 201) throw new Error(`negotiated: expected 201, got ${neg.status}: ${neg.raw}`);
+      const nb = neg.json?.data ?? neg.json;
+      const nr = await db.booking.findUnique({ where: { id: nb.id }, select: { resourceId: true, courtSlotIndex: true } });
+      if (nr?.resourceId !== courts[1].id || nr?.courtSlotIndex !== 2) {
+        throw new Error(`negotiated: expected Court 2 / index 2 (unauthorized court still assignable by admin), got ${JSON.stringify(nr)}`);
+      }
+      console.log('F225_EVIDENCE negotiated_unfiltered', JSON.stringify(nr));
+    },
+  },
+
+  {
+    name: 'F-225: a guest booking with no authorized court free falls back to resourceId:null (no rejection)',
+    async run() {
+      // Capacity 3, only court 1 authorized for guests.
+      const { pool, courts } = await createResourcedPooledPool(3, [1]);
+      const window = await createWindow(pool.id, 42, 3);
+
+      const first = await bookWindow('f225-full-1', 'f225-full-1-key', {
+        branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+      });
+      if (first.status !== 201) throw new Error(`first: expected 201, got ${first.status}: ${first.raw}`);
+      const r1 = await db.booking.findUnique({ where: { id: (first.json?.data ?? first.json).id }, select: { resourceId: true } });
+      if (r1?.resourceId !== courts[0].id) throw new Error(`first: expected Court 1, got ${r1?.resourceId}`);
+
+      // Court 1 (the only authorized one) is now taken; capacity is 3 so the booking is still
+      // accepted, but assignPooledCourt has no guest-authorized court free → resourceId null.
+      const second = await bookWindow('f225-full-2', 'f225-full-2-key', {
+        branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+      });
+      if (second.status !== 201) throw new Error(`second: expected 201 (not a rejection), got ${second.status}: ${second.raw}`);
+      const r2 = await db.booking.findUnique({
+        where: { id: (second.json?.data ?? second.json).id },
+        select: { resourceId: true, courtSlotIndex: true },
+      });
+      if (r2?.resourceId !== null) {
+        throw new Error(`second: expected resourceId null fallback (no authorized court free), got ${r2?.resourceId}`);
+      }
+      console.log('F225_EVIDENCE no_authorized_free', JSON.stringify(r2));
     },
   },
 ];

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarClock, FileSpreadsheet, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, CalendarClock, FileSpreadsheet } from 'lucide-react';
 import { moduleVisible, useAdminTenant } from '../auth/AdminTenantContext';
 import { Banner, EmptyState, LoadingState, Select, Tabs } from '../components';
 import { useBranches } from './guestManagement/queries';
+import { SetupRulesPanel } from './guestManagement/SetupRulesPanel';
 
 const TABS = [
   { key: 'reservations', label: 'Reservations' },
@@ -12,9 +13,9 @@ const TABS = [
 
 /**
  * F-220 §2 — `/guests`: the Guest Management shell. A branch selector over two tabs —
- * "Reservations" (walk-in bookings + manual payment, tracked as F-204) and "Setup Rules"
- * (guest court eligibility / pricing / cancellation / scheduling). Both tabs are honest
- * `EmptyState`s in this hand-off; the four real Setup Rules sections land one at a time in §3.
+ * "Reservations" (walk-in bookings + manual payment, tracked as F-204, still an honest
+ * `EmptyState`) and "Setup Rules" (rendered by `SetupRulesPanel` — §3.1's Authorized Guest
+ * Courts is the first real section; the other three land one at a time).
  *
  * Same F-206 posture as `CourtGroupsScreen`: the `guests` nav entry carries
  * `module: 'GUEST_BOOKING'`, and this screen also refuses to render if reached directly on an
@@ -97,11 +98,7 @@ export function GuestManagementScreen() {
             description="Walk-in bookings and manual payment recording for this branch — tracked as a future slice."
           />
         ) : (
-          <EmptyState
-            icon={<SlidersHorizontal size={20} />}
-            title="Setup Rules"
-            description="Guest court eligibility, pricing, cancellation policy and scheduling — sections land one at a time, starting next."
-          />
+          <SetupRulesPanel key={branchId} branchId={branchId} />
         )}
       </div>
     </div>

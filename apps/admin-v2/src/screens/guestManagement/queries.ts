@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAdminApi } from '../../lib/useAdminApi';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { useAdminTenant } from '../../auth/AdminTenantContext';
@@ -62,6 +62,50 @@ export function useAvailability(poolId?: string, date?: string) {
     queryKey: ['court-groups', 'availability', poolId, date],
     enabled: !!poolId && !!date,
     queryFn: () => api.get<AvailabilitySlot[]>(`/slot-engine/resource-pools/${poolId}/availability?date=${date}`),
+  });
+}
+
+/**
+ * F-220 §3.2 / F-224 — save branch-wide guest Standard/Peak pricing. Partial update: pass only
+ * the fields a given Save button owns (the Peak Hours block and the Rates block save
+ * independently). Owner-only + GUEST_BOOKING-gated server-side (`tenant-management`).
+ */
+export function useSaveGuestPricing(branchId?: string) {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  const { tenant } = useAdminTenant();
+  return useMutation({
+    mutationFn: (body: {
+      guestStandardRate?: number;
+      guestPeakRate?: number | null;
+      guestPeakWindows?: { start: string; end: string }[];
+    }) => api.patch<Branch>(`/tenant/branches/${branchId}/guest-pricing`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: courtGroupsKeys.branches(tenant?.id) });
+    },
+  });
+}
+
+/**
+ * F-220 §3.1 / F-225 — save which courts guests may book, per pool. `authorizedByPool` maps a
+ * pool id to its authorised resource ids; each entry is a whole-pool replace on the server
+ * (`PATCH /slot-engine/resource-pools/:id/guest-court-eligibility`). Owner-only + GUEST_BOOKING-
+ * gated server-side. Fanned out per pool (JBC = one pool per branch → one call), the same shape
+ * as Special Hours.
+ */
+export function useSaveGuestCourts(branchId?: string) {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (authorizedByPool: Record<string, string[]>) =>
+      Promise.all(
+        Object.entries(authorizedByPool).map(([poolId, authorizedResourceIds]) =>
+          api.patch(`/slot-engine/resource-pools/${poolId}/guest-court-eligibility`, { authorizedResourceIds }),
+        ),
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: courtGroupsKeys.pools(branchId) });
+    },
   });
 }
 

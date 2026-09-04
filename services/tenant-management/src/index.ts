@@ -3,7 +3,7 @@ import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
 import { PrismaClient, BranchStatus, UserRole, TenantModule } from '@badminton/database';
-import { resolveEntitlementState } from '@badminton/shared-types';
+import { resolveEntitlementState, entitlementAllows } from '@badminton/shared-types';
 
 const server = fastify({ logger: true });
 
@@ -274,6 +274,110 @@ function validateBranchFields(fields: { workingHoursStart?: unknown; workingHour
   }
 }
 
+// F-224: local GUEST_BOOKING entitlement gate for the guest-pricing route. A direct port of
+// slot-engine's requireModuleEntitlement wrapper (services/slot-engine/src/index.ts) — same
+// ~15-lines-vs-coupling call the timezone helpers above made. Routed here (not slot-engine)
+// because every Branch write already lives in this service and slot-engine has never written
+// Branch; a GUEST_BOOKING-only field must not be reachable through the deliberately-ungated
+// PATCH /branches/:id (that would recreate F-221 in reverse).
+async function requireGuestBookingEntitlement(tenantId: string, opts: { write: boolean }) {
+  const row = await prisma.moduleEntitlement.findUnique({
+    where: { tenantId_module: { tenantId, module: TenantModule.GUEST_BOOKING } },
+  });
+  const state = resolveEntitlementState(row, new Date());
+  if (!entitlementAllows(state, opts.write)) {
+    const err = new Error(`Module not entitled: ${TenantModule.GUEST_BOOKING}`);
+    (err as any).statusCode = 403;
+    (err as any).code = 'MODULE_NOT_ENTITLED';
+    throw err;
+  }
+}
+
+// F-224: validate a partial guest-pricing update. Only supplied keys are checked; the server
+// mirrors the admin-v2 client rules (never client-only). `existing` carries the row's current
+// windows so a rates-only PATCH can still enforce "peak rate required when windows exist".
+function validateGuestPricingBody(
+  body: { guestStandardRate?: unknown; guestPeakRate?: unknown; guestPeakWindows?: unknown },
+  existing: { guestPeakRate: unknown; guestPeakWindows: unknown },
+): { guestStandardRate?: number | null; guestPeakRate?: number | null; guestPeakWindows?: { start: string; end: string }[] | null } {
+  const out: any = {};
+
+  for (const [field, value] of [
+    ['guestStandardRate', body.guestStandardRate],
+    ['guestPeakRate', body.guestPeakRate],
+  ] as const) {
+    if (value === undefined) continue;
+    if (value === null) { out[field] = null; continue; }
+    const n = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(n) || n < 0) {
+      const err = new Error(`${field} must be a non-negative number`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_RATE';
+      throw err;
+    }
+    out[field] = n;
+  }
+
+  let effectiveWindows: { start: string; end: string }[] =
+    Array.isArray(existing.guestPeakWindows)
+      ? (existing.guestPeakWindows as any[]).filter((x) => x && typeof x.start === 'string' && typeof x.end === 'string')
+      : [];
+
+  if (body.guestPeakWindows !== undefined) {
+    if (body.guestPeakWindows === null) {
+      out.guestPeakWindows = [];
+      effectiveWindows = [];
+    } else {
+      if (!Array.isArray(body.guestPeakWindows)) {
+        const err = new Error('guestPeakWindows must be an array');
+        (err as any).statusCode = 400;
+        (err as any).code = 'INVALID_PEAK_WINDOWS';
+        throw err;
+      }
+      const windows = body.guestPeakWindows.map((w: any) => ({ start: String(w?.start), end: String(w?.end) }));
+      for (const w of windows) {
+        if (!WORKING_HOURS_RE.test(w.start) || !WORKING_HOURS_RE.test(w.end) || w.start >= w.end) {
+          const err = new Error('each peak window needs HH:mm start and end with start before end');
+          (err as any).statusCode = 400;
+          (err as any).code = 'INVALID_PEAK_WINDOWS';
+          throw err;
+        }
+      }
+      for (let i = 0; i < windows.length; i++) {
+        for (let j = i + 1; j < windows.length; j++) {
+          const a = windows[i], b = windows[j];
+          if (a.start === b.start && a.end === b.end) {
+            const err = new Error('duplicate peak window');
+            (err as any).statusCode = 400;
+            (err as any).code = 'INVALID_PEAK_WINDOWS';
+            throw err;
+          }
+          if (a.start < b.end && b.start < a.end) {
+            const err = new Error('peak windows must not overlap');
+            (err as any).statusCode = 400;
+            (err as any).code = 'INVALID_PEAK_WINDOWS';
+            throw err;
+          }
+        }
+      }
+      out.guestPeakWindows = windows;
+      effectiveWindows = windows;
+    }
+  }
+
+  // A peak rate must exist (on the row after this update) whenever peak windows exist.
+  const effectivePeakRate =
+    out.guestPeakRate !== undefined ? out.guestPeakRate : existing.guestPeakRate;
+  if (effectiveWindows.length > 0 && (effectivePeakRate === null || effectivePeakRate === undefined)) {
+    const err = new Error('a peak rate is required when peak windows are set');
+    (err as any).statusCode = 400;
+    (err as any).code = 'PEAK_RATE_REQUIRED';
+    throw err;
+  }
+
+  return out;
+}
+
 // Add new branch (defaults to DRAFT)
 // Phase 9: accepts working schedule and about/facilities/photos fields.
 server.post('/tenants/:id/branches', async (request, reply) => {
@@ -371,6 +475,43 @@ server.patch('/branches/:id', async (request, reply) => {
       ...(aboutDescription !== undefined ? { aboutDescription } : {}),
       ...(facilities !== undefined ? { facilities } : {}),
       ...(photos !== undefined ? { photos } : {}),
+    },
+  });
+
+  return updated;
+});
+
+// F-224: guest-only Standard/Peak court pricing (F-220 §3.2). Branch-wide, owner-only, and
+// GUEST_BOOKING-gated — deliberately NOT folded into PATCH /branches/:id, which is ungated by
+// design (branch hours aren't a sellable module) and would leak a guest-booking concept past
+// that gate. Partial update: only supplied keys are written. `defaultRate` and the member
+// booking path are never touched by this.
+server.patch('/branches/:id/guest-pricing', async (request, reply) => {
+  const { id } = request.params as any;
+  const branch = await prisma.branch.findUnique({ where: { id } });
+  if (!branch) {
+    reply.status(404);
+    const err = new Error('Branch not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'BRANCH_NOT_FOUND';
+    throw err;
+  }
+
+  await verifyTenantOwnerOrInternal(request, reply, branch.tenantId);
+  await requireGuestBookingEntitlement(branch.tenantId, { write: true });
+
+  const { guestStandardRate, guestPeakRate, guestPeakWindows } = (request.body ?? {}) as any;
+  const patch = validateGuestPricingBody(
+    { guestStandardRate, guestPeakRate, guestPeakWindows },
+    { guestPeakRate: branch.guestPeakRate, guestPeakWindows: branch.guestPeakWindows },
+  );
+
+  const updated = await prisma.branch.update({
+    where: { id },
+    data: {
+      ...(patch.guestStandardRate !== undefined ? { guestStandardRate: patch.guestStandardRate } : {}),
+      ...(patch.guestPeakRate !== undefined ? { guestPeakRate: patch.guestPeakRate } : {}),
+      ...(patch.guestPeakWindows !== undefined ? { guestPeakWindows: patch.guestPeakWindows ?? [] } : {}),
     },
   });
 

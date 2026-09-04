@@ -264,4 +264,68 @@ export const moduleEntitlementSections: Section<SlotEngineContext>[] = [
       expectCode(denied, 'MODULE_NOT_ENTITLED', 'lapsed booking-conflicts');
     },
   },
+
+  {
+    name: 'F-225: PATCH /resource-pools/:id/guest-court-eligibility — owner 200, branch_manager 403, lapsed 403, bad id 400',
+    async run() {
+      const { tenant, branch, pool } = await makeTenantBranchPool('f225-elig');
+      await setEntitlement(tenant.id, { startOffsetDays: -1, endOffsetDays: 30 });
+      const owner = signJwt({ userId: 'f225-owner', tenantId: tenant.id, roles: ['owner'] });
+      const manager = signJwt({ userId: 'f225-mgr', tenantId: tenant.id, roles: [`branch_manager:${branch.id}`] });
+
+      // Two real courts on the pool.
+      const mk = async (name: string) => {
+        const r = await fetch(`${baseUrl}/resource-pools/${pool.id}/resources`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner}` },
+          body: JSON.stringify({ name }),
+        });
+        return ((await r.json()) as any).data;
+      };
+      const c1 = await mk('Court 1');
+      const c2 = await mk('Court 2');
+
+      const patch = async (token: string, body: unknown) =>
+        await inspect(
+          await fetch(`${baseUrl}/resource-pools/${pool.id}/guest-court-eligibility`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body),
+          }),
+        );
+
+      // branch_manager → 403 FORBIDDEN (owner-only, unlike the sibling resource routes).
+      const asMgr = await patch(manager, { authorizedResourceIds: [c1.id] });
+      expectStatus(asMgr, 403, 'branch_manager guest-court-eligibility');
+      expectCode(asMgr, 'FORBIDDEN', 'branch_manager guest-court-eligibility');
+
+      // owner → 200, whole-pool replace.
+      const ok = await patch(owner, { authorizedResourceIds: [c1.id] });
+      expectStatus(ok, 200, 'owner guest-court-eligibility');
+      const c1row = await db.resource.findUnique({ where: { id: c1.id }, select: { guestBookable: true } });
+      const c2row = await db.resource.findUnique({ where: { id: c2.id }, select: { guestBookable: true } });
+      if (c1row?.guestBookable !== true || c2row?.guestBookable !== false) {
+        throw new Error(`whole-pool replace wrong: c1=${c1row?.guestBookable} c2=${c2row?.guestBookable}`);
+      }
+
+      // An id not in the pool → 400 INVALID_RESOURCE.
+      const badId = await patch(owner, { authorizedResourceIds: ['11111111-1111-1111-1111-111111111111'] });
+      expectStatus(badId, 400, 'foreign resource id');
+      expectCode(badId, 'INVALID_RESOURCE', 'foreign resource id');
+
+      // Lapsed GUEST_BOOKING → 403 MODULE_NOT_ENTITLED (owner check passes first, then the gate).
+      const lapsed = await makeTenantBranchPool('f225-lapsed');
+      await setEntitlement(lapsed.tenant.id, { startOffsetDays: -30, endOffsetDays: -1 });
+      const lapsedOwner = signJwt({ userId: 'f225-lapsed-owner', tenantId: lapsed.tenant.id, roles: ['owner'] });
+      const denied = await inspect(
+        await fetch(`${baseUrl}/resource-pools/${lapsed.pool.id}/guest-court-eligibility`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${lapsedOwner}` },
+          body: JSON.stringify({ authorizedResourceIds: [] }),
+        }),
+      );
+      expectStatus(denied, 403, 'lapsed guest-court-eligibility');
+      expectCode(denied, 'MODULE_NOT_ENTITLED', 'lapsed guest-court-eligibility');
+    },
+  },
 ];

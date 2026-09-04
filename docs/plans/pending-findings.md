@@ -835,3 +835,160 @@ actually enforced. Bala's call (3 Sep 2026): ship the UI-only patch now, track t
 separately rather than block the patch on a backend change.
 Confirmed-ID: F-223
 Confirmed: 3 Sep 2026
+
+### guest-only-standard-peak-pricing-arbitrary-windows
+Batch: F-220 §3.2 (Custom Pricing Rates)
+Surfaced: 3 Sep 2026
+Description: Surfaced during F-220 §3.2 (Custom Pricing Rates, the "Setup Rules" tab). Bala's
+real product call: Standard/Peak Rate must be guest-only — member pricing is separate, slated
+for F-209, and the two must not share a field. Confirmed directly against `main`:
+`resolvePrice()` (`slot-engine/src/index.ts:919`) has exactly two call sites — member
+auto-booking (`:1125`, inside `ensureTodayMemberBooking`'s transaction) and guest self-service
+booking (`:2890`) — already architecturally separate, not one function branching on booker type.
+No guest/member price distinction exists in the schema today; no "peak hours" concept exists
+anywhere (zero matches, confirmed). Own finding, not folded into F-220, because F-220's own plan
+stated "no backend change of any kind" — this is a real schema migration plus a changed
+resolution call site.
+
+Two rounds of direct clarification with Bala evolved the shape from Chief's originally-resolved
+per-`ResourcePool` design (one fixed Standard/Peak Rate per pool) to the following, each change
+independently re-verified against real code, not taken on the discussion's word:
+
+1. **Branch-wide, not per-pool.** One Standard Rate and one Peak Rate for the whole branch, no
+   per-court/per-court-type differentiation. Safe because `resolvePrice`'s existing `window.price`
+   override (per `AvailabilityWindow`/pattern) is untouched and still wins first in the chain — a
+   pool that genuinely needs to diverge still can. Removes a layer of granularity JBC's real data
+   (one pool per branch today) doesn't need, not real capability.
+2. **Arbitrary number of peak windows**, not one fixed window — the business is busy morning and
+   evening, not one block. Stored as `Branch.guestPeakWindows` (`Json?`, array of
+   `{start:"HH:mm", end:"HH:mm"}`), reusing the same structured-JSON-array-in-one-column pattern
+   already proven for `BookingRule.cancellationPolicyJson`.
+3. **One shared Peak Rate** across all windows, not a rate per window.
+4. **Peak Rate and windows fully optional** — no configuration means flat-rate pricing, unchanged
+   from today's behavior.
+5. **Hard validation, both client and server**: no two windows identical, no two windows
+   overlapping (real interval check), each window's `HH:mm` shape validated, `start < end` (no
+   overnight wraparound for MVP). A shared, reusable `nonNegativeAmount` zod helper (extending the
+   proven `poolSchema.defaultRate: z.coerce.number().min(0)` pattern) rejects negative and
+   non-numeric rate input on both fields.
+6. **Real component reuse** — time selection reuses the existing `TimeField` component
+   (`apps/admin-v2/src/components/TimeField.tsx`) rather than a new picker.
+
+**Schema:** three new nullable columns on `Branch` — `guestStandardRate` (`Decimal(10,2)?`),
+`guestPeakRate` (`Decimal(10,2)?`), `guestPeakWindows` (`Json?`). No new table, `defaultRate`
+untouched.
+
+**API — corrected after review:** `PATCH /branches/:id/guest-pricing`, inside
+**`tenant-management`** (not `slot-engine`), `GUEST_BOOKING`-gated by a local
+`requireModuleEntitlement`-equivalent wrapper (the real pattern already used in `slot-engine`,
+`services/slot-engine/src/index.ts:262-273`, is a ~15-line wrapper around
+`resolveEntitlementState`/`entitlementAllows` — both already exported from the shared
+`@badminton/shared-types` package, trivially reproducible locally in `tenant-management`).
+Confirmed directly: `slot-engine` has never written to `Branch` (four read-only call sites, zero
+`update`/`create`/`delete`/`upsert`); every real `Branch` write, including the existing
+`PATCH /branches/:id`, has always lived in `tenant-management`
+(`services/tenant-management/src/index.ts:300,324,354`). Routing the new write through
+`slot-engine` instead would have been that service's first-ever `Branch` write and was an
+unforced error in the original proposal — the gate this was meant to guarantee doesn't require
+crossing that boundary.
+
+**`resolvePrice` guest call site (`:2890`) only — the member call site (`:1125`) is untouched:**
+`window.price` (existing override, still wins first) → does the booking's real branch-local time
+fall inside any `guestPeakWindows` entry, using `branchMinutesOfDay`/`branchLocalToUtc`
+(`services/slot-engine/src/branchTime.ts:135,171` — named explicitly per review, not the
+looser "F-066 helpers" citation the original proposal used, and not `slotStartForDate`, which is
+a differently-shaped tool: it computes a slot's start instant, not a minutes-of-day comparison)
+— and is `guestPeakRate` set? → use it → else if `guestStandardRate` is set → use it (covers both
+"no window matched" and "window matched but no peak rate configured") → else → `pool.defaultRate`
+(unchanged fallback).
+
+**Both corrections above were raised on review of the original proposal and independently
+re-verified against real `main` before being folded in here** — not asserted on the reviewer's
+word alone: `slot-engine`'s zero `Branch` writes confirmed by grepping every
+`prisma.branch.*` call site in `services/`; `branchMinutesOfDay`/`branchLocalToUtc` confirmed
+real, already imported and in active use throughout `slot-engine/src/index.ts`.
+
+Mock built and reviewed (repeatable peak-window rows, add/remove, live overlap/duplicate
+validation, conditionally-required Peak Rate, TimeField-styled time pickers) — UI-only, no real
+code written yet.
+Confirmed-ID: F-224
+Confirmed: 4 Sep 2026 (Bala, standing in for Chief per Chief's own already-given §1f/§1g
+resolution in this Project's `chief-handover-slice2-guest-member-findings.md` — that
+confirmation was real but never landed in this file; this entry lands it. Both of Chief's review
+corrections re-verified against real `main` before being folded in — see Description.)
+
+### authorized-guest-courts-real-enforcement
+Batch: F-220 §3.1 (Authorized Guest Courts)
+Surfaced: 4 Sep 2026
+Description: §3.1's per-court guest-eligibility toggles are UI-only by design (confirmed
+directly: `AuthorizedCourts.tsx` is `useState` only, no `mutate`/`api.patch`/`api.post` calls
+anywhere in the file; `Resource` has no guest-eligibility column — `schema.prisma`'s `Resource`
+model has none). This was flagged as an open product question from the original F-220 v2 plan
+onward, not a bug: does per-court guest eligibility even make sense when a `POOLED` pool's
+courts are assigned automatically ([[F-205]]) and are interchangeable by design?
+
+**Real business need confirmed directly with Bala, 4 Sep 2026: yes — real enforcement, not just
+visibility.** Some courts (reserved for members/coaching) must never be offered to a guest
+booking at all, not merely "shown as preferred."
+
+**Real technical grounding, investigated directly against `f220-guest-management` before this
+was scoped (not assumed):** [[F-205]]'s `assignPooledCourt(pool, activeBookings)`
+(`services/slot-engine/src/index.ts:116-138`) is the one function that decides which real
+`Resource` a `POOLED` booking gets. It has two real correctness traps that make this bigger than
+"add a schema field + a route" if implemented naively:
+
+1. **The `ordered.length === pool.capacity` check governs whether real-court assignment happens
+   at all** (`:121`) — if the excluded court is simply filtered out of the resource list before
+   calling `assignPooledCourt`, that count check fails for the *whole pool*, and every guest
+   booking silently falls back to the pre-F-205 cosmetic-index-only path (`resourceId: null`,
+   `:130-136`) — not just the excluded court. F-205's real-court assignment would quietly stop
+   working for that pool's entire guest traffic, not just steer around the reserved court.
+2. **`courtSlotIndex` is derived from a resource's position in the full, unfiltered
+   `createdAt`-ordered list** (`free + 1`, `:123-126`) — the doc comment at `:104-109` is explicit
+   that this position is forced to agree with the real "Court N" numbering. Filtering the list
+   before it reaches `assignPooledCourt` would shift every later court's computed index, so a
+   guest could be told "Court 2" while actually holding the resource that is really "Court 3."
+
+**Correct shape, grounded in the existing code rather than invented:** `assignPooledCourt`'s
+`findIndex` predicate (`:123`, `!taken.has(r.id)`) gains a second, guest-only condition
+(`&& (opts?.guestOnly ? r.guestBookable !== false : true)`, or equivalent) — applied while
+iterating the *full* `ordered` array, so position/numbering and the resource-completeness check
+both stay correct. The guest call site (`:2972`) passes `{ guestOnly: true }`; the member call
+site (`:3222`) passes nothing — a court "reserved for members" must still be assignable to
+members, so the member path is deliberately unfiltered, mirroring exactly how [[F-224]]'s
+`resolvePrice` change kept its member call site untouched via an optional param.
+
+**One real edge case, documented rather than silently resolved:** the guest booking-acceptance
+capacity check (`activeCount >= w.capacity`, `:2925`) is intentionally untouched by this — it
+still governs against the pool's *full* capacity, not the guest-eligible subset. On a fully
+booked pool with one court excluded, the last accepted guest booking would fall back to
+`resourceId: null` (the same pre-existing, explicitly-harmless fallback `assignPooledCourt`
+already uses today — not a rejection, not a new failure mode). Matches this codebase's existing,
+documented stance on capacity-sharing edge cases (see [[F-184]]'s own "documented, not solved in
+code" note for the same class of question) — flagging so it isn't silently assumed away, not
+proposing to solve it here.
+
+**Scope, once resolved:** one nullable/defaulted column (`Resource.guestBookable Boolean?`, or
+equivalent — absence/`null`/`true` = guest-bookable, `false` = excluded), a gated write route
+(owner-only + `GUEST_BOOKING`-entitled, same pattern as [[F-224]]'s `guest-pricing` route,
+likely also `tenant-management` since `Resource` writes should be checked against the same
+"where do writes to this table already live" discipline [[F-224]]'s review applied), the
+`assignPooledCourt` change above, and wiring `AuthorizedCourts.tsx`'s already-built toggle UI
+(currently local `useState`) to a real save — the frontend interaction pattern (a single batched
+"Save" for the section, live "N of M" count, no per-toggle auto-save, no confirm dialog since
+it's a reversible toggle) was already proposed and is sound.
+
+Reviewed by Chief directly against `f220-guest-management`, 4 Sep 2026: PATCH route confirmed
+real and in `tenant-management` (not `slot-engine`); peak-window matching confirmed using
+`branchMinutesOfDay`, not an ad-hoc comparison; member call site confirmed untouched — all three
+F-224 sign-off conditions independently re-verified as honored. This finding's technical shape
+confirmed sound: `Resource` has no eligibility column today (re-confirmed); the proposed
+in-loop-filter fix (not pre-filtering the array) correctly avoids both the whole-pool
+real-assignment regression and the "Court N" numbering desync. `AuthorizedCourts.tsx` being
+`useState`-only, which Chief could not check directly, independently re-confirmed by Technical
+Lead against the real file (`apps/admin-v2/src/screens/guestManagement/sections/AuthorizedCourts.tsx`):
+`useState<Record<string, boolean>>({})`, zero `mutate`/`api.patch`/`api.post` calls. Cited line
+numbers for `assignPooledCourt` have drifted a few lines from other work landing on the branch
+since this was written — described behavior unaffected, only the exact pointers.
+Confirmed-ID: F-225
+Confirmed: 4 Sep 2026
