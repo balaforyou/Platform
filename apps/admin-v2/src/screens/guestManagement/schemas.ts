@@ -84,15 +84,17 @@ export type TimeWindow = { start: string; end: string };
 /**
  * Generic (not pricing-specific): validate a list of `{ start, end }` HH:mm windows. Returns
  * one message per row, `''` when that row is fine — per-row HH:mm shape + `start < end`, then a
- * pairwise pass for exact duplicates and interval overlaps. Mirrors the server's own check in
- * `tenant-management`'s `PATCH /branches/:id/guest-pricing`.
+ * duplicate/overlap pass **against earlier rows only** so a conflict is flagged on the *later*
+ * row (the one just added or edited), not retroactively on the pristine row above it. Save is
+ * still blocked whenever any row has an error, and the server re-runs a full pairwise check —
+ * this is display positioning only. Mirrors the server's check in `tenant-management`'s
+ * `PATCH /branches/:id/guest-pricing`.
  */
 export function validateTimeWindows(windows: TimeWindow[]): string[] {
   return windows.map((w, i) => {
     if (!HHMM_RE.test(w.start) || !HHMM_RE.test(w.end)) return 'Enter a valid start and end time.';
     if (w.start >= w.end) return 'End time must be after start time.';
-    for (let j = 0; j < windows.length; j++) {
-      if (i === j) continue;
+    for (let j = 0; j < i; j++) {
       const o = windows[j];
       if (w.start === o.start && w.end === o.end) return 'Same as another peak window.';
       if (w.start < o.end && o.start < w.end) return 'Overlaps another peak window.';

@@ -73,7 +73,16 @@ export function PricingRates({ branchId }: { branchId: string }) {
 
   const setWindow = (i: number, patch: Partial<TimeWindow>) =>
     setWindows((ws) => ws.map((w, j) => (j === i ? { ...w, ...patch } : w)));
-  const addWindow = () => setWindows((ws) => [...ws, { start: '06:00', end: '09:00' }]);
+  // Default a fresh row to a 2h slot starting after the latest existing window, so adding one
+  // never instantly collides with a window already in the list (clamped to the evening).
+  const addWindow = () =>
+    setWindows((ws) => {
+      if (ws.length === 0) return [{ start: '06:00', end: '09:00' }];
+      const latestEnd = ws.reduce((m, w) => (w.end > m ? w.end : m), '00:00');
+      const startH = latestEnd < '22:00' ? Number(latestEnd.slice(0, 2)) : 6;
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return [...ws, { start: `${pad(startH)}:00`, end: `${pad(Math.min(startH + 2, 23))}:00` }];
+    });
   const removeWindow = (i: number) => setWindows((ws) => ws.filter((_, j) => j !== i));
 
   const saveWindows = () => {
