@@ -835,3 +835,84 @@ actually enforced. Bala's call (3 Sep 2026): ship the UI-only patch now, track t
 separately rather than block the patch on a backend change.
 Confirmed-ID: F-223
 Confirmed: 3 Sep 2026
+
+### guest-only-standard-peak-pricing-arbitrary-windows
+Batch: F-220 §3.2 (Custom Pricing Rates)
+Surfaced: 3 Sep 2026
+Description: Surfaced during F-220 §3.2 (Custom Pricing Rates, the "Setup Rules" tab). Bala's
+real product call: Standard/Peak Rate must be guest-only — member pricing is separate, slated
+for F-209, and the two must not share a field. Confirmed directly against `main`:
+`resolvePrice()` (`slot-engine/src/index.ts:919`) has exactly two call sites — member
+auto-booking (`:1125`, inside `ensureTodayMemberBooking`'s transaction) and guest self-service
+booking (`:2890`) — already architecturally separate, not one function branching on booker type.
+No guest/member price distinction exists in the schema today; no "peak hours" concept exists
+anywhere (zero matches, confirmed). Own finding, not folded into F-220, because F-220's own plan
+stated "no backend change of any kind" — this is a real schema migration plus a changed
+resolution call site.
+
+Two rounds of direct clarification with Bala evolved the shape from Chief's originally-resolved
+per-`ResourcePool` design (one fixed Standard/Peak Rate per pool) to the following, each change
+independently re-verified against real code, not taken on the discussion's word:
+
+1. **Branch-wide, not per-pool.** One Standard Rate and one Peak Rate for the whole branch, no
+   per-court/per-court-type differentiation. Safe because `resolvePrice`'s existing `window.price`
+   override (per `AvailabilityWindow`/pattern) is untouched and still wins first in the chain — a
+   pool that genuinely needs to diverge still can. Removes a layer of granularity JBC's real data
+   (one pool per branch today) doesn't need, not real capability.
+2. **Arbitrary number of peak windows**, not one fixed window — the business is busy morning and
+   evening, not one block. Stored as `Branch.guestPeakWindows` (`Json?`, array of
+   `{start:"HH:mm", end:"HH:mm"}`), reusing the same structured-JSON-array-in-one-column pattern
+   already proven for `BookingRule.cancellationPolicyJson`.
+3. **One shared Peak Rate** across all windows, not a rate per window.
+4. **Peak Rate and windows fully optional** — no configuration means flat-rate pricing, unchanged
+   from today's behavior.
+5. **Hard validation, both client and server**: no two windows identical, no two windows
+   overlapping (real interval check), each window's `HH:mm` shape validated, `start < end` (no
+   overnight wraparound for MVP). A shared, reusable `nonNegativeAmount` zod helper (extending the
+   proven `poolSchema.defaultRate: z.coerce.number().min(0)` pattern) rejects negative and
+   non-numeric rate input on both fields.
+6. **Real component reuse** — time selection reuses the existing `TimeField` component
+   (`apps/admin-v2/src/components/TimeField.tsx`) rather than a new picker.
+
+**Schema:** three new nullable columns on `Branch` — `guestStandardRate` (`Decimal(10,2)?`),
+`guestPeakRate` (`Decimal(10,2)?`), `guestPeakWindows` (`Json?`). No new table, `defaultRate`
+untouched.
+
+**API — corrected after review:** `PATCH /branches/:id/guest-pricing`, inside
+**`tenant-management`** (not `slot-engine`), `GUEST_BOOKING`-gated by a local
+`requireModuleEntitlement`-equivalent wrapper (the real pattern already used in `slot-engine`,
+`services/slot-engine/src/index.ts:262-273`, is a ~15-line wrapper around
+`resolveEntitlementState`/`entitlementAllows` — both already exported from the shared
+`@badminton/shared-types` package, trivially reproducible locally in `tenant-management`).
+Confirmed directly: `slot-engine` has never written to `Branch` (four read-only call sites, zero
+`update`/`create`/`delete`/`upsert`); every real `Branch` write, including the existing
+`PATCH /branches/:id`, has always lived in `tenant-management`
+(`services/tenant-management/src/index.ts:300,324,354`). Routing the new write through
+`slot-engine` instead would have been that service's first-ever `Branch` write and was an
+unforced error in the original proposal — the gate this was meant to guarantee doesn't require
+crossing that boundary.
+
+**`resolvePrice` guest call site (`:2890`) only — the member call site (`:1125`) is untouched:**
+`window.price` (existing override, still wins first) → does the booking's real branch-local time
+fall inside any `guestPeakWindows` entry, using `branchMinutesOfDay`/`branchLocalToUtc`
+(`services/slot-engine/src/branchTime.ts:135,171` — named explicitly per review, not the
+looser "F-066 helpers" citation the original proposal used, and not `slotStartForDate`, which is
+a differently-shaped tool: it computes a slot's start instant, not a minutes-of-day comparison)
+— and is `guestPeakRate` set? → use it → else if `guestStandardRate` is set → use it (covers both
+"no window matched" and "window matched but no peak rate configured") → else → `pool.defaultRate`
+(unchanged fallback).
+
+**Both corrections above were raised on review of the original proposal and independently
+re-verified against real `main` before being folded in here** — not asserted on the reviewer's
+word alone: `slot-engine`'s zero `Branch` writes confirmed by grepping every
+`prisma.branch.*` call site in `services/`; `branchMinutesOfDay`/`branchLocalToUtc` confirmed
+real, already imported and in active use throughout `slot-engine/src/index.ts`.
+
+Mock built and reviewed (repeatable peak-window rows, add/remove, live overlap/duplicate
+validation, conditionally-required Peak Rate, TimeField-styled time pickers) — UI-only, no real
+code written yet.
+Confirmed-ID: F-224
+Confirmed: 4 Sep 2026 (Bala, standing in for Chief per Chief's own already-given §1f/§1g
+resolution in this Project's `chief-handover-slice2-guest-member-findings.md` — that
+confirmation was real but never landed in this file; this entry lands it. Both of Chief's review
+corrections re-verified against real `main` before being folded in — see Description.)
