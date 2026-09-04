@@ -73,15 +73,18 @@ export function PricingRates({ branchId }: { branchId: string }) {
 
   const setWindow = (i: number, patch: Partial<TimeWindow>) =>
     setWindows((ws) => ws.map((w, j) => (j === i ? { ...w, ...patch } : w)));
-  // Default a fresh row to a 2h slot starting after the latest existing window, so adding one
-  // never instantly collides with a window already in the list (clamped to the evening).
+  // Default a fresh row to a 2h slot starting exactly at the latest existing window's end, so
+  // adding one never collides with a window already in the list (`start === latestEnd` can't
+  // overlap it — the overlap check is strict `<`). Minutes are kept (a window can end off the
+  // hour, minuteStep=5); if there's no evening room left, fall back to the 06:00–09:00 default.
   const addWindow = () =>
     setWindows((ws) => {
       if (ws.length === 0) return [{ start: '06:00', end: '09:00' }];
       const latestEnd = ws.reduce((m, w) => (w.end > m ? w.end : m), '00:00');
-      const startH = latestEnd < '22:00' ? Number(latestEnd.slice(0, 2)) : 6;
-      const pad = (n: number) => String(n).padStart(2, '0');
-      return [...ws, { start: `${pad(startH)}:00`, end: `${pad(Math.min(startH + 2, 23))}:00` }];
+      if (latestEnd >= '22:00') return [...ws, { start: '06:00', end: '09:00' }];
+      const [h, mm] = latestEnd.split(':');
+      const endH = String(Math.min(Number(h) + 2, 23)).padStart(2, '0');
+      return [...ws, { start: latestEnd, end: `${endH}:${mm}` }];
     });
   const removeWindow = (i: number) => setWindows((ws) => ws.filter((_, j) => j !== i));
 
