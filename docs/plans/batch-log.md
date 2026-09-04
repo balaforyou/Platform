@@ -1384,15 +1384,18 @@ This batch row is the record that §1a–§2 reached `main`.
 
 **Findings:** [[F-220]] — **still Open** (§3.3 Cancellation & Refund Policy and §3.4 Dynamic Guest
 Scheduler still to come; its own register row + full close-out stay deferred to the end of §3).
-[[F-224]] — register row (Open) + `pending-findings.md` landed when Chief confirmed it (`4551fcc`);
-**delivered this batch**, row stays Open pending F-220's close-out. [[F-225]] — `pending-findings.md`
-(`b56c3d8`), then a **Resolved** register row this batch (`95148bf`).
+[[F-224]] — `pending-findings.md` landed (`4551fcc`), then a **Resolved** register row this batch
+(`f20f37f`) — same treatment as [[F-225]] (Bala's Option A, not folded into F-220's close-out).
+[[F-225]] — `pending-findings.md` (`b56c3d8`), then a **Resolved** register row (`95148bf`, in PR #16).
 **Handed off:** 4 Sep 2026 (Technical Lead thread — `Technical lead plan f220 v2 guest management branch settings.md`)
 **Status:** merged to `main`
 **Branch/PR:** `f220-guest-management` (kept, not deleted — TL verification cites per-slice SHAs)
-→ PR #16, **Squash and merged** (`6645949`). A `git merge -s ours origin/main` (`38bbcc3`) was
-recorded on the branch first to clear the post-#15 squash-merge orphan conflict — tree unchanged
-(`git diff HEAD~1 HEAD` empty), every cited slice SHA preserved.
+→ **PR #16**, Squash and merged (`6645949`, one commit above #15's `1da6c7e`). A `git merge -s ours
+origin/main` (`38bbcc3`) was recorded on the branch first to clear the post-#15 squash-merge orphan
+conflict — tree unchanged (`git diff HEAD~1 HEAD` empty), every cited slice SHA preserved.
+**This batch-log entry + F-224's Resolved row were missed from PR #16** and landed as a small
+standalone docs PR (#17) off `6645949` — docs-only, no code, per standing rule 6 (batch-log entry
+is inseparable from a merge to `main`).
 
 Slices, each independently TL-verified + Bala-signed-off before the next:
 
@@ -1402,21 +1405,23 @@ Slices, each independently TL-verified + Bala-signed-off before the next:
   field existed), plus a circle-visibility device-test fix.
 - **F-224 backend** (`729ecde`) — guest-only Standard/Peak pricing. `Branch.guestStandardRate` /
   `guestPeakRate` (`Decimal(10,2)?`) + `guestPeakWindows` (`Json?`, `{start,end}` array, reusing the
-  `cancellationPolicyJson` structured-list-in-one-column precedent). New owner-only +
-  `GUEST_BOOKING`-gated `PATCH /branches/:id/guest-pricing` in **tenant-management** (where `Branch`
-  writes live; local `requireModuleEntitlement` wrapper around shared
-  `resolveEntitlementState`/`entitlementAllows`). `resolvePrice`'s guest call site (`:2890`) only
-  gains: `window.price` → (branch-local start in any `guestPeakWindows` via `branchMinutesOfDay` ∧
-  `guestPeakRate` set ? peak : standard) → `pool.defaultRate`. Member call site untouched (optional
-  4th param). Migration `20260904120000`. +1 slot-engine regression section, +2 tenant-management
+  `cancellationPolicyJson` structured-list-in-one-column precedent). New owner-only
+  (`verifyTenantOwnerOrInternal`) + `GUEST_BOOKING`-gated `PATCH /branches/:id/guest-pricing` in
+  **tenant-management** (where `Branch` writes live; local `requireGuestBookingEntitlement` wrapper
+  around shared `resolveEntitlementState`/`entitlementAllows`). Only `resolvePrice`'s guest
+  self-service call site gains the chain `window.price` → (branch-local start in any
+  `guestPeakWindows` via `branchMinutesOfDay` ∧ `guestPeakRate` set ? peak : standard) →
+  `pool.defaultRate`; the member auto-booking call site (`:1181`) is byte-identical (optional 4th
+  param). Migration `20260904120000`. +1 slot-engine regression section, +2 tenant-management
   (`guest-pricing.regression.ts` — gate matrix + validation matrix).
 - **F-224 frontend** (`4e837cb`) — `PricingRates.tsx`: repeatable peak-window rows (`TimeField`,
   `minuteStep=5`, live overlap/duplicate errors), Standard/Peak rate pair (Peak "— required" once a
   window exists), Banner feedback, owner-gated. Reusable `nonNegativeAmount` / `validateTimeWindows`
   zod helpers.
 - **§3.2 polish** (`1afa465`, `7bc2de1`) — "Add peak window" no longer flashes a validation error:
-  the new row defaults to a clean non-colliding slot after the latest window (minutes preserved),
-  and a duplicate/overlap error shows only on the later row.
+  the new row defaults to a clean non-colliding slot after the latest window (minutes preserved,
+  closing the `1afa465` edge case), and a duplicate/overlap error shows only on the later row.
+- **F-224 docs** (`f20f37f`, PR #17) — Resolved register row.
 - **F-225 backend** (`0e1ab42`) — Authorized Guest Courts real enforcement.
   `Resource.guestBookable Boolean @default(false)` via a **two-step migration** (`20260904150000`):
   `ADD COLUMN … DEFAULT true` backfills every existing row ([[F-205]]'s live JBC real-court
@@ -1430,25 +1435,28 @@ Slices, each independently TL-verified + Bala-signed-off before the next:
   authorize their post-migration test-created courts.
 - **F-225 frontend** (`2396570`) — `AuthorizedCourts.tsx`: seeds from real `guestBookable`, one
   batched Save (no per-toggle auto-save), Banner feedback, owner-gated, `LoadingState`→`Spinner`.
-- **F-225 docs** (`95148bf`) — Resolved register row (commits + evidence).
+- **F-225 docs** (`95148bf`, PR #16) — Resolved register row.
 
 **Evidence:** per-slice — typecheck + `vite build` + `eslint` clean (8 pre-existing warnings, none
 new); **full 5-service regression green** — slot-engine **74/74**, tenant-management **11/11**,
 identity-auth 7/7, payment 12/12, notification 7/7. Both migrations applied to `badminton_db` +
 `badminton_db_test`; F-225's backfill verified on real data (all 18 existing `Resource` rows →
 `true`, column default `false`). Live-fire on the dev stack against real JBC (`badminton_db`) every
-slice — guest-pricing PATCH + DB read-back + the peak/standard/override/defaultRate price chain;
-F-225 court exclusion end-to-end (guest booking skips the excluded court with `courtSlotIndex`
-synced to real position, negotiated still reaches it, `resourceId:null` graceful fallback), UI save
-persistence across a full page reload, dark mode, 375px no-horizontal-scroll. TL independent
-re-verification of every slice against the real branch. Post-merge CI (`checks` + `regression` +
-`integration`) on `main`, run 33870563828.
+slice — guest-pricing PATCH + DB read-back + the peak / standard / `window.price` override /
+`defaultRate` price chain; F-225 court exclusion end-to-end (guest booking skips the excluded court
+with `courtSlotIndex` synced to real position, negotiated still reaches it, `resourceId:null`
+graceful fallback), UI save persistence across a full page reload, dark mode, 375px
+no-horizontal-scroll. TL independent re-verification of every slice against the real branch.
+Post-merge CI on `main` (run `33870563828`) — `checks` + `regression` + `integration` all green;
+`integration` built the shipped 7-service stack, `verify-deployment` passed all 7 at the built SHA,
+and both movable + immutable image tags for `6645949` were pushed to Docker Hub. Production still on
+`1da6c7e` — `promote.sh 6645949` is the next deploy step, Bala's call on timing.
 
-**Close-out:** `pnpm register:check` green — **203 rows, Open 110, Resolved 93** (F-225 Resolved row
-added; F-224 stays Open pending F-220's close-out). `pnpm diagram:verify` green (no tagged FLOW node
-touched). **[[F-220]]'s own register row and the `pending-findings.md` UI-only follow-ups entry are
-still NOT written** — deferred to the end of §3 (§3.3 + §3.4 remain). This batch row is the record
-that §3.1–§3.2 + F-224 + F-225 reached `main`.
+**Close-out:** `pnpm register:check` green — **203 rows, Open 109, Resolved 94** (F-224 and F-225
+both Resolved this batch; total row count unchanged — F-224's row was moved from Open, not added).
+`pnpm diagram:verify` green (no tagged FLOW node touched). **[[F-220]]'s own register row and the
+`pending-findings.md` UI-only follow-ups entry are still NOT written** — deferred to the end of §3
+(§3.3 + §3.4 remain). This batch row is the record that §3.1–§3.2 + F-224 + F-225 reached `main`.
 
 ## Queued, not yet batched
 
