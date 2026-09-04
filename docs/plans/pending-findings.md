@@ -916,3 +916,79 @@ Confirmed: 4 Sep 2026 (Bala, standing in for Chief per Chief's own already-given
 resolution in this Project's `chief-handover-slice2-guest-member-findings.md` — that
 confirmation was real but never landed in this file; this entry lands it. Both of Chief's review
 corrections re-verified against real `main` before being folded in — see Description.)
+
+### authorized-guest-courts-real-enforcement
+Batch: F-220 §3.1 (Authorized Guest Courts)
+Surfaced: 4 Sep 2026
+Description: §3.1's per-court guest-eligibility toggles are UI-only by design (confirmed
+directly: `AuthorizedCourts.tsx` is `useState` only, no `mutate`/`api.patch`/`api.post` calls
+anywhere in the file; `Resource` has no guest-eligibility column — `schema.prisma`'s `Resource`
+model has none). This was flagged as an open product question from the original F-220 v2 plan
+onward, not a bug: does per-court guest eligibility even make sense when a `POOLED` pool's
+courts are assigned automatically ([[F-205]]) and are interchangeable by design?
+
+**Real business need confirmed directly with Bala, 4 Sep 2026: yes — real enforcement, not just
+visibility.** Some courts (reserved for members/coaching) must never be offered to a guest
+booking at all, not merely "shown as preferred."
+
+**Real technical grounding, investigated directly against `f220-guest-management` before this
+was scoped (not assumed):** [[F-205]]'s `assignPooledCourt(pool, activeBookings)`
+(`services/slot-engine/src/index.ts:116-138`) is the one function that decides which real
+`Resource` a `POOLED` booking gets. It has two real correctness traps that make this bigger than
+"add a schema field + a route" if implemented naively:
+
+1. **The `ordered.length === pool.capacity` check governs whether real-court assignment happens
+   at all** (`:121`) — if the excluded court is simply filtered out of the resource list before
+   calling `assignPooledCourt`, that count check fails for the *whole pool*, and every guest
+   booking silently falls back to the pre-F-205 cosmetic-index-only path (`resourceId: null`,
+   `:130-136`) — not just the excluded court. F-205's real-court assignment would quietly stop
+   working for that pool's entire guest traffic, not just steer around the reserved court.
+2. **`courtSlotIndex` is derived from a resource's position in the full, unfiltered
+   `createdAt`-ordered list** (`free + 1`, `:123-126`) — the doc comment at `:104-109` is explicit
+   that this position is forced to agree with the real "Court N" numbering. Filtering the list
+   before it reaches `assignPooledCourt` would shift every later court's computed index, so a
+   guest could be told "Court 2" while actually holding the resource that is really "Court 3."
+
+**Correct shape, grounded in the existing code rather than invented:** `assignPooledCourt`'s
+`findIndex` predicate (`:123`, `!taken.has(r.id)`) gains a second, guest-only condition
+(`&& (opts?.guestOnly ? r.guestBookable !== false : true)`, or equivalent) — applied while
+iterating the *full* `ordered` array, so position/numbering and the resource-completeness check
+both stay correct. The guest call site (`:2972`) passes `{ guestOnly: true }`; the member call
+site (`:3222`) passes nothing — a court "reserved for members" must still be assignable to
+members, so the member path is deliberately unfiltered, mirroring exactly how [[F-224]]'s
+`resolvePrice` change kept its member call site untouched via an optional param.
+
+**One real edge case, documented rather than silently resolved:** the guest booking-acceptance
+capacity check (`activeCount >= w.capacity`, `:2925`) is intentionally untouched by this — it
+still governs against the pool's *full* capacity, not the guest-eligible subset. On a fully
+booked pool with one court excluded, the last accepted guest booking would fall back to
+`resourceId: null` (the same pre-existing, explicitly-harmless fallback `assignPooledCourt`
+already uses today — not a rejection, not a new failure mode). Matches this codebase's existing,
+documented stance on capacity-sharing edge cases (see [[F-184]]'s own "documented, not solved in
+code" note for the same class of question) — flagging so it isn't silently assumed away, not
+proposing to solve it here.
+
+**Scope, once resolved:** one nullable/defaulted column (`Resource.guestBookable Boolean?`, or
+equivalent — absence/`null`/`true` = guest-bookable, `false` = excluded), a gated write route
+(owner-only + `GUEST_BOOKING`-entitled, same pattern as [[F-224]]'s `guest-pricing` route,
+likely also `tenant-management` since `Resource` writes should be checked against the same
+"where do writes to this table already live" discipline [[F-224]]'s review applied), the
+`assignPooledCourt` change above, and wiring `AuthorizedCourts.tsx`'s already-built toggle UI
+(currently local `useState`) to a real save — the frontend interaction pattern (a single batched
+"Save" for the section, live "N of M" count, no per-toggle auto-save, no confirm dialog since
+it's a reversible toggle) was already proposed and is sound.
+
+Reviewed by Chief directly against `f220-guest-management`, 4 Sep 2026: PATCH route confirmed
+real and in `tenant-management` (not `slot-engine`); peak-window matching confirmed using
+`branchMinutesOfDay`, not an ad-hoc comparison; member call site confirmed untouched — all three
+F-224 sign-off conditions independently re-verified as honored. This finding's technical shape
+confirmed sound: `Resource` has no eligibility column today (re-confirmed); the proposed
+in-loop-filter fix (not pre-filtering the array) correctly avoids both the whole-pool
+real-assignment regression and the "Court N" numbering desync. `AuthorizedCourts.tsx` being
+`useState`-only, which Chief could not check directly, independently re-confirmed by Technical
+Lead against the real file (`apps/admin-v2/src/screens/guestManagement/sections/AuthorizedCourts.tsx`):
+`useState<Record<string, boolean>>({})`, zero `mutate`/`api.patch`/`api.post` calls. Cited line
+numbers for `assignPooledCourt` have drifted a few lines from other work landing on the branch
+since this was written — described behavior unaffected, only the exact pointers.
+Confirmed-ID: F-225
+Confirmed: 4 Sep 2026
