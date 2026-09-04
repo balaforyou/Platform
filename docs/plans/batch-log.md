@@ -1380,6 +1380,76 @@ re-verification of every slice against the real branch (ancestry, full diffs, fr
 deferred to the end of §2+§3 per the TL plan; §3 (the 4 Setup Rules sections) is still to come.
 This batch row is the record that §1a–§2 reached `main`.
 
+## Batch 31 — F-220 admin-v2 §3.1–§3.2 (Setup Rules: Authorized Guest Courts + Custom Pricing Rates) + F-224 + F-225
+
+**Findings:** [[F-220]] — **still Open** (§3.3 Cancellation & Refund Policy and §3.4 Dynamic Guest
+Scheduler still to come; its own register row + full close-out stay deferred to the end of §3).
+[[F-224]] — register row (Open) + `pending-findings.md` landed when Chief confirmed it (`4551fcc`);
+**delivered this batch**, row stays Open pending F-220's close-out. [[F-225]] — `pending-findings.md`
+(`b56c3d8`), then a **Resolved** register row this batch (`95148bf`).
+**Handed off:** 4 Sep 2026 (Technical Lead thread — `Technical lead plan f220 v2 guest management branch settings.md`)
+**Status:** merged to `main`
+**Branch/PR:** `f220-guest-management` (kept, not deleted — TL verification cites per-slice SHAs)
+→ PR #16, **Squash and merged** (`6645949`). A `git merge -s ours origin/main` (`38bbcc3`) was
+recorded on the branch first to clear the post-#15 squash-merge orphan conflict — tree unchanged
+(`git diff HEAD~1 HEAD` empty), every cited slice SHA preserved.
+
+Slices, each independently TL-verified + Bala-signed-off before the next:
+
+- **§3.1** (`2fae8c3`→`2c5462a`) — Authorized Guest Courts, the first real Setup Rules section:
+  tile grid, tri-state master select-all, bounded scroll box (`.agc-*` in `styles.css`).
+  `usePools` already returned `resources`; typed + rendered here. Landed UI-only first (no backend
+  field existed), plus a circle-visibility device-test fix.
+- **F-224 backend** (`729ecde`) — guest-only Standard/Peak pricing. `Branch.guestStandardRate` /
+  `guestPeakRate` (`Decimal(10,2)?`) + `guestPeakWindows` (`Json?`, `{start,end}` array, reusing the
+  `cancellationPolicyJson` structured-list-in-one-column precedent). New owner-only +
+  `GUEST_BOOKING`-gated `PATCH /branches/:id/guest-pricing` in **tenant-management** (where `Branch`
+  writes live; local `requireModuleEntitlement` wrapper around shared
+  `resolveEntitlementState`/`entitlementAllows`). `resolvePrice`'s guest call site (`:2890`) only
+  gains: `window.price` → (branch-local start in any `guestPeakWindows` via `branchMinutesOfDay` ∧
+  `guestPeakRate` set ? peak : standard) → `pool.defaultRate`. Member call site untouched (optional
+  4th param). Migration `20260904120000`. +1 slot-engine regression section, +2 tenant-management
+  (`guest-pricing.regression.ts` — gate matrix + validation matrix).
+- **F-224 frontend** (`4e837cb`) — `PricingRates.tsx`: repeatable peak-window rows (`TimeField`,
+  `minuteStep=5`, live overlap/duplicate errors), Standard/Peak rate pair (Peak "— required" once a
+  window exists), Banner feedback, owner-gated. Reusable `nonNegativeAmount` / `validateTimeWindows`
+  zod helpers.
+- **§3.2 polish** (`1afa465`, `7bc2de1`) — "Add peak window" no longer flashes a validation error:
+  the new row defaults to a clean non-colliding slot after the latest window (minutes preserved),
+  and a duplicate/overlap error shows only on the later row.
+- **F-225 backend** (`0e1ab42`) — Authorized Guest Courts real enforcement.
+  `Resource.guestBookable Boolean @default(false)` via a **two-step migration** (`20260904150000`):
+  `ADD COLUMN … DEFAULT true` backfills every existing row ([[F-205]]'s live JBC real-court
+  assignment preserved — a bare `DEFAULT false` would regress it branch-wide), then
+  `SET DEFAULT false` (new courts opt-in). `assignPooledCourt` gains `opts: { guestOnly? }` — the
+  skip is applied **inside** the `findIndex` over the full list, so the `ordered.length === capacity`
+  gate and `courtSlotIndex` "Court N" numbering stay correct. Guest self-service (`POST /bookings`)
+  filters; negotiated + member auto-booking do not. New owner-only (`requireOwnerOrInternal`) +
+  `GUEST_BOOKING`-gated `PATCH /resource-pools/:id/guest-court-eligibility` in slot-engine (where
+  `Resource` writes live). +4 slot-engine regression sections; existing F-205 sections updated to
+  authorize their post-migration test-created courts.
+- **F-225 frontend** (`2396570`) — `AuthorizedCourts.tsx`: seeds from real `guestBookable`, one
+  batched Save (no per-toggle auto-save), Banner feedback, owner-gated, `LoadingState`→`Spinner`.
+- **F-225 docs** (`95148bf`) — Resolved register row (commits + evidence).
+
+**Evidence:** per-slice — typecheck + `vite build` + `eslint` clean (8 pre-existing warnings, none
+new); **full 5-service regression green** — slot-engine **74/74**, tenant-management **11/11**,
+identity-auth 7/7, payment 12/12, notification 7/7. Both migrations applied to `badminton_db` +
+`badminton_db_test`; F-225's backfill verified on real data (all 18 existing `Resource` rows →
+`true`, column default `false`). Live-fire on the dev stack against real JBC (`badminton_db`) every
+slice — guest-pricing PATCH + DB read-back + the peak/standard/override/defaultRate price chain;
+F-225 court exclusion end-to-end (guest booking skips the excluded court with `courtSlotIndex`
+synced to real position, negotiated still reaches it, `resourceId:null` graceful fallback), UI save
+persistence across a full page reload, dark mode, 375px no-horizontal-scroll. TL independent
+re-verification of every slice against the real branch. Post-merge CI (`checks` + `regression` +
+`integration`) on `main`, run 33870563828.
+
+**Close-out:** `pnpm register:check` green — **203 rows, Open 110, Resolved 93** (F-225 Resolved row
+added; F-224 stays Open pending F-220's close-out). `pnpm diagram:verify` green (no tagged FLOW node
+touched). **[[F-220]]'s own register row and the `pending-findings.md` UI-only follow-ups entry are
+still NOT written** — deferred to the end of §3 (§3.3 + §3.4 remain). This batch row is the record
+that §3.1–§3.2 + F-224 + F-225 reached `main`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
