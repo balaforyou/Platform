@@ -19,6 +19,14 @@ export type BookingRule = {
   lowOccupancyThresholdPct: number;
 };
 
+/** F-220 §3.1: the courts in a pool. `GET /branches/:id/resource-pools` already returns these
+ *  (`include: { resources: true }` on the slot-engine route) — they just weren't typed or
+ *  rendered until Authorized Guest Courts needed them. */
+export type Resource = {
+  id: string;
+  name: string;
+};
+
 export type ResourcePool = {
   id: string;
   tenantId: string;
@@ -31,6 +39,7 @@ export type ResourcePool = {
   pricingMode: 'FLAT' | 'PER_PERSON';
   defaultRate: string;
   bookingRules?: BookingRule[];
+  resources?: Resource[];
 };
 
 export type AvailabilitySlot = {

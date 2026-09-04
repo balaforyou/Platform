@@ -392,3 +392,84 @@ body {
   outline: 2px solid var(--av2-ring);
   outline-offset: 2px;
 }
+
+/* F-220 §3.1: Authorized Guest Courts (guestManagement/sections/AuthorizedCourts.tsx).
+   Screen components are otherwise inline-styled; this block exists only for what inline styles
+   can't do — the responsive tile density (real 767px breakpoint, same as .av2-shell), the
+   bounded-scroll box's per-breakpoint max-height, and the hidden scrollbar (same technique as
+   .av2-timewheel). Everything token-based, adapts to both themes. */
+.agc-header-row { display: flex; align-items: flex-start; gap: var(--av2-space-3); }
+.agc-header-text { flex: 1; min-width: 0; }
+.agc-sub-row { display: flex; align-items: center; gap: var(--av2-space-2); flex-wrap: wrap; margin-top: 2px; }
+.agc-summary { font-size: var(--av2-text-sm); color: var(--av2-muted); margin: 0; }
+
+.agc-master {
+  flex: none; width: 36px; height: 36px; margin: -4px -4px 0 0; border-radius: var(--av2-radius-sm);
+  border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.agc-master:disabled { opacity: 0.5; cursor: not-allowed; }
+.agc-master-box {
+  width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--av2-border); background: var(--av2-surface);
+  display: flex; align-items: center; justify-content: center; color: var(--av2-accent-fg);
+  transition: background var(--av2-duration-fast) var(--av2-ease-standard), border-color var(--av2-duration-fast) var(--av2-ease-standard);
+}
+.agc-master.indeterminate .agc-master-box,
+.agc-master.checked .agc-master-box { background: var(--av2-accent); border-color: var(--av2-accent); }
+.agc-master:focus-visible .agc-master-box { outline: 2px solid var(--av2-ring); outline-offset: 2px; }
+
+.agc-pool-label {
+  font-size: var(--av2-text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--av2-muted); margin: var(--av2-space-3) 0 var(--av2-space-2); grid-column: 1 / -1;
+}
+.agc-pool-label:first-child { margin-top: 0; }
+
+.agc-scroll {
+  position: relative; max-height: 176px; overflow-y: auto;
+  margin: var(--av2-space-3) calc(var(--av2-space-1) * -1) 0; padding: 0 var(--av2-space-1);
+  scrollbar-width: none; -ms-overflow-style: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent);
+}
+.agc-scroll::-webkit-scrollbar { display: none; }
+.agc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--av2-space-2); padding: var(--av2-space-1) 0; }
+
+.agc-tile {
+  text-align: left; cursor: pointer; border-radius: var(--av2-radius-sm);
+  border: 1.5px solid var(--av2-border); background: var(--av2-surface); padding: 8px 10px;
+  display: grid; gap: 1px; min-width: 0;
+  transition: background var(--av2-duration-fast) var(--av2-ease-standard), border-color var(--av2-duration-fast) var(--av2-ease-standard);
+}
+.agc-tile.active { background: var(--av2-accent-soft); border-color: var(--av2-accent); }
+.agc-tile:focus-visible { outline: 2px solid var(--av2-ring); outline-offset: 2px; }
+.agc-tile-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.agc-tile-name { font-size: 13px; font-weight: 700; color: var(--av2-text); }
+.agc-tile-status { font-size: 10.5px; font-weight: 600; color: var(--av2-muted); }
+.agc-tile.active .agc-tile-status { color: var(--av2-accent-hover); }
+.agc-tile-circle {
+  flex: none; width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--av2-border);
+  background: var(--av2-surface); display: flex; align-items: center; justify-content: center; color: var(--av2-accent-fg);
+}
+.agc-tile.active .agc-tile-circle { background: var(--av2-accent); border-color: var(--av2-accent); }
+
+@media (min-width: 768px) {
+  .agc-scroll { max-height: 232px; }
+  .agc-grid { gap: var(--av2-space-3); }
+  .agc-tile { padding: var(--av2-space-3); gap: 2px; }
+  .agc-tile-name { font-size: var(--av2-text-base); }
+  .agc-tile-status { font-size: var(--av2-text-xs); }
+  .agc-tile-circle { width: 17px; height: 17px; }
+}
+
+.agc-footnote { font-size: var(--av2-text-xs); color: var(--av2-muted); line-height: 1.5; margin-top: var(--av2-space-4); }
+.agc-savebar {
+  margin-top: var(--av2-space-4); width: 100%; text-align: center; padding: var(--av2-space-3);
+  border-radius: var(--av2-radius-sm); border: 1px dashed var(--av2-border); background: var(--av2-surface-alt);
+  font-size: var(--av2-text-sm); font-weight: 700; color: var(--av2-muted); cursor: not-allowed;
+}
+.agc-savebar b { color: var(--av2-text); }
+
+.setup-rules-next {
+  background: var(--av2-surface-alt); border: 1px dashed var(--av2-border); border-radius: var(--av2-radius-sm);
+  padding: var(--av2-space-3) var(--av2-space-4); font-size: var(--av2-text-xs); color: var(--av2-muted); line-height: 1.6;
+}
+.setup-rules-next b { color: var(--av2-text); }
