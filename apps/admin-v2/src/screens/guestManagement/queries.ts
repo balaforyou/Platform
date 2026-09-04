@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAdminApi } from '../../lib/useAdminApi';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { useAdminTenant } from '../../auth/AdminTenantContext';
@@ -62,6 +62,27 @@ export function useAvailability(poolId?: string, date?: string) {
     queryKey: ['court-groups', 'availability', poolId, date],
     enabled: !!poolId && !!date,
     queryFn: () => api.get<AvailabilitySlot[]>(`/slot-engine/resource-pools/${poolId}/availability?date=${date}`),
+  });
+}
+
+/**
+ * F-220 §3.2 / F-224 — save branch-wide guest Standard/Peak pricing. Partial update: pass only
+ * the fields a given Save button owns (the Peak Hours block and the Rates block save
+ * independently). Owner-only + GUEST_BOOKING-gated server-side (`tenant-management`).
+ */
+export function useSaveGuestPricing(branchId?: string) {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  const { tenant } = useAdminTenant();
+  return useMutation({
+    mutationFn: (body: {
+      guestStandardRate?: number;
+      guestPeakRate?: number | null;
+      guestPeakWindows?: { start: string; end: string }[];
+    }) => api.patch<Branch>(`/tenant/branches/${branchId}/guest-pricing`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: courtGroupsKeys.branches(tenant?.id) });
+    },
   });
 }
 

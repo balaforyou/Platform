@@ -3,6 +3,9 @@
  * admin-web's `main.tsx`. Response fields only — request bodies are typed by the zod schemas.
  */
 
+/** F-220 §3.2 / F-224: a branch-wide guest peak-pricing window, branch-local HH:mm. */
+export type GuestPeakWindow = { start: string; end: string };
+
 export type Branch = {
   id: string;
   name: string;
@@ -10,6 +13,11 @@ export type Branch = {
   workingDays?: string[];
   workingHoursStart?: string | null;
   workingHoursEnd?: string | null;
+  // F-224: guest-only Standard/Peak court pricing. Decimals serialise as strings in the API
+  // envelope. Null / absent = no guest rate configured (flat-rate on pool.defaultRate).
+  guestStandardRate?: string | null;
+  guestPeakRate?: string | null;
+  guestPeakWindows?: GuestPeakWindow[] | null;
 };
 
 export type BookingRule = {

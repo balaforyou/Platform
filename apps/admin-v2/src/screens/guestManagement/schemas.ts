@@ -61,3 +61,65 @@ export const overrideSchema = z.object({
   price: z.coerce.number().min(0).optional(),
   reason: z.string().optional(),
 });
+
+/* -------------------------------------------------------------------------- */
+/* F-220 §3.2 / F-224 — guest-only Standard/Peak pricing                       */
+/* -------------------------------------------------------------------------- */
+
+const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * A reusable non-negative amount validator with a readable, field-named message — the shared
+ * form of the `z.coerce.number().min(0)` idiom `poolSchema.defaultRate` already uses.
+ * `z.coerce.number()` already rejects non-numeric input (coerces via Number(), then the NaN
+ * check fails it); this just names the field in both messages.
+ */
+export const nonNegativeAmount = (label: string) =>
+  z.coerce
+    .number({ invalid_type_error: `${label} must be a number` })
+    .min(0, `${label} can't be negative`);
+
+export type TimeWindow = { start: string; end: string };
+
+/**
+ * Generic (not pricing-specific): validate a list of `{ start, end }` HH:mm windows. Returns
+ * one message per row, `''` when that row is fine — per-row HH:mm shape + `start < end`, then a
+ * pairwise pass for exact duplicates and interval overlaps. Mirrors the server's own check in
+ * `tenant-management`'s `PATCH /branches/:id/guest-pricing`.
+ */
+export function validateTimeWindows(windows: TimeWindow[]): string[] {
+  return windows.map((w, i) => {
+    if (!HHMM_RE.test(w.start) || !HHMM_RE.test(w.end)) return 'Enter a valid start and end time.';
+    if (w.start >= w.end) return 'End time must be after start time.';
+    for (let j = 0; j < windows.length; j++) {
+      if (i === j) continue;
+      const o = windows[j];
+      if (w.start === o.start && w.end === o.end) return 'Same as another peak window.';
+      if (w.start < o.end && o.start < w.end) return 'Overlaps another peak window.';
+    }
+    return '';
+  });
+}
+
+/**
+ * The guest-pricing form. `guestPeakRate` is required only once at least one peak window
+ * exists; with no windows a branch is flat-rate on `guestStandardRate` alone.
+ */
+export const guestPricingSchema = z
+  .object({
+    guestStandardRate: nonNegativeAmount('Standard Rate'),
+    guestPeakRate: nonNegativeAmount('Peak Rate').optional(),
+    guestPeakWindows: z.array(z.object({ start: z.string(), end: z.string() })),
+  })
+  .superRefine((v, ctx) => {
+    if (v.guestPeakWindows.length > 0 && (v.guestPeakRate === undefined || Number.isNaN(v.guestPeakRate))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['guestPeakRate'],
+        message: 'Set a peak rate — you have peak hours configured.',
+      });
+    }
+    if (validateTimeWindows(v.guestPeakWindows).some((e) => e)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['guestPeakWindows'], message: 'Fix the peak hours before saving.' });
+    }
+  });
