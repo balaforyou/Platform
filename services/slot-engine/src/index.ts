@@ -114,8 +114,13 @@ function formatHHMM(date: Date, timeZone: string): string {
  * fallback path is unchanged from today's behaviour.
  */
 function assignPooledCourt(
-  pool: { capacity: number; resources: { id: string; createdAt: Date }[] },
+  pool: { capacity: number; resources: { id: string; createdAt: Date; guestBookable?: boolean }[] },
   activeBookings: { courtSlotIndex: number | null; resourceId: string | null }[],
+  // F-225: when guestOnly, skip a court not authorised for walk-in guest bookings
+  // (`guestBookable === false`). Applied INSIDE the findIndex over the full ordered list — never
+  // by pre-filtering `pool.resources`, which would break the `ordered.length === pool.capacity`
+  // completeness gate for the whole pool and desync `courtSlotIndex` from the real "Court N".
+  opts?: { guestOnly?: boolean },
 ): { resourceId: string | null; courtSlotIndex: number | null } {
   const ordered = [...pool.resources].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
@@ -123,7 +128,9 @@ function assignPooledCourt(
     const taken = new Set(
       activeBookings.map((b) => b.resourceId).filter((v): v is string => v !== null),
     );
-    const free = ordered.findIndex((r) => !taken.has(r.id));
+    const free = ordered.findIndex(
+      (r) => !taken.has(r.id) && (opts?.guestOnly ? r.guestBookable === true : true),
+    );
     if (free !== -1) {
       return { resourceId: ordered[free].id, courtSlotIndex: free + 1 };
     }
@@ -222,6 +229,19 @@ const isAuthorizedForBranch = (auth: AdminAuthContext, branchId: string): boolea
   auth.roles.includes('owner') ||
   auth.roles.includes(`branch_manager:${branchId}`)
 );
+
+// F-225: owner-tier gate for a slot-engine route (the internal-key/platform caller bypasses, same
+// precedent as isAuthorizedForBranch). Mirrors tenant-management's verifyTenantOwnerOrInternal
+// for a `Resource` write that must be owner-only, not branch_manager — distinct from
+// requirePoolScope, which permits branch_manager. Compose after getInternalOrAdminAuth.
+const requireOwnerOrInternal = (auth: AdminAuthContext, reply: any) => {
+  if (auth.isInternal || auth.roles.includes('owner')) return;
+  reply.status(403);
+  const err = new Error('Forbidden: Owner privilege required');
+  (err as any).statusCode = 403;
+  (err as any).code = 'FORBIDDEN';
+  throw err;
+};
 
 // WHY: A branch-manager role is scoped to one branch. Resource-pool admin routes
 // must check the pool's branchId server-side instead of trusting client filters.
@@ -1402,6 +1422,53 @@ server.post('/resource-pools/:id/resources', async (request, reply) => {
     },
   });
   return resource;
+});
+
+// F-225: which of a pool's courts a walk-in guest booking may be assigned. Whole-pool replace —
+// the body's `authorizedResourceIds` become guestBookable:true, every other court in the pool
+// guestBookable:false. Owner-only (verifyTenantOwnerOrInternal's slot-engine equivalent) +
+// GUEST_BOOKING-gated. Only the guest self-service booking path reads guestBookable; the
+// admin/negotiated and member paths ignore it.
+server.patch('/resource-pools/:id/guest-court-eligibility', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  requireOwnerOrInternal(auth, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
+  const { id } = request.params as any;
+  const pool = await requirePoolScope(auth, id, reply);
+
+  const { authorizedResourceIds } = (request.body ?? {}) as any;
+  if (!Array.isArray(authorizedResourceIds) || authorizedResourceIds.some((x) => typeof x !== 'string')) {
+    reply.status(400);
+    const err = new Error('authorizedResourceIds must be an array of resource ids');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  const poolResourceIds = new Set(pool.resources.map((r) => r.id));
+  const unknown = authorizedResourceIds.find((rid: string) => !poolResourceIds.has(rid));
+  if (unknown) {
+    reply.status(400);
+    const err = new Error(`Resource ${unknown} does not belong to this pool`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_RESOURCE';
+    throw err;
+  }
+
+  const authorized = new Set<string>(authorizedResourceIds);
+  const toEnable = pool.resources.filter((r) => authorized.has(r.id)).map((r) => r.id);
+  const toDisable = pool.resources.filter((r) => !authorized.has(r.id)).map((r) => r.id);
+
+  await prisma.$transaction([
+    prisma.resource.updateMany({ where: { id: { in: toEnable } }, data: { guestBookable: true } }),
+    prisma.resource.updateMany({ where: { id: { in: toDisable } }, data: { guestBookable: false } }),
+  ]);
+
+  const resources = await prisma.resource.findMany({
+    where: { resourcePoolId: id },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true, guestBookable: true },
+  });
+  return { resources };
 });
 
 // Add Availability Windows to a pool.
@@ -2955,6 +3022,8 @@ server.post('/bookings', async (request, reply) => {
       // pool has no usable Resource list, assignPooledCourt falls back to F-186's original
       // occupancy-scan index with resourceId null. Neither is a rejection reason — the
       // capacity check above (step 7) already independently governs validity.
+      // F-225: this is the guest self-service path, so pass { guestOnly: true } — a court an
+      // owner hasn't authorised for guests is skipped here (but not on the negotiated path below).
       let courtSlotIndex: number | null = null;
       let pooledResourceId: string | null = null;
       if (pool.allocationMode === AllocationMode.POOLED) {
@@ -2969,7 +3038,7 @@ server.post('/bookings', async (request, reply) => {
           });
           active.push(...rows);
         }
-        const assigned = assignPooledCourt(pool, active);
+        const assigned = assignPooledCourt(pool, active, { guestOnly: true });
         pooledResourceId = assigned.resourceId;
         courtSlotIndex = assigned.courtSlotIndex;
       }
@@ -3209,6 +3278,8 @@ server.post('/bookings/negotiated', async (request, reply) => {
       // vice versa. assignPooledCourt picks a real Resource + a matching courtSlotIndex,
       // or falls back to F-186's occupancy-scan index (resourceId null) for a pool with no
       // usable Resource list.
+      // F-225: NO { guestOnly } here — this is the admin/negotiated path. A court reserved from
+      // walk-in guests must still be assignable by an admin acting for a member.
       let courtSlotIndex: number | null = null;
       let pooledResourceId: string | null = null;
       if (pool.allocationMode === AllocationMode.POOLED) {

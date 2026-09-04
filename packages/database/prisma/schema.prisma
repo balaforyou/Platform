@@ -191,6 +191,12 @@ model Resource {
   resourcePoolId      String
   resourcePool        ResourcePool         @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
   name                String
+  // F-225: whether walk-in guest bookings may be assigned this court. Opt-in for new courts
+  // (@default(false)); the F-225 migration backfills every pre-existing row to true so F-205's
+  // live real-court assignment is preserved. Only the guest self-service booking path filters
+  // on this — admin/negotiated and member paths ignore it. Never a booking-rejection reason:
+  // a pool with no guest-authorized court free falls back to assignPooledCourt's resourceId:null.
+  guestBookable       Boolean              @default(false)
   availabilityWindows AvailabilityWindow[]
   bookings            Booking[]
   blockedWindows      BlockedWindow[]

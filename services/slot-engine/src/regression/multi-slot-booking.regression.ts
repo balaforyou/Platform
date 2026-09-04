@@ -623,6 +623,12 @@ export const multiSlotBookingSections: Section<SlotEngineContext>[] = [
         });
         courts.push(((await r.json()) as any).data);
       }
+      // F-225: courts default guestBookable:false — authorize them so this guest-path booking
+      // exercises F-205's real-court assignment, not the resourceId:null fallback.
+      await db.resource.updateMany({
+        where: { id: { in: courts.map((c) => c.id) } },
+        data: { guestBookable: true },
+      });
 
       const userId = 'f205-multi-user';
       const createRes = await inspect(
