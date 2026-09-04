@@ -409,7 +409,7 @@ body {
 }
 .agc-master:disabled { opacity: 0.5; cursor: not-allowed; }
 .agc-master-box {
-  width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--av2-border); background: var(--av2-surface);
+  width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--av2-muted); background: var(--av2-surface);
   display: flex; align-items: center; justify-content: center; color: var(--av2-accent-fg);
   transition: background var(--av2-duration-fast) var(--av2-ease-standard), border-color var(--av2-duration-fast) var(--av2-ease-standard);
 }
@@ -445,9 +445,12 @@ body {
 .agc-tile-name { font-size: 13px; font-weight: 700; color: var(--av2-text); }
 .agc-tile-status { font-size: 10.5px; font-weight: 600; color: var(--av2-muted); }
 .agc-tile.active .agc-tile-status { color: var(--av2-accent-hover); }
+/* Inactive circle: a visible grey-ringed disc, not a faint outline on white — end users
+   couldn't see the empty state on a real device (Bala, 4 Sep). Active = accent-filled + check. */
 .agc-tile-circle {
-  flex: none; width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--av2-border);
-  background: var(--av2-surface); display: flex; align-items: center; justify-content: center; color: var(--av2-accent-fg);
+  flex: none; width: 17px; height: 17px; border-radius: 50%; border: 2px solid var(--av2-muted);
+  background: var(--av2-surface-alt); display: flex; align-items: center; justify-content: center; color: var(--av2-accent-fg);
+  transition: background var(--av2-duration-fast) var(--av2-ease-standard), border-color var(--av2-duration-fast) var(--av2-ease-standard);
 }
 .agc-tile.active .agc-tile-circle { background: var(--av2-accent); border-color: var(--av2-accent); }
 
@@ -457,7 +460,7 @@ body {
   .agc-tile { padding: var(--av2-space-3); gap: 2px; }
   .agc-tile-name { font-size: var(--av2-text-base); }
   .agc-tile-status { font-size: var(--av2-text-xs); }
-  .agc-tile-circle { width: 17px; height: 17px; }
+  .agc-tile-circle { width: 19px; height: 19px; }
 }
 
 .agc-footnote { font-size: var(--av2-text-xs); color: var(--av2-muted); line-height: 1.5; margin-top: var(--av2-space-4); }

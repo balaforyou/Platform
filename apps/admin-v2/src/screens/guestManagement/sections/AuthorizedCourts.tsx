@@ -100,7 +100,7 @@ export function AuthorizedCourts({ branchId }: { branchId: string }) {
                       >
                         <span className="agc-tile-top">
                           <span className="agc-tile-name">{r.name}</span>
-                          <span className="agc-tile-circle">{on ? <Check size={10} strokeWidth={3} /> : null}</span>
+                          <span className="agc-tile-circle">{on ? <Check size={11} strokeWidth={3.5} /> : null}</span>
                         </span>
                         <span className="agc-tile-status">{on ? 'Guests can book' : 'Not offered to guests'}</span>
                       </button>
