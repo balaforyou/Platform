@@ -80,6 +80,66 @@ function requireInternalKey(request: any, reply: any) {
   }
 }
 
+/**
+ * Dual-path admin auth for the walk-in identity route (F-229): a trusted internal service caller
+ * OR an owner / scoped branch_manager JWT.
+ *
+ * Modeled on payment's `requirePaymentLinkAdmin` (`services/payment/src/index.ts:704`) — the
+ * hand-off names it as the precedent — but deliberately STRICTER on the JWT path: it also
+ * requires `decoded.tenantId === bodyTenantId`, matching `GET /users/lookup`'s own tenant check
+ * rather than the payment helper's (which omits it). An admin JWT may only create a walk-in
+ * guest inside its own tenant.
+ *
+ * Returns the decoded JWT on the admin-token path, or `null` on the internal-key path (no
+ * decoded identity — the same shape `requirePaymentLinkAdmin` returns). Call BEFORE reading or
+ * normalizing the rest of the body (F-090/F-045/F-071: auth after a parse leaves a pre-auth
+ * code path reachable unauthenticated).
+ */
+async function requireWalkInAdmin(request: any, reply: any, bodyTenantId: string): Promise<any | null> {
+  const authHeader = request.headers['authorization'];
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+
+  if (authHeader === `Bearer ${internalKey}`) {
+    return null;
+  }
+  if (!authHeader) {
+    reply.status(401);
+    const err = new Error('Missing authorization header');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+
+  let decoded: any;
+  try {
+    decoded = await request.jwtVerify();
+  } catch {
+    reply.status(401);
+    const err = new Error('Invalid or expired token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+
+  const roles: string[] = decoded.roles ?? [];
+  const isAdmin = roles.includes('owner') || roles.some((r: string) => r.startsWith('branch_manager:'));
+  if (!isAdmin) {
+    reply.status(403);
+    const err = new Error('Forbidden: Owner or Branch Manager role required');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+  if (decoded.tenantId !== bodyTenantId) {
+    reply.status(403);
+    const err = new Error('Forbidden: Tenant mismatch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+  return decoded;
+}
+
 // Helper endpoint for health checks
 server.get('/health', async () => {
   // F-077: BUILD_GIT_SHA is baked in at image build; the deploy verifier compares it
@@ -137,7 +197,10 @@ server.get('/users/lookup', async (request, reply) => {
 
   const user = await prisma.user.findUnique({
     where: { phone_tenantId: { phone, tenantId } },
-    select: { id: true, phone: true, userType: true },
+    // F-229: `name` is returned so the admin walk-in / manual-booking guest lookup can show the
+    // resolved guest's name. `email` stays excluded on purpose — admin-phone-lookup.regression.ts
+    // asserts it never leaks here.
+    select: { id: true, phone: true, name: true, userType: true },
   });
   if (!user) {
     reply.status(404);
@@ -148,6 +211,87 @@ server.get('/users/lookup', async (request, reply) => {
   }
 
   return user;
+});
+
+// POST /users/walk-in — admin-assisted (no-OTP) walk-in guest identity (F-229).
+//
+// An owner / scoped branch_manager (or a trusted internal service) creates or resolves the
+// lightweight GUEST account for a guest who is physically present or on the phone. The admin is
+// the trust boundary — this account never proves phone ownership itself, so `isPhoneVerified`
+// stays false and there is no OTP exchange, no session, and no PendingInvite resolution.
+//
+// Find-or-create on the real `phone_tenantId` unique key (same pattern as `/auth/otp/verify`):
+// an existing account for that phone is returned UNCHANGED — this route never overwrites a
+// stored `name` (not its job; a name correction is a separate, deliberate action).
+server.post('/users/walk-in', async (request, reply) => {
+  const { phone: rawPhone, name: rawName, tenantId } = request.body as any;
+
+  // Auth before any parse/normalize (F-090/F-045/F-071).
+  await requireWalkInAdmin(request, reply, tenantId);
+
+  if (!rawPhone || !rawName || !tenantId) {
+    reply.status(400);
+    const err = new Error('phone, name, and tenantId are required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const name = String(rawName).trim();
+  if (name.length === 0 || name.length > 120) {
+    reply.status(400);
+    const err = new Error('name must be 1–120 characters');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_NAME';
+    throw err;
+  }
+
+  const phone = normalizePhone(rawPhone);
+  if (!/^\+91[6-9]\d{9}$/.test(phone)) {
+    reply.status(400);
+    const err = new Error('Phone must normalize to a valid 10-digit Indian mobile number');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_PHONE';
+    throw err;
+  }
+
+  const selectFields = { id: true, phone: true, name: true, userType: true } as const;
+
+  const existing = await prisma.user.findUnique({
+    where: { phone_tenantId: { phone, tenantId } },
+    select: selectFields,
+  });
+  if (existing) {
+    return { ...existing, created: false };
+  }
+
+  try {
+    const created = await prisma.user.create({
+      data: {
+        phone,
+        tenantId,
+        name,
+        userType: UserType.GUEST,
+        isPhoneVerified: false,
+      },
+      select: selectFields,
+    });
+    return { ...created, created: true };
+  } catch (e: any) {
+    // P2002: a concurrent walk-in create for the same phone+tenant (the submit button is
+    // admin-clickable twice). Re-read and return the row that won the race, unchanged — same
+    // catch-and-return-existing shape payment's createPaymentLinkForHeldBooking uses.
+    if (e?.code === 'P2002') {
+      const raced = await prisma.user.findUnique({
+        where: { phone_tenantId: { phone, tenantId } },
+        select: selectFields,
+      });
+      if (raced) {
+        return { ...raced, created: false };
+      }
+    }
+    throw e;
+  }
 });
 
 // Endpoint to request an OTP (Creates an OtpRequest record and rate-limits requests)

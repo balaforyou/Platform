@@ -9,6 +9,7 @@ import { db, setupBaseFixtures, internalKey, IdentityContext } from './_fixtures
 import { otpFlowSections } from './otp-flow.regression';
 import { jwtSessionSections } from './jwt-session.regression';
 import { adminPhoneLookupSections } from './admin-phone-lookup.regression';
+import { walkInSections } from './walk-in.regression';
 
 async function main() {
   console.log('Starting local Identity & Auth and Slot Engine servers...');
@@ -34,7 +35,7 @@ async function main() {
     // Order matters: otp-flow registers the user whose session jwt-session rotates.
     const results = await runSections<IdentityContext>(
       'identity-auth',
-      [...otpFlowSections, ...jwtSessionSections, ...adminPhoneLookupSections],
+      [...otpFlowSections, ...jwtSessionSections, ...adminPhoneLookupSections, ...walkInSections],
       context,
     );
     passed = allPassed(results);
