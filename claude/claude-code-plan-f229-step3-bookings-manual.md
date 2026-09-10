@@ -1,6 +1,11 @@
 # F-229 Step 3 — `POST /bookings/manual` (payment) — implementation plan
 
-**Status:** plan-mode, awaiting sign-off. Steps 0–2 signed off; branch `f229-manual-booking` at `478b5f8`.
+**Status:** plan-mode, rev 2 — awaiting sign-off. Steps 0–2 signed off; branch `f229-manual-booking` at `2ad29e1`.
+**Rev 2 (10 Sep 2026):** §2b Branch 2 and §5 rewritten after the reviewer caught a real bug — the first-draft
+existing-intent guard would reject a legitimate Idempotency-Key retry, and its P2002 catch could confirm a
+booking against another booking's payment intent (a reused admin-typed `upiTransactionId` → "free court").
+Fix: compute `expectedGatewayRef` before the guard, branch on identity, and verify `referenceId` in the
+P2002 catch (409 `UPI_TRANSACTION_ID_ALREADY_USED`, never confirm). §4 decisions all confirmed.
 **Scope:** the manual-booking route in the payment service — `cash`, `upi_qr`, `razorpay_link`. No UI (Step 5), no ledger route (Step 4). This is new money-handling code — the plan below is deliberately explicit about the three-way branch, the `PaymentIntent` shape, and every internal call.
 
 ---
@@ -63,54 +68,78 @@ return { booking, paymentLink, paymentMethod: 'razorpay_link' };
 Identical to `/payment-links/negotiated`'s own body — same helper calls, same status logic.
 
 **Branch 2 — `cash` and `upi_qr` (the immediate-capture sequence):**
+
+Revised after the reviewer caught a real bug in the first draft: `createHeldNegotiatedBooking` is idempotent on `Idempotency-Key`, so a legitimate retry (network timeout after the first call succeeded) returns the *same* `booking.id` and the first call's already-`captured` intent — the first-draft guard would 400 that retry immediately and never reach the P2002 path §5 expects to exercise. Worse: on the P2002 catch, a blind `findUnique({ gatewayRef })` return could hand back an intent whose `referenceId` points at a *different* booking (a reused admin-typed `upiTransactionId`), and step 5 would then confirm *this* booking against someone else's payment proof — a real "free court" path. The fix computes `expectedGatewayRef` **before** the guard and branches on identity, and the P2002 catch verifies `referenceId` before proceeding.
+
 ```
-1. const booking = await createHeldNegotiatedBooking(body, idempotencyKey, reply);   // HELD
+1. const booking = await createHeldNegotiatedBooking(body, idempotencyKey, reply);   // HELD (or, on an
+                                                                                     // Idempotency-Key retry,
+                                                                                     // the same row — possibly
+                                                                                     // already CONFIRMED)
 
-2. // guard: an intent may already exist for this booking id
-   const existing = await prisma.paymentIntent.findFirst({ where: { referenceId: booking.id } });
-   if (existing?.status === 'captured') -> 400 PAYMENT_ALREADY_CAPTURED   (same as the link path)
-   if (existing) -> 400 BOOKING_HAS_PENDING_INTENT
-        // a dangling razorpay_link intent for this booking — admin must resolve that first.
-        // Cannot happen from Step 5's UI (fresh booking per submit); only via a method switch
-        // on an Idempotency-Key retry. Flagged as a decision in §4.
-
-3. const amount = Math.round(Number(negotiatedPrice) * 100);   // verbatim from :818
-   const gatewayRef =
+2. const amount = Math.round(Number(negotiatedPrice) * 100);   // verbatim from :818
+   const expectedGatewayRef =
      paymentMethod === 'cash'
-       ? `cash_${sha256(idempotencyKey).slice(0,16)}`     // deterministic — retry-safe
-       : `upi_${upiTransactionId.trim()}`;                 // admin-entered, must be unique
+       ? `cash_${sha256(idempotencyKey).slice(0,16)}`     // deterministic — a genuine cross-booking
+                                                          // collision needs an actual key reuse
+       : `upi_${upiTransactionId.trim()}`;                // admin-typed, no crypto backing
 
-4. try {
-     intent = await prisma.paymentIntent.create({ data: {
-       tenantId: booking.tenantId ?? tenantId,
-       userId:   booking.userId ?? userId,
-       amount,
-       purpose: 'guest_booking',
-       referenceId: booking.id,
-       status: 'captured',          // directly — no webhook will ever fire (precedent :543)
-       gatewayRef,
-     }});
-   } catch P2002 {
-     // same-key retry (cash) or resubmitted UPI txn id — return the row that won
-     intent = await prisma.paymentIntent.findUnique({ where: { gatewayRef } });
-     if (!intent) throw;
+3. // an intent may already exist for this booking id
+   const existing = await prisma.paymentIntent.findFirst({ where: { referenceId: booking.id } });
+
+   if (existing && existing.gatewayRef === expectedGatewayRef && existing.status === 'captured') {
+     // SAME request being retried (same key -> same booking -> same derived ref). Not an error.
+     // Fall straight through to step 5's confirm (idempotent) and return this intent.
+     // This also self-heals §4 decision 2's HELD-but-paid window: a retry after a mid-flight
+     // 502 now recovers automatically instead of needing an admin to notice.
+     intent = existing;
+     // -> go to step 5
+   } else if (existing && existing.status === 'captured') {
+     -> 400 PAYMENT_ALREADY_CAPTURED        // gatewayRef differs — booking already paid another way
+   } else if (existing) {
+     -> 400 BOOKING_HAS_PENDING_INTENT      // dangling razorpay_link intent — admin resolves that first
+                                            // (can't arise from Step 5's UI; only a method-switch retry)
+   } else {
+     // 4. no intent yet — create it, already-captured (no webhook will ever fire; precedent :543)
+     try {
+       intent = await prisma.paymentIntent.create({ data: {
+         tenantId: booking.tenantId ?? tenantId,
+         userId:   booking.userId ?? userId,
+         amount,
+         purpose: 'guest_booking',
+         referenceId: booking.id,
+         status: 'captured',
+         gatewayRef: expectedGatewayRef,
+       }});
+     } catch P2002 {
+       // gatewayRef already exists on SOME intent. Re-read it and check whose booking it is.
+       const raced = await prisma.paymentIntent.findUnique({ where: { gatewayRef: expectedGatewayRef } });
+       if (!raced) throw;
+       if (raced.referenceId !== booking.id) {
+         -> 409 UPI_TRANSACTION_ID_ALREADY_USED   // cross-booking collision (realistically upi_qr only).
+                                                  // NEVER fall through to confirm.
+       }
+       intent = raced;   // genuine same-booking race — safe to continue
+     }
    }
 
-5. // HELD -> CONFIRMED via the EXACT call the webhook makes
+5. // HELD -> CONFIRMED via the EXACT call the webhook makes (idempotent if already CONFIRMED)
    const confirmRes = await fetch(`${slotEngine}/bookings/${booking.id}/confirm`, {
      method: 'POST',
      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
      body: JSON.stringify({}),
    });
-   if (!confirmRes.ok) -> 502, log the body   (same failure handling as the webhook, :477)
+   if (!confirmRes.ok) -> 502, log the body + intent id   (same posture as the webhook, :477)
    const confirmed = (await confirmRes.json()).data ?? ...;
 
-6. return { booking: confirmed, payment: {
+6. reply.status(201);
+   return { booking: confirmed, payment: {
      intentId: intent.id, status: intent.status, amount: intent.amount,
      gatewayRef: intent.gatewayRef, method: paymentMethod,
    }};
-   reply.status(201);
 ```
+
+`referenceId` on a `PaymentIntent` is a bare `String` (no FK), so the `raced.referenceId !== booking.id` check is a plain string compare — cheap and exact.
 
 **No new `booking.update({ status: CONFIRMED })` anywhere** — step 5 is the same internal call the real webhook uses; F-183 child cascade + non-HELD rejection + idempotency all belong to that route, not this one.
 
@@ -127,26 +156,36 @@ Identical to `/payment-links/negotiated`'s own body — same helper calls, same 
 | `PaymentIntent` schema | — | **not touched** |
 | payment regression `run.ts` | +1 section import | additive |
 
-## 4. Decisions for the reviewer
+## 4. Decisions — resolved with the reviewer
 
-1. **`cash`/`upi_qr` when a `pending` intent already exists for the booking (§2b step 2).** Proposed: **400 `BOOKING_HAS_PENDING_INTENT`** — cannot arise from Step 5's UI (each submit is a fresh booking via a fresh Idempotency-Key), only from a deliberate method-switch on a key retry. Alternative: silently supersede the pending link intent (update it in place to `captured` + new `gatewayRef`). Recommend the 400 — a switched-method retry is a real ambiguity an admin should see, not something to paper over silently, and it keeps this route from having to reason about Razorpay link cancellation.
-2. **`confirm` failure after the `captured` intent already exists (§2b step 5).** If `/bookings/:id/confirm` returns non-OK *after* we've written a `captured` `PaymentIntent`, the booking is HELD-but-paid — same window the real webhook has (`:477` throws too, leaving the intent captured). Proposed: return 502 with the intent id in the body and log loudly; the booking's 5-minute `heldUntil` means it either gets manually re-confirmed or expires and the intent is then a real refund case. This matches existing webhook behaviour rather than inventing compensation logic. Flagging, not proposing to solve it here.
-3. **Response status for `cash`/`upi_qr`:** `201` (a booking + an intent were created). `razorpay_link` keeps `/payment-links/negotiated`'s `200|201` (reused vs new).
+All three confirmed by the reviewer (10 Sep 2026), and the §2b logic above now reflects them:
+
+1. **`cash`/`upi_qr` when a *pending* intent already exists for the booking** → **400 `BOOKING_HAS_PENDING_INTENT`**, not silent supersession. Silently superseding a dangling `razorpay_link` intent does not cancel the real Razorpay link, so the guest could still pay it later and double-capture — surfacing it to the admin is the safe default.
+2. **`confirm` fails *after* the `captured` intent is written** → **502 + loud log + intent id in the body**, no compensation logic. Matches the webhook's own posture (`:477`). The §2b step-3 retry-detection branch now gives this a real self-healing path — a retried request with the same key re-runs the idempotent confirm instead of erroring.
+3. **Response status for `cash`/`upi_qr`** → **`201`**. `razorpay_link` keeps `/payment-links/negotiated`'s `200|201` (reused vs new).
+
+Plus, from the reviewer's bug catch: a **cross-booking `gatewayRef` collision** (a reused admin-typed `upiTransactionId`) → **409 `UPI_TRANSACTION_ID_ALREADY_USED`**, and the route must **never** confirm a booking against an intent whose `referenceId` is a different booking.
 
 ## 5. Verification (live-fire, before reporting back — extra rigor per the reviewer)
 
 Direct API calls against the dev stack (payment :3004, slot-engine :3001) with a **real `badminton_db` JBC pool + a fresh availability window**, internal-key path:
 
-- **`cash`:** POST → capture the response; then read the booking from slot-engine **before is impossible (already confirmed)** so instead: log the intermediate — a variant call that stops after `createHeldNegotiatedBooking` to show `status: HELD`, then the full call to show `status: CONFIRMED` + `PaymentIntent { status: 'captured', amount == round(price*100), gatewayRef ^= 'cash_' }`, all via DB read-back. **Explicitly report the before (HELD) / after (CONFIRMED) booking state around the `/bookings/:id/confirm` call**, per the reviewer's request.
-- **`upi_qr`:** same, `gatewayRef == 'upi_<the exact txn id sent>'`; then **re-POST with the same `upiTransactionId`** → no duplicate row, no 500, returns the same intent (P2002 path).
-- **`upi_qr` without `upiTransactionId`** → 400 `UPI_TRANSACTION_ID_REQUIRED`.
-- **multi-window (F-183) booking via `cash`** if a co-booking pool allows it → confirm cascade reaches the child booking (`parentBookingId` rows also `CONFIRMED`). If JBC pools can't express multi-window negotiated here, note it and cover in regression instead.
-- **`razorpay_link`:** produces a real working `plink_mock_...` + `rzp.io/l/mock-...`, `PaymentIntent status: 'pending'`, `gatewayRef ^= 'plink_mock_'` — **explicit regression check that this is unchanged from `/payment-links/negotiated`.**
-- **`/payment-links/negotiated` itself** re-run post-refactor → identical behaviour (idempotency retry → same booking + intent, member JWT → 403).
-- **auth:** non-admin JWT → 403; wrong-branch `branch_manager` → 403; no auth → 401.
-- All test bookings/intents/users deleted from `badminton_db` afterwards, `SELECT count(*) == 0` confirmed — no demo-data pollution.
+To surface the **HELD → CONFIRMED** transition around the real `/bookings/:id/confirm` call (the reviewer's explicit ask), the live-fire script issues its **own** `POST ${slotEngine}/bookings/negotiated` first (internal key, a distinct Idempotency-Key) to hold a booking, reads it back (`status: HELD`), then calls that same route directly to show `status: CONFIRMED` — proving the primitive in isolation — *and* records the `/bookings/manual` response's booking status. It does not try to observe the mid-flight HELD state inside a single `/bookings/manual` call (there's no seam to do so), it demonstrates the transition the route composes.
 
-New regression suite `services/payment/src/regression/manual-booking.regression.ts` covering all three methods + the UPI-resubmit + auth, added to `run.ts`. Then `pnpm -r build` (rebuild — suites run from `dist`), whole-repo typecheck/lint, full 5-service regression against `badminton_db_test`.
+- **`cash`:** POST `/bookings/manual` → 201; DB read-back: booking `CONFIRMED`, `PaymentIntent { status: 'captured', amount === Math.round(price*100), gatewayRef` starts `cash_`, `referenceId === booking.id }`. Separately: a standalone `/bookings/negotiated` → read `HELD` → `/bookings/:id/confirm` → read `CONFIRMED`, reported as the before/after pair.
+- **`cash` retry** (same Idempotency-Key, same body) → 201, **same `booking.id` and same `intentId`**, exactly one `PaymentIntent` row for that booking (`SELECT count(*)`), booking still `CONFIRMED` (idempotent confirm re-run, no error).
+- **`upi_qr`:** POST → 201, `gatewayRef === 'upi_<the exact txn id sent>'`, booking `CONFIRMED`.
+- **`upi_qr` resubmit, same booking** (same Idempotency-Key + same `upiTransactionId`) → 201, same `intentId`, one row — the same-booking race branch.
+- **`upi_qr` cross-booking collision:** a **second, different** booking (fresh Idempotency-Key, different window) with the **same `upiTransactionId`** → **409 `UPI_TRANSACTION_ID_ALREADY_USED`**; DB read-back: the second booking is **not** `CONFIRMED` (still `HELD`, expires on its own), and there is still exactly one `PaymentIntent` for that `upi_` ref, pointing at the first booking.
+- **`upi_qr` without `upiTransactionId`** → 400 `UPI_TRANSACTION_ID_REQUIRED`.
+- **`cash`/`upi_qr` when a `pending` link intent already exists** for the booking id → 400 `BOOKING_HAS_PENDING_INTENT`.
+- **multi-window (F-183) booking via `cash`** if a JBC pool can express it → confirm cascade reaches `parentBookingId` child rows (all `CONFIRMED`). If not expressible against real JBC data here, cover it in the regression suite instead and say so.
+- **`razorpay_link`:** produces a working `plink_mock_...` + `rzp.io/l/mock-...`, `PaymentIntent status: 'pending'`, `gatewayRef` starts `plink_mock_` — **explicit check it is unchanged from `/payment-links/negotiated`.**
+- **`/payment-links/negotiated` itself** re-run post-refactor → identical behaviour (idempotency retry → same booking + intent, member JWT → 403).
+- **auth:** non-admin JWT → 403; wrong-branch `branch_manager` → 403; no auth → 401; bad `paymentMethod` → 400.
+- All test bookings / intents / users deleted from `badminton_db` afterwards, `SELECT count(*) === 0` confirmed — no demo-data pollution.
+
+New regression suite `services/payment/src/regression/manual-booking.regression.ts` covering all three methods + the cash retry + the UPI resubmit + the cross-booking 409 + auth, added to `run.ts`. Then `pnpm -r build` (rebuild — suites run from `dist`), whole-repo typecheck/lint, full 5-service regression against `badminton_db_test`.
 
 ## 6. Commit / push / sign-off
 
