@@ -10,6 +10,9 @@ export type Branch = {
   id: string;
   name: string;
   status: string;
+  // F-229: already returned by `GET /tenants/:id/branches` (no `select` clause) — just wasn't
+  // typed. Used for branch-local time-of-day grouping and guest peak-window matching.
+  timezone?: string;
   workingDays?: string[];
   workingHoursStart?: string | null;
   workingHoursEnd?: string | null;
@@ -74,6 +77,35 @@ export type AvailabilitySlot = {
     price?: string | null;
   };
   remainingCapacity: number;
+};
+
+// F-229 Step 5 — walk-in reservation flow response shapes.
+
+/** `GET /identity/users/lookup` — 200 body (404 = no account, handled as a state, not an error). */
+export type GuestLookupResult = {
+  id: string;
+  phone: string;
+  name?: string | null;
+  userType: string;
+};
+
+/** `POST /identity/users/walk-in` — find-or-create a GUEST by phone. */
+export type WalkInResult = {
+  id: string;
+  phone: string;
+  name?: string | null;
+  userType: string;
+  created: boolean;
+};
+
+export type ManualPaymentMethod = 'cash' | 'razorpay_link' | 'upi_qr';
+
+/** `POST /payment/bookings/manual` — response varies by method. */
+export type ManualBookingResult = {
+  booking: { id: string; status: string; resourceId?: string | null; courtSlotIndex?: number | null };
+  paymentMethod?: ManualPaymentMethod;
+  payment?: { intentId: string; status: string; amount: number; gatewayRef: string; method: string };
+  paymentLink?: { paymentLinkId: string; shortUrl: string; amount: number };
 };
 
 export type AvailabilityPattern = {

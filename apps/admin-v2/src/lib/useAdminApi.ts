@@ -16,11 +16,14 @@ export function useAdminApi() {
   return useMemo(
     () => ({
       get: <T,>(path: string) => apiRequest<T>(path, { token: accessToken }),
-      post: <T,>(path: string, body?: unknown) =>
+      // `headers` is optional and additive — same shape as admin-web's own `useAdminApi.post`.
+      // F-229 needs it to pass `Idempotency-Key` to `POST /payment/bookings/manual`.
+      post: <T,>(path: string, body?: unknown, headers?: Record<string, string>) =>
         apiRequest<T>(path, {
           method: 'POST',
           token: accessToken,
           body: body === undefined ? undefined : JSON.stringify(body),
+          ...(headers ? { headers } : {}),
         }),
       patch: <T,>(path: string, body: unknown) =>
         apiRequest<T>(path, { method: 'PATCH', token: accessToken, body: JSON.stringify(body) }),

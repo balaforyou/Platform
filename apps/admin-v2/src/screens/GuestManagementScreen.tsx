@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarClock, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet } from 'lucide-react';
 import { moduleVisible, useAdminTenant } from '../auth/AdminTenantContext';
 import { Banner, EmptyState, LoadingState, Select, Tabs } from '../components';
 import { useBranches } from './guestManagement/queries';
+import { ReservationsPanel } from './guestManagement/sections/ReservationsPanel';
 import { SetupRulesPanel } from './guestManagement/SetupRulesPanel';
 
 const TABS = [
@@ -92,11 +93,11 @@ export function GuestManagementScreen() {
         <Tabs items={TABS} activeKey={tab} onChange={setTab} />
 
         {tab === 'reservations' ? (
-          <EmptyState
-            icon={<CalendarClock size={20} />}
-            title="Reservations aren’t built yet"
-            description="Walk-in bookings and manual payment recording for this branch — tracked as a future slice."
-          />
+          branchId ? (
+            <ReservationsPanel key={branchId} branchId={branchId} />
+          ) : (
+            <Banner tone="info">Select a branch to record a walk-in booking.</Banner>
+          )
         ) : (
           <SetupRulesPanel key={branchId} branchId={branchId} />
         )}
