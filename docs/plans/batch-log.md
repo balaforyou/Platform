@@ -1653,6 +1653,54 @@ the immediate re-run.)
 **No register/pending-findings/diagram change** — schema-only step, F-229 already has its Open
 row and `Confirmed-ID` from Batch 34.
 
+## Batch 36 — F-229 Step 2: `POST /users/walk-in` (identity-auth)
+
+**Findings:** [[F-229]] Step 2 of 6. Register row stays **Open / In progress**.
+
+**Change (identity-auth only):**
+- New `requireWalkInAdmin` helper — dual-path (internal key OR owner/`branch_manager:*` JWT),
+  modeled on payment's `requirePaymentLinkAdmin` (`services/payment/src/index.ts:704`) but
+  **stricter**: the JWT path also enforces `decoded.tenantId === body.tenantId`, matching
+  `GET /users/lookup`'s own tenant check (which the payment helper omits). Reviewer explicitly
+  called this out as a correct judgment call — closing a gap the precedent route has rather than
+  copying it forward.
+- New `POST /users/walk-in` `{ phone, name, tenantId }` — auth before parse (F-090/F-045/F-071),
+  `normalizePhone` + `/^\+91[6-9]\d{9}$/` reused verbatim from `/users/lookup`, find-or-create on
+  the real `phone_tenantId` key. An existing row is returned **unchanged** — the route never
+  overwrites a stored `name`. New rows: `userType: GUEST`, `isPhoneVerified: false` (the admin is
+  the trust boundary, not an OTP exchange). No session, no `PendingInvite` resolution. P2002
+  catch-and-return-existing for the admin double-click, same shape as
+  `createPaymentLinkForHeldBooking`. Returns `{ id, phone, name, userType, created }`.
+- **F-229 §4 (reviewer-approved):** `GET /users/lookup`'s `select` gains `name` so Step 5's
+  guest-lookup "found" state can show the resolved name. `email` stays excluded —
+  `admin-phone-lookup.regression.ts` still asserts it never leaks.
+- New `walk-in.regression.ts` (5 sections) wired into `run.ts`.
+
+**Blast radius:** new route + new helper, nothing existing changes except the additive `name`
+field on `/users/lookup`'s payload — its two consumers (that regression suite, which guards
+`email` not payload shape; `apps/admin-web/src/main.tsx:672`'s `UserLookupResult` type, additive)
+are both safe.
+
+**Decision record:** `claude/claude-code-plan-f229-step2-users-walk-in.md` (committed `3532e2b`),
+signed off by the reviewing thread including §4 = (A), after an independent code-level re-check of
+every citation.
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 3).
+**Status:** commit `c51eb49` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`c51eb49`).
+
+**Evidence:** live-fire against the running dev stack + real `badminton_db` JBC tenant — all
+scenarios pass (internal-key new/existing-not-overwritten with DB read-back, owner +
+`branch_manager` JWT create, wrong-tenant 403, non-admin 403, no-auth 401, bad phone / empty name
+/ missing field 400 with the right codes, `/users/lookup` returns `name` and still omits `email`).
+2 test User rows created then deleted, `SELECT count(*)` = 0 after — no demo-data pollution.
+`pnpm -r build` / `typecheck` / `lint` clean (8 pre-existing lint warnings, none new). Full
+5-service regression green against `badminton_db_test` — **identity-auth 12/12** (7 baseline + 5
+new walk-in sections), tenant-management 11/11, slot-engine 74/74, payment 12/12, notification
+7/7; clean on the first run.
+
+**No register/pending-findings/diagram change** — route-only step.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
