@@ -1458,6 +1458,84 @@ both Resolved this batch; total row count unchanged — F-224's row was moved fr
 `pending-findings.md` UI-only follow-ups entry are still NOT written** — deferred to the end of §3
 (§3.3 + §3.4 remain). This batch row is the record that §3.1–§3.2 + F-224 + F-225 reached `main`.
 
+## Batch 32 — F-220 admin-v2 §3.3 (Setup Rules: Cancellation & Refund Policy)
+
+**Findings:** [[F-220]] — **still Open** (§3.4 Dynamic Guest Scheduler still to come; its own
+register row + full close-out stay deferred to the end of §3). One new finding surfaced and logged
+**described-not-numbered** in `pending-findings.md` (`booking-rule-route-missing-owner-and-entitlement-gate`)
+— awaiting Chief's ID; **no register row this batch**.
+**Handed off:** 4 Sep 2026 (Technical Lead thread — `Technical lead plan f220 v2 guest management branch settings.md`)
+**Status:** merged to `main`
+**Branch/PR:** `f220-guest-management` (kept) → **PR #18**, Squash and merged (`55e7c54`, one commit
+above #17's `6fc02ac`). Net diff was exactly the §3.3 change — 6 files, +302/−2. This batch-log
+entry lands as a small standalone docs PR off `55e7c54` (docs-only, no code), same shape as Batch
+31's PR #17 — per standing rule 6, the batch-log entry is inseparable from the merge to `main`.
+
+Single slice, TL-verified + Bala-signed-off:
+
+- **§3.3** (`b27dab8` on the branch → squashed to `55e7c54`) — Cancellation & Refund Policy, the
+  third real Setup Rules section: a tiered guest refund schedule backed by the already-live
+  `BookingRule.cancellationPolicyJson` (`{ type:'tiered', tiers:[{min_hours_before_slot,
+  refund_percent}] }`, consumed at real cancellation time in slot-engine — tiers sorted descending,
+  first match wins, refund = `price * refund_percent / 100`). **No backend change** — the write
+  route `PUT /resource-pools/:id/booking-rule`, the consumption, and `bookingRules` on
+  `GET /branches/:id/resource-pools` all already existed; the route does no server-side tier-shape
+  validation (client owns correctness, same division as [[F-224]]'s `guestPeakWindows`).
+  - New `sections/CancellationPolicy.tsx` — mirrors `PricingRates.tsx`. Three **fixed** rows, both
+    the notice-hours threshold and the refund % editable per row (Bala's 4 Sep call — nothing
+    hardcodes 24/12/0 server-side; not an add/remove tier list). Row labels computed from the live
+    values ("Above {h1} hrs" / "{h2}–{h1} hrs" / "Below {h2} hrs"). Owner-gated (non-owner sees
+    read-only inputs + info Banner). Seeds from the pool's real rule, else slot-engine's
+    `DEFAULT_CANCELLATION_POLICY` (24/100, 6/50, 0/0) — not the mockup's `|| 0`, since the system
+    already applies that default at cancellation time before any explicit save.
+  - `queries.ts` — `useSaveCancellationPolicy`: `PUT` per pool. "Apply to every branch" =
+    tenant-wide (`useBranches` → each branch's resource-pools → PUT all), **deduped by pool id**
+    before the fan-out (`includeDraft=true` returns a draft+published row for the same branch —
+    caught live as an initial 3-PUT for JBC's 2 pools, fixed before the push). Unchecked = the
+    selected branch's pools only, from the already-loaded `usePools`.
+  - `schemas.ts` — `refundPercent` (int 0–100), `hourThreshold` (int ≥ 0),
+    `cancellationPolicySchema` (3-tuple + `superRefine`: strictly descending notice hours
+    `h1 > h2 > h3 >= 0` — the cancellation-time tier match relies on descending order). Refund %s
+    independent, no cross-row ordering. Same "catch before save, not after a 400" instinct as
+    `validateTimeWindows`.
+  - `types.ts` — `CancellationTier` / `CancellationPolicyJson`; `BookingRule.cancellationPolicyJson?`.
+  - `SetupRulesPanel.tsx` — mount the card; footer "2 more sections" → "1 more" (only §3.4 left).
+- **Finding logged** (in the same commit, `docs/plans/pending-findings.md`) —
+  `booking-rule-route-missing-owner-and-entitlement-gate`: `PUT /resource-pools/:id/booking-rule`
+  composes only `getInternalOrAdminAuth` + `requirePoolScope` (which permits `branch_manager`) —
+  **no owner check, no `GUEST_BOOKING` entitlement check**, unlike its sibling `POST /booking-rules`
+  and every other admin write route this Setup Rules screen calls ([[F-224]] `guest-pricing`,
+  [[F-225]] `guest-court-eligibility`). Same class of gap as [[F-221]] + [[F-223]] combined on one
+  route. §3.3's UI ships owner-gated regardless, so the UI never promises a non-owner an action the
+  backend should also reject. Described, not numbered — awaiting Chief's ID; resolve after §3.3
+  ships and verifies, same precedent as F-221/F-223.
+
+**Evidence:** typecheck + `vite build` + `eslint` clean (8 pre-existing warnings, none new);
+`pnpm register:check` + `pnpm diagram:verify` green. **Full 5-service regression green** — slot-engine
+**74/74**, tenant-management **11/11**, identity-auth 7/7 (showed the documented false-alarm on the
+first local full run, passed in isolation and on full re-run), payment 12/12, notification 7/7. The
+cancellation-time tier consumption this writer feeds is exercised end-to-end by the existing
+`multi-slot-booking.regression.ts` section (cancels a booking, asserts `refundAmount` computed from
+`cancellationPolicyJson`). Live-fire on the dev stack against real JBC (`badminton_db`, both
+branches, one pool each): rows seed from the real rule, computed labels, descending-order guard
+disables Save with **no API call**, single-branch save = **one PUT**, global fan-out = **exactly one
+PUT per branch pool** (dedupe re-verified live), both DB read-back correct, persists across a full
+page reload. Non-owner path verified by code against the identical proven `isOwner`/`disabled`/
+`Banner` pattern in `PricingRates.tsx` / `AuthorizedCourts.tsx` (no seeded JBC `branch_manager`;
+`badminton_db` writes are environment-blocked). TL independent re-verification against the real
+branch — signed off; the double-PUT dedupe was added and re-verified live before the push, then the
+WIP commit was reworded and force-pushed to a clean SHA (`b27dab8`).
+Post-merge CI on `main` (run `34439588329`) — `checks` + `regression` + `integration` all green;
+`integration` built the shipped 7-service stack, `verify-deployment` passed all 7 at the built SHA
+(`55e7c54`), and both movable + immutable image tags for `55e7c54` were pushed to Docker Hub.
+Production still on `1da6c7e` — `promote.sh 55e7c54` is the next deploy step, Bala's call on timing.
+
+**Close-out:** `pnpm register:check` green — **203 rows, Open 109, Resolved 94** (no register
+change this batch — the new finding is `pending-findings.md`-only, awaiting Chief's ID).
+`pnpm diagram:verify` green (no tagged FLOW node touched). **[[F-220]]'s own register row and the
+`pending-findings.md` UI-only follow-ups entry are still NOT written** — deferred to the end of §3
+(only §3.4 Dynamic Guest Scheduler remains). This batch row is the record that §3.3 reached `main`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
