@@ -12,6 +12,7 @@ import { AppsOverflowScreen } from './screens/AppsOverflowScreen';
 import { StubScreen } from './screens/StubScreen';
 import { BranchSettingsScreen } from './screens/BranchSettingsScreen';
 import { GuestManagementScreen } from './screens/GuestManagementScreen';
+import { LedgerScreen } from './screens/LedgerScreen';
 
 /**
  * Auth gate → navigated app.
@@ -60,15 +61,7 @@ export default function App() {
               />
             }
           />
-          <Route
-            path="/ledger"
-            element={
-              <StubScreen
-                title="Subscription Ledger"
-                description="Payments collected and outstanding, by member and period."
-              />
-            }
-          />
+          <Route path="/ledger" element={<LedgerScreen />} />
           <Route
             path="/inventory"
             element={

@@ -9,6 +9,7 @@ import type {
   AvailabilityPattern,
   AvailabilitySlot,
   Branch,
+  GuestLedgerRow,
   GuestLookupResult,
   ManualBookingResult,
   ManualPaymentMethod,
@@ -115,6 +116,20 @@ export function useCreateWalkIn() {
   return useMutation<WalkInResult, Error, { phone: string; name: string }>({
     mutationFn: ({ phone, name }) =>
       api.post<WalkInResult>('/identity/users/walk-in', { phone, name, tenantId: tenant?.id }),
+  });
+}
+
+/**
+ * F-229 Step 6: the pool's guest ledger — every guest booking with its payment status joined
+ * and the Cash/UPI/Link method already derived server-side (`GET /resource-pools/:id/guest-ledger`,
+ * Step 4). Owner / branch_manager, pool-scoped.
+ */
+export function useGuestLedger(poolId?: string) {
+  const api = useAdminApi();
+  return useQuery({
+    queryKey: ['guest-ledger', poolId],
+    enabled: !!poolId,
+    queryFn: () => api.get<GuestLedgerRow[]>(`/slot-engine/resource-pools/${poolId}/guest-ledger`),
   });
 }
 

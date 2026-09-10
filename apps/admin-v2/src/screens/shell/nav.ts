@@ -44,7 +44,7 @@ export interface NavDestination {
 export const NAV_DESTINATIONS: NavDestination[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/dashboard', Icon: LayoutDashboard, mobileDirect: true },
   { key: 'communications', label: 'Communications', shortLabel: 'Comms', path: '/communications', Icon: MessageSquare, mobileDirect: true },
-  { key: 'ledger', label: 'Subscription Ledger', shortLabel: 'Ledger', path: '/ledger', Icon: DollarSign, mobileDirect: true },
+  { key: 'ledger', label: 'Ledger', shortLabel: 'Ledger', path: '/ledger', Icon: DollarSign, mobileDirect: true },
   { key: 'inventory', label: 'Inventory', path: '/inventory', Icon: Package, mobileDirect: true },
   { key: 'members', label: 'Manage Members', path: '/members', Icon: Users, mobileDirect: false, module: 'MEMBER_MANAGEMENT' },
   // F-220 §2: /court-groups is a plain stub now (its real functionality moved to /guests) —

@@ -100,6 +100,28 @@ export type WalkInResult = {
 
 export type ManualPaymentMethod = 'cash' | 'razorpay_link' | 'upi_qr';
 
+/** `GET /slot-engine/resource-pools/:id/guest-ledger` row (F-229 Step 4). */
+export type LedgerMethod = 'cash' | 'upi' | 'link' | 'other';
+export type GuestLedgerRow = {
+  bookingId: string;
+  status: string;
+  date: string;
+  windowStart: string;
+  windowEnd: string;
+  guest: { id: string; name?: string | null; phone?: string | null };
+  court: string | null;
+  courtSlotIndex: number | null;
+  resourceId: string | null;
+  price: string | null;
+  payment: {
+    intentId: string;
+    amountPaise: number;
+    status: string;
+    gatewayRef: string;
+    method: LedgerMethod | null;
+  } | null;
+};
+
 /** `POST /payment/bookings/manual` — response varies by method. */
 export type ManualBookingResult = {
   booking: { id: string; status: string; resourceId?: string | null; courtSlotIndex?: number | null };
