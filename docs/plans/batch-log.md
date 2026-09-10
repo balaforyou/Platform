@@ -1960,6 +1960,28 @@ tenant-management 11/11, slot-engine 75/75, payment 19/19, notification 7/7.
 the same discovery doc §10) still needs relaying into git, and the F-207/F-209 urgency note the
 discovery doc §6 raised (this MVP's manual-toggle membership model may reduce their priority).
 
+## Batch 42 — F-229 fix: `crypto.randomUUID` on a plain-IP dev URL (Bala's mobile test)
+
+**Findings:** [[F-229]] — a fix to Step 5 code found during Bala's own mobile testing of PR #21,
+not a new finding. F-229 stays **Resolved** (the fix is part of the same PR, before merge).
+
+**Bug:** `POST /bookings/manual` from admin-v2 on a phone (`http://192.168.x.x:5175`) threw
+`crypto.randomUUID is not a function`. `crypto.randomUUID()` is defined only in a **secure
+context** (HTTPS or localhost) — over a plain-IP LAN URL it is `undefined`. It was used inline in
+`useCreateManualBooking` for the `Idempotency-Key` header (the one `crypto.randomUUID` call in
+admin-v2; `guest-member-pwa`'s `CourtBooking.tsx` has the same pattern but is out of F-229 scope
+and normally served over HTTPS).
+
+**Fix (`e5b311b`):** new `newIdempotencyKey()` helper in `reservationHelpers.ts` —
+`crypto.randomUUID()` when available, else a v4 UUID from `crypto.getRandomValues` (which is
+**not** secure-context-gated), else a `timestamp+random` string. Verified in-browser with
+`crypto.randomUUID` forced `undefined`: a `razorpay_link` booking now succeeds (`HELD` +
+`plink_mock_` intent, a valid v4 `idempotencyKey` from the fallback), no error. typecheck /
+build / lint clean.
+
+**Status:** commit `e5b311b` + this row, on `f229-manual-booking` → PR #21 (still open, not
+merged).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
