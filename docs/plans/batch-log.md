@@ -1761,6 +1761,54 @@ against `badminton_db_test` — identity-auth 12/12, tenant-management 11/11, sl
 
 **No register/pending-findings/diagram change** — route + refactor only.
 
+## Batch 38 — F-229 Step 4: `GET /resource-pools/:id/guest-ledger` (slot-engine)
+
+**Findings:** [[F-229]] Step 4 of 6. Register row stays **Open / In progress**.
+
+**New read-only route `GET /resource-pools/:id/guest-ledger` (slot-engine):**
+- Auth: `getInternalOrAdminAuth` + `requirePoolScope` — the exact gate the other pool-scoped
+  admin reads use (owner **or** `branch_manager:<pool's branch>`, 404 unknown pool, 403
+  cross-branch).
+- `where: { resourcePoolId, isMemberBooking: false, parentBookingId: null }` — F-183 child rows
+  excluded, same as `GET /bookings/admin` and `GET /bookings/my`.
+- `Booking` has no `user` relation and `PaymentIntent` has no relation to `Booking`
+  (`referenceId` is a bare string), so both are joined in memory with one extra `findMany` each.
+- `deriveLedgerMethod(gatewayRef)`: `cash_`→`cash`, `upi_`→`upi`, `plink_`/`pay_`→`link`, else
+  `other`; raw `gatewayRef` also returned. **No `method` column** (per the plan).
+- Optional `?status` (validated against `BookingStatus`, 400 on a bad value) and `?limit`
+  (default 200, capped 1–500).
+- **Pool-scoped** (`:id` = resourcePoolId) — matches `requirePoolScope` verbatim; JBC is
+  one-pool-per-branch. Branch aggregation deferred.
+
+**Blast radius:** new route + `deriveLedgerMethod` helper. slot-engine now `SELECT`s
+`prisma.paymentIntent` and `prisma.user` for the first time — additive, read-only. One shared-file
+change: `services/slot-engine/src/regression/_fixtures.ts` `cleanDatabase()` gains
+`paymentIntent` + `user` deletes (the new suite is the first to create them; both other services'
+`cleanDatabase()` already wipe them; `User` FK cascades cover `authSession`/`webAuthnCredential`).
+No schema change, no mutation, no frontend, no other service.
+
+**Decision record:** `claude/claude-code-plan-f229-step4-guest-ledger.md` (committed `e07b0db`),
+signed off by the reviewing thread with all four §4 decisions as written.
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 5).
+**Status:** commit `4056f6e` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`4056f6e`).
+
+**Evidence:** live-fire against the running dev stack + **real `badminton_db` JBC pool**
+`ba1d1433-…` — 13 checks pass. `cash` / `upi_qr` / `razorpay_link` bookings created via
+`POST /bookings/manual` (Step 3) for a walk-in guest all appear with the right derived method
+(`cash` / `upi` / `link`), `amountPaise` (30000 for ₹300), payment status (`captured` / `captured`
+/ `pending`), resolved `guest.name`/`phone`, and `court`; a directly-seeded `isMemberBooking: true`
+row is **excluded**; `?status=CONFIRMED` drops the HELD link row; `?status=NONSENSE` → 400;
+`?limit=1` caps; no-auth → 401, non-admin JWT → 403, wrong-branch `branch_manager` → 403, unknown
+pool → 404; the route's row count never exceeds a direct `SELECT`. All seeded rows deleted,
+`SELECT count(*)` = 0. `pnpm -r build` / `typecheck` / `lint` clean (8 pre-existing lint
+warnings). Full 5-service regression green against `badminton_db_test` — identity-auth 12/12,
+tenant-management 11/11, **slot-engine 75/75** (74 baseline + 1 new), payment 19/19, notification
+7/7; clean first run.
+
+**No register/pending-findings/diagram change** — route-only step.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
