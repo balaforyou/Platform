@@ -1943,7 +1943,7 @@ per-step sign-offs (Steps 0–6) + Bala's instruction to run the close-out and o
 not auto-merge, and leave the stack up for their own testing.
 
 **Handed off:** 10 Sep 2026.
-**Status:** commit `<this row's commit>` on `f229-manual-booking`, pushed. **PR #21 →
+**Status:** commit `0c3b832` on `f229-manual-booking`, pushed. **PR #21 →
 `main` is open for review — deliberately not merged.** The Resolved row is written on the
 assumption PR #21 merges; if it does not, this row and F-204's supersede clause both need
 reverting.
