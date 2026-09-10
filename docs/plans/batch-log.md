@@ -1870,6 +1870,61 @@ service code, no schema.
 
 **No register/pending-findings/diagram change** — UI-only step.
 
+## Batch 40 — F-229 Step 6: `/ledger` rebuild (admin-v2) — final implementation step
+
+**Findings:** [[F-229]] Step 6 of 6 (last step). Register row **still Open / In progress** — the
+flip to Resolved + a F-229 Resolved summary row is a separate whole-finding close-out pass, same
+pattern as [[F-220]]'s Batch 33, to run after the reviewing thread's final sign-off and the merge
+to `main`.
+
+**Change (admin-v2 only, no backend/service/schema):**
+- `App.tsx` — `/ledger` route: the "Subscription Ledger" `StubScreen` → `<LedgerScreen />`.
+  `StubScreen` still serves 4 other routes.
+- New `screens/LedgerScreen.tsx`, built to the approved `Ledger_v2.dc.html`:
+  - the shared `Tabs` component (per the hand-off): **Guest** / **Members** / **Students**.
+  - **Guest** tab — real, backed by `GET /slot-engine/resource-pools/:id/guest-ledger` (Step 4),
+    rendered with the shared `Table`. Columns: Date, Guest, Court, Amount (right), Method,
+    Status. The Method badge **reuses the server-derived `payment.method`** (`cash` / `upi` /
+    `link` — not re-derived client-side): Cash green, Link blue, **UPI neutral** (the third,
+    distinct style — Bala's "your call, not a blocker"), intent-less rows → "Unpaid". Status
+    badge maps booking status (`CONFIRMED`→Confirmed, `HELD`→Pending, `CANCELLED`→Cancelled, …).
+    Date `"27 Sep, 6:00 PM"` day-first in the branch timezone.
+  - **Members** / **Students** — honest greyed lock-icon placeholders with `Ledger_v2`'s exact
+    copy ("Member Ledger — launching with the Membership module" / "Student Ledger — coming with
+    the Students module" + their one-line descriptions). Never fake data — Bala's demo-value
+    call, 10 Sep 2026.
+  - Branch selector + a Court-pool `Select` when the branch has >1 pool (same silent-single /
+    Select-when-many pattern as Step 5).
+- `nav.ts` — the destination label `"Subscription Ledger"` → `"Ledger"` (`shortLabel` was
+  already "Ledger"). The old label was mis-scoped copy (Bala's note); it now matches the mockup
+  and the real screen. No F-206 module gate on `/ledger` (unchanged — nav.ts's own comment).
+- `queries.ts` `+useGuestLedger(poolId)`, `types.ts` `+GuestLedgerRow` / `LedgerMethod`.
+
+**Blast radius:** one route swap + one nav label + an additive hook/type. No service code, no
+schema.
+
+**Handed off:** 10 Sep 2026 (per-step). **All six F-229 steps are now implemented on the
+branch** — Step 0 (relay) + Steps 1–6 (`User.name` · `/users/walk-in` · `/bookings/manual` ·
+`/resource-pools/:id/guest-ledger` · Reservations tab · `/ledger`).
+**Status:** commit `376e597` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`376e597`).
+
+**Evidence — browser live-fire against the dev stack + real `badminton_db`:** 3 fresh guest
+bookings seeded through `POST /bookings/manual` (cash / upi_qr / razorpay_link) all appear in the
+**Guest** tab with the right method badge (Cash green / UPI neutral / Link blue) and status badge
+(Confirmed / Confirmed / Pending); pre-existing real JBC bookings render correctly as Cancelled /
+Unpaid. **Members** and **Students** tabs show the greyed lock-icon placeholders with the exact
+`Ledger_v2` copy. A first-pass bug — a disabled ledger query briefly rendering the empty state
+before the pool resolved — was caught and fixed (loading gate now checks `poolId` presence); a
+branch with no pool shows an info `Banner`. 375px: the table scrolls inside its own
+`overflow-x: auto` container, the page body does not scroll horizontally; dark + light both
+render. All seeded rows removed afterward (verified `count(*)` = 0). Whole-repo typecheck /
+build / lint clean (8 pre-existing lint warnings). Full 5-service regression green against
+`badminton_db_test`, **unchanged counts** — identity-auth 12/12, tenant-management 11/11,
+slot-engine 75/75, payment 19/19, notification 7/7; clean first run.
+
+**No register/pending-findings/diagram change** — UI-only step; whole-finding close-out pending.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
