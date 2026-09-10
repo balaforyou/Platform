@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root {
+      --av2-bg: #f8fafc; --av2-surface: #ffffff; --av2-surface-alt: #f1f5f9; --av2-border: #e2e8f0;
+      --av2-text: #0f172a; --av2-muted: #64748b;
+      --av2-accent: #059669; --av2-accent-hover: #047857; --av2-accent-fg: #ffffff; --av2-accent-soft: #ecfdf5;
+      --av2-warning: #d97706; --av2-warning-soft: #fffbeb; --av2-warning-border: #fde68a;
+      --av2-info-soft: #eff6ff; --av2-info-border: #bfdbfe; --av2-info-text: #1e40af;
+      --av2-radius: 12px; --av2-radius-sm: 8px;
+      --av2-shadow: 0 1px 3px rgb(15 23 42 / 0.08), 0 1px 2px rgb(15 23 42 / 0.04);
+      --av2-space-1: 4px; --av2-space-2: 8px; --av2-space-3: 12px; --av2-space-4: 16px;
+      --av2-space-5: 20px; --av2-space-6: 24px; --av2-space-10: 40px;
+      --av2-text-xs: 12px; --av2-text-sm: 13px; --av2-text-base: 14px; --av2-text-lg: 16px;
+      --av2-leading-tight: 1.2; --av2-leading-normal: 1.45;
+      --av2-duration-fast: 120ms; --av2-ease-standard: cubic-bezier(0.4,0,0.2,1);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--av2-bg); color: var(--av2-text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: var(--av2-accent); } a:hover { color: var(--av2-accent-hover); }
+    table { width: 100%; border-collapse: collapse; font-size: var(--av2-text-base); }
+    th { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--av2-border); font-size: var(--av2-text-xs);
+      font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--av2-muted); white-space: nowrap; }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--av2-border); color: var(--av2-text); }
+  </style>
+</helmet>
+
+<div style="max-width: 720px; margin: 0 auto; padding: var(--av2-space-6); display: flex; flex-direction: column; gap: var(--av2-space-6);">
+
+  <div>
+    <h2 style="margin: 0 0 4px; font-size: var(--av2-text-lg);">Ledger</h2>
+    <p style="margin: 0; font-size: var(--av2-text-sm); color: var(--av2-muted);">Payments collected, by who they're for.</p>
+  </div>
+
+  <!-- Tabs -->
+  <div role="tablist" style="display: inline-flex; gap: 4px; padding: 4px; background: var(--av2-surface-alt); border-radius: var(--av2-radius-sm); width: fit-content;">
+    <sc-for list="{{tabs}}" as="tab" hint-placeholder-count="3">
+      <button onClick="{{tab.pick}}" disabled="{{tab.disabled}}" style="appearance: none; border: none; cursor: pointer; padding: 4px 14px; border-radius: var(--av2-radius-sm); font-size: var(--av2-text-sm); font-weight: {{tab.weight}}; background: {{tab.bg}}; color: {{tab.color}}; display: inline-flex; align-items: center; gap: 6px;">
+        {{tab.label}}
+        <sc-if value="{{tab.greyed}}" hint-placeholder-val="{{false}}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </sc-if>
+      </button>
+    </sc-for>
+  </div>
+
+  <!-- Guest tab: real table -->
+  <sc-if value="{{isGuest}}" hint-placeholder-val="{{true}}">
+    <div style="overflow-x: auto; background: var(--av2-surface); border: 1px solid var(--av2-border); border-radius: var(--av2-radius); box-shadow: var(--av2-shadow);">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Guest</th>
+            <th>Court</th>
+            <th style="text-align: right;">Amount</th>
+            <th>Method</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{rows}}" as="row" hint-placeholder-count="4">
+            <tr>
+              <td>{{row.date}}</td>
+              <td>{{row.guest}}</td>
+              <td>{{row.court}}</td>
+              <td style="text-align: right;">{{row.amount}}</td>
+              <td>
+                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: var(--av2-text-xs); font-weight: 600; background: {{row.methodBg}}; border: 1px solid {{row.methodBorder}}; color: {{row.methodFg}};">{{row.method}}</span>
+              </td>
+              <td>
+                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: var(--av2-text-xs); font-weight: 600; background: {{row.statusBg}}; border: 1px solid {{row.statusBorder}}; color: {{row.statusFg}};">{{row.status}}</span>
+              </td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </sc-if>
+
+  <!-- Members / Students: honest greyed teaser -->
+  <sc-if value="{{isTeaser}}" hint-placeholder-val="{{false}}">
+    <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--av2-space-2); padding: var(--av2-space-10) var(--av2-space-6); border: 1px dashed var(--av2-border); border-radius: var(--av2-radius); background: var(--av2-surface-alt); color: var(--av2-muted);">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span style="font-size: var(--av2-text-base); font-weight: 600; color: var(--av2-text);">{{teaserTitle}}</span>
+      <span style="font-size: var(--av2-text-sm); max-width: 320px; line-height: var(--av2-leading-normal);">{{teaserDescription}}</span>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{
+  "activeTab": {"editor": "enum", "default": "guest", "options": ["guest", "members", "students"], "section": "Ledger"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const activeTab = this.state.activeTab ?? this.props.activeTab ?? 'guest';
+    const pick = (key) => () => this.setState({ activeTab: key });
+
+    const tabDefs = [
+      { key: 'guest', label: 'Guest', greyed: false },
+      { key: 'members', label: 'Members', greyed: true },
+      { key: 'students', label: 'Students', greyed: true },
+    ];
+    const tabs = tabDefs.map((t) => {
+      const active = t.key === activeTab;
+      return {
+        ...t,
+        pick: pick(t.key),
+        disabled: false,
+        weight: active ? 700 : 600,
+        bg: active ? (t.greyed ? 'var(--av2-surface)' : 'var(--av2-accent-soft)') : 'transparent',
+        color: active ? (t.greyed ? 'var(--av2-muted)' : 'var(--av2-accent)') : 'var(--av2-muted)',
+      };
+    });
+
+    const rows = [
+      { date: '10 Sep, 6:00 PM', guest: 'Ramesh K.', court: 'Court 1', amount: '₹500', method: 'Cash', status: 'Confirmed',
+        methodBg: 'var(--av2-accent-soft)', methodBorder: 'var(--av2-accent)', methodFg: 'var(--av2-accent-hover)',
+        statusBg: 'var(--av2-accent-soft)', statusBorder: 'var(--av2-accent)', statusFg: 'var(--av2-accent-hover)' },
+      { date: '10 Sep, 7:00 PM', guest: 'Priya S.', court: 'Court 2', amount: '₹350', method: 'Link', status: 'Pending',
+        methodBg: 'var(--av2-info-soft)', methodBorder: 'var(--av2-info-border)', methodFg: 'var(--av2-info-text)',
+        statusBg: 'var(--av2-warning-soft)', statusBorder: 'var(--av2-warning-border)', statusFg: 'var(--av2-warning)' },
+      { date: '9 Sep, 8:00 PM', guest: 'Arjun M.', court: 'Court 4', amount: '₹500', method: 'Cash', status: 'Confirmed',
+        methodBg: 'var(--av2-accent-soft)', methodBorder: 'var(--av2-accent)', methodFg: 'var(--av2-accent-hover)',
+        statusBg: 'var(--av2-accent-soft)', statusBorder: 'var(--av2-accent)', statusFg: 'var(--av2-accent-hover)' },
+      { date: '9 Sep, 6:00 PM', guest: 'Divya R.', court: 'Court 1', amount: '₹350', method: 'Link', status: 'Confirmed',
+        methodBg: 'var(--av2-info-soft)', methodBorder: 'var(--av2-info-border)', methodFg: 'var(--av2-info-text)',
+        statusBg: 'var(--av2-accent-soft)', statusBorder: 'var(--av2-accent)', statusFg: 'var(--av2-accent-hover)' },
+    ];
+
+    const teasers = {
+      members: { title: 'Member Ledger — launching with the Membership module', description: 'Dues by member and period, once term-based membership billing ships.' },
+      students: { title: 'Student Ledger — coming with the Students module', description: 'Course fees and attendance-linked billing, once that module is scoped.' },
+    };
+
+    return {
+      tabs,
+      isGuest: activeTab === 'guest',
+      isTeaser: activeTab !== 'guest',
+      teaserTitle: teasers[activeTab]?.title ?? '',
+      teaserDescription: teasers[activeTab]?.description ?? '',
+      rows,
+    };
+  }
+}
+</script>
+</body>
+</html>

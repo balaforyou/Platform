@@ -1,0 +1,344 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root {
+      --av2-bg: #f8fafc;
+      --av2-surface: #ffffff;
+      --av2-surface-alt: #f1f5f9;
+      --av2-border: #e2e8f0;
+      --av2-text: #0f172a;
+      --av2-muted: #64748b;
+      --av2-accent: #059669;
+      --av2-accent-hover: #047857;
+      --av2-accent-fg: #ffffff;
+      --av2-accent-soft: #ecfdf5;
+      --av2-danger: #dc2626;
+      --av2-danger-soft: #fef2f2;
+      --av2-danger-border: #fecaca;
+      --av2-info-soft: #eff6ff;
+      --av2-info-border: #bfdbfe;
+      --av2-info-text: #1e40af;
+      --av2-warning: #d97706;
+      --av2-warning-soft: #fffbeb;
+      --av2-warning-border: #fde68a;
+      --av2-radius: 12px;
+      --av2-radius-sm: 8px;
+      --av2-shadow: 0 1px 3px rgb(15 23 42 / 0.08), 0 1px 2px rgb(15 23 42 / 0.04);
+      --av2-space-1: 4px; --av2-space-2: 8px; --av2-space-3: 12px; --av2-space-4: 16px;
+      --av2-space-5: 20px; --av2-space-6: 24px; --av2-space-8: 32px; --av2-space-10: 40px;
+      --av2-text-xs: 12px; --av2-text-sm: 13px; --av2-text-base: 14px; --av2-text-lg: 16px; --av2-text-xl: 20px;
+      --av2-leading-tight: 1.2; --av2-leading-normal: 1.45;
+      --av2-duration-fast: 120ms; --av2-ease-standard: cubic-bezier(0.4,0,0.2,1);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--av2-bg); color: var(--av2-text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: var(--av2-accent); } a:hover { color: var(--av2-accent-hover); }
+    button { font-family: inherit; }
+    input, select { font-family: inherit; }
+    input::placeholder { color: var(--av2-muted); opacity: 1; }
+  </style>
+</helmet>
+
+<div style="max-width: 640px; margin: 0 auto; padding: var(--av2-space-6); display: flex; flex-direction: column; gap: var(--av2-space-6);">
+
+  <!-- Header, exact GuestManagementScreen shape -->
+  <div style="display: flex; align-items: flex-start; gap: var(--av2-space-2);">
+    <span style="flex: none; margin-top: 2px; display: inline-flex; color: var(--av2-muted);">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+    </span>
+    <div>
+      <h2 style="margin: 0 0 4px; font-size: var(--av2-text-lg);">Guest Management</h2>
+      <p style="margin: 0; font-size: var(--av2-text-sm); color: var(--av2-muted);">Walk-in reservations and guest booking setup rules for this branch.</p>
+    </div>
+  </div>
+
+  <!-- Branch select -->
+  <div style="display: flex; flex-direction: column; gap: var(--av2-space-2); max-width: 320px;">
+    <label style="font-size: var(--av2-text-sm); font-weight: 600;">Branch</label>
+    <div style="position: relative; display: flex;">
+      <select style="flex: 1; appearance: none; padding: 8px 32px 8px 12px; font-size: var(--av2-text-base); border-radius: var(--av2-radius-sm); border: 1px solid var(--av2-border); background: var(--av2-surface); color: var(--av2-text); cursor: pointer;">
+        <option>Coimbatore Main Courts</option>
+      </select>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--av2-muted); pointer-events: none;"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div role="tablist" style="display: inline-flex; gap: 4px; padding: 4px; background: var(--av2-surface-alt); border-radius: var(--av2-radius-sm); width: fit-content;">
+    <button style="appearance: none; border: none; cursor: pointer; padding: 4px 12px; border-radius: var(--av2-radius-sm); font-size: var(--av2-text-sm); font-weight: 700; background: var(--av2-accent-soft); color: var(--av2-accent);">Reservations</button>
+    <button style="appearance: none; border: none; cursor: pointer; padding: 4px 12px; border-radius: var(--av2-radius-sm); font-size: var(--av2-text-sm); font-weight: 600; background: transparent; color: var(--av2-muted);">Setup Rules</button>
+  </div>
+
+  <!-- New booking card -->
+  <div style="display: flex; flex-direction: column; gap: var(--av2-space-5); background: var(--av2-surface); border: 1px solid var(--av2-border); border-radius: var(--av2-radius); padding: var(--av2-space-6); box-shadow: var(--av2-shadow);">
+
+    <div>
+      <h3 style="margin: 0 0 2px; font-size: var(--av2-text-base); font-weight: 700;">New walk-in booking</h3>
+      <p style="margin: 0; font-size: var(--av2-text-xs); color: var(--av2-muted);">For a guest who's here in person or on the phone right now.</p>
+    </div>
+
+    <!-- Guest lookup: demo-state tweak drives this -->
+    <div style="display: flex; flex-direction: column; gap: var(--av2-space-2);">
+      <label style="font-size: var(--av2-text-sm); font-weight: 600;">Guest</label>
+
+      <sc-if value="{{isNotSearched}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; gap: var(--av2-space-2);">
+          <input placeholder="Mobile number" value="98765 43210" readonly style="flex: 1; padding: 8px 12px; font-size: var(--av2-text-base); border-radius: var(--av2-radius-sm); border: 1px solid var(--av2-border); background: var(--av2-surface);" />
+          <button onClick="{{cycleDemo}}" style="display: inline-flex; align-items: center; gap: var(--av2-space-2); padding: 8px 16px; border-radius: var(--av2-radius-sm); border: none; background: var(--av2-accent); color: var(--av2-accent-fg); font-size: var(--av2-text-sm); font-weight: 600; cursor: pointer; white-space: nowrap;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+            Search
+          </button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isFound}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; align-items: center; gap: var(--av2-space-2); padding: 10px 12px; border-radius: var(--av2-radius-sm); background: var(--av2-accent-soft); border: 1px solid var(--av2-accent); color: var(--av2-accent-hover); font-size: var(--av2-text-sm);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+          <span><strong>+91 98765 43210</strong> — existing guest, Ramesh K.</span>
+          <button onClick="{{cycleDemo}}" style="margin-left: auto; appearance: none; border: none; background: none; color: var(--av2-accent-hover); font-size: var(--av2-text-xs); font-weight: 600; cursor: pointer; text-decoration: underline;">try another</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isNotFound}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; flex-direction: column; gap: var(--av2-space-2);">
+          <div style="display: flex; align-items: center; gap: var(--av2-space-2); padding: 10px 12px; border-radius: var(--av2-radius-sm); background: var(--av2-info-soft); border: 1px solid var(--av2-info-border); color: var(--av2-info-text); font-size: var(--av2-text-sm);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span><strong>+91 99887 65432</strong> — no account found</span>
+            <button onClick="{{cycleDemo}}" style="margin-left: auto; appearance: none; border: none; background: none; color: var(--av2-info-text); font-size: var(--av2-text-xs); font-weight: 600; cursor: pointer; text-decoration: underline;">try another</button>
+          </div>
+          <input placeholder="Guest's name" value="Priya S." style="padding: 8px 12px; font-size: var(--av2-text-base); border-radius: var(--av2-radius-sm); border: 1px solid var(--av2-border); background: var(--av2-surface);" />
+          <span style="font-size: var(--av2-text-xs); color: var(--av2-muted);">Creates a guest account with this name and number — no OTP needed, you're verifying them.</span>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- Date + time-of-day band -->
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--av2-space-3);">
+      <div style="display: flex; flex-direction: column; gap: var(--av2-space-2);">
+        <label style="font-size: var(--av2-text-sm); font-weight: 600;">Date</label>
+        <input value="10 Sep 2026" readonly style="padding: 8px 10px; font-size: var(--av2-text-base); border-radius: var(--av2-radius-sm); border: 1px solid var(--av2-border); background: var(--av2-surface);" />
+      </div>
+      <div style="display: flex; flex-direction: column; gap: var(--av2-space-2);">
+        <label style="font-size: var(--av2-text-sm); font-weight: 600;">Time of day</label>
+        <div role="tablist" style="display: inline-flex; gap: 4px; padding: 4px; background: var(--av2-surface-alt); border-radius: var(--av2-radius-sm); width: fit-content;">
+          <sc-for list="{{bands}}" as="band" hint-placeholder-count="3">
+            <button onClick="{{band.pick}}" style="appearance: none; border: none; cursor: pointer; padding: 6px 14px; border-radius: var(--av2-radius-sm); font-size: var(--av2-text-sm); font-weight: {{band.weight}}; background: {{band.bg}}; color: {{band.color}};">{{band.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- Specific slot within the chosen band -->
+    <div style="display: flex; flex-direction: column; gap: var(--av2-space-2); max-width: 280px;">
+      <label style="font-size: var(--av2-text-sm); font-weight: 600;">Slot</label>
+      <div style="position: relative; display: flex;">
+        <select style="flex: 1; appearance: none; padding: 8px 30px 8px 10px; font-size: var(--av2-text-base); border-radius: var(--av2-radius-sm); border: 1px solid var(--av2-border); background: var(--av2-surface);"><option>{{slotLabel}}</option></select>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--av2-muted); pointer-events: none;"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <span style="font-size: var(--av2-text-xs); color: var(--av2-muted);">Open slots for {{bandLabel}} on 10 Sep — pick the exact one.</span>
+    </div>
+
+    <!-- Court picker -->
+    <div style="display: flex; flex-direction: column; gap: var(--av2-space-2);">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <label style="font-size: var(--av2-text-sm); font-weight: 600;">Court</label>
+        <label style="display: inline-flex; align-items: center; gap: 6px; font-size: var(--av2-text-xs); color: var(--av2-muted); cursor: pointer;" onClick="{{toggleShowAll}}">
+          <span style="position: relative; width: 28px; height: 16px; border-radius: 999px; background: {{showAllTrack}}; transition: background var(--av2-duration-fast) var(--av2-ease-standard); display: inline-block;">
+            <span style="position: absolute; top: 2px; left: {{showAllKnob}}; width: 12px; height: 12px; border-radius: 999px; background: #fff; transition: left var(--av2-duration-fast) var(--av2-ease-standard); box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);"></span>
+          </span>
+          Show all courts
+        </label>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--av2-space-2);">
+        <sc-for list="{{courts}}" as="court" hint-placeholder-count="4">
+          <button onClick="{{court.pick}}" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: var(--av2-radius-sm); cursor: pointer; border: {{court.borderStyle}}; background: {{court.bgStyle}};">
+            <span style="font-size: var(--av2-text-sm); font-weight: 700; color: {{court.textStyle}};">{{court.label}}</span>
+            <sc-if value="{{court.reserved}}" hint-placeholder-val="{{false}}">
+              <span style="font-size: 10px; font-weight: 600; color: var(--av2-warning); text-transform: uppercase; letter-spacing: 0.04em;">Reserved</span>
+            </sc-if>
+          </button>
+        </sc-for>
+      </div>
+      <span style="font-size: var(--av2-text-xs); color: var(--av2-muted);">
+        <sc-if value="{{showAll}}" hint-placeholder-val="{{false}}">Showing every court in this pool, including ones reserved for members.</sc-if>
+        <sc-if value="{{showAllOff}}" hint-placeholder-val="{{true}}">Showing courts open to guest bookings only.</sc-if>
+      </span>
+    </div>
+
+    <!-- Price -->
+    <div style="display: flex; flex-direction: column; gap: var(--av2-space-2); max-width: 200px;">
+      <label style="font-size: var(--av2-text-sm); font-weight: 600;">Price</label>
+      <div style="position: relative; display: flex; align-items: center;">
+        <span style="position: absolute; left: 12px; color: var(--av2-muted); font-size: var(--av2-text-base);">₹</span>
+        <input value="500" style="width: 100%; padding: 8px 12px 8px 26px; font-size: var(--av2-text-base); border-radius: var(--av2-radius-sm); border: 1px solid var(--av2-border); background: var(--av2-surface);" />
+      </div>
+      <span style="font-size: var(--av2-text-xs); color: var(--av2-muted);">Pre-filled from the guest peak rate — edit to override.</span>
+    </div>
+
+    <!-- Payment method -->
+    <div style="display: flex; flex-direction: column; gap: var(--av2-space-2);">
+      <label style="font-size: var(--av2-text-sm); font-weight: 600;">How will they pay?</label>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--av2-space-3);">
+        <button onClick="{{pickCash}}" style="display: flex; flex-direction: column; gap: 6px; padding: var(--av2-space-4); border-radius: var(--av2-radius); cursor: pointer; text-align: left; border: {{cashBorder}}; background: {{cashBg}};">
+          <span style="display: inline-flex; align-items: center; gap: var(--av2-space-2);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{cashIconColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
+            <span style="font-size: var(--av2-text-base); font-weight: 700; color: {{cashText}};">Cash</span>
+          </span>
+          <span style="font-size: var(--av2-text-xs); color: var(--av2-muted); line-height: var(--av2-leading-normal);">Collected now — booking confirms immediately.</span>
+        </button>
+        <button onClick="{{pickLink}}" style="display: flex; flex-direction: column; gap: 6px; padding: var(--av2-space-4); border-radius: var(--av2-radius); cursor: pointer; text-align: left; border: {{linkBorder}}; background: {{linkBg}};">
+          <span style="display: inline-flex; align-items: center; gap: var(--av2-space-2);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{linkIconColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <span style="font-size: var(--av2-text-base); font-weight: 700; color: {{linkText}};">Payment link</span>
+          </span>
+          <span style="font-size: var(--av2-text-xs); color: var(--av2-muted); line-height: var(--av2-leading-normal);">Sent to their phone, or scan your QR — either way you confirm once they've paid.</span>
+        </button>
+      </div>
+
+      <!-- Link sub-flow: automated send vs. static-QR fallback with manual UPI reference -->
+      <sc-if value="{{isLink}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; flex-direction: column; gap: var(--av2-space-3); margin-top: var(--av2-space-1); padding: var(--av2-space-4); border-radius: var(--av2-radius-sm); background: var(--av2-info-soft); border: 1px solid var(--av2-info-border);">
+          <div role="tablist" style="display: inline-flex; gap: 4px; padding: 4px; background: var(--av2-surface); border-radius: var(--av2-radius-sm); width: fit-content;">
+            <button onClick="{{pickSend}}" style="appearance: none; border: none; cursor: pointer; padding: 4px 12px; border-radius: var(--av2-radius-sm); font-size: var(--av2-text-xs); font-weight: {{sendWeight}}; background: {{sendBg}}; color: {{sendColor}};">Send Razorpay link</button>
+            <button onClick="{{pickQr}}" style="appearance: none; border: none; cursor: pointer; padding: 4px 12px; border-radius: var(--av2-radius-sm); font-size: var(--av2-text-xs); font-weight: {{qrWeight}}; background: {{qrBg}}; color: {{qrColor}};">Already paid via your QR</button>
+          </div>
+
+          <sc-if value="{{isSend}}" hint-placeholder-val="{{true}}">
+            <span style="font-size: var(--av2-text-xs); color: var(--av2-info-text); line-height: var(--av2-leading-normal);">A real Razorpay link goes to their phone. Confirms automatically once they pay — no action needed from you.</span>
+          </sc-if>
+
+          <sc-if value="{{isQr}}" hint-placeholder-val="{{false}}">
+            <div style="display: flex; flex-direction: column; gap: var(--av2-space-2);">
+              <span style="font-size: var(--av2-text-xs); color: var(--av2-info-text); line-height: var(--av2-leading-normal);">If Razorpay's down or they'd rather scan your static UPI QR directly, enter the transaction reference they show you to confirm the booking yourself.</span>
+              <input placeholder="UPI transaction ID" value="T2609101834512345" style="padding: 8px 12px; font-size: var(--av2-text-base); border-radius: var(--av2-radius-sm); border: 1px solid var(--av2-border); background: var(--av2-surface);" />
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- Submit -->
+    <button style="align-self: flex-start; margin-top: var(--av2-space-2); padding: 10px 20px; border-radius: var(--av2-radius-sm); border: none; background: var(--av2-accent); color: var(--av2-accent-fg); font-size: var(--av2-text-sm); font-weight: 700; cursor: pointer; box-shadow: var(--av2-shadow);">
+      {{submitLabel}}
+    </button>
+
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{
+  "demoState": {"editor": "enum", "default": "found", "options": ["not-searched", "found", "not-found"], "section": "Guest lookup"},
+  "showAll": {"editor": "boolean", "default": false, "section": "Court picker"},
+  "paymentMethod": {"editor": "enum", "default": "cash", "options": ["cash", "link"], "section": "Payment"},
+  "linkMode": {"editor": "enum", "default": "send", "options": ["send", "qr"], "section": "Payment"},
+  "timeBand": {"editor": "enum", "default": "evening", "options": ["morning", "afternoon", "evening"], "section": "Date & time"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const demoOrder = ['found', 'not-found', 'not-searched'];
+    const demoState = this.state.demoState ?? this.props.demoState ?? 'found';
+    const showAll = this.state.showAll ?? this.props.showAll ?? false;
+    const paymentMethod = this.state.paymentMethod ?? this.props.paymentMethod ?? 'cash';
+    const linkMode = this.state.linkMode ?? this.props.linkMode ?? 'send';
+    const timeBand = this.state.timeBand ?? this.props.timeBand ?? 'evening';
+    const pickBand = (key) => () => this.setState({ timeBand: key });
+
+    const bandDefs = [
+      { key: 'morning', label: 'Morning', slot: '6:00 – 7:00 AM' },
+      { key: 'afternoon', label: 'Afternoon', slot: '1:00 – 2:00 PM' },
+      { key: 'evening', label: 'Evening', slot: '6:00 – 7:00 PM' },
+    ];
+    const bands = bandDefs.map((b) => {
+      const active = b.key === timeBand;
+      return {
+        ...b,
+        pick: pickBand(b.key),
+        weight: active ? 700 : 600,
+        bg: active ? 'var(--av2-accent-soft)' : 'transparent',
+        color: active ? 'var(--av2-accent)' : 'var(--av2-muted)',
+      };
+    });
+    const activeBand = bandDefs.find((b) => b.key === timeBand) ?? bandDefs[2];
+
+    const cycleDemo = () => {
+      const i = demoOrder.indexOf(demoState);
+      this.setState({ demoState: demoOrder[(i + 1) % demoOrder.length] });
+    };
+    const toggleShowAll = () => this.setState({ showAll: !showAll });
+    const pickCash = () => this.setState({ paymentMethod: 'cash' });
+    const pickLink = () => this.setState({ paymentMethod: 'link' });
+    const pickSend = () => this.setState({ linkMode: 'send' });
+    const pickQr = () => this.setState({ linkMode: 'qr' });
+
+    const allCourts = [
+      { label: 'Court 1', reserved: false },
+      { label: 'Court 2', reserved: false },
+      { label: 'Court 3', reserved: true },
+      { label: 'Court 4', reserved: false },
+    ];
+    const visibleCourts = showAll ? allCourts : allCourts.filter((c) => !c.reserved);
+    const [selectedCourt, setSelectedCourt] = [this.state.selectedCourt ?? 'Court 1', (v) => this.setState({ selectedCourt: v })];
+    const courts = visibleCourts.map((c) => {
+      const selected = c.label === selectedCourt;
+      return {
+        ...c,
+        pick: () => setSelectedCourt(c.label),
+        borderStyle: selected ? '2px solid var(--av2-accent)' : '1px solid var(--av2-border)',
+        bgStyle: selected ? 'var(--av2-accent-soft)' : 'var(--av2-surface)',
+        textStyle: c.reserved ? 'var(--av2-warning)' : (selected ? 'var(--av2-accent-hover)' : 'var(--av2-text)'),
+      };
+    });
+
+    return {
+      isNotSearched: demoState === 'not-searched',
+      isFound: demoState === 'found',
+      isNotFound: demoState === 'not-found',
+      cycleDemo,
+      bands,
+      bandLabel: activeBand.label,
+      slotLabel: activeBand.slot,
+      showAll,
+      showAllOff: !showAll,
+      toggleShowAll,
+      showAllTrack: showAll ? 'var(--av2-accent)' : 'var(--av2-border)',
+      showAllKnob: showAll ? '14px' : '2px',
+      courts,
+      pickCash,
+      pickLink,
+      cashBorder: paymentMethod === 'cash' ? '2px solid var(--av2-accent)' : '1px solid var(--av2-border)',
+      cashBg: paymentMethod === 'cash' ? 'var(--av2-accent-soft)' : 'var(--av2-surface)',
+      cashText: paymentMethod === 'cash' ? 'var(--av2-accent-hover)' : 'var(--av2-text)',
+      cashIconColor: paymentMethod === 'cash' ? 'var(--av2-accent-hover)' : 'var(--av2-muted)',
+      linkBorder: paymentMethod === 'link' ? '2px solid var(--av2-info-text)' : '1px solid var(--av2-border)',
+      linkBg: paymentMethod === 'link' ? 'var(--av2-info-soft)' : 'var(--av2-surface)',
+      linkText: paymentMethod === 'link' ? 'var(--av2-info-text)' : 'var(--av2-text)',
+      linkIconColor: paymentMethod === 'link' ? 'var(--av2-info-text)' : 'var(--av2-muted)',
+      isLink: paymentMethod === 'link',
+      isSend: linkMode === 'send',
+      isQr: linkMode === 'qr',
+      pickSend,
+      pickQr,
+      sendWeight: linkMode === 'send' ? 700 : 600,
+      sendBg: linkMode === 'send' ? 'var(--av2-info-text)' : 'transparent',
+      sendColor: linkMode === 'send' ? '#ffffff' : 'var(--av2-info-text)',
+      qrWeight: linkMode === 'qr' ? 700 : 600,
+      qrBg: linkMode === 'qr' ? 'var(--av2-info-text)' : 'transparent',
+      qrColor: linkMode === 'qr' ? '#ffffff' : 'var(--av2-info-text)',
+      submitLabel:
+        paymentMethod === 'cash' ? 'Confirm & mark paid'
+        : linkMode === 'send' ? 'Create booking & send link'
+        : 'Confirm — paid via QR',
+    };
+  }
+}
+</script>
+</body>
+</html>
