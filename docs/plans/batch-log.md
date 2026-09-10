@@ -1809,6 +1809,67 @@ tenant-management 11/11, **slot-engine 75/75** (74 baseline + 1 new), payment 19
 
 **No register/pending-findings/diagram change** — route-only step.
 
+## Batch 39 — F-229 Step 5: Reservations tab UI (admin-v2)
+
+**Findings:** [[F-229]] Step 5 of 6 (first frontend surface). Register row stays **Open / In
+progress**.
+
+**Change (admin-v2 only, no backend/service/schema):**
+- `GuestManagementScreen.tsx` — the Reservations `EmptyState` → `<ReservationsPanel branchId=…>`.
+- New `sections/ReservationsPanel.tsx` — the walk-in booking form, built to the approved
+  `Main_v2.dc.html` mockup: phone guest lookup (three states — not-searched / found /
+  not-found → inline name → `POST /identity/users/walk-in`), date + Morning/Afternoon/Evening
+  band + slot (`useAvailability`, band from the window's branch-local hour), a court picker
+  (guest-bookable only + a "Show all courts" toggle that reveals the rest labelled "Reserved" —
+  F-225 Option B), price pre-filled via `resolveGuestRate` (mirrors slot-engine's
+  `resolveGuestBlanketRate`), Cash / Payment-link cards with the "Send Razorpay link" vs
+  "Already paid via your QR" (UPI transaction ID) sub-choice, a dynamic submit label, and a
+  persistent `Banner` with the `shortUrl` on the `razorpay_link` path.
+- New `reservationHelpers.ts` (band grouping, `resolveGuestRate`, phone validation) + 3 hooks in
+  `queries.ts` (`useGuestLookup` / `useCreateWalkIn` / `useCreateManualBooking`).
+- `vite.config.ts` — proxy `/api/payment` → `:3004` (first admin-v2 consumer of the payment
+  service; Caddy already routes it in prod, so production is unaffected).
+- `lib/useAdminApi.ts` — `post()` gains an **optional** `headers` arg (additive, matches
+  admin-web's own shape) for the `Idempotency-Key` header.
+- `guestManagement/types.ts` — `Branch.timezone` added (already returned by
+  `GET /tenants/:id/branches`, just wasn't typed — reviewer's Decision-2 correction) + walk-in
+  response types.
+
+**Decisions (signed off):** (1) court picker built per the mockup + a "Court is assigned
+automatically for this pool" caption when POOLED (JBC's case) — `resourceId` is sent, honored
+for a future FIXED_INSTANCE tenant, ignored for POOLED (`slot-engine:3389`, F-225's existing
+design); (2) `Branch.timezone` folded in, no follow-up; (3) persistent `Banner` for the
+`razorpay_link` `shortUrl`; (4) silent-single / `Select`-when-many pool selector.
+
+**Blast radius:** one `EmptyState` swap on an existing screen; everything else additive. No
+service code, no schema.
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 6 — the `/ledger` rebuild).
+**Status:** commit `4332039` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`4332039`).
+
+**Evidence — browser live-fire against the dev stack + real `badminton_db`:**
+- **JBC owner:** a **cash** booking end-to-end through the real admin-v2 UI → `CONFIRMED` with a
+  `cash_` `captured` `PaymentIntent`, verified by DB read-back **and** the Step 4 guest-ledger
+  route; **razorpay_link** → `HELD` + `plink_mock_` `pending` + the link `Banner`;
+  **upi_qr** → `CONFIRMED` + `upi_<the typed txn id>` `captured`. not-found phone → name →
+  walk-in `User` created. Price pre-fill correct for a standard slot (₹400) and a peak slot
+  (₹600, JBC's 19:00–21:00 peak window). "Show all courts" reveals a de-authorised court with
+  the **RESERVED** tag in warning colour; dynamic submit labels for all three states.
+- **`courtowner1` owner:** the F-206 entitlement gate blocks the screen (no `GUEST_BOOKING`);
+  with a temporary grant the multi-pool **Court pool** `Select` (88 pools — F-202 test
+  pollution) renders, the tenant theme (red accent) is picked up via `--av2-*` tokens, and the
+  empty-slot state is handled. Temp grant and every test row removed afterward — verified
+  `count(*)` = 0.
+- **375px:** the `Date`/`Time-of-day`, court, and payment grids collapse to one column
+  (`repeat(auto-fit, …)`); no horizontal page overflow. **Dark and light** both render.
+- Whole-repo typecheck / build / lint clean (8 pre-existing lint warnings, none new). Full
+  5-service regression green against `badminton_db_test` — identity-auth 12/12,
+  tenant-management 11/11, slot-engine 75/75, payment 19/19, notification 7/7 (first run hit the
+  known service-health startup flake on 3 suites, clean on re-run).
+
+**No register/pending-findings/diagram change** — UI-only step.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
