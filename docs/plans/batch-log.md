@@ -1603,8 +1603,9 @@ unchanged — the other half of the same relay gap, so the register/pending-find
 same §10 but is a separate finding and is **not** relayed here — out of this hand-off's scope.
 
 **Handed off:** 10 Sep 2026 (F-229 implementation hand-off, Step 0).
-**Status:** on branch `f229-manual-booking` (off `main` `0fb9337`) — pending push.
-**Branch/PR:** `f229-manual-booking`.
+**Status:** commit `e856223` on `f229-manual-booking` (off `main` `0fb9337`), pushed; Step 0
+signed off by the reviewing thread after an independent content check.
+**Branch/PR:** `f229-manual-booking` (`e856223`).
 
 **No code / schema / route changes.** Step 1 (the `User.name` migration) is the first code step
 and is not done here.
@@ -1612,6 +1613,45 @@ and is not done here.
 **Close-out:** `pnpm register:check` green — **206 rows, Open 111, Resolved 95** (+F-229 Open;
 from 205/110/95). `pnpm diagram:verify` green — all 67 finding tags agree, no tagged FLOW node
 touched by a docs-only change (F-229's own endpoints show only as non-failing advisory lines).
+
+## Batch 35 — F-229 Step 1: `User.name` column
+
+**Findings:** [[F-229]] Step 1 of 6 (schema). Register row stays **Open / In progress** — no
+status flip, this is one step inside the finding.
+
+**Change:** one purely-additive nullable column, `User.name String?`
+(`packages/database/prisma/schema.prisma`), migration
+`20260910120000_user_name_f229` — `ALTER TABLE "User" ADD COLUMN "name" TEXT;`. No backfill;
+every existing row gets `NULL`. Set on create by the walk-in identity route in Step 2; nothing
+reads it as required. A schema comment marks it distinct from [[F-219]]'s planned
+Google-profile-sourced `displayName`/`photoUrl` (not yet built) — this is the admin-entered
+guest name, the admin being the trust boundary rather than an OTP exchange.
+
+**Blast radius:** additive optional field — no `prisma.user.create`/`select`/`include` requires
+it across all 5 services + both frontends + seed scripts + test harness; no `SELECT *` on
+`User`, no User-shape snapshot test. Generated client is gitignored.
+
+**Decision record:** `claude/claude-code-handover-f229-implementation.md` Step 1. Per-step
+batch-log cadence (this entry, Batch 34's own entry) confirmed by the reviewing thread over a
+hold-until-close-out alternative — keeps the trail granular, same as F-220's per-section batches.
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 2).
+**Status:** merged path — commit `0fd8373` on `f229-manual-booking`, pushed, Step 1 signed off
+by the reviewing thread after an independent code-level diff read.
+**Branch/PR:** `f229-manual-booking` (`0fd8373`).
+
+**Evidence:** migration applied via `prisma migrate deploy` to `badminton_db`,
+`badminton_db_test`, `badminton_db_e2e` — column confirmed `text` / `is_nullable = YES` in
+`information_schema.columns` on each; `prisma migrate status` clean. Prisma client regenerated
+(`User.name: string | null` in `index.d.ts`). `pnpm -r build` / `typecheck` / `lint` all clean
+(8 pre-existing lint warnings, none new). Full 5-service regression green against
+`badminton_db_test` — identity-auth 7/7, tenant-management 11/11, slot-engine 74/74, payment
+12/12, notification 7/7. (First run hit a service-health startup race on 3 suites —
+environmental per the CLAUDE.md trap, slot-engine logged the same error yet passed; clean 5/5 on
+the immediate re-run.)
+
+**No register/pending-findings/diagram change** — schema-only step, F-229 already has its Open
+row and `Confirmed-ID` from Batch 34.
 
 ## Queued, not yet batched
 
