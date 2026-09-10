@@ -1925,6 +1925,41 @@ slot-engine 75/75, payment 19/19, notification 7/7; clean first run.
 
 **No register/pending-findings/diagram change** — UI-only step; whole-finding close-out pending.
 
+## Batch 41 — F-229 whole-pass close-out (register) + PR #21 to `main`
+
+**Findings:** [[F-229]] — its Open row (added Batch 34) converted to a **Resolved** summary row,
+`Resolved: 10 Sep 2026`, written fresh per the register's convention (Resolution replaces
+Impact/Action). Its `pending-findings.md` `admin-assisted-manual-booking-cash-payment` entry was
+already under "Promoted (audit trail)" with `Confirmed-ID: F-229` from Batch 34 — no change
+needed there (unlike [[F-220]]'s Batch 33, which had to write its Promoted entry at close-out).
+[[F-204]]'s "**Superseded by [[F-229]]**" clause (added Batch 34) is in F-204's own row and
+survives untouched.
+
+**Docs-only — no code.** All F-229 code landed in Batches 35–40 (Steps 1–6); Batch 34 was the
+Step 0 relay.
+
+**Decision record:** the 10 Sep 2026 F-229 implementation hand-off + the reviewing thread's
+per-step sign-offs (Steps 0–6) + Bala's instruction to run the close-out and open the PR now,
+not auto-merge, and leave the stack up for their own testing.
+
+**Handed off:** 10 Sep 2026.
+**Status:** commit `<this row's commit>` on `f229-manual-booking`, pushed. **PR #21 →
+`main` is open for review — deliberately not merged.** The Resolved row is written on the
+assumption PR #21 merges; if it does not, this row and F-204's supersede clause both need
+reverting.
+**Branch/PR:** `f229-manual-booking` → **PR #21** (the whole finding — Batches 34–41 — as one
+PR, not the per-batch docs PRs [[F-220]] used, at Bala's direction).
+
+**Close-out:** `pnpm register:check` green — **206 rows, Open 110, Resolved 96** (F-229 moved
+Open → Resolved; total unchanged). `pnpm diagram:verify` green — all 67 finding tags agree, no
+tagged FLOW node touched. Whole-repo typecheck / build / lint clean (8 pre-existing lint
+warnings). Full 5-service regression green against `badminton_db_test` — identity-auth 12/12,
+tenant-management 11/11, slot-engine 75/75, payment 19/19, notification 7/7.
+
+**Still owned by Chief, not done here:** whether F-228 (unified Gmail-first login, assigned in
+the same discovery doc §10) still needs relaying into git, and the F-207/F-209 urgency note the
+discovery doc §6 raised (this MVP's manual-toggle membership model may reduce their priority).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
