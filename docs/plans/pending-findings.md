@@ -174,6 +174,8 @@ second demo tenant with a realistic pool count (that removes the "just test poll
 Confirmed-ID: F-202
 Confirmed: 29 Aug 2026
 
+## Promoted (audit trail)
+
 ### booking-rule-route-missing-owner-and-entitlement-gate
 Batch: F-220 §3.3 (Cancellation & Refund Policy)
 Surfaced: 4 Sep 2026
@@ -194,10 +196,38 @@ branch_manager-role admin who could exercise this; flagged as real regardless. �
 ships owner-gated in the UI per this screen's established convention, so the UI never promises a
 non-owner an action the backend should also reject — this finding tracks closing the gap
 server-side, same "log now, resolve after the section ships and verifies" precedent as F-221/F-223.
-Confirmed-ID:
-Confirmed:
+Confirmed-ID: F-227
+Confirmed: 10 Sep 2026
 
-## Promoted (audit trail)
+### f220-guest-management-branch-settings-v2-rebuild
+Batch: F-220 whole-pass close-out
+Surfaced: 2 Sep 2026 (Chief → Technical Lead "Admin-v2 Slice 2 / Guest & Member Management"
+handover, §1a addendum "F-220 assigned, sequencing revised" — Bala's direct request, 2 Sep 2026,
+to port Guest Booking Management court/slot configuration into admin-v2, entitlement-gated per
+[[F-206]] and Bala's 2 Sep call). No pending-findings entry was opened at assignment time; this
+one is written at whole-pass close-out so the register's F-220 summary row has the `Confirmed-ID`
+the `check-register.mjs` gate requires (F-220 ≥ F-179), matching how [[F-206]] — also assigned in
+that same handover — carries a Promoted entry.
+Description: Guest Management + Branch Settings rebuild for admin-v2. The signed-off v1 plan built
+`admin-web`'s `ResourcesPage`/`SchedulingPage` functionality onto the wrong screen (`/court-groups`);
+Bala's manual test caught the mismatch, traced to the real mobile mockup (`AdminDashboard.jsx`)
+having a "Guest Management" screen with a "Settings & Setup Rules" pane, plus a missing branch
+operating-hours screen ([[F-210]]). v2 rebuilt it UI-first against the real mockup, one section at
+a time, each independently verified. Delivered: new Branch Settings screen (`/branch-settings`,
+[[F-210]]) — §1a display/edit-toggle cards over the real `PATCH /tenant/branches/:id`, §1b Special
+Hours CRUD against `AvailabilityOverride` fanned across a branch's pools ([[F-221]]/[[F-222]]
+surfaced). New Guest Management screen (`/guests`, replacing the `/court-groups` port which reverts
+to a plain stub): Reservations tab (honest `EmptyState`, [[F-204]]) + Setup Rules tab with
+Authorized Guest Courts ([[F-225]]), Custom Pricing Rates ([[F-224]]), and Cancellation & Refund
+Policy (built with no dedicated finding — `BookingRule.cancellationPolicyJson` already existed and
+was live; surfaced [[F-227]]). The originally-planned fourth section, Dynamic Guest Scheduler, is
+explicitly descoped from this MVP pass — Bala's reasoned call, reviewed and agreed by Chief 10 Sep
+2026 (`admin-web`'s live `/resources`/`/scheduling` cover the fallback capability; [[F-224]]/[[F-225]]
+answer the real product questions). Spec preserved for post-MVP in
+`claude/technical-lead-plan-f220-3.4-dynamic-guest-scheduler.md`. Full evidence in [[F-224]]/[[F-225]]'s
+own rows and in `docs/plans/batch-log.md` Batches 30–33.
+Confirmed-ID: F-220
+Confirmed: 2 Sep 2026
 
 ### tenant-module-entitlement-system
 Batch: F-206 close-out

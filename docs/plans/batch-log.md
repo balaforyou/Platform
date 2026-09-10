@@ -1536,6 +1536,49 @@ change this batch — the new finding is `pending-findings.md`-only, awaiting Ch
 `pending-findings.md` UI-only follow-ups entry are still NOT written** — deferred to the end of §3
 (only §3.4 Dynamic Guest Scheduler remains). This batch row is the record that §3.3 reached `main`.
 
+## Batch 33 — F-220 v2 whole-pass close-out (register + pending-findings)
+
+**Findings:** [[F-227]] — new **Open** row (the §3.3 `PUT /resource-pools/:id/booking-rule` gap,
+Chief-assigned `Confirmed-ID: F-227` on the `booking-rule-route-missing-owner-and-entitlement-gate`
+pending-findings entry, 10 Sep 2026). [[F-220]] — new **Resolved** summary row for the whole v2
+rebuild (§1a/§1b/§2 shell/§3.1–§3.3), Chief's decision (b) since none of §1a/§1b/§3.3 had a
+dedicated finding of their own; a `Confirmed-ID: F-220` Promoted entry was written to
+`pending-findings.md` at the same time so the `check-register.mjs` gate (F-220 ≥ F-179) passes —
+F-220 was Chief-assigned in the Slice-2 handover 2 Sep 2026 but never got a pending-findings entry,
+same situation [[F-206]] was already handled for.
+**Decision record:** `claude/chief-validation-f220-3.1-3.4-closeout.md` (Chief) + the 10 Sep 2026
+whole-pass close-out hand-off. Three Chief decisions applied here: (a) F-227 gets its ID and Open
+row; (b) F-220 gets its own Resolved summary row; (c) **§3.4 Dynamic Guest Scheduler is descoped
+from the MVP pass** — Bala's reasoned call, reviewed and agreed by Chief 10 Sep 2026 (`admin-web`'s
+live `/resources`/`/scheduling` cover the fallback capability; [[F-224]]/[[F-225]] answer the real
+product questions). The §3.4 implementation spec + approved mockup are preserved in
+`claude/technical-lead-plan-f220-3.4-dynamic-guest-scheduler.md` for post-MVP pickup.
+**Handed off:** 10 Sep 2026 (whole-pass close-out hand-off, docs-only).
+**Status:** merged to `main`
+**Branch/PR:** `docs/f220-batch33-closeout` → **PR #20** (docs-only, no code — PRs #15–#18 were
+already on `main` before this batch; #19 landed Batch 32). Standalone docs PR, same reasoning as
+Batches 31/32: zero risk, and un-pushed register drift is a known trap.
+
+**No code / schema / route changes.** F-227's fix (add both `requireOwnerOrInternal` and
+`requireModuleEntitlement(GUEST_BOOKING)` to `PUT /resource-pools/:id/booking-rule`) is **deferred**
+— tracked by the new Open row, not done here.
+
+**Verification of F-227's claims before the row was written (rule 8, against real `main`):**
+`services/slot-engine/src/index.ts:2298` — `PUT /resource-pools/:id/booking-rule` composes
+`getInternalOrAdminAuth` → `requirePoolScope` only, no owner or entitlement check (line number
+still accurate). Sibling `POST /booking-rules` (`:2238`) has `requireModuleEntitlement(GUEST_BOOKING,
+{write:true})`. [[F-225]]'s `PATCH /resource-pools/:id/guest-court-eligibility` (`:1432`) and
+[[F-224]]'s `PATCH /branches/:id/guest-pricing` (tenant-management `:489`) are both owner +
+`GUEST_BOOKING` gated. All confirmed directly.
+
+**Close-out:** `pnpm register:check` green — **205 rows, Open 110, Resolved 95** (+F-227 Open,
++F-220 Resolved; from 203/109/94). `pnpm diagram:verify` green — all 67 finding tags agree, no
+tagged FLOW node touched by a docs-only change. F-220's `Found` date is **2 Sep 2026** (Chief →
+Technical Lead Slice-2 handover §1a addendum, "F-220 assigned … Bala's direct request, 2 Sep 2026"),
+corrected from the hand-off draft's 3 Sep 2026 estimate per the hand-off's own instruction to
+prefer the kickoff doc's date. F-220's PR list in the register row also names #19 (Batch 32
+batch-log), which the hand-off draft predated.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
