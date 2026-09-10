@@ -130,3 +130,22 @@ export const RATE_SOURCE_LABEL: Record<RateSource, string> = {
 export function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/**
+ * A unique client-side idempotency key. `crypto.randomUUID()` is only defined in a **secure
+ * context** (HTTPS or localhost) — on a plain-IP dev URL (`http://192.168.x.x:5175`, phone
+ * testing) it is undefined and throws. `crypto.getRandomValues` is NOT secure-context-gated,
+ * so fall back to a v4 UUID built from it, then to a timestamp+random string.
+ */
+export function newIdempotencyKey(): string {
+  const c = typeof crypto !== 'undefined' ? crypto : undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  if (c?.getRandomValues) {
+    const b = c.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  return `k-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}

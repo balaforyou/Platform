@@ -4,6 +4,7 @@ import { useAdminApi } from '../../lib/useAdminApi';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { useAdminTenant } from '../../auth/AdminTenantContext';
 import { branchScopes } from './helpers';
+import { newIdempotencyKey } from './reservationHelpers';
 import type {
   AvailabilityOverride,
   AvailabilityPattern,
@@ -155,7 +156,7 @@ export function useCreateManualBooking() {
       api.post<ManualBookingResult>(
         '/payment/bookings/manual',
         { ...body, tenantId: tenant?.id },
-        { 'Idempotency-Key': crypto.randomUUID() },
+        { 'Idempotency-Key': newIdempotencyKey() },
       ),
   });
 }
