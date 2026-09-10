@@ -1982,6 +1982,47 @@ build / lint clean.
 **Status:** commit `e5b311b` + this row, on `f229-manual-booking` → PR #21 (still open, not
 merged).
 
+## Batch 43 — F-229 hardening: no raw code errors on screen
+
+**Findings:** [[F-229]] — a sweep prompted by Batch 42 (Bala: "we should not [have] such code
+errors [on screen]"), for the same class as the `crypto.randomUUID` bug. F-229 stays
+**Resolved** (same PR, before merge). Commit `9c07de8`.
+
+**Three fixes:**
+1. **Timezone / date safety — a render-crash risk, not just a bad message.** `branch.timezone`
+   comes from the DB; a legacy/misconfigured branch could carry `""`, `"IST"`, or garbage, and
+   `new Intl.DateTimeFormat(_, { timeZone })` throws `RangeError` on a non-IANA string. Every
+   F-229 formatter (`branchHour`, `formatSlotLabel`, `branchLocalMinutes`, the Ledger's
+   `formatDateTime`) runs **during render** — an unguarded throw white-screens the screen, and
+   admin-v2 has **no error boundary** (flagged below). New `safeTimeZone()` validates the zone
+   once and falls back to UTC; `safeDate()` guards `Invalid Date`; `hhmmToMinutes()` regex-parses
+   and returns `NaN` instead of `.split`-throwing on a malformed peak window.
+2. **`friendlyError(err, fallback)`** added to `lib/errorMessage.ts` — `ZodError` / `APIError`
+   shown verbatim, a fetch/network `TypeError` gets a plain line, **anything else (a bug) is
+   `console.error`'d and shown as `fallback`, never leaked raw.** `errorMessage()` passed a bare
+   `Error.message` straight through — exactly how "crypto.randomUUID is not a function" reached a
+   `Banner`. `ReservationsPanel` + `LedgerScreen` switched to `friendlyError`.
+3. **Null-safety:** Ledger row `r.guest?.name`; `METHOD_TONE`/`METHOD_LABEL` fall back for an
+   unknown method string.
+
+**Verified:** `safeTimeZone` unit-tested against `""` / `"IST"` / `"Not/AZone"` / `"GMT+5:30"` /
+`"garbage"` / trailing-space — all resolve without throwing; `Invalid Date` → epoch. Browser
+sweep of `/guests` and `/ledger` (all three Ledger tabs, a full cash booking) — no admin-v2 code
+errors in the console. typecheck / build / lint clean (8 pre-existing warnings).
+
+**Flagged, not fixed here (broader than F-229):**
+- **admin-v2 has no React error boundary** — any render-time throw in any screen white-screens
+  the whole app. Worth a small `<ErrorBoundary>` around `<Outlet />` in `AppShell` (a non-DOM-
+  destroying one — see CLAUDE.md's F-215 note about error boundaries that swap the tree).
+- The **"Service worker registration failed"** console errors on the vite dev server — `sw.js`
+  is stamped at build time and absent in dev ([[F-197]]); console-only, never reaches the UI,
+  pre-existing.
+- `guest-member-pwa`'s `CourtBooking.tsx` has the same inline `crypto.randomUUID()` — out of
+  F-229 scope, and it is served over HTTPS in real use, but a `newIdempotencyKey`-style fix
+  there is a cheap future follow-up.
+
+**Status:** commit `9c07de8` + this row on `f229-manual-booking` → PR #21 (open, not merged).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
