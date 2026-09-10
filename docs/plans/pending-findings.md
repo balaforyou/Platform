@@ -174,6 +174,29 @@ second demo tenant with a realistic pool count (that removes the "just test poll
 Confirmed-ID: F-202
 Confirmed: 29 Aug 2026
 
+### booking-rule-route-missing-owner-and-entitlement-gate
+Batch: F-220 §3.3 (Cancellation & Refund Policy)
+Surfaced: 4 Sep 2026
+Description: `PUT /resource-pools/:id/booking-rule` (`services/slot-engine/src/index.ts:2298`) —
+the write route §3.3's Cancellation & Refund Policy section depends on — has neither an owner-only
+check nor a `GUEST_BOOKING` module-entitlement check. Confirmed by reading the route directly: it
+composes only `getInternalOrAdminAuth` + `requirePoolScope`, and `requirePoolScope` explicitly
+permits `branch_manager` (not owner-only, per its own in-file comment). Its sibling create route,
+`POST /booking-rules`, does call `requireModuleEntitlement(auth, GUEST_BOOKING, ..., {write:true})`
+— the PUT route omits it. Every other admin write route this same Setup Rules screen already calls
+(`guest-pricing` [[F-224]], `guest-court-eligibility` [[F-225]], `availability-overrides` after
+[[F-223]]) is owner-gated; this one is not, as of today. Same class of gap as [[F-221]] (missing
+entitlement check) and [[F-223]] (missing owner check), combined on one route. Real risk: a
+branch_manager (not just an owner) can currently change a pool's cancellation/refund policy — a
+real revenue-affecting setting — and a tenant with a lapsed `GUEST_BOOKING` entitlement can still
+write to it. Not confirmed against live production auth data whether JBC currently has any
+branch_manager-role admin who could exercise this; flagged as real regardless. §3.3's frontend
+ships owner-gated in the UI per this screen's established convention, so the UI never promises a
+non-owner an action the backend should also reject — this finding tracks closing the gap
+server-side, same "log now, resolve after the section ships and verifies" precedent as F-221/F-223.
+Confirmed-ID:
+Confirmed:
+
 ## Promoted (audit trail)
 
 ### tenant-module-entitlement-system

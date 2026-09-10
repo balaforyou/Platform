@@ -1,5 +1,6 @@
 import { AuthorizedCourts } from './sections/AuthorizedCourts';
 import { PricingRates } from './sections/PricingRates';
+import { CancellationPolicy } from './sections/CancellationPolicy';
 
 /**
  * F-220 §3 — the Setup Rules tab's content: a stack of independent full-width sections scoped to
@@ -20,10 +21,10 @@ export function SetupRulesPanel({ branchId }: { branchId: string }) {
     <div style={{ display: 'grid', gap: 'var(--av2-space-4)', minWidth: 0 }}>
       <AuthorizedCourts branchId={branchId} />
       <PricingRates branchId={branchId} />
+      <CancellationPolicy branchId={branchId} />
 
       <div className="setup-rules-next">
-        <b>2 more sections land next, one at a time:</b> Cancellation &amp; Refund Policy, Dynamic
-        Guest Scheduler — each its own hand-off, same as this one.
+        <b>1 more section lands next:</b> Dynamic Guest Scheduler — its own hand-off, same as this one.
       </div>
     </div>
   );

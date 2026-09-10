@@ -109,6 +109,56 @@ export function useSaveGuestCourts(branchId?: string) {
   });
 }
 
+/**
+ * F-220 §3.3 — save the tiered guest cancellation/refund policy. Writes
+ * `PUT /slot-engine/resource-pools/:id/booking-rule` (upsert keyed on the pool) with a
+ * `cancellationPolicyJson` of exactly three tiers. Fanned out per pool, same shape as
+ * Authorized Guest Courts / Special Hours.
+ *
+ * `applyGlobally: false` → the current branch's pools only (passed in from the section's
+ * already-loaded `usePools(branchId)`, no extra fetch). `applyGlobally: true` → tenant-wide:
+ * every branch, every pool (the mockup's own handler loops every branch key).
+ *
+ * The route is owner-gated in the UI (this screen's convention) but NOT yet server-side — see
+ * `pending-findings.md` "booking-rule-route-missing-owner-and-entitlement-gate".
+ */
+export function useSaveCancellationPolicy(branchId?: string) {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  const { tenant } = useAdminTenant();
+  return useMutation({
+    mutationFn: async (args: {
+      tiers: { hours: number; percent: number }[]; // exactly 3, already validated
+      applyGlobally: boolean;
+      branchPools: ResourcePool[]; // current branch's pools, already loaded
+    }) => {
+      const cancellationPolicyJson = {
+        type: 'tiered' as const,
+        tiers: args.tiers.map((t) => ({ min_hours_before_slot: t.hours, refund_percent: t.percent })),
+      };
+      let pools = args.branchPools;
+      if (args.applyGlobally) {
+        const branches = await api.get<Branch[]>(`/tenant/tenants/${tenant?.id}/branches?includeDraft=true`);
+        const perBranch = await Promise.all(
+          branches.map((b) => api.get<ResourcePool[]>(`/slot-engine/branches/${b.id}/resource-pools`)),
+        );
+        pools = perBranch.flat();
+      }
+      // Dedupe by pool id before the fan-out: `includeDraft=true` can return a draft + published
+      // row for the same branch, which would otherwise PUT the same pool twice (idempotent, but
+      // wasteful). Also guards the current branch's pool appearing in more than one list.
+      const uniquePoolIds = [...new Set(pools.map((p) => p.id))];
+      await Promise.all(
+        uniquePoolIds.map((id) => api.put(`/slot-engine/resource-pools/${id}/booking-rule`, { cancellationPolicyJson })),
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: courtGroupsKeys.pools(branchId) });
+      qc.invalidateQueries({ queryKey: courtGroupsKeys.branches(tenant?.id) });
+    },
+  });
+}
+
 /** Query-key builders so mutations can invalidate exactly what they touched. */
 export const courtGroupsKeys = {
   branches: (tenantId?: string) => ['court-groups', 'branches', tenantId] as const,
