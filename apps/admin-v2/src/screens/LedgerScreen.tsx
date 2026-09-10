@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Lock } from 'lucide-react';
 import { Badge, Banner, LoadingState, Select, Table, Tabs, type BadgeTone, type Column } from '../components';
-import { errorMessage } from '../lib/errorMessage';
+import { friendlyError } from '../lib/errorMessage';
 import { useBranches, useGuestLedger, usePools } from './guestManagement/queries';
+import { safeTimeZone } from './guestManagement/reservationHelpers';
 import type { GuestLedgerRow, LedgerMethod } from './guestManagement/types';
 
 const TABS = [
@@ -47,14 +48,16 @@ function statusBadge(status: string): { tone: BadgeTone; label: string } {
 
 function formatDateTime(iso: string, timezone: string | undefined): string {
   // "27 Sep, 6:00 PM" — day-first, matching the approved mockup's own copy.
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone || 'UTC',
+    timeZone: safeTimeZone(timezone),
     day: 'numeric',
     month: 'short',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  }).formatToParts(new Date(iso));
+  }).formatToParts(d);
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
   const month = get('month').replace(/\.$/, '').slice(0, 3);
   return `${get('day')} ${month}, ${get('hour')}:${get('minute')} ${get('dayPeriod').toUpperCase()}`;
@@ -90,7 +93,7 @@ export function LedgerScreen() {
 
   const columns: Column<GuestLedgerRow>[] = [
     { key: 'date', header: 'Date', render: (r) => <span style={{ whiteSpace: 'nowrap' }}>{formatDateTime(r.date, tz)}</span> },
-    { key: 'guest', header: 'Guest', render: (r) => r.guest.name || r.guest.phone || '—' },
+    { key: 'guest', header: 'Guest', render: (r) => r.guest?.name || r.guest?.phone || '—' },
     { key: 'court', header: 'Court', render: (r) => r.court || '—' },
     {
       key: 'amount',
@@ -107,7 +110,7 @@ export function LedgerScreen() {
       render: (r) => {
         const m = r.payment?.method;
         if (!m) return <Badge tone="neutral">Unpaid</Badge>;
-        return <Badge tone={METHOD_TONE[m]}>{METHOD_LABEL[m]}</Badge>;
+        return <Badge tone={METHOD_TONE[m] ?? 'neutral'}>{METHOD_LABEL[m] ?? String(m)}</Badge>;
       },
     },
     {
@@ -162,7 +165,7 @@ export function LedgerScreen() {
             ))}
           </Select>
         )}
-        {branches.error && <Banner tone="error">{errorMessage(branches.error)}</Banner>}
+        {branches.error && <Banner tone="error">{friendlyError(branches.error, "Couldn’t load branches.")}</Banner>}
       </div>
 
       <div style={{ display: 'grid', gap: 'var(--av2-space-4)', minWidth: 0 }}>
@@ -174,7 +177,7 @@ export function LedgerScreen() {
           ) : !poolId || pools.isLoading || ledger.isLoading || ledger.isPending ? (
             <LoadingState label="Loading ledger…" />
           ) : ledger.error ? (
-            <Banner tone="error">{errorMessage(ledger.error)}</Banner>
+            <Banner tone="error">{friendlyError(ledger.error, "Couldn’t load the ledger.")}</Banner>
           ) : (
             <div
               style={{

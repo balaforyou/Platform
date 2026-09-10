@@ -11,13 +11,43 @@ export function digitsOnly(raw: string): string {
   return raw.replace(/\D/g, '').slice(0, 10);
 }
 
+// --- timezone / date safety --------------------------------------------------
+// `new Intl.DateTimeFormat(_, { timeZone })` throws RangeError on a non-IANA string, and a
+// malformed ISO date makes `.format()` throw too. Every formatter below runs during render
+// (useMemo, slotsInBand, table column renderers), so an unguarded throw white-screens the
+// screen. `branch.timezone` comes from the DB — JBC is "UTC" (fine), but a legacy/misconfigured
+// branch could carry "" or "IST" or garbage. Validate the zone once, fall back to UTC.
+
+const tzCache = new Map<string, string>();
+export function safeTimeZone(tz: string | undefined): string {
+  const key = (tz || 'UTC').trim();
+  const cached = tzCache.get(key);
+  if (cached) return cached;
+  let resolved = 'UTC';
+  try {
+    // The constructor is what validates the zone.
+    // eslint-disable-next-line no-new
+    new Intl.DateTimeFormat('en-US', { timeZone: key });
+    resolved = key;
+  } catch {
+    resolved = 'UTC';
+  }
+  tzCache.set(key, resolved);
+  return resolved;
+}
+
+function safeDate(iso: string): Date {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? new Date(0) : d;
+}
+
 /** The window's hour-of-day in the branch's own timezone (JBC = UTC). */
 export function branchHour(iso: string, timezone: string | undefined): number {
   const h = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone || 'UTC',
+    timeZone: safeTimeZone(timezone),
     hour: 'numeric',
     hour12: false,
-  }).format(new Date(iso));
+  }).format(safeDate(iso));
   // Intl can render midnight as "24" in some engines — normalise.
   return Number(h) % 24;
 }
@@ -60,20 +90,21 @@ export function bandsWithSlots(
 
 /** "6:00 – 7:00 PM" in the branch timezone. */
 export function formatSlotLabel(window: AvailabilitySlot['window'], timezone: string | undefined): string {
+  const tz = safeTimeZone(timezone);
   const fmt = (iso: string) =>
     new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone || 'UTC',
+      timeZone: tz,
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    }).format(new Date(iso));
+    }).format(safeDate(iso));
   const start = fmt(window.startTime).replace(/\s?[AP]M$/i, '');
   return `${start} – ${fmt(window.endTime)}`;
 }
 
-const hhmmToMinutes = (hhmm: string): number => {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
+const hhmmToMinutes = (hhmm: unknown): number => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm ?? '').trim());
+  return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
 };
 
 export type RateSource = 'window' | 'peak' | 'standard' | 'default';
@@ -98,9 +129,9 @@ export function resolveGuestRate(
   if (window && peak != null && peakWindows.length > 0) {
     const startMin = branchLocalMinutes(window.startTime, branch?.timezone);
     const inPeak = peakWindows.some((w) => {
-      const s = hhmmToMinutes(w.start);
-      const e = hhmmToMinutes(w.end);
-      return startMin >= s && startMin < e;
+      const s = hhmmToMinutes(w?.start);
+      const e = hhmmToMinutes(w?.end);
+      return Number.isFinite(s) && Number.isFinite(e) && startMin >= s && startMin < e;
     });
     if (inPeak) return { amount: peak, source: 'peak' };
   }
@@ -110,11 +141,11 @@ export function resolveGuestRate(
 
 function branchLocalMinutes(iso: string, timezone: string | undefined): number {
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone || 'UTC',
+    timeZone: safeTimeZone(timezone),
     hour: 'numeric',
     minute: 'numeric',
     hour12: false,
-  }).formatToParts(new Date(iso));
+  }).formatToParts(safeDate(iso));
   const h = Number(parts.find((p) => p.type === 'hour')?.value ?? '0') % 24;
   const m = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
   return h * 60 + m;

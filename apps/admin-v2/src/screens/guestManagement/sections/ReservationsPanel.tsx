@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, CircleAlert, CreditCard, Link2, Search } from 'lucide-react';
 import { Banner, Button, Card, Select, Toggle, useToast } from '../../../components';
-import { errorMessage } from '../../../lib/errorMessage';
+import { friendlyError } from '../../../lib/errorMessage';
 import {
   useAvailability,
   useBranches,
@@ -88,7 +88,7 @@ export function ReservationsPanel({ branchId }: { branchId: string }) {
         setLookupState('not-found');
       }
     } catch (err) {
-      setLookupError(errorMessage(err));
+      setLookupError(friendlyError(err, 'Couldn’t look up that number. Try again.'));
     }
   };
 
@@ -194,7 +194,7 @@ export function ReservationsPanel({ branchId }: { branchId: string }) {
       }
       resetAfterSuccess();
     } catch (err) {
-      setSubmitError(errorMessage(err));
+      setSubmitError(friendlyError(err, 'Couldn’t record the booking. Nothing was charged — try again.'));
     }
   };
 
@@ -223,7 +223,7 @@ export function ReservationsPanel({ branchId }: { branchId: string }) {
   const label: React.CSSProperties = { fontSize: 'var(--av2-text-sm)', fontWeight: 600, color: 'var(--av2-text)' };
 
   if (pools.isLoading) return <Banner tone="info">Loading courts…</Banner>;
-  if (pools.error) return <Banner tone="error">{errorMessage(pools.error)}</Banner>;
+  if (pools.error) return <Banner tone="error">{friendlyError(pools.error, "Couldn’t load this branch’s courts.")}</Banner>;
   if (!branchPools.length) return <Banner tone="info">This branch has no court pool configured yet.</Banner>;
 
   return (
