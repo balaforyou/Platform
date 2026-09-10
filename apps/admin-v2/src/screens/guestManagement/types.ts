@@ -20,11 +20,20 @@ export type Branch = {
   guestPeakWindows?: GuestPeakWindow[] | null;
 };
 
+/**
+ * F-220 §3.3: the tiered guest cancellation/refund policy. Stored on `BookingRule` as a Json
+ * column, consumed at real cancellation time (`slot-engine/src/index.ts` — tiers sorted
+ * descending by `min_hours_before_slot`, first match wins, refund = price * refund_percent / 100).
+ */
+export type CancellationTier = { min_hours_before_slot: number; refund_percent: number };
+export type CancellationPolicyJson = { type: 'tiered'; tiers: CancellationTier[] };
+
 export type BookingRule = {
   id: string;
   resourcePoolId: string;
   guestAccessCutoffMinutes: number;
   lowOccupancyThresholdPct: number;
+  cancellationPolicyJson?: CancellationPolicyJson | null; // F-220 §3.3
 };
 
 /** F-220 §3.1: the courts in a pool. `GET /branches/:id/resource-pools` already returns these

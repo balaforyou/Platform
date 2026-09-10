@@ -125,3 +125,34 @@ export const guestPricingSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['guestPeakWindows'], message: 'Fix the peak hours before saving.' });
     }
   });
+
+/* -------------------------------------------------------------------------- */
+/* F-220 §3.3 — tiered guest cancellation / refund policy                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Exactly three tiers, both sides editable (Bala, 4 Sep 2026 — nothing hardcodes 24/12/0
+ * server-side). Refund percent: independent 0–100 integer per row, no cross-row ordering.
+ * Hour threshold: non-negative integer, and the three must be strictly descending
+ * (`h1 > h2 > h3 >= 0`) — the cancellation-time tier match (`slot-engine`) sorts descending and
+ * takes the first tier whose `min_hours_before_slot <= hoursBeforeSlot`, so a non-descending
+ * list produces a policy that reads wrong. Same "catch before save, not after a 400" instinct
+ * as `validateTimeWindows`; the PUT route does not validate tier shape itself.
+ */
+export const refundPercent = z.coerce.number().int().min(0).max(100);
+export const hourThreshold = z.coerce.number().int().min(0);
+
+const cancellationTierInput = z.object({ hours: hourThreshold, percent: refundPercent });
+
+export const cancellationPolicySchema = z
+  .object({ tiers: z.tuple([cancellationTierInput, cancellationTierInput, cancellationTierInput]) })
+  .superRefine((v, ctx) => {
+    const [a, b, c] = v.tiers;
+    if (!(a.hours > b.hours && b.hours > c.hours)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['tiers'],
+        message: 'Notice hours must decrease down the list (e.g. 24, 6, 0).',
+      });
+    }
+  });
