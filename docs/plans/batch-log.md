@@ -1701,6 +1701,66 @@ new walk-in sections), tenant-management 11/11, slot-engine 74/74, payment 12/12
 
 **No register/pending-findings/diagram change** — route-only step.
 
+## Batch 37 — F-229 Step 3: `POST /bookings/manual` (payment)
+
+**Findings:** [[F-229]] Step 3 of 6. Register row stays **Open / In progress**.
+
+**Refactor (behaviour-preserving):** the inline slot-engine `/bookings/negotiated` call in
+`POST /payment-links/negotiated` is extracted **verbatim** into `createHeldNegotiatedBooking()`
+so `/bookings/manual` reuses it. Only existing code path this step touches — guarded by
+`negotiated-link.regression.ts` plus a live-fire re-run of `/payment-links/negotiated` itself.
+
+**New route `POST /bookings/manual` (payment):**
+- Auth: `requirePaymentLinkAdmin` + the same per-branch role check `/payment-links/negotiated`
+  uses (`:989`); `Idempotency-Key` required. Body = the negotiated body + `paymentMethod`
+  (`cash` \| `razorpay_link` \| `upi_qr`) + `upiTransactionId?` (required iff `upi_qr`).
+- `razorpay_link` — thin pass-through, identical to `/payment-links/negotiated`.
+- `cash` / `upi_qr` — `createHeldNegotiatedBooking` (HELD) → `PaymentIntent` written already
+  `captured` (`amount = Math.round(Number(negotiatedPrice) * 100)` verbatim from
+  `createPaymentLinkForHeldBooking:818`; `gatewayRef` = `cash_<sha256(idempotencyKey).slice(0,16)>`
+  or `upi_<upiTransactionId>`) → slot-engine `POST /bookings/:id/confirm`, **the exact call the
+  Razorpay webhook makes at `:468`**. No new `booking.update({ status })` anywhere — idempotency,
+  the non-HELD reject, and the F-183 child cascade all belong to that route.
+- Retry / collision safety (reviewer bug catch, plan rev 2): `expectedGatewayRef` computed
+  **before** the existing-intent guard; a same-key retry (ref matches + `captured`) falls
+  through to the idempotent confirm and returns the existing intent (also self-heals a
+  confirm-failed-after-capture); the P2002 catch verifies `raced.referenceId === booking.id`,
+  else **409 `UPI_TRANSACTION_ID_ALREADY_USED`** and **never** confirms — closes a real
+  cross-booking "free court" path from a reused admin-typed UPI id.
+- Other errors: pending intent on the booking → **400 `BOOKING_HAS_PENDING_INTENT`**; confirm
+  fails after capture → **502 `BOOKING_CONFIRM_FAILED`** + loud log (webhook's own posture).
+- **No schema change** — `PaymentIntent` untouched; Cash/UPI/Link lives entirely in the
+  `gatewayRef` prefix, which Step 4's ledger derives from.
+
+**Blast radius:** new route + the behaviour-preserving `createHeldNegotiatedBooking` extraction.
+slot-engine (`/bookings/negotiated`, `/bookings/:id/confirm`) called as-is, not modified. New
+`manual-booking.regression.ts` (7 sections) in `run.ts`.
+
+**Decision record:** `claude/claude-code-plan-f229-step3-bookings-manual.md` rev 2 (committed
+`5ba7411`) — reviewer caught a real bug in rev 1's guard and signed off rev 2, including the three
+§4 decisions, after an independent code-level trace of all four branches (sequential + concurrent).
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 4).
+**Status:** commit `3c2b0cf` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`3c2b0cf`).
+
+**Evidence:** live-fire against the running dev stack + **real `badminton_db` JBC pool**
+`ba1d1433-…` (POOLED, Coimbatore branch `6c9c1e5e-…`), walk-in guest created via the Step 2
+route — 24 checks pass: standalone `/bookings/:id/confirm` shows **HELD → CONFIRMED**; `cash`
+and `upi_qr` reach `CONFIRMED` with a `captured` `PaymentIntent` (24000 paise for ₹240, `cash_` /
+`upi_<txn>` prefix, `referenceId` match, `purpose: guest_booking`); `cash` retry → same booking +
+same intent, one row, still `CONFIRMED`; `upi_qr` resubmit (same booking) → same intent;
+**`upi_qr` cross-booking collision → 409, second booking NOT `CONFIRMED`, one intent pointing at
+the first booking**; missing `upiTransactionId` → 400 (no booking leaked); `razorpay_link` →
+working `plink_mock_…` link, `pending` intent, booking stays `HELD`; `/payment-links/negotiated`
+itself post-refactor → unchanged (retry reuse, member JWT 403); auth 401 / 403 / 403 / 400. All
+test rows deleted, `SELECT count(*)` = 0/0 — no demo-data pollution. `pnpm -r build` /
+`typecheck` / `lint` clean (8 pre-existing lint warnings). Full 5-service regression green
+against `badminton_db_test` — identity-auth 12/12, tenant-management 11/11, slot-engine 74/74,
+**payment 19/19** (12 baseline + 7 new), notification 7/7; clean first run.
+
+**No register/pending-findings/diagram change** — route + refactor only.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
