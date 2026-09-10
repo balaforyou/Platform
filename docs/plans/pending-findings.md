@@ -538,6 +538,21 @@ dated append, not a silent backfill.
 Confirmed-ID: F-204
 Confirmed: 30 Aug 2026
 
+### admin-assisted-manual-booking-cash-payment
+Batch: F-229 Step 0 (register relay), 10 Sep 2026
+Surfaced: 10 Sep 2026, Business Discovery Checklist
+(`claude/discovery-unified-login-manual-booking.md`, §9–§10) — Chief Architect thread.
+Supersedes [[F-204]] (`Walk-in booking + manual payment recording`, Open, never implemented) —
+same real gap F-204 always named, now fully scoped: an admin can book a court for a guest who's
+physically present or on the phone, with real cash and UPI-QR capture (immediate confirm, no
+webhook) plus a Razorpay-payment-link fallback, replacing F-204's narrower two-field/no-QR/
+standard-price-only scope. Depends softly on F-228 (`unified-gmail-login-guest-member-identity`,
+also Chief-assigned 10 Sep 2026, not yet relayed into git — separate finding, not part of this
+hand-off) for its shared search-or-create identity component; the capture route itself has no
+hard dependency and sequences first here.
+Confirmed-ID: F-229
+Confirmed: 10 Sep 2026
+
 ### deploy-pipeline-consolidation
 Batch: 23
 Surfaced: 28 Aug 2026

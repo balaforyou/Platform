@@ -1579,6 +1579,40 @@ corrected from the hand-off draft's 3 Sep 2026 estimate per the hand-off's own i
 prefer the kickoff doc's date. F-220's PR list in the register row also names #19 (Batch 32
 batch-log), which the hand-off draft predated.
 
+## Batch 34 — F-229 Step 0: register relay of Chief's manual-booking assignment (docs-only)
+
+**Findings:** [[F-229]] — new **Open** row, `admin-assisted-manual-booking-cash-payment`. Chief
+assigned the ID on 10 Sep 2026 in the Business Discovery Checklist
+(`claude/discovery-unified-login-manual-booking.md` §10), with the same "relay, same mechanism as
+F-221–F-227" instruction the doc spells out — that relay into git never happened until now, which
+is why a prior implementing thread's checkout correctly showed F-229 as unlogged. This batch is
+the mechanical transcription, not a new decision: a `Confirmed-ID: F-229` Promoted entry written
+to `pending-findings.md` so the `check-register.mjs` gate (F-229 ≥ F-179) passes, the F-229 Open
+row added verbatim from the hand-off, and [[F-204]]'s existing Open row marked **Superseded by
+[[F-229]]** (kept in place as a historical marker, not deleted — its narrower "no QR, standard
+price only, two fields" scope is absorbed into F-229's fuller design).
+
+**Also committed this batch:** the four F-229 hand-off documents into `claude/` at repo root
+(`technical-lead-plan-f229-manual-booking.md`, `claude-code-handover-f229-manual-booking.md`,
+`claude-code-handover-f229-implementation.md`, `discovery-unified-login-manual-booking.md`),
+unchanged — the other half of the same relay gap, so the register/pending-findings citations to
+`claude/discovery-unified-login-manual-booking.md` resolve to a real committed file.
+
+**Decision record:** `claude/discovery-unified-login-manual-booking.md` §10 (Chief) +
+`claude/claude-code-handover-f229-implementation.md` Step 0 (hand-off). F-228 was assigned in the
+same §10 but is a separate finding and is **not** relayed here — out of this hand-off's scope.
+
+**Handed off:** 10 Sep 2026 (F-229 implementation hand-off, Step 0).
+**Status:** on branch `f229-manual-booking` (off `main` `0fb9337`) — pending push.
+**Branch/PR:** `f229-manual-booking`.
+
+**No code / schema / route changes.** Step 1 (the `User.name` migration) is the first code step
+and is not done here.
+
+**Close-out:** `pnpm register:check` green — **206 rows, Open 111, Resolved 95** (+F-229 Open;
+from 205/110/95). `pnpm diagram:verify` green — all 67 finding tags agree, no tagged FLOW node
+touched by a docs-only change (F-229's own endpoints show only as non-failing advisory lines).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
