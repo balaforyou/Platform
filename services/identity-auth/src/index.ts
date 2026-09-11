@@ -400,6 +400,56 @@ server.post('/auth/otp/request', async (request, reply) => {
   return { success: true, message: 'OTP request initiated' };
 });
 
+/**
+ * Verify a pending OTP code for (phone, tenantId) and consume it (delete on success, so it can't
+ * be replayed). Throws the same OTP_EXPIRED_OR_INVALID / INVALID_OTP_CODE / OTP_ATTEMPTS_EXCEEDED
+ * errors either call site surfaces via the global error handler (it reads statusCode/code off the
+ * thrown error directly — see packages/shared-middleware/src/index.ts — so this needs no `reply`).
+ * Extracted for /auth/otp/attach-phone (F-228 Step 2), the second real call site.
+ */
+async function verifyOtpCode(prisma: PrismaClient, phone: string, tenantId: string, code: string): Promise<void> {
+  const now = new Date();
+
+  const otpReq = await prisma.otpRequest.findFirst({
+    where: {
+      phone,
+      tenantId,
+      expiresAt: { gte: now },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!otpReq) {
+    const err = new Error('OTP request expired or invalid');
+    (err as any).statusCode = 400;
+    (err as any).code = 'OTP_EXPIRED_OR_INVALID';
+    throw err;
+  }
+
+  if (otpReq.code !== code) {
+    const updated = await prisma.otpRequest.update({
+      where: { id: otpReq.id },
+      data: { attempts: otpReq.attempts + 1 },
+    });
+
+    if (updated.attempts >= 3) {
+      await prisma.otpRequest.delete({ where: { id: otpReq.id } });
+      const err = new Error('OTP verification attempts exceeded. Please request a new code.');
+      (err as any).statusCode = 400;
+      (err as any).code = 'OTP_ATTEMPTS_EXCEEDED';
+      throw err;
+    }
+
+    const err = new Error('Invalid OTP code');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_OTP_CODE';
+    throw err;
+  }
+
+  // OTP verified successfully. Delete the code to prevent replay attacks.
+  await prisma.otpRequest.delete({ where: { id: otpReq.id } });
+}
+
 // Endpoint to verify OTP and issue session tokens (Public signup defaults userType to GUEST)
 server.post('/auth/otp/verify', async (request, reply) => {
   const { phone: rawPhone, tenantId, code, googleId, email } = request.body as any;
@@ -413,52 +463,7 @@ server.post('/auth/otp/verify', async (request, reply) => {
 
   const phone = normalizePhone(rawPhone);
 
-  const now = new Date();
-
-  // Find latest active OTP request
-  const otpReq = await prisma.otpRequest.findFirst({
-    where: {
-      phone,
-      tenantId,
-      expiresAt: { gte: now },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!otpReq) {
-    reply.status(400);
-    const err = new Error('OTP request expired or invalid');
-    (err as any).statusCode = 400;
-    (err as any).code = 'OTP_EXPIRED_OR_INVALID';
-    throw err;
-  }
-
-  // Verify code
-  if (otpReq.code !== code) {
-    const updated = await prisma.otpRequest.update({
-      where: { id: otpReq.id },
-      data: { attempts: otpReq.attempts + 1 },
-    });
-
-    // Invalidate the request after 3 failed attempts
-    if (updated.attempts >= 3) {
-      await prisma.otpRequest.delete({ where: { id: otpReq.id } });
-      reply.status(400);
-      const err = new Error('OTP verification attempts exceeded. Please request a new code.');
-      (err as any).statusCode = 400;
-      (err as any).code = 'OTP_ATTEMPTS_EXCEEDED';
-      throw err;
-    }
-
-    reply.status(400);
-    const err = new Error('Invalid OTP code');
-    (err as any).statusCode = 400;
-    (err as any).code = 'INVALID_OTP_CODE';
-    throw err;
-  }
-
-  // OTP verified successfully. Delete the code to prevent replay attacks.
-  await prisma.otpRequest.delete({ where: { id: otpReq.id } });
+  await verifyOtpCode(prisma, phone, tenantId, code);
 
   // Check or register the User
   let user = await prisma.user.findUnique({
@@ -560,6 +565,109 @@ server.post('/auth/otp/verify', async (request, reply) => {
 
   reply.status(201);
   return { accessToken, isNewSignup, user };
+});
+
+// Attach and verify a phone number on the CALLER's OWN account (F-228 Step 2). Lets a
+// Google-first account (created by /auth/google/verify with phone:null) fill in a phone,
+// independent of how the session was created — the gate is account state, not userType.
+// tenantId comes from the access token, never the body: a caller can only ever attach a
+// phone to their own account, in their own tenant.
+server.post('/auth/otp/attach-phone', async (request, reply) => {
+  let decoded: any;
+  try {
+    decoded = await request.jwtVerify();
+  } catch {
+    reply.status(401);
+    const err = new Error('Invalid or expired token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+
+  const { phone: rawPhone, code } = request.body as any;
+  if (!rawPhone || !code) {
+    reply.status(400);
+    const err = new Error('phone and code are required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const phone = normalizePhone(rawPhone);
+  if (!/^\+91[6-9]\d{9}$/.test(phone)) {
+    reply.status(400);
+    const err = new Error('Phone must normalize to a valid 10-digit Indian mobile number');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_PHONE';
+    throw err;
+  }
+
+  const tenantId = decoded.tenantId;
+  const selectFields = { id: true, phone: true, isPhoneVerified: true, userType: true } as const;
+
+  const caller = await prisma.user.findUnique({
+    where: { id: decoded.userId },
+    select: selectFields,
+  });
+  if (!caller) {
+    // Row vanished between token issue and read — treat as not found rather than 500.
+    reply.status(404);
+    const err = new Error('Account not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'USER_NOT_FOUND';
+    throw err;
+  }
+
+  // Already verified with a DIFFERENT phone: "change my number" is explicitly out of scope for
+  // this endpoint (F-228 §4) — reject before touching OtpRequest at all.
+  if (caller.isPhoneVerified && caller.phone !== phone) {
+    reply.status(409);
+    const err = new Error('This account already has a different verified phone number.');
+    (err as any).statusCode = 409;
+    (err as any).code = 'PHONE_ALREADY_ATTACHED';
+    throw err;
+  }
+
+  // Either an idempotent retry (already verified, same phone) or the real first-attach case
+  // (not yet verified) — both require a valid, fresh OTP code for this phone.
+  await verifyOtpCode(prisma, phone, tenantId, code);
+
+  if (caller.isPhoneVerified && caller.phone === phone) {
+    // Idempotent no-op: nothing to change, but the OTP was still consumed above.
+    return caller;
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { phone_tenantId: { phone, tenantId } },
+    select: { id: true },
+  });
+  if (existing) {
+    reply.status(409);
+    const err = new Error('This phone number is already linked to a different account.');
+    (err as any).statusCode = 409;
+    (err as any).code = 'PHONE_ALREADY_LINKED';
+    throw err;
+  }
+
+  try {
+    const updated = await prisma.user.update({
+      where: { id: decoded.userId },
+      data: { phone, isPhoneVerified: true },
+      select: selectFields,
+    });
+    return updated;
+  } catch (e: any) {
+    // P2002: another account claimed this phone in the race window between the pre-check
+    // above and this update. Same collision, same code as the pre-check — not a new concept.
+    if (e?.code === 'P2002') {
+      reply.status(409);
+      const err = new Error('This phone number is already linked to a different account.');
+      (err as any).statusCode = 409;
+      (err as any).code = 'PHONE_ALREADY_LINKED';
+      throw err;
+    }
+    throw e;
+  }
 });
 
 // Endpoint to verify Google OAuth ID Tokens. Real verification (F-228 Step 1); find-or-create
