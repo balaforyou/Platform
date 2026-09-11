@@ -4,12 +4,14 @@ import { ArrowLeft, FileSpreadsheet } from 'lucide-react';
 import { moduleVisible, useAdminTenant } from '../auth/AdminTenantContext';
 import { Banner, EmptyState, LoadingState, Select, Tabs } from '../components';
 import { useBranches } from './guestManagement/queries';
+import { MemberProvisioningPanel } from './guestManagement/sections/MemberProvisioningPanel';
 import { ReservationsPanel } from './guestManagement/sections/ReservationsPanel';
 import { SetupRulesPanel } from './guestManagement/SetupRulesPanel';
 
 const TABS = [
   { key: 'reservations', label: 'Reservations' },
   { key: 'setup-rules', label: 'Setup Rules' },
+  { key: 'member-provisioning', label: 'Members' },
 ];
 
 /**
@@ -98,8 +100,12 @@ export function GuestManagementScreen() {
           ) : (
             <Banner tone="info">Select a branch to record a walk-in booking.</Banner>
           )
-        ) : (
+        ) : tab === 'setup-rules' ? (
           <SetupRulesPanel key={branchId} branchId={branchId} />
+        ) : (
+          // F-228 Step 6: tenant-level (userType has no branchId) — unlike the other two tabs,
+          // this one doesn't depend on branchId and renders regardless of branch selection.
+          <MemberProvisioningPanel />
         )}
       </div>
     </div>

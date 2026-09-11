@@ -115,4 +115,74 @@ export const adminPhoneLookupSections: Section<IdentityContext>[] = [
       }
     },
   },
+
+  {
+    name: 'GET /users/lookup — F-228 Step 6: optional ?email= (found, no phone-required, no email leak, invalid email 400, neither/both identifiers 400)',
+    async run() {
+      const ownerJwt = signJwt({ userId: 'owner-user-2', tenantId: TENANT_ID, roles: ['owner'], userType: 'MEMBER' });
+
+      // A Google-first guest with no phone attached yet (F-228 Step 1's exact shape) — the whole
+      // point of adding ?email= is to find accounts precisely like this one, which ?phone=
+      // structurally cannot reach.
+      const emailOnlyUser = await db.user.create({
+        data: {
+          tenantId: TENANT_ID,
+          userType: 'GUEST',
+          email: 'provisioning-target@example.com',
+          googleId: 'google-provisioning-target',
+          isPhoneVerified: false,
+        },
+      });
+
+      const lookupByEmail = (email: string, jwt: string) =>
+        fetch(`${identityUrl}/users/lookup?tenantId=${TENANT_ID}&email=${encodeURIComponent(email)}`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+
+      // Found by email; phone is genuinely null (not just absent-from-payload); email itself is
+      // not echoed back, same convention as the phone-lookup path above.
+      const found = await inspect(await lookupByEmail('provisioning-target@example.com', ownerJwt));
+      if (
+        found.status !== 200 ||
+        found.json?.data?.id !== emailOnlyUser.id ||
+        found.json?.data?.phone !== null ||
+        found.json?.data?.email
+      ) {
+        throw new Error(`Expected email lookup to find the user with phone:null and no email leak, got ${found.raw}`);
+      }
+      console.log('LOOKUP_EVIDENCE email_found_no_phone', JSON.stringify(found.json));
+
+      // Case-insensitive: Google always lowercases before storing (adminGoogleAuth.ts), so the
+      // lookup must too, or a real admin typing the address as shown in their own inbox would
+      // never match it.
+      const foundMixedCase = await inspect(await lookupByEmail('Provisioning-Target@Example.com', ownerJwt));
+      if (foundMixedCase.status !== 200 || foundMixedCase.json?.data?.id !== emailOnlyUser.id) {
+        throw new Error(`Expected case-insensitive email lookup to match, got ${foundMixedCase.raw}`);
+      }
+      console.log('Case-insensitive email lookup matches the lowercased stored value.');
+
+      const invalidEmail = await inspect(await lookupByEmail('not-an-email', ownerJwt));
+      if (invalidEmail.status !== 400 || invalidEmail.json?.error?.code !== 'INVALID_EMAIL') {
+        throw new Error(`Expected invalid email 400 INVALID_EMAIL, got ${invalidEmail.raw}`);
+      }
+
+      // Neither identifier -> 400. Both identifiers -> 400 (never silently pick one).
+      const neither = await inspect(
+        await fetch(`${identityUrl}/users/lookup?tenantId=${TENANT_ID}`, { headers: { Authorization: `Bearer ${ownerJwt}` } }),
+      );
+      if (neither.status !== 400 || neither.json?.error?.code !== 'BAD_REQUEST') {
+        throw new Error(`Expected neither-identifier 400 BAD_REQUEST, got ${neither.raw}`);
+      }
+      const both = await inspect(
+        await fetch(
+          `${identityUrl}/users/lookup?tenantId=${TENANT_ID}&phone=9888888888&email=provisioning-target@example.com`,
+          { headers: { Authorization: `Bearer ${ownerJwt}` } },
+        ),
+      );
+      if (both.status !== 400 || both.json?.error?.code !== 'BAD_REQUEST') {
+        throw new Error(`Expected both-identifiers 400 BAD_REQUEST, got ${both.raw}`);
+      }
+      console.log('Neither identifier and both identifiers both correctly rejected 400 BAD_REQUEST.');
+    },
+  },
 ];

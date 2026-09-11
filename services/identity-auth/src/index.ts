@@ -150,10 +150,10 @@ server.get('/health', async () => {
 });
 
 server.get('/users/lookup', async (request, reply) => {
-  const { tenantId, phone: rawPhone } = request.query as any;
-  if (!tenantId || !rawPhone) {
+  const { tenantId, phone: rawPhone, email: rawEmail } = request.query as any;
+  if (!tenantId || (!rawPhone && !rawEmail) || (rawPhone && rawEmail)) {
     reply.status(400);
-    const err = new Error('tenantId and phone are required');
+    const err = new Error('tenantId and exactly one of phone or email are required');
     (err as any).statusCode = 400;
     (err as any).code = 'BAD_REQUEST';
     throw err;
@@ -188,20 +188,36 @@ server.get('/users/lookup', async (request, reply) => {
     throw err;
   }
 
-  const phone = normalizePhone(rawPhone);
-  if (!/^\+91[6-9]\d{9}$/.test(phone)) {
-    reply.status(400);
-    const err = new Error('Phone must normalize to a valid 10-digit Indian mobile number');
-    (err as any).statusCode = 400;
-    (err as any).code = 'INVALID_PHONE';
-    throw err;
+  // F-228 Step 6: exactly one of phone or email identifies the target — build the matching
+  // compound-unique where clause, never both. `select` stays identical regardless of which
+  // identifier resolved the match: `email` is never returned (same established convention as
+  // the phone path — admin-phone-lookup.regression.ts asserts it never leaks here), and `phone`
+  // can genuinely be null now (a Google-first guest with no phone attached yet, F-228 Step 1).
+  let where: { phone_tenantId: { phone: string; tenantId: string } } | { email_tenantId: { email: string; tenantId: string } };
+  if (rawPhone) {
+    const phone = normalizePhone(rawPhone);
+    if (!/^\+91[6-9]\d{9}$/.test(phone)) {
+      reply.status(400);
+      const err = new Error('Phone must normalize to a valid 10-digit Indian mobile number');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PHONE';
+      throw err;
+    }
+    where = { phone_tenantId: { phone, tenantId } };
+  } else {
+    const email = String(rawEmail).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      reply.status(400);
+      const err = new Error('Invalid email address');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_EMAIL';
+      throw err;
+    }
+    where = { email_tenantId: { email, tenantId } };
   }
 
   const user = await prisma.user.findUnique({
-    where: { phone_tenantId: { phone, tenantId } },
-    // F-229: `name` is returned so the admin walk-in / manual-booking guest lookup can show the
-    // resolved guest's name. `email` stays excluded on purpose — admin-phone-lookup.regression.ts
-    // asserts it never leaks here.
+    where: where as any,
     select: { id: true, phone: true, name: true, userType: true },
   });
   if (!user) {

@@ -81,10 +81,14 @@ export type AvailabilitySlot = {
 
 // F-229 Step 5 — walk-in reservation flow response shapes.
 
-/** `GET /identity/users/lookup` — 200 body (404 = no account, handled as a state, not an error). */
+/**
+ * `GET /identity/users/lookup` — 200 body (404 = no account, handled as a state, not an error).
+ * F-228 Step 6: `phone` widened to `string | null` — an email-based lookup can match a
+ * Google-first guest with no phone attached yet (F-228 Step 1's find-or-create shape).
+ */
 export type GuestLookupResult = {
   id: string;
-  phone: string;
+  phone: string | null;
   name?: string | null;
   userType: string;
 };

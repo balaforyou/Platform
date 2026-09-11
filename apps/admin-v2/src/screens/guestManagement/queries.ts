@@ -87,19 +87,25 @@ export type GuestLookupOutcome =
   | { status: 'found'; user: GuestLookupResult }
   | { status: 'not-found' };
 
+/** Exactly one of phone or email identifies the target — same rule `GET /identity/users/lookup` enforces server-side. */
+export type GuestLookupIdentifier = { phone: string } | { email: string };
+
 /**
- * F-229: look up a guest by phone. `GET /identity/users/lookup` — owner/branch_manager JWT +
- * tenant-matched (Step 2 added `name` to its select). A 404 (`USER_NOT_FOUND`) resolves to a
- * `not-found` outcome; every other failure rejects.
+ * F-229 (phone), generalized F-228 Step 6 (email): look up a guest by phone or email.
+ * `GET /identity/users/lookup` — owner/branch_manager JWT + tenant-matched. A 404
+ * (`USER_NOT_FOUND`) resolves to a `not-found` outcome; every other failure rejects.
  */
 export function useGuestLookup() {
   const api = useAdminApi();
   const { tenant } = useAdminTenant();
-  return useMutation<GuestLookupOutcome, Error, string>({
-    mutationFn: async (phone: string) => {
+  return useMutation<GuestLookupOutcome, Error, GuestLookupIdentifier>({
+    mutationFn: async (identifier: GuestLookupIdentifier) => {
+      const query = 'phone' in identifier
+        ? `phone=${encodeURIComponent(identifier.phone)}`
+        : `email=${encodeURIComponent(identifier.email)}`;
       try {
         const user = await api.get<GuestLookupResult>(
-          `/identity/users/lookup?tenantId=${tenant?.id}&phone=${encodeURIComponent(phone)}`,
+          `/identity/users/lookup?tenantId=${tenant?.id}&${query}`,
         );
         return { status: 'found', user };
       } catch (err) {
@@ -107,6 +113,17 @@ export function useGuestLookup() {
         throw err;
       }
     },
+  });
+}
+
+/**
+ * F-228 Step 6: promote a found guest to MEMBER. `PATCH /identity/users/:id/type` — Step 5's
+ * admin-JWT dual-path, tenant-scoped server-side against the target row's own tenantId.
+ */
+export function usePromoteToMember() {
+  const api = useAdminApi();
+  return useMutation<GuestLookupResult, Error, { userId: string }>({
+    mutationFn: ({ userId }) => api.patch<GuestLookupResult>(`/identity/users/${userId}/type`, { userType: 'MEMBER' }),
   });
 }
 

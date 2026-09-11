@@ -80,7 +80,7 @@ export function ReservationsPanel({ branchId }: { branchId: string }) {
   const runLookup = async () => {
     setLookupError(null);
     try {
-      const out = await lookup.mutateAsync(phone);
+      const out = await lookup.mutateAsync({ phone });
       if (out.status === 'found') {
         setFoundUser(out.user);
         setLookupState('found');
