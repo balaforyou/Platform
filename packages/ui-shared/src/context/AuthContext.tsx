@@ -9,6 +9,8 @@ interface AuthContextType {
   requestOtp: (phone: string) => Promise<boolean>;
   verifyOtp: (phone: string, code: string) => Promise<void>;
   verifyGoogleMock: (email: string) => Promise<void>;
+  verifyGoogle: (idToken: string) => Promise<{ isNewSignup: boolean }>;
+  attachPhone: (phone: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -138,6 +140,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const verifyGoogle = async (idToken: string): Promise<{ isNewSignup: boolean }> => {
+    if (!tenant) throw new Error('Tenant context is required to verify Google login');
+
+    const res = await apiRequest<{ accessToken: string; isNewSignup: boolean }>('/identity/auth/google/verify', {
+      method: 'POST',
+      body: JSON.stringify({ googleIdToken: idToken, tenantId: tenant.id }),
+    });
+
+    if (res && res.accessToken) {
+      setAccessToken(res.accessToken);
+      const decoded = parseJwt(res.accessToken);
+      setUser(decoded);
+      console.log('Google OAuth login successful.');
+    }
+
+    return { isNewSignup: !!res?.isNewSignup };
+  };
+
+  const attachPhone = async (phone: string, code: string): Promise<void> => {
+    const res = await apiRequest<{ phone: string; isPhoneVerified: boolean }>('/identity/auth/otp/attach-phone', {
+      method: 'POST',
+      body: JSON.stringify({ phone, code }),
+      token: accessToken,
+    });
+
+    if (res) {
+      // The JWT's own `phone` claim only refreshes on the next /auth/refresh; merge the
+      // updated fields into the in-memory user object now so callers can route immediately.
+      setUser((prev: any) => (prev ? { ...prev, phone: res.phone } : prev));
+      console.log('Phone attached and verified.');
+    }
+  };
+
   const logout = async () => {
     try {
       await apiRequest('/identity/auth/logout', { method: 'POST' });
@@ -161,6 +196,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         requestOtp,
         verifyOtp,
         verifyGoogleMock,
+        verifyGoogle,
+        attachPhone,
         logout,
         loading,
       }}

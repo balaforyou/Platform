@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useNavigate, useL
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { apiRequest, TenantProvider, useTenant, AuthProvider, useAuth } from '@badminton/ui-shared';
 import LoginScreen from './components/LoginScreen';
+import CompleteSignupScreen from './components/CompleteSignupScreen';
 import PwaInstallPrompt from './components/PwaInstallPrompt';
 import BranchSelect from './components/BranchSelect';
 import BranchDashboard from './components/BranchDashboard';
@@ -630,20 +631,37 @@ function MainDashboard() {
   );
 }
 
+function AuthLoadingSpinner() {
+  return (
+    <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+      <RefreshCw className="h-8 w-8 animate-spin" style={{ color: 'var(--color-accent-700)' }} />
+    </div>
+  );
+}
+
 /**
- * Route protection wrapper. Redirects unauthenticated users to /login.
+ * Route protection wrapper for the real app. Redirects unauthenticated users to /login, and
+ * (F-228 Step 3) an authenticated account with no phone on file yet to /complete-signup — durable
+ * across reloads, not just the immediate post-login moment, since /auth/refresh reissues the same
+ * phone:null claim until that account finishes signup.
  */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user, loading } = useAuth();
+
+  if (loading) return <AuthLoadingSpinner />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!user?.phone) return <Navigate to="/complete-signup" replace />;
+  return <>{children}</>;
+}
+
+/**
+ * Guards /complete-signup itself: authenticated only, deliberately no phone check (that's the
+ * point of this route) — not ProtectedRoute, which would redirect back here in a loop.
+ */
+function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <RefreshCw className="h-8 w-8 animate-spin" style={{ color: 'var(--color-accent-700)' }} />
-      </div>
-    );
-  }
-
+  if (loading) return <AuthLoadingSpinner />;
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
@@ -654,7 +672,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginScreen />} />
-      <Route 
+      <Route path="/complete-signup" element={<RequireAuth><CompleteSignupScreen /></RequireAuth>} />
+      <Route
         element={
           <ProtectedRoute>
             <Layout />

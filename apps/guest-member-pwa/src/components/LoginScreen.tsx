@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, useTenant } from '@badminton/ui-shared';
-import { ChevronRight, RefreshCw, Mail, AlertCircle, ShieldCheck } from 'lucide-react';
+import { useAuth, useTenant, renderGoogleButton } from '@badminton/ui-shared';
+import { ChevronRight, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
 
 // F-190 Slice 1: shared button styling for 3a/3b's 54px touch-first controls. ds.css's own
 // .btn-primary/.btn-secondary classes don't exist in this app's CSS (100% Tailwind here) --
@@ -13,22 +13,19 @@ const primaryBtn =
   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent-700)] ' +
   'disabled:opacity-45 disabled:cursor-not-allowed';
 
-const secondaryBtn =
-  'w-full min-h-[54px] rounded-[14px] flex items-center justify-center gap-[11px] font-bold text-[15px] cursor-pointer bg-white ' +
-  'text-[var(--color-text)] border border-[var(--color-neutral-300)] hover:bg-[var(--color-neutral-100)] active:bg-[var(--color-neutral-200)] ' +
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent-700)]';
-
 export default function LoginScreen() {
   const { tenant } = useTenant();
-  const { requestOtp, verifyOtp, verifyGoogleMock, isAuthenticated, user, logout } = useAuth();
+  const { requestOtp, verifyOtp, verifyGoogle, isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect to dashboard if already authenticated
+  // Redirect once authenticated. F-228 Step 3: an account with no phone on file yet (a
+  // brand-new Google signup) lands on /complete-signup instead of the dashboard — `phone` is
+  // already a JWT claim (null for that case), no extra state needed.
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/');
+      navigate(user?.phone ? '/' : '/complete-signup');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user?.phone, navigate]);
 
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -36,9 +33,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // For Dev Mock Google Sign In
-  const [showGoogleMockInput, setShowGoogleMockInput] = useState(false);
-  const [mockEmail, setMockEmail] = useState('');
+  const googleBtnRef = useRef<HTMLDivElement>(null);
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,35 +74,50 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGoogleMockLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!mockEmail || !mockEmail.includes('@')) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-
+  const handleGoogleToken = async (idToken: string) => {
     try {
       setLoading(true);
       setError(null);
-      await verifyGoogleMock(mockEmail);
-      console.log('Login successful via mock Google Account.');
+      await verifyGoogle(idToken);
+      console.log('Login successful via Google.');
+      // Navigation happens via the isAuthenticated effect above once `user` updates.
     } catch (err: any) {
-      // F-187: identity-auth already returns a readable err.message for both codes
-      // (e.g. "Google authentication is restricted to members only.") — these two branches
-      // exist to redirect the guest toward a path that actually works, not to reword an
-      // otherwise-raw string.
-      if (err.code === 'GOOGLE_LOGIN_ONLY_FOR_MEMBERS') {
-        setError('Google sign-in is for members only. Please use phone verification below instead.');
-      } else if (err.code === 'PHONE_VERIFICATION_REQUIRED') {
-        setError('This Google account needs phone verification first. Please sign in with your phone number below.');
-      } else {
-        setError(err.message || 'Google mock login failed.');
-      }
+      setError(err.message || 'Google sign-in failed. Please try again.');
     } finally {
       setLoading(false);
-      setShowGoogleMockInput(false);
     }
   };
+
+  // F-228 Step 3: real GIS button. Same pattern as admin-v2's LoginScreen (src/screens/LoginScreen.tsx) —
+  // GIS is handed a detached child <div>, never the React-managed ref node directly, so its own DOM
+  // churn (an injected <iframe> + wrapper) never collides with React's commit/cleanup on this component.
+  useEffect(() => {
+    const host = googleBtnRef.current;
+    if (!host) return;
+    let alive = true;
+
+    const mount = document.createElement('div');
+    mount.style.cssText = 'display:flex;justify-content:center';
+    host.appendChild(mount);
+
+    renderGoogleButton(mount, (idToken) => {
+      if (alive) handleGoogleToken(idToken);
+    }).catch((e) => {
+      if (alive) console.error('Failed to render Google sign-in button:', e);
+    });
+
+    return () => {
+      alive = false;
+      try {
+        mount.remove();
+      } catch {
+        /* GIS may already have detached it */
+      }
+    };
+    // Deliberately run once on mount only, same as admin-v2's LoginScreen.tsx's identical effect
+    // (no react-hooks lint plugin is configured in this repo's .eslintrc.json, so no disable
+    // comment is needed or checked here).
+  }, []);
 
   if (isAuthenticated) {
     return (
@@ -178,77 +188,6 @@ export default function LoginScreen() {
       <span>{error}</span>
     </div>
   );
-
-  if (showGoogleMockInput) {
-    // Stage 3: no wireframe equivalent -- kept as its own centered card (not the 3a/3b
-    // full-bleed header treatment), restyled with Slice 0's tokens for visual consistency.
-    return (
-      <div
-        className="min-h-screen flex flex-col justify-center items-center px-4 py-8"
-        style={{ background: 'var(--color-bg)' }}
-      >
-        <div
-          className="w-full max-w-md flex flex-col gap-6 p-7"
-          style={{ background: 'var(--color-neutral-100)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)' }}
-        >
-          {errorBanner}
-          <form onSubmit={handleGoogleMockLogin} className="flex flex-col gap-6">
-            <div className="flex items-center gap-3">
-              <span
-                className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-700)' }}
-              >
-                <Mail className="h-5 w-5" />
-              </span>
-              <div className="flex-1 flex justify-between items-center">
-                <h2 className="text-lg font-bold" style={{ color: 'var(--color-text)' }}>
-                  Google OAuth Simulation
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowGoogleMockInput(false);
-                    setError(null);
-                  }}
-                  className="text-xs font-semibold hover:underline"
-                  style={{ color: 'var(--color-accent-700)' }}
-                >
-                  Back
-                </button>
-              </div>
-            </div>
-            <p
-              className="text-xs p-3"
-              style={{ background: 'var(--color-neutral-200)', color: 'var(--color-neutral-800)', borderRadius: 'var(--radius-md)' }}
-            >
-              Simulates Google Single Sign-On (OAuth). Enter an email to verify membership or link phone.
-            </p>
-
-            <div className="flex flex-col gap-2">
-              <label
-                className="text-xs font-semibold uppercase tracking-wider"
-                style={{ color: 'var(--color-neutral-700)' }}
-              >
-                Simulated Google Email
-              </label>
-              <input
-                type="email"
-                value={mockEmail}
-                onChange={(e) => setMockEmail(e.target.value)}
-                placeholder="member@example.com"
-                className="w-full px-4 outline-none transition-colors border bg-white border-[var(--color-neutral-300)] focus:border-2 focus:border-[var(--color-accent-700)]"
-                style={{ minHeight: '54px', borderRadius: '14px', color: 'var(--color-text)', fontSize: '15px' }}
-              />
-            </div>
-
-            <button type="submit" disabled={loading} className={primaryBtn}>
-              {loading ? <RefreshCw className="h-5 w-5 animate-spin" /> : <span>Simulate Token Verification</span>}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
 
   if (otpSent) {
     // 3b -- Verify (JBC Booking.dc.html:208-239)
@@ -414,20 +353,11 @@ export default function LoginScreen() {
         </div>
 
         <div className="flex flex-col gap-[9px]">
-          <button type="button" onClick={() => setShowGoogleMockInput(true)} className={secondaryBtn}>
-            <span
-              className="h-[22px] w-[22px] rounded-full shrink-0"
-              style={{ background: 'repeating-linear-gradient(135deg, var(--color-neutral-300) 0 4px, var(--color-neutral-200) 4px 8px)' }}
-            />
-            <span>Continue with Google</span>
-          </button>
+          {/* F-228 Step 3: real GIS button (packages/ui-shared/src/lib/googleIdentity.ts), not a
+              styled button of our own — Google renders its own iframe into this container. */}
+          <div ref={googleBtnRef} className="flex justify-center min-h-[54px]" />
           <div className="flex flex-col gap-0.5" style={{ fontSize: '12px', lineHeight: 1.55, color: 'var(--color-neutral-700)' }}>
             <span>Members keep their booking history and skip the code next time.</span>
-            {/* Not real Google OAuth (Chief's Q1 answer, F-187 kickoff) -- kept quiet but visible
-                rather than dropped, so nobody mistakes this for a live integration. */}
-            <span className="font-semibold" style={{ color: 'var(--color-neutral-500)' }}>
-              [Dev Mock] — does not use real Google sign-in.
-            </span>
           </div>
         </div>
 

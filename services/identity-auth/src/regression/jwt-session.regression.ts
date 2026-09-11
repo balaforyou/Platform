@@ -210,4 +210,72 @@ export const jwtSessionSections: Section<IdentityContext>[] = [
       console.log('A token from a different tenant cannot see an OTP requested under another tenantId — isolation holds.');
     },
   },
+
+  {
+    name: 'PATCH /users/:id/type — F-228 Step 5: admin JWT dual-path (correct-tenant 200, cross-tenant 403 no-write, non-admin 403, no-auth 401, nonexistent-id 404), internal-key path unchanged',
+    async run() {
+      const OTHER_TENANT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaac';
+
+      const target = await db.user.create({
+        data: { tenantId: TENANT_ID, userType: 'GUEST', phone: '+919700000005', isPhoneVerified: true },
+      });
+
+      function patchType(token: string | null, id: string, userType: string) {
+        return fetch(`${identityUrl}/users/${id}/type`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ userType }),
+        });
+      }
+
+      // --- No auth at all -> 401 ---
+      const noAuth = await inspect(await patchType(null, target.id, 'MEMBER'));
+      if (noAuth.status !== 401) throw new Error(`Expected no-auth patch to 401, got ${noAuth.status}: ${noAuth.raw}`);
+
+      // --- Non-admin JWT (no owner/branch_manager role) -> 403 ---
+      const nonAdminToken = signJwt({ userId: 'non-admin-user', tenantId: TENANT_ID, roles: [], userType: 'MEMBER' });
+      const nonAdmin = await inspect(await patchType(nonAdminToken, target.id, 'MEMBER'));
+      if (nonAdmin.status !== 403) throw new Error(`Expected non-admin patch to 403, got ${nonAdmin.status}: ${nonAdmin.raw}`);
+      console.log('No-auth 401 and non-admin-role 403 both correctly rejected.');
+
+      // --- Admin JWT, correct tenant -> 200, DB read-back confirms the new userType ---
+      const ownerToken = signJwt({ userId: 'owner-user', tenantId: TENANT_ID, roles: ['owner'], userType: 'MEMBER' });
+      const correctTenant = await inspect(await patchType(ownerToken, target.id, 'MEMBER'));
+      if (correctTenant.status !== 200) throw new Error(`Expected correct-tenant admin patch to 200, got ${correctTenant.status}: ${correctTenant.raw}`);
+      const afterCorrect = await db.user.findUnique({ where: { id: target.id } });
+      if (afterCorrect?.userType !== 'MEMBER') {
+        throw new Error(`Expected DB read-back userType MEMBER, got ${JSON.stringify(afterCorrect)}`);
+      }
+      console.log('Admin JWT for the correct tenant promoted the user; DB read-back confirms MEMBER.');
+
+      // --- Admin JWT, different tenant targeting a real user in TENANT_ID -> 403, no write ---
+      const otherTenantOwnerToken = signJwt({ userId: 'other-owner', tenantId: OTHER_TENANT_ID, roles: ['owner'], userType: 'MEMBER' });
+      const crossTenant = await inspect(await patchType(otherTenantOwnerToken, target.id, 'STAFF'));
+      if (crossTenant.status !== 403 || crossTenant.json?.error?.code !== 'FORBIDDEN') {
+        throw new Error(`Expected cross-tenant admin patch to 403 FORBIDDEN, got ${crossTenant.status}: ${crossTenant.raw}`);
+      }
+      const afterCrossTenant = await db.user.findUnique({ where: { id: target.id } });
+      if (afterCrossTenant?.userType !== 'MEMBER') {
+        throw new Error(`Cross-tenant admin patch must not write: ${JSON.stringify(afterCrossTenant)}`);
+      }
+      console.log('Admin JWT from a different tenant correctly rejected 403 FORBIDDEN, no write.');
+
+      // --- Admin JWT targeting a nonexistent :id -> 404 ---
+      const nonexistent = await inspect(await patchType(ownerToken, '00000000-0000-0000-0000-000000000000', 'MEMBER'));
+      if (nonexistent.status !== 404) throw new Error(`Expected nonexistent-id admin patch to 404, got ${nonexistent.status}: ${nonexistent.raw}`);
+      console.log('Admin JWT targeting a nonexistent user correctly rejected 404.');
+
+      // --- Internal-key path unchanged: no key -> 401, with key -> 200 (mirrors the existing
+      // "internal-key promotion" section above; re-asserted here alongside the new admin path so
+      // both paths' evidence lives in one place for this route). ---
+      const internalNoKey = await inspect(await patchType(null, target.id, 'STAFF'));
+      if (internalNoKey.status !== 401) throw new Error(`Expected internal-key-less patch to 401, got ${internalNoKey.status}: ${internalNoKey.raw}`);
+      const internalWithKey = await inspect(await patchType(internalKey, target.id, 'STAFF'));
+      if (internalWithKey.status !== 200) throw new Error(`Expected internal-key patch to 200, got ${internalWithKey.status}: ${internalWithKey.raw}`);
+      console.log('Internal-key path unchanged: 401 without key, 200 with key.');
+    },
+  },
 ];
