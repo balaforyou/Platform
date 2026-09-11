@@ -2065,6 +2065,298 @@ post-fix (19 pre-existing + this one). typecheck clean on both `slot-engine` and
 **Status:** commit `42f26e7` + this row, on `f229-manual-booking` → PR #21 (still open, not
 merged).
 
+## Batch 45 — F-228 Step 0: register relay of Chief's unified-login assignment (docs-only)
+
+**Findings:** [[F-228]] — new **Open** row, `unified-gmail-login-guest-member-identity`. Chief
+assigned the ID on 10 Sep 2026 in the same Business Discovery Checklist §10 that assigned
+[[F-229]] (`claude/discovery-unified-login-manual-booking.md`), but the relay was deliberately
+held back at F-229's own Batch 34 ("F-228 was assigned in the same §10 but is a separate finding
+and is not relayed here") and again named explicitly at Batch 41's close-out ("still owned by
+Chief, not done here"). This batch is that relay: a `Confirmed-ID: F-228` Promoted entry written
+to `pending-findings.md` (`unified-gmail-login-guest-member-identity`) so the `check-register.mjs`
+gate passes, and the F-228 Open row added.
+
+**Decision record:** `claude/discovery-unified-login-manual-booking.md` §10 (Chief) + the standing
+Technical Lead review cadence established across F-229's steps, applied here identically: no
+TL-authored implementation spec exists for Steps 2–6 (unlike Step 1, which was handed down in
+full detail) — each of those steps' own design was investigated and proposed by the implementing
+thread first, then reviewed, corrected where wrong, and signed off by the Technical Lead thread
+before any code was written, same as every prior finding in this sequence.
+
+**Handed off:** 10 Sep 2026 (Chief assignment) / 11 Sep 2026 (this relay).
+**Status:** register relay only, part of this batch's own commit alongside Batches 46–52.
+**Branch/PR:** `f228-closeout-register` (this batch's commit).
+
+**No code / schema / route changes.** Step 1 is the first code step and is not done here.
+
+## Batch 46 — F-228 Step 1: real Google verification + find-or-create in `/auth/google/verify`
+
+**Findings:** [[F-228]] Step 1 of 6. Register row stays **Open / In progress**.
+
+**Change (identity-auth):** `POST /auth/google/verify` replaced its `mock-google-token-` branch
+and the `PHONE_VERIFICATION_REQUIRED`/`GOOGLE_LOGIN_ONLY_FOR_MEMBERS` gates outright with real
+JWKS verification, reusing `adminGoogleAuth.ts`'s existing `verifyGoogleIdToken`/`googleRemoteJwks`
+— no mock fallback survives in any environment. New `memberGoogleAuth.ts`: `findOrCreateMemberUser`
+find-or-create, a brand-new identity gets a `GUEST` row with `phone:null` instead of being
+rejected; P2002 race guarded (catch-and-re-findFirst, same shape as `/users/walk-in`'s). Response
+gains `isNewSignup`.
+
+**Blast radius:** `verifyGoogleMock`'s only two callers grepped — `guest-member-pwa/LoginScreen.tsx`
+(Step 1 doesn't touch it, Step 3 does) and `admin-web/main.tsx` (untouched this whole sequence —
+its Google login now 401s, a known, low-risk, Chief-accepted consequence per the sign-off, not a
+regression to prevent).
+
+**Environment gap found and fixed along the way:** `GOOGLE_OAUTH_CLIENT_ID` was missing entirely
+from the local docker dev stack's env — every Google verification, including the pre-existing
+admin route, silently failed closed with "not configured." Added to `docker-compose.dev.yml`.
+
+**Evidence:** whole-repo typecheck clean. identity-auth vitest 42/42. Full 5-service regression
+against `badminton_db_test`, 5/5 suites, run twice. Live-fire through the dev-deployed container
+with a real Google-signed ID token (captured via a hooked `fetch` in the browser pane, real
+account `balaforyou@gmail.com`): existing STAFF user matched by email → 200, row unchanged;
+brand-new identity in a different tenant → 200, `isNewSignup:true`, real `GUEST` row created
+(`phone:null`, `isPhoneVerified:false`) — direct proof the removed gate no longer blocks a fresh
+signup; old `mock-google-token-` literal → 401 against real verification. Synthetic test row
+deleted afterward.
+
+**Handed off:** 11 Sep 2026.
+**Status:** commit `0f8612b` on `f228-step1-google-verify` (off `main` `c3367fa`), pushed, signed
+off after independent diff pull + re-run.
+**Branch/PR:** `f228-step1-google-verify` → **PR #22** (open, not merged).
+
+## Batch 47 — F-228 Step 2: `POST /auth/otp/attach-phone`
+
+**Findings:** [[F-228]] Step 2 of 6. Register row stays **Open / In progress**.
+
+**Change (identity-auth):** new `POST /auth/otp/attach-phone` — the caller's own authenticated
+session attaches and verifies a phone via a real OTP check, independent of how the account was
+created. `verifyOtpCode(prisma, phone, tenantId, code)` extracted from `/auth/otp/verify`'s inline
+block as the second real call site.
+
+**Mid-review correction, recorded accurately rather than smoothed over:** the idempotency logic
+was first implemented as a flat "already verified → 409 reject" gate. Independent review against
+the original Decision 4 spec caught that this was wrong — Decision 4 is phone-aware, not flat: a
+caller re-submitting the *same* already-attached phone is a legitimate idempotent retry (200,
+still requires a fresh valid OTP, no write), a *different* phone while already verified is the
+real out-of-scope "change my number" case (409 `PHONE_ALREADY_ATTACHED`), and a target phone
+already claimed by a different account is a separate concern under its own code
+(409 `PHONE_ALREADY_LINKED`, both the pre-check and the P2002 race backstop). Corrected before
+merge, not discovered after.
+
+**Evidence:** whole-repo typecheck clean. identity-auth vitest 42/42 (unaffected). Full regression
+5/5, run twice — new section covers no-auth 401, wrong-code 400, first-attach 200 + DB read-back,
+idempotent retry 200, change-number 409, phone-collision 409 with DB read-back confirming no
+write, cross-tenant OTP isolation. Live-fire: real Google sign-in → phoneless `GUEST` → wrong OTP
+rejected → correct OTP (dev-fixed `123456`) attaches, DB read-back confirms `phone`/
+`isPhoneVerified` → idempotent retry → change-number reject → phone-collision reject against a
+second real seeded account, DB read-back confirms no write. Synthetic rows deleted afterward.
+
+**Handed off:** 11 Sep 2026.
+**Status:** commit `1f8d42a` on `f228-step2-attach-phone` (off Step 1), pushed, signed off after
+independent diff pull + re-run.
+**Branch/PR:** `f228-step2-attach-phone` → **PR #23** (open, not merged).
+
+## Batch 48 — F-228 Step 3: guest-member-pwa real GIS login + guest/member landing split
+
+**Findings:** [[F-228]] Step 3 of 6. Register row stays **Open / In progress**.
+
+**Change:** `packages/ui-shared/src/lib/googleIdentity.ts` (moved from `apps/admin-v2/src/lib`,
+now shared — admin-v2's own login migrated to the shared import, behavior-identical). `AuthContext.tsx`
+gains `verifyGoogle`/`attachPhone` **additively** — `verifyGoogleMock` untouched, so admin-web's
+already-401ing mock path (accepted since Step 1) sees zero further change. `guest-member-pwa`'s
+`LoginScreen.tsx`: the dev-mock email-input flow removed, replaced with a real GIS button (same
+detached-mount-node pattern as admin-v2's own, so GIS's DOM churn never collides with React's).
+New `CompleteSignupScreen.tsx` (phone + OTP entry, driving `requestOtp` + `attachPhone`).
+`main.tsx`'s `ProtectedRoute` now redirects any authenticated-but-phoneless account to
+`/complete-signup` on every protected route — durable across reloads, not just the immediate
+post-login moment, since `/auth/refresh` reissues the same `phone:null` claim until that account
+finishes signup.
+
+**Environment gaps found and fixed along the way:** `docker-compose.dev.yml`'s `guest-member-pwa`
+service had no `VITE_GOOGLE_CLIENT_ID` (same gap shape as Step 1's backend fix) — added. Google's
+OAuth client had only `localhost:5175` (admin-v2) as an authorized JavaScript origin, not
+`localhost:8080` (guest-member-pwa via Caddy) — a real one-time Google Cloud Console config step,
+outside the repo, done by Bala.
+
+**A live-fire attribution error was caught and corrected during Step 6's sign-off review, not
+left standing:** a service-worker registration failure was first reported as
+"guest-member-pwa-specific, already seen since Step 1" — that specific claim was wrong, sourced
+from a stale memory rather than a check of that session. Independently re-verified per-origin on
+request during Step 6's review; the correction surfaced that **both** admin-v2 and guest-member-pwa
+fail independently, at their own dev ports, not one app's regression — parked as its own finding
+candidate (below), not folded into F-228.
+
+**Evidence:** whole-repo typecheck clean. Full regression 5/5 (unaffected, as expected for a
+UI-only step). Live-fire against a freshly rebuilt stack with the service worker/caches cleared
+first: fresh Google sign-in → `/complete-signup`; completing it (real phone + dev OTP) →
+`/`, DB read-back confirms `phone`/`isPhoneVerified`; signing out and back in with the
+now-complete account → straight to `/`, never touching `/complete-signup`; admin-v2's own real
+GIS login still works unchanged after the shared-helper migration (confirmed after fixing an
+unrelated stale local Vite dependency-cache issue on that app's dev server).
+
+**Handed off:** 11 Sep 2026.
+**Status:** commit `835947e` on `f228-step3-guest-gis` (off Step 2), pushed, signed off after
+independent diff pull, raw regression/DOM-state evidence review, and the service-worker
+attribution correction above.
+**Branch/PR:** `f228-step3-guest-gis` (`835947e`) — pushed, PR not yet opened.
+
+## Batch 49 — F-228 Step 4: booking-flow phone-gate — verified closed by Step 3, no code change
+
+**Findings:** [[F-228]] Step 4 of 6. Register row stays **Open / In progress**.
+
+**Investigated, not built:** the original plan named this step "booking-flow phone-gate for
+phone-unverified guests," with an explicit instruction to check the real shape before assuming a
+green-field build was still needed. It wasn't: every route in guest-member-pwa except `/login`
+and `/complete-signup` already sits behind Step 3's `ProtectedRoute`, including
+`CourtBooking.tsx`/`BookingPay.tsx`; `CourtBooking.tsx:380` is the app's only real
+booking-creation call site; and the JWT's `phone` claim (what `ProtectedRoute` gates on) is
+always live-OTP-proven at issuance in every reachable path (`/auth/otp/verify` runs a real OTP
+check unconditionally before either of its branches; `/auth/refresh`/`/auth/google/verify` both
+read `phone` fresh from the live DB row). Reported as "closed by Step 3, no functional gap"
+rather than building redundant gate logic — a legitimate outcome, not a failure to find work.
+
+**Only change:** a stale comment in `BookingPay.tsx` (F-190 Slice 3) that cited the removed
+Step-1 signup-time Google gate as the reason `user.phone` is trustworthy there — corrected to
+cite the real, current mechanism (Step 3's route-level redirect). Comment-only, zero behavior
+change.
+
+**Surfaced, not fixed, a genuinely separate bug:** `/auth/otp/verify`'s existing-user branch never
+updates `isPhoneVerified` on the DB row, even after a real OTP check — parked as its own finding
+candidate (below), not folded into F-228 (rule 9).
+
+**Evidence:** whole-repo typecheck clean (comment-only change). No regression re-run needed — no
+runtime behavior touched.
+
+**Handed off:** 11 Sep 2026.
+**Status:** commit `cea6251` on `f228-step4-booking-gate-verification` (off Step 3), pushed,
+signed off after independent verification of every claim against real code.
+**Branch/PR:** `f228-step4-booking-gate-verification` (`cea6251`) — pushed, PR not yet opened.
+
+## Batch 50 — F-228 Step 5: `PATCH /users/:id/type` dual-path admin JWT
+
+**Findings:** [[F-228]] Step 5 of 6. Register row stays **Open / In progress**.
+
+**Change (identity-auth):** `PATCH /users/:id/type` (previously internal-key-only, zero
+production callers anywhere in the repo — confirmed by grep, only the regression fixture calls
+it) gains a second auth path: an owner/branch_manager admin JWT, alongside the unchanged
+internal-key path. New `requireUserTypeAdmin` helper — deliberately **not** a reuse of
+`requireWalkInAdmin`'s shape: that helper's tenant check compares against a client-supplied body
+`tenantId`, correct for a CREATE (F-229's walk-in route) but wrong for a PATCH on an arbitrary
+existing `:id` (a caller could claim any tenant while targeting a user in a different one). The
+new helper instead looks up the **target row's real tenantId** server-side, after the caller has
+already proven internal-key-or-admin-role (auth-before-body-trust, matching this file's own
+F-090/F-045/F-071 discipline), and compares against that — no client-supplied tenant value
+involved at all. Role gate matches `requireWalkInAdmin`'s (owner + branch_manager), consistent
+with every other admin-JWT route in this file. Backend-only, ahead of Step 6's UI.
+
+**Evidence:** whole-repo typecheck clean. Full regression, run three times (one transient
+"slot-engine did not become healthy" startup-timing failure on the first attempt — confirmed
+ports clear, re-ran per this project's own environmental-failure discipline, clean 5/5 twice
+after). New section: no-auth 401, non-admin-role 403, correct-tenant 200 + DB read-back,
+cross-tenant 403 with no write, nonexistent-id 404, internal-key path re-asserted unchanged.
+
+**Handed off:** 11 Sep 2026.
+**Status:** commit `3b19a52` on `f228-step5-usertype-admin-jwt` (off Step 4), pushed, signed off
+after independent diff pull + re-run.
+**Branch/PR:** `f228-step5-usertype-admin-jwt` (`3b19a52`) — pushed, PR not yet opened.
+
+## Batch 51 — F-228 Step 6: admin-v2 member-provisioning UI — final implementation step
+
+**Findings:** [[F-228]] Step 6 of 6, final implementation step. Register row stays
+**Open / In progress** — converted to Resolved in Batch 52.
+
+**Change:** `GET /users/lookup` gains optional `?email=` — exactly one of phone/email required
+(400 on neither or both, never silently picking one); email path validates format, lowercases
+(matching how Google stores emails on write), queries the confirmed-real `email_tenantId`
+compound-unique key; `select` stays identical regardless of which identifier resolved the match
+— `email` itself still never returned (same convention the phone path already enforced), `phone`
+can now genuinely be `null` (a Step-1 Google-first guest). `GuestLookupResult.phone` widened to
+`string \| null`. `useGuestLookup` (admin-v2) generalized to `{phone}\|{email}` rather than a
+near-duplicate sibling hook — one real external caller, `ReservationsPanel.tsx`, updated at its
+one call site. New `usePromoteToMember()` against Step 5's route. New
+`MemberProvisioningPanel.tsx` — reuses `ReservationsPanel`'s idle/found/not-found lookup shape,
+adapted: looks up by email (target accounts are often phoneless Google-first guests) and its
+terminal action is promotion, not booking, so there is no create-on-not-found sub-flow. Wired
+into `GuestManagementScreen` as a third "Members" tab, tenant-level (no `branchId`), unlike the
+other two tabs.
+
+**A real leaked-row bug was caught during this step's own sign-off review and fixed as its own
+follow-up commit, not folded silently into the step that introduced the exposure:** Step 5's
+`PATCH /users/:id/type` always returned the full `prisma.user.update` row with no `select` —
+harmless while its only callers were internal-key service-to-service and the regression fixture,
+but this step's `usePromoteToMember()` made it reachable from a browser for the first time, so
+`email`/`googleId`/`isPhoneVerified`/`isEmailVerified`/timestamps genuinely reached a response
+body. Fixed with the same minimal-fields `select` `GET /users/lookup` already used. Re-verified
+with a targeted rebuild + regression rerun of both the Step 5 and Step 6 sections, confirming an
+identical status-code sequence before and after — nothing broke, only the leaked fields left the
+response.
+
+**Live-fire caught a real copy bug, not just a data bug:** the found-state summary line read
+"already a Member" for a `STAFF` account too. Fixed to show the account's actual `userType`
+before this batch's commit.
+
+**Evidence:** whole-repo typecheck clean. Full regression 5/5, run twice (main change), plus a
+targeted rebuild + rerun of identity-auth's own suite alone (15/15 sections) after the leaked-row
+fix. Live-fire, real browser, dev sign-in as JBC owner: searched the real JBC STAFF account by
+email → correctly "currently Staff," promote button correctly hidden; seeded a fresh `GUEST` by
+email, searched, promoted → DB read-back confirms `userType:MEMBER`; searched a nonexistent email
+→ correct not-found state. Synthetic rows deleted afterward.
+
+**Handed off:** 11 Sep 2026.
+**Status:** commits `c72dd7e` (main step) + `8d94a1f` (leaked-row fix, its own follow-up commit)
+on `f228-step6-member-provisioning` (off Step 5), pushed, both independently re-verified — the
+main diff pulled and checked file-by-file against origin, the fix's diff and raw regression output
+pasted and confirmed byte-identical to what was requested.
+**Branch/PR:** `f228-step6-member-provisioning` (`c72dd7e`, `8d94a1f`) — pushed, PR not yet opened.
+
+## Batch 52 — F-228 whole-pass close-out (register + pending-findings)
+
+**Findings:** [[F-228]] — its Open row (added Batch 45) converted to a **Resolved** summary row,
+`Resolved: 11 Sep 2026`, written fresh per the register's convention (Resolution replaces
+Impact/Action), covering all six steps as actually shipped — including the Step 2 idempotency
+correction against the original Decision 4 spec, the Step 3/6 service-worker misattribution
+catch-and-correct, and Step 6's own leaked-row catch, recorded accurately rather than smoothed
+over. Its `pending-findings.md` `unified-gmail-login-guest-member-identity` entry already had
+`Confirmed-ID: F-228` from Batch 45 — no change needed there.
+
+Two new finding candidates opened in `pending-findings.md`'s "Awaiting confirmation" section,
+**described, not numbered** — neither ID assigned by this thread:
+- `otp-verify-existing-user-isphoneverified-not-refreshed` (surfaced Step 4) — `/auth/otp/verify`'s
+  existing-user branch never refreshes `isPhoneVerified` on the DB row after a real OTP check.
+  Pre-existing, does not affect F-228's own booking gate (which reads the JWT's `phone` claim, not
+  the DB column).
+- `shared-service-worker-registration-failure-both-apps` (surfaced Step 3, attribution corrected
+  Step 6) — both admin-v2 and guest-member-pwa fail their own service-worker registration
+  independently, same error shape, neither app's code touched by any of the six steps, root cause
+  unconfirmed.
+
+**Docs-only — no code.** All F-228 code landed in Batches 46–51 (Steps 1–6); Batch 45 was the
+Step 0 relay.
+
+**Decision record:** the 10 Sep 2026 Chief assignment (`claude/discovery-unified-login-manual-booking.md`
+§10) + the Technical Lead thread's per-step sign-offs (Steps 0–6, this close-out) + the explicit
+instruction to record the mid-sequence corrections accurately rather than omit them.
+
+**Handed off:** 11 Sep 2026.
+**Status:** this batch's commit on `f228-closeout-register`, pushed. **Not merged to `main` —
+deliberately, pending independent re-verification of this exact register/pending-findings diff.**
+The Resolved row is written on the assumption the full six-step stack (Steps 1–6 plus this
+close-out) merges as a whole; if any step does not merge, this row and the corresponding
+branches/commits list both need reverting or correcting.
+**Branch/PR:** `f228-closeout-register` (off `f228-step6-member-provisioning`) — the whole
+finding, Batches 45–52, as one stack, mirroring how F-229's Batches 34–41 became one PR.
+
+**Close-out:** `pnpm register:check` green — **208 rows, Open 110, Resolved 98** (F-228 added
+directly as Resolved — this close-out combines the relay and the resolution into one pass rather
+than staging a separate historical Open-row commit, since all six steps' code already exists and
+is already signed off by the time this batch is written; from 207/110/97). `pnpm diagram:verify`
+green — all 67 finding tags agree, no tagged FLOW node touched by a docs-only change.
+
+**Still open, not done here:** whether `otp-verify-existing-user-isphoneverified-not-refreshed`
+and `shared-service-worker-registration-failure-both-apps` get a Chief-assigned ID and become
+their own findings — both owned by Chief now, same as F-228 itself was between F-229's Batch 34
+and this close-out.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
