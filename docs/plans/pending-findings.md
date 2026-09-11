@@ -174,6 +174,55 @@ second demo tenant with a realistic pool count (that removes the "just test poll
 Confirmed-ID: F-202
 Confirmed: 29 Aug 2026
 
+### otp-verify-existing-user-isphoneverified-not-refreshed
+Batch: F-228 Step 4, 11 Sep 2026
+Surfaced: 11 Sep 2026, during F-228 Step 4's investigation of whether the booking-flow phone gate
+had a remaining gap.
+Description: `POST /auth/otp/verify` (`services/identity-auth/src/index.ts`) never updates
+`isPhoneVerified` on its existing-user branch. The route runs a real OTP check
+(`verifyOtpCode`) unconditionally before the `findUnique`/`if (!user)` split, so a caller has
+always just proven live possession of the phone by the time execution reaches either branch —
+but only the `!user` (brand-new signup) branch writes `isPhoneVerified: true` at creation. If an
+existing row already has `isPhoneVerified: false` (the walk-in-created shape, [[F-229]] Step 2 —
+an admin types in a phone they have not verified), and that same guest later completes a real OTP
+login through the actual app for that phone, the match falls straight through to session
+creation with zero `prisma.user.update` in between — the DB flag stays permanently `false` even
+though the account has since been proven live. Confirmed by reading the code path directly: no
+update call exists on that branch at all, not a race or an edge case.
+Does not affect F-228's own booking-flow phone gate — `ProtectedRoute` gates on the JWT's `phone`
+claim (always live-OTP-proven at token-issuance time via `verifyOtpCode`), not on the DB's
+`isPhoneVerified` column, so the gate behaves correctly regardless of this staleness. This is a
+DB-consistency bug, not a security or booking-access gap. Pre-existing (predates all six F-228
+steps); not introduced or worsened by any of them. Not fixed here — scope discipline (rule 9).
+Likely fix direction: have the existing-user branch of `/auth/otp/verify` also
+`prisma.user.update({ where: { id: user.id }, data: { isPhoneVerified: true } })` when the
+stored value is `false`, mirroring what the brand-new-signup branch already does at creation.
+Confirmed-ID: F-231
+Confirmed: 11 Sep 2026
+
+### shared-service-worker-registration-failure-both-apps
+Batch: F-228 Steps 3 and 6, 11 Sep 2026 (misattributed once, corrected same day)
+Surfaced: 11 Sep 2026, during F-228 Step 3's live-fire verification, and corrected during Step 6's
+sign-off review after the Technical Lead thread asked for the origin to be checked independently.
+Description: both `admin-v2` (`http://localhost:5175`) and `guest-member-pwa`
+(`http://localhost:8080`) fail to register their own service worker in the local dev stack —
+confirmed independently for each origin, same error shape both times:
+`TypeError: Failed to register a ServiceWorker for scope ('<origin>/') with script
+('<origin>/sw.js'): An unknown error occurred when fetching the script.` Neither app's real
+`public/sw.js` or its registration code (near-identical in each app's `main.tsx`) was touched by
+any of the six F-228 steps. First reported (Step 3 live-fire) as "already seen for
+guest-member-pwa specifically, since Step 1" — that specific attribution was wrong, sourced from
+a stale memory rather than a check of that session; independently re-verified per-origin during
+Step 6's review (`navigator.serviceWorker.register('/sw.js')` called directly in each app's own
+tab), which is what surfaced that it is **not** app-specific — both fail, independently, the same
+way. Root cause unconfirmed — likely something in how Vite's dev server serves a static file
+outside its module graph under this docker/Caddy stack, not yet diagnosed. Whether it also
+reproduces in the actual deployed/production build (the one that matters for real PWA
+installability, [[F-197]]) has not been checked. Not fixed here — out of scope for any of the six
+F-228 steps and root cause not yet established.
+Confirmed-ID: F-232
+Confirmed: 11 Sep 2026
+
 ## Promoted (audit trail)
 
 ### booking-rule-route-missing-owner-and-entitlement-gate
@@ -537,6 +586,26 @@ F-204 as-is on 30 Aug 2026; its register row reflects Open / not-yet-implemented
 dated append, not a silent backfill.
 Confirmed-ID: F-204
 Confirmed: 30 Aug 2026
+
+### unified-gmail-login-guest-member-identity
+Batch: F-228 Step 0 (register relay), 11 Sep 2026
+Surfaced: 10 Sep 2026, Business Discovery Checklist
+(`claude/discovery-unified-login-manual-booking.md`, §10) — Chief Architect thread, same batch
+that assigned [[F-229]].
+Honest note (11 Sep 2026): assigned in the same §10 as F-229 on 10 Sep 2026, but explicitly held
+back "out of scope" of F-229's own relay (Batch 34's decision record) and again named in Batch
+41's close-out as "still owned by Chief, not done here." No `Confirmed-ID` line or register row
+has existed for it until now — this entry and the accompanying register row are that relay,
+11 Sep 2026, not a silent backfill.
+Description: One Google Sign-In button serves both guest and member accounts — no separate
+member-only mock gate, no separate guest phone-first flow. A guest signing in with Google for the
+first time gets a real account immediately (`GUEST`, no phone yet) instead of being rejected into
+a phone-verification detour; they complete their phone once, at the point they actually need it
+(booking), not as a signup gate. Real production need: JBC's owner account and any future member
+should be able to sign in with the same Google button a guest uses, and a phone-unverified guest
+must never reach a booking screen without completing that step first.
+Confirmed-ID: F-228
+Confirmed: 10 Sep 2026
 
 ### admin-assisted-manual-booking-cash-payment
 Batch: F-229 Step 0 (register relay), 10 Sep 2026
