@@ -1274,15 +1274,59 @@ server.post('/users/resolve-invite', async (request, reply) => {
   return invite;
 });
 
-// Internal endpoint to update userType (Promotion to MEMBER or STAFF)
-// WHY: Requires secure internal service token authentication. Prevents clients from spoofing user types.
-server.patch('/users/:id/type', async (request, reply) => {
-  // F-119: extracted to the shared helper rather than left inlined, so this route and
-  // /users/resolve-invite cannot drift apart. Behaviour is unchanged — jwt-session.regression.ts
-  // (`:107`/`:116`) asserts both the 401 and the keyed success path.
-  requireInternalKey(request, reply);
+/**
+ * Dual-path admin auth for PATCH /users/:id/type (F-228 Step 5): a trusted internal service
+ * caller OR an owner/branch_manager JWT. Unlike requireWalkInAdmin (F-229, index.ts:100 — a
+ * CREATE where the body's tenantId is the source of truth), this route PATCHes an arbitrary
+ * existing :id, so the tenant check has to be against that row's REAL tenantId — looked up by
+ * the caller after this returns, never a client-supplied value a caller could spoof. Returns the
+ * decoded JWT on the admin path, null on the internal-key path (same shape requireWalkInAdmin
+ * returns — no target-tenant check happens here, since the target isn't known yet).
+ */
+async function requireUserTypeAdmin(request: any, reply: any): Promise<any | null> {
+  const authHeader = request.headers['authorization'];
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
 
+  if (authHeader === `Bearer ${internalKey}`) {
+    return null;
+  }
+  if (!authHeader) {
+    reply.status(401);
+    const err = new Error('Missing authorization header');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+
+  let decoded: any;
+  try {
+    decoded = await request.jwtVerify();
+  } catch {
+    reply.status(401);
+    const err = new Error('Invalid or expired token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+
+  const roles: string[] = decoded.roles ?? [];
+  const isAdmin = roles.includes('owner') || roles.some((r: string) => r.startsWith('branch_manager:'));
+  if (!isAdmin) {
+    reply.status(403);
+    const err = new Error('Forbidden: Owner or Branch Manager role required');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+  return decoded;
+}
+
+// Update userType (Promotion to MEMBER or STAFF). Dual-path (F-228 Step 5): a trusted internal
+// service caller, or an owner/branch_manager admin JWT scoped to the target user's own tenant.
+server.patch('/users/:id/type', async (request, reply) => {
   const { id } = request.params as any;
+  const decoded = await requireUserTypeAdmin(request, reply);
+
   const { userType } = request.body as any;
 
   if (!userType || !Object.values(UserType).includes(userType)) {
@@ -1291,6 +1335,26 @@ server.patch('/users/:id/type', async (request, reply) => {
     (err as any).statusCode = 400;
     (err as any).code = 'BAD_REQUEST';
     throw err;
+  }
+
+  if (decoded) {
+    // Admin-JWT path only: verify the target row is actually in the caller's own tenant. The
+    // internal-key path stays fully trusted, unchanged — no lookup, no tenant check.
+    const target = await prisma.user.findUnique({ where: { id }, select: { tenantId: true } });
+    if (!target) {
+      reply.status(404);
+      const err = new Error('User not found');
+      (err as any).statusCode = 404;
+      (err as any).code = 'USER_NOT_FOUND';
+      throw err;
+    }
+    if (decoded.tenantId !== target.tenantId) {
+      reply.status(403);
+      const err = new Error('Forbidden: Tenant mismatch');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
   }
 
   const user = await prisma.user.update({
