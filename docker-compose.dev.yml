@@ -108,6 +108,11 @@ services:
       PORT: 3002
       SLOT_ENGINE_URL: http://slot-engine:3001
       TENANT_SERVICE_URL: http://tenant-management:3003
+      # Public client ID, not a secret. Was missing entirely from this dev stack's env —
+      # discovered while live-fire testing F-228 Step 1; verifyGoogleIdToken (used by both
+      # /auth/admin/google/verify and /auth/google/verify) fails closed with "not configured"
+      # without it, on every Google sign-in attempt through this stack.
+      GOOGLE_OAUTH_CLIENT_ID: 861109681806-fhuch1ct1kjrmaie9lo4fpubta7k78e3.apps.googleusercontent.com
     command: [sh, -c, "corepack enable && pnpm --filter @badminton/identity-auth run dev"]
 
   tenant-management:

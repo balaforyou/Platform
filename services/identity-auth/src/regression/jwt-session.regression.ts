@@ -1,5 +1,5 @@
 import { Section } from '@badminton/test-harness';
-import { db, identityUrl, internalKey, IdentityContext, TENANT_ID, PHONE } from './_fixtures';
+import { identityUrl, internalKey, IdentityContext, TENANT_ID } from './_fixtures';
 
 /**
  * Refresh-token rotation/replay defense and Google signup gating.
@@ -50,60 +50,31 @@ export const jwtSessionSections: Section<IdentityContext>[] = [
   },
 
   {
-    name: 'Google signup gating, guest-login 403, internal-key promotion, member happy path',
+    name: 'Google token rejection (real verification), internal-key promotion',
     async run(ctx) {
       if (!ctx.user) throw new Error('Registration section must run before Google gating.');
 
-      // Brand-new Google signup must be gated into the phone-verification flow.
-      const googleResNew = await fetch(`${identityUrl}/auth/google/verify`, {
+      // F-228 Step 1: /auth/google/verify now does real JWKS verification with no mock
+      // fallback in any environment. The old 'mock-google-token-<email>' format is just a
+      // garbage string to the real verifier — confirm it fails as such, not silently accepted.
+      const googleResBadToken = await fetch(`${identityUrl}/auth/google/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          googleIdToken: 'mock-google-token-newuser@example.com',
+          googleIdToken: 'mock-google-token-anything',
           tenantId: TENANT_ID,
         }),
       });
-      if (googleResNew.status !== 400) {
-        throw new Error(`Expected new Google signup to request phone verification, got ${googleResNew.status}`);
+      if (googleResBadToken.status !== 401) {
+        throw new Error(`Expected non-JWT Google token to be rejected 401, got ${googleResBadToken.status}`);
       }
-      const googleDataNew = (await googleResNew.json()) as any;
-      if (googleDataNew.error?.code !== 'PHONE_VERIFICATION_REQUIRED') {
-        throw new Error(`Expected PHONE_VERIFICATION_REQUIRED code, got ${googleDataNew.error?.code}`);
+      const googleDataBadToken = (await googleResBadToken.json()) as any;
+      if (googleDataBadToken.error?.code !== 'INVALID_GOOGLE_TOKEN') {
+        throw new Error(`Expected INVALID_GOOGLE_TOKEN code, got ${googleDataBadToken.error?.code}`);
       }
-      console.log('New Google OAuth signup properly gated to phone verification flow.');
+      console.log('Old mock-google-token- format correctly rejected by real verification.');
 
-      await fetch(`${identityUrl}/auth/google/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          googleIdToken: `mock-google-token-${PHONE}@example.com`,
-          tenantId: TENANT_ID,
-        }),
-      });
-
-      // Link the guest to an email so the guest-login restriction can be exercised.
-      await db.user.update({
-        where: { id: ctx.user.id },
-        data: {
-          email: `email-${PHONE}@example.com`,
-          googleId: `google-id-email-${PHONE}@example.com`,
-        },
-      });
-
-      const googleResGuestLinked = await fetch(`${identityUrl}/auth/google/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          googleIdToken: `mock-google-token-email-${PHONE}@example.com`,
-          tenantId: TENANT_ID,
-        }),
-      });
-      if (googleResGuestLinked.status !== 403) {
-        throw new Error(`Expected guest Google login to return 403, got ${googleResGuestLinked.status}`);
-      }
-      console.log('Guest Google login blocked with 403 Forbidden correctly.');
-
-      // Promotion to MEMBER is internal-key protected.
+      // Promotion to MEMBER is internal-key protected. Unrelated to Google verification.
       const patchUnauth = await fetch(`${identityUrl}/users/${ctx.user.id}/type`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -125,19 +96,6 @@ export const jwtSessionSections: Section<IdentityContext>[] = [
         throw new Error(`Expected userType promotion to return 200, got ${patchRes.status}`);
       }
       console.log('User promoted to MEMBER securely using INTERNAL_SERVICE_KEY.');
-
-      const googleResMember = await fetch(`${identityUrl}/auth/google/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          googleIdToken: `mock-google-token-email-${PHONE}@example.com`,
-          tenantId: TENANT_ID,
-        }),
-      });
-      if (googleResMember.status !== 200) {
-        throw new Error(`Expected member Google login to return 200, got ${googleResMember.status}`);
-      }
-      console.log('Member Google login authenticated successfully (Happy Path).');
     },
   },
 ];
