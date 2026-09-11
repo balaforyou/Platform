@@ -1376,6 +1376,12 @@ server.patch('/users/:id/type', async (request, reply) => {
   const user = await prisma.user.update({
     where: { id },
     data: { userType: userType as UserType },
+    // F-228 Step 6: this route is now reachable directly from an admin-v2 browser
+    // (usePromoteToMember), not just internal-key service-to-service — without an explicit
+    // select this returned the full row (email, googleId, tenantId, isPhoneVerified,
+    // isEmailVerified, timestamps) over HTTP. Same minimal-fields convention GET /users/lookup
+    // already enforces (email never leaves this service in a lookup/promotion response).
+    select: { id: true, phone: true, name: true, userType: true },
   });
 
   return user;
