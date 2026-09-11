@@ -114,7 +114,9 @@ export default function LoginScreen() {
         /* GIS may already have detached it */
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deliberately run once on mount only, same as admin-v2's LoginScreen.tsx's identical effect
+    // (no react-hooks lint plugin is configured in this repo's .eslintrc.json, so no disable
+    // comment is needed or checked here).
   }, []);
 
   if (isAuthenticated) {
