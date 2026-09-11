@@ -197,8 +197,8 @@ steps); not introduced or worsened by any of them. Not fixed here — scope disc
 Likely fix direction: have the existing-user branch of `/auth/otp/verify` also
 `prisma.user.update({ where: { id: user.id }, data: { isPhoneVerified: true } })` when the
 stored value is `false`, mirroring what the brand-new-signup branch already does at creation.
-Confirmed-ID:
-Confirmed:
+Confirmed-ID: F-231
+Confirmed: 11 Sep 2026
 
 ### shared-service-worker-registration-failure-both-apps
 Batch: F-228 Steps 3 and 6, 11 Sep 2026 (misattributed once, corrected same day)
@@ -220,8 +220,8 @@ outside its module graph under this docker/Caddy stack, not yet diagnosed. Wheth
 reproduces in the actual deployed/production build (the one that matters for real PWA
 installability, [[F-197]]) has not been checked. Not fixed here — out of scope for any of the six
 F-228 steps and root cause not yet established.
-Confirmed-ID:
-Confirmed:
+Confirmed-ID: F-232
+Confirmed: 11 Sep 2026
 
 ## Promoted (audit trail)
 
