@@ -9,8 +9,10 @@ import {
   resolveAdminUser,
   googleRemoteJwks,
   ADMIN_ROLES,
+  GoogleTokenError,
   type VerifiedGoogleIdentity,
 } from './adminGoogleAuth';
+import { findOrCreateMemberUser } from './memberGoogleAuth';
 import {
   resolveRpConfig,
   newCredentialRow,
@@ -560,7 +562,8 @@ server.post('/auth/otp/verify', async (request, reply) => {
   return { accessToken, isNewSignup, user };
 });
 
-// Endpoint to verify Google OAuth ID Tokens (Only available for MEMBERS/STAFF)
+// Endpoint to verify Google OAuth ID Tokens. Real verification (F-228 Step 1); find-or-create
+// for a brand-new identity, open to any userType (GUEST included).
 server.post('/auth/google/verify', async (request, reply) => {
   const { googleIdToken, tenantId } = request.body as any;
   if (!googleIdToken || !tenantId) {
@@ -571,50 +574,26 @@ server.post('/auth/google/verify', async (request, reply) => {
     throw err;
   }
 
-  // Mock Google ID token verification for development/testing
-  let email = '';
-  let googleId = '';
-  if (googleIdToken.startsWith('mock-google-token-')) {
-    email = googleIdToken.replace('mock-google-token-', '');
-    googleId = `google-id-${email}`;
-  } else {
-    reply.status(400);
-    const err = new Error('Invalid Google ID token');
-    (err as any).statusCode = 400;
-    (err as any).code = 'INVALID_TOKEN';
-    throw err;
+  // Real Google ID token verification. No mock fallback in any environment (F-228 Decision 3).
+  let identity: VerifiedGoogleIdentity;
+  try {
+    identity = await verifyGoogleIdToken(googleIdToken, {
+      jwks: googleRemoteJwks(),
+      clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+    });
+  } catch (e) {
+    if (e instanceof GoogleTokenError) {
+      reply.status(e.statusCode);
+      (e as any).code = e.code;
+      throw e;
+    }
+    throw e;
   }
 
-  // Retrieve user by Google ID or email
-  const user = await prisma.user.findFirst({
-    where: {
-      tenantId,
-      OR: [
-        { googleId },
-        { email },
-      ],
-    },
-  });
-
-  if (!user) {
-    // Transient signup path. Require phone verification first.
-    reply.status(400);
-    const err = new Error('Phone verification required to complete Google signup');
-    (err as any).statusCode = 400;
-    (err as any).code = 'PHONE_VERIFICATION_REQUIRED';
-    (err as any).details = { email, googleId };
-    throw err;
-  }
-
-  // WHY: Google sign-in is restricted to MEMBERS and STAFF to control SMS costs.
-  // GUEST accounts are rejected with 403 Forbidden.
-  if (user.userType === UserType.GUEST) {
-    reply.status(403);
-    const err = new Error('Google authentication is restricted to members only.');
-    (err as any).statusCode = 403;
-    (err as any).code = 'GOOGLE_LOGIN_ONLY_FOR_MEMBERS';
-    throw err;
-  }
+  // Find-or-create: a brand-new Google identity gets a GUEST row instead of being rejected
+  // into the phone-verification flow (F-228 Step 1). No more userType gate — GUEST proceeds
+  // the same as MEMBER/STAFF.
+  const { user, isNewSignup } = await findOrCreateMemberUser(prisma, identity, tenantId);
 
   // Create session
   const refreshToken = crypto.randomBytes(32).toString('hex');
@@ -662,7 +641,7 @@ server.post('/auth/google/verify', async (request, reply) => {
     sameSite: 'lax',
   });
 
-  return { accessToken, user };
+  return { accessToken, user, isNewSignup };
 });
 
 // Shared admin session issuance — used by /auth/admin/google/verify and
