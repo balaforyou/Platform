@@ -2023,6 +2023,48 @@ errors in the console. typecheck / build / lint clean (8 pre-existing warnings).
 
 **Status:** commit `9c07de8` + this row on `f229-manual-booking` → PR #21 (open, not merged).
 
+## Batch 44 — F-230: /bookings/manual walk-in guest respects per-court guest authorization
+
+**Finding:** [[F-230]] — reviewer-confirmed 11 Sep 2026 directly in the Technical Lead thread
+(handoff), against `f229-manual-booking` post-merge-review. `POST /bookings/manual` ([[F-229]])
+reuses `createHeldNegotiatedBooking` → slot-engine's `POST /bookings/negotiated`, which [[F-225]]
+built to call `assignPooledCourt(pool, active)` with **no** `{ guestOnly: true }` — correct for its
+original caller `/payment-links/negotiated` (an admin negotiating on behalf of a **member**, who
+may legitimately use a court reserved away from walk-in guests). `/bookings/manual` is a real
+walk-in-**guest** path, not a member-negotiated one, so it silently inherited the same unfiltered
+call — a walk-in guest could be assigned a court the branch had explicitly reserved away from
+guests via F-225's own toggle.
+
+**Blast-radius check (rule 3a):** `grep -r "bookings/negotiated"` across the repo — only two
+non-doc call sites: the route itself (`slot-engine/src/index.ts:3226`) and
+`createHeldNegotiatedBooking` (`payment/src/index.ts:854`), itself called from exactly 3 places —
+`/payment-links/negotiated` (member-negotiated, must stay unaffected) and `/bookings/manual`'s two
+branches (`razorpay_link`, cash/upi_qr — both share one `bookingFields` object). No other route,
+service, or regression helper calls `/bookings/negotiated` directly.
+
+**Fix:** `createHeldNegotiatedBooking`'s `fields` gains an opt-in `guestOnly?: boolean`, forwarded
+as `guestOnly: fields.guestOnly === true` in the request body to `POST /bookings/negotiated`.
+Slot-engine's route destructures `guestOnly` and passes `{ guestOnly: guestOnly === true }` into
+`assignPooledCourt` — an absent/falsy value is byte-identical to today's behavior.
+`/bookings/manual`'s shared `bookingFields` now sets `guestOnly: true` (covers both its branches
+from one line); `/payment-links/negotiated`'s own object is untouched.
+
+**Regression:** new section in `manual-booking.regression.ts`, mirroring slot-engine's own F-225
+"no authorized court free → resourceId:null" test (`court-slot-index.regression.ts:567`) through
+`/bookings/manual` instead of self-service `POST /bookings`. Captured **failing for real, pre-fix**
+— a POOLED pool (capacity 2, only court 1 guest-authorized), court 1 taken, a second walk-in guest
+via `/bookings/manual` landed on court 2 (`resourceId: "aba63198-..."`, the reserved one) instead
+of the expected `null` fallback. Applied the fix, rebuilt, reran: `resourceId: null`, matching
+F-225's guest self-service behavior in the identical scenario.
+
+**Evidence:** slot-engine **75/75** post-fix (F-225's own three sections unaffected — confirms
+`/payment-links/negotiated` and guest self-service both stayed byte-identical); payment **20/20**
+post-fix (19 pre-existing + this one). typecheck clean on both `slot-engine` and `payment`
+(`tsc --noEmit`). `pnpm register:check` + `pnpm diagram:verify` green.
+
+**Status:** commit `42f26e7` + this row, on `f229-manual-booking` → PR #21 (still open, not
+merged).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
