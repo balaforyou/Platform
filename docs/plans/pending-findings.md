@@ -538,6 +538,21 @@ dated append, not a silent backfill.
 Confirmed-ID: F-204
 Confirmed: 30 Aug 2026
 
+### admin-assisted-manual-booking-cash-payment
+Batch: F-229 Step 0 (register relay), 10 Sep 2026
+Surfaced: 10 Sep 2026, Business Discovery Checklist
+(`claude/discovery-unified-login-manual-booking.md`, §9–§10) — Chief Architect thread.
+Supersedes [[F-204]] (`Walk-in booking + manual payment recording`, Open, never implemented) —
+same real gap F-204 always named, now fully scoped: an admin can book a court for a guest who's
+physically present or on the phone, with real cash and UPI-QR capture (immediate confirm, no
+webhook) plus a Razorpay-payment-link fallback, replacing F-204's narrower two-field/no-QR/
+standard-price-only scope. Depends softly on F-228 (`unified-gmail-login-guest-member-identity`,
+also Chief-assigned 10 Sep 2026, not yet relayed into git — separate finding, not part of this
+hand-off) for its shared search-or-create identity component; the capture route itself has no
+hard dependency and sequences first here.
+Confirmed-ID: F-229
+Confirmed: 10 Sep 2026
+
 ### deploy-pipeline-consolidation
 Batch: 23
 Surfaced: 28 Aug 2026
@@ -1045,3 +1060,21 @@ numbers for `assignPooledCourt` have drifted a few lines from other work landing
 since this was written — described behavior unaffected, only the exact pointers.
 Confirmed-ID: F-225
 Confirmed: 4 Sep 2026
+
+### bookings-manual-guest-court-authorization-gap
+Batch: F-229 close-out follow-up, 11 Sep 2026
+Surfaced: 11 Sep 2026, Technical Lead review thread (Bala), directly against `f229-manual-booking`
+post-merge-review.
+Description: `POST /bookings/manual` (F-229's walk-in-guest booking route) reuses
+`createHeldNegotiatedBooking` → slot-engine's `POST /bookings/negotiated`, which F-225 deliberately
+built to call `assignPooledCourt(pool, active)` with no `{ guestOnly: true }` — correct for its
+original and only caller at the time, `/payment-links/negotiated` (an admin negotiating a booking
+*on behalf of a member*, who may legitimately use a court reserved away from walk-in guests).
+F-229 later gave `/bookings/manual` — a real walk-in-**guest** path, not a member-negotiated one —
+the same unfiltered call, so a walk-in guest booked through it could be assigned a court the branch
+had explicitly reserved away from guests via F-225's own `guestBookable` gate. Confirmed for real:
+a POOLED pool (capacity 2, only court 1 guest-authorized) with court 1 taken, a second walk-in
+guest through `/bookings/manual` landed on court 2 (the reserved one) instead of the expected
+`resourceId: null` fallback F-225's own guest self-service path uses in the identical situation.
+Confirmed-ID: F-230
+Confirmed: 11 Sep 2026

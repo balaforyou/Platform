@@ -1,9 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { APIError } from '@badminton/ui-shared';
 import { useAdminApi } from '../../lib/useAdminApi';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { useAdminTenant } from '../../auth/AdminTenantContext';
 import { branchScopes } from './helpers';
-import type { AvailabilityOverride, AvailabilityPattern, AvailabilitySlot, Branch, ResourcePool } from './types';
+import { newIdempotencyKey } from './reservationHelpers';
+import type {
+  AvailabilityOverride,
+  AvailabilityPattern,
+  AvailabilitySlot,
+  Branch,
+  GuestLedgerRow,
+  GuestLookupResult,
+  ManualBookingResult,
+  ManualPaymentMethod,
+  ResourcePool,
+  WalkInResult,
+} from './types';
 
 /**
  * F-220: the config screen's read queries, adapted from admin-web's identically-named hooks.
@@ -62,6 +75,89 @@ export function useAvailability(poolId?: string, date?: string) {
     queryKey: ['court-groups', 'availability', poolId, date],
     enabled: !!poolId && !!date,
     queryFn: () => api.get<AvailabilitySlot[]>(`/slot-engine/resource-pools/${poolId}/availability?date=${date}`),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// F-229 Step 5 — walk-in reservation flow
+// ---------------------------------------------------------------------------
+
+/** `not-found` is a real UI state (enter a name → walk-in create), not an error. */
+export type GuestLookupOutcome =
+  | { status: 'found'; user: GuestLookupResult }
+  | { status: 'not-found' };
+
+/**
+ * F-229: look up a guest by phone. `GET /identity/users/lookup` — owner/branch_manager JWT +
+ * tenant-matched (Step 2 added `name` to its select). A 404 (`USER_NOT_FOUND`) resolves to a
+ * `not-found` outcome; every other failure rejects.
+ */
+export function useGuestLookup() {
+  const api = useAdminApi();
+  const { tenant } = useAdminTenant();
+  return useMutation<GuestLookupOutcome, Error, string>({
+    mutationFn: async (phone: string) => {
+      try {
+        const user = await api.get<GuestLookupResult>(
+          `/identity/users/lookup?tenantId=${tenant?.id}&phone=${encodeURIComponent(phone)}`,
+        );
+        return { status: 'found', user };
+      } catch (err) {
+        if (err instanceof APIError && err.statusCode === 404) return { status: 'not-found' };
+        throw err;
+      }
+    },
+  });
+}
+
+/** F-229: find-or-create the lightweight GUEST account for a walk-in (Step 2, no OTP). */
+export function useCreateWalkIn() {
+  const api = useAdminApi();
+  const { tenant } = useAdminTenant();
+  return useMutation<WalkInResult, Error, { phone: string; name: string }>({
+    mutationFn: ({ phone, name }) =>
+      api.post<WalkInResult>('/identity/users/walk-in', { phone, name, tenantId: tenant?.id }),
+  });
+}
+
+/**
+ * F-229 Step 6: the pool's guest ledger — every guest booking with its payment status joined
+ * and the Cash/UPI/Link method already derived server-side (`GET /resource-pools/:id/guest-ledger`,
+ * Step 4). Owner / branch_manager, pool-scoped.
+ */
+export function useGuestLedger(poolId?: string) {
+  const api = useAdminApi();
+  return useQuery({
+    queryKey: ['guest-ledger', poolId],
+    enabled: !!poolId,
+    queryFn: () => api.get<GuestLedgerRow[]>(`/slot-engine/resource-pools/${poolId}/guest-ledger`),
+  });
+}
+
+/** F-229: record a manual / walk-in booking (Step 3 — cash / razorpay_link / upi_qr). */
+export function useCreateManualBooking() {
+  const api = useAdminApi();
+  const { tenant } = useAdminTenant();
+  return useMutation<
+    ManualBookingResult,
+    Error,
+    {
+      branchId: string;
+      resourcePoolId: string;
+      resourceId?: string;
+      windowId: string;
+      userId: string;
+      negotiatedPrice: number;
+      paymentMethod: ManualPaymentMethod;
+      upiTransactionId?: string;
+    }
+  >({
+    mutationFn: (body) =>
+      api.post<ManualBookingResult>(
+        '/payment/bookings/manual',
+        { ...body, tenantId: tenant?.id },
+        { 'Idempotency-Key': newIdempotencyKey() },
+      ),
   });
 }
 

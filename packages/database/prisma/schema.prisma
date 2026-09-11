@@ -445,6 +445,7 @@ model User {
   phone           String?
   email           String?
   googleId        String?
+  name            String?       // F-229: admin-entered display name for admin-assisted / walk-in bookings. Distinct from F-219's planned displayName/photoUrl (Google-profile-sourced), which is not yet built.
   isPhoneVerified Boolean       @default(false)
   isEmailVerified Boolean       @default(false)
   userType        UserType      @default(GUEST)

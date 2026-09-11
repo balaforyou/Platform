@@ -17,6 +17,7 @@ import { dailyBookingCapSections } from './daily-booking-cap.regression';
 import { courtSlotIndexSections } from './court-slot-index.regression';
 import { nextAvailableDateSections } from './next-available-date.regression';
 import { moduleEntitlementSections } from './module-entitlement.regression';
+import { guestLedgerSections } from './guest-ledger.regression';
 
 async function main() {
   console.log('Starting local Slot Engine server...');
@@ -53,6 +54,7 @@ async function main() {
         ...courtSlotIndexSections,
         ...nextAvailableDateSections,
         ...moduleEntitlementSections,
+        ...guestLedgerSections,
       ],
       context,
     );

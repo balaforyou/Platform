@@ -1579,6 +1579,492 @@ corrected from the hand-off draft's 3 Sep 2026 estimate per the hand-off's own i
 prefer the kickoff doc's date. F-220's PR list in the register row also names #19 (Batch 32
 batch-log), which the hand-off draft predated.
 
+## Batch 34 — F-229 Step 0: register relay of Chief's manual-booking assignment (docs-only)
+
+**Findings:** [[F-229]] — new **Open** row, `admin-assisted-manual-booking-cash-payment`. Chief
+assigned the ID on 10 Sep 2026 in the Business Discovery Checklist
+(`claude/discovery-unified-login-manual-booking.md` §10), with the same "relay, same mechanism as
+F-221–F-227" instruction the doc spells out — that relay into git never happened until now, which
+is why a prior implementing thread's checkout correctly showed F-229 as unlogged. This batch is
+the mechanical transcription, not a new decision: a `Confirmed-ID: F-229` Promoted entry written
+to `pending-findings.md` so the `check-register.mjs` gate (F-229 ≥ F-179) passes, the F-229 Open
+row added verbatim from the hand-off, and [[F-204]]'s existing Open row marked **Superseded by
+[[F-229]]** (kept in place as a historical marker, not deleted — its narrower "no QR, standard
+price only, two fields" scope is absorbed into F-229's fuller design).
+
+**Also committed this batch:** the four F-229 hand-off documents into `claude/` at repo root
+(`technical-lead-plan-f229-manual-booking.md`, `claude-code-handover-f229-manual-booking.md`,
+`claude-code-handover-f229-implementation.md`, `discovery-unified-login-manual-booking.md`),
+unchanged — the other half of the same relay gap, so the register/pending-findings citations to
+`claude/discovery-unified-login-manual-booking.md` resolve to a real committed file.
+
+**Decision record:** `claude/discovery-unified-login-manual-booking.md` §10 (Chief) +
+`claude/claude-code-handover-f229-implementation.md` Step 0 (hand-off). F-228 was assigned in the
+same §10 but is a separate finding and is **not** relayed here — out of this hand-off's scope.
+
+**Handed off:** 10 Sep 2026 (F-229 implementation hand-off, Step 0).
+**Status:** commit `e856223` on `f229-manual-booking` (off `main` `0fb9337`), pushed; Step 0
+signed off by the reviewing thread after an independent content check.
+**Branch/PR:** `f229-manual-booking` (`e856223`).
+
+**No code / schema / route changes.** Step 1 (the `User.name` migration) is the first code step
+and is not done here.
+
+**Close-out:** `pnpm register:check` green — **206 rows, Open 111, Resolved 95** (+F-229 Open;
+from 205/110/95). `pnpm diagram:verify` green — all 67 finding tags agree, no tagged FLOW node
+touched by a docs-only change (F-229's own endpoints show only as non-failing advisory lines).
+
+## Batch 35 — F-229 Step 1: `User.name` column
+
+**Findings:** [[F-229]] Step 1 of 6 (schema). Register row stays **Open / In progress** — no
+status flip, this is one step inside the finding.
+
+**Change:** one purely-additive nullable column, `User.name String?`
+(`packages/database/prisma/schema.prisma`), migration
+`20260910120000_user_name_f229` — `ALTER TABLE "User" ADD COLUMN "name" TEXT;`. No backfill;
+every existing row gets `NULL`. Set on create by the walk-in identity route in Step 2; nothing
+reads it as required. A schema comment marks it distinct from [[F-219]]'s planned
+Google-profile-sourced `displayName`/`photoUrl` (not yet built) — this is the admin-entered
+guest name, the admin being the trust boundary rather than an OTP exchange.
+
+**Blast radius:** additive optional field — no `prisma.user.create`/`select`/`include` requires
+it across all 5 services + both frontends + seed scripts + test harness; no `SELECT *` on
+`User`, no User-shape snapshot test. Generated client is gitignored.
+
+**Decision record:** `claude/claude-code-handover-f229-implementation.md` Step 1. Per-step
+batch-log cadence (this entry, Batch 34's own entry) confirmed by the reviewing thread over a
+hold-until-close-out alternative — keeps the trail granular, same as F-220's per-section batches.
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 2).
+**Status:** merged path — commit `0fd8373` on `f229-manual-booking`, pushed, Step 1 signed off
+by the reviewing thread after an independent code-level diff read.
+**Branch/PR:** `f229-manual-booking` (`0fd8373`).
+
+**Evidence:** migration applied via `prisma migrate deploy` to `badminton_db`,
+`badminton_db_test`, `badminton_db_e2e` — column confirmed `text` / `is_nullable = YES` in
+`information_schema.columns` on each; `prisma migrate status` clean. Prisma client regenerated
+(`User.name: string | null` in `index.d.ts`). `pnpm -r build` / `typecheck` / `lint` all clean
+(8 pre-existing lint warnings, none new). Full 5-service regression green against
+`badminton_db_test` — identity-auth 7/7, tenant-management 11/11, slot-engine 74/74, payment
+12/12, notification 7/7. (First run hit a service-health startup race on 3 suites —
+environmental per the CLAUDE.md trap, slot-engine logged the same error yet passed; clean 5/5 on
+the immediate re-run.)
+
+**No register/pending-findings/diagram change** — schema-only step, F-229 already has its Open
+row and `Confirmed-ID` from Batch 34.
+
+## Batch 36 — F-229 Step 2: `POST /users/walk-in` (identity-auth)
+
+**Findings:** [[F-229]] Step 2 of 6. Register row stays **Open / In progress**.
+
+**Change (identity-auth only):**
+- New `requireWalkInAdmin` helper — dual-path (internal key OR owner/`branch_manager:*` JWT),
+  modeled on payment's `requirePaymentLinkAdmin` (`services/payment/src/index.ts:704`) but
+  **stricter**: the JWT path also enforces `decoded.tenantId === body.tenantId`, matching
+  `GET /users/lookup`'s own tenant check (which the payment helper omits). Reviewer explicitly
+  called this out as a correct judgment call — closing a gap the precedent route has rather than
+  copying it forward.
+- New `POST /users/walk-in` `{ phone, name, tenantId }` — auth before parse (F-090/F-045/F-071),
+  `normalizePhone` + `/^\+91[6-9]\d{9}$/` reused verbatim from `/users/lookup`, find-or-create on
+  the real `phone_tenantId` key. An existing row is returned **unchanged** — the route never
+  overwrites a stored `name`. New rows: `userType: GUEST`, `isPhoneVerified: false` (the admin is
+  the trust boundary, not an OTP exchange). No session, no `PendingInvite` resolution. P2002
+  catch-and-return-existing for the admin double-click, same shape as
+  `createPaymentLinkForHeldBooking`. Returns `{ id, phone, name, userType, created }`.
+- **F-229 §4 (reviewer-approved):** `GET /users/lookup`'s `select` gains `name` so Step 5's
+  guest-lookup "found" state can show the resolved name. `email` stays excluded —
+  `admin-phone-lookup.regression.ts` still asserts it never leaks.
+- New `walk-in.regression.ts` (5 sections) wired into `run.ts`.
+
+**Blast radius:** new route + new helper, nothing existing changes except the additive `name`
+field on `/users/lookup`'s payload — its two consumers (that regression suite, which guards
+`email` not payload shape; `apps/admin-web/src/main.tsx:672`'s `UserLookupResult` type, additive)
+are both safe.
+
+**Decision record:** `claude/claude-code-plan-f229-step2-users-walk-in.md` (committed `3532e2b`),
+signed off by the reviewing thread including §4 = (A), after an independent code-level re-check of
+every citation.
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 3).
+**Status:** commit `c51eb49` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`c51eb49`).
+
+**Evidence:** live-fire against the running dev stack + real `badminton_db` JBC tenant — all
+scenarios pass (internal-key new/existing-not-overwritten with DB read-back, owner +
+`branch_manager` JWT create, wrong-tenant 403, non-admin 403, no-auth 401, bad phone / empty name
+/ missing field 400 with the right codes, `/users/lookup` returns `name` and still omits `email`).
+2 test User rows created then deleted, `SELECT count(*)` = 0 after — no demo-data pollution.
+`pnpm -r build` / `typecheck` / `lint` clean (8 pre-existing lint warnings, none new). Full
+5-service regression green against `badminton_db_test` — **identity-auth 12/12** (7 baseline + 5
+new walk-in sections), tenant-management 11/11, slot-engine 74/74, payment 12/12, notification
+7/7; clean on the first run.
+
+**No register/pending-findings/diagram change** — route-only step.
+
+## Batch 37 — F-229 Step 3: `POST /bookings/manual` (payment)
+
+**Findings:** [[F-229]] Step 3 of 6. Register row stays **Open / In progress**.
+
+**Refactor (behaviour-preserving):** the inline slot-engine `/bookings/negotiated` call in
+`POST /payment-links/negotiated` is extracted **verbatim** into `createHeldNegotiatedBooking()`
+so `/bookings/manual` reuses it. Only existing code path this step touches — guarded by
+`negotiated-link.regression.ts` plus a live-fire re-run of `/payment-links/negotiated` itself.
+
+**New route `POST /bookings/manual` (payment):**
+- Auth: `requirePaymentLinkAdmin` + the same per-branch role check `/payment-links/negotiated`
+  uses (`:989`); `Idempotency-Key` required. Body = the negotiated body + `paymentMethod`
+  (`cash` \| `razorpay_link` \| `upi_qr`) + `upiTransactionId?` (required iff `upi_qr`).
+- `razorpay_link` — thin pass-through, identical to `/payment-links/negotiated`.
+- `cash` / `upi_qr` — `createHeldNegotiatedBooking` (HELD) → `PaymentIntent` written already
+  `captured` (`amount = Math.round(Number(negotiatedPrice) * 100)` verbatim from
+  `createPaymentLinkForHeldBooking:818`; `gatewayRef` = `cash_<sha256(idempotencyKey).slice(0,16)>`
+  or `upi_<upiTransactionId>`) → slot-engine `POST /bookings/:id/confirm`, **the exact call the
+  Razorpay webhook makes at `:468`**. No new `booking.update({ status })` anywhere — idempotency,
+  the non-HELD reject, and the F-183 child cascade all belong to that route.
+- Retry / collision safety (reviewer bug catch, plan rev 2): `expectedGatewayRef` computed
+  **before** the existing-intent guard; a same-key retry (ref matches + `captured`) falls
+  through to the idempotent confirm and returns the existing intent (also self-heals a
+  confirm-failed-after-capture); the P2002 catch verifies `raced.referenceId === booking.id`,
+  else **409 `UPI_TRANSACTION_ID_ALREADY_USED`** and **never** confirms — closes a real
+  cross-booking "free court" path from a reused admin-typed UPI id.
+- Other errors: pending intent on the booking → **400 `BOOKING_HAS_PENDING_INTENT`**; confirm
+  fails after capture → **502 `BOOKING_CONFIRM_FAILED`** + loud log (webhook's own posture).
+- **No schema change** — `PaymentIntent` untouched; Cash/UPI/Link lives entirely in the
+  `gatewayRef` prefix, which Step 4's ledger derives from.
+
+**Blast radius:** new route + the behaviour-preserving `createHeldNegotiatedBooking` extraction.
+slot-engine (`/bookings/negotiated`, `/bookings/:id/confirm`) called as-is, not modified. New
+`manual-booking.regression.ts` (7 sections) in `run.ts`.
+
+**Decision record:** `claude/claude-code-plan-f229-step3-bookings-manual.md` rev 2 (committed
+`5ba7411`) — reviewer caught a real bug in rev 1's guard and signed off rev 2, including the three
+§4 decisions, after an independent code-level trace of all four branches (sequential + concurrent).
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 4).
+**Status:** commit `3c2b0cf` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`3c2b0cf`).
+
+**Evidence:** live-fire against the running dev stack + **real `badminton_db` JBC pool**
+`ba1d1433-…` (POOLED, Coimbatore branch `6c9c1e5e-…`), walk-in guest created via the Step 2
+route — 24 checks pass: standalone `/bookings/:id/confirm` shows **HELD → CONFIRMED**; `cash`
+and `upi_qr` reach `CONFIRMED` with a `captured` `PaymentIntent` (24000 paise for ₹240, `cash_` /
+`upi_<txn>` prefix, `referenceId` match, `purpose: guest_booking`); `cash` retry → same booking +
+same intent, one row, still `CONFIRMED`; `upi_qr` resubmit (same booking) → same intent;
+**`upi_qr` cross-booking collision → 409, second booking NOT `CONFIRMED`, one intent pointing at
+the first booking**; missing `upiTransactionId` → 400 (no booking leaked); `razorpay_link` →
+working `plink_mock_…` link, `pending` intent, booking stays `HELD`; `/payment-links/negotiated`
+itself post-refactor → unchanged (retry reuse, member JWT 403); auth 401 / 403 / 403 / 400. All
+test rows deleted, `SELECT count(*)` = 0/0 — no demo-data pollution. `pnpm -r build` /
+`typecheck` / `lint` clean (8 pre-existing lint warnings). Full 5-service regression green
+against `badminton_db_test` — identity-auth 12/12, tenant-management 11/11, slot-engine 74/74,
+**payment 19/19** (12 baseline + 7 new), notification 7/7; clean first run.
+
+**No register/pending-findings/diagram change** — route + refactor only.
+
+## Batch 38 — F-229 Step 4: `GET /resource-pools/:id/guest-ledger` (slot-engine)
+
+**Findings:** [[F-229]] Step 4 of 6. Register row stays **Open / In progress**.
+
+**New read-only route `GET /resource-pools/:id/guest-ledger` (slot-engine):**
+- Auth: `getInternalOrAdminAuth` + `requirePoolScope` — the exact gate the other pool-scoped
+  admin reads use (owner **or** `branch_manager:<pool's branch>`, 404 unknown pool, 403
+  cross-branch).
+- `where: { resourcePoolId, isMemberBooking: false, parentBookingId: null }` — F-183 child rows
+  excluded, same as `GET /bookings/admin` and `GET /bookings/my`.
+- `Booking` has no `user` relation and `PaymentIntent` has no relation to `Booking`
+  (`referenceId` is a bare string), so both are joined in memory with one extra `findMany` each.
+- `deriveLedgerMethod(gatewayRef)`: `cash_`→`cash`, `upi_`→`upi`, `plink_`/`pay_`→`link`, else
+  `other`; raw `gatewayRef` also returned. **No `method` column** (per the plan).
+- Optional `?status` (validated against `BookingStatus`, 400 on a bad value) and `?limit`
+  (default 200, capped 1–500).
+- **Pool-scoped** (`:id` = resourcePoolId) — matches `requirePoolScope` verbatim; JBC is
+  one-pool-per-branch. Branch aggregation deferred.
+
+**Blast radius:** new route + `deriveLedgerMethod` helper. slot-engine now `SELECT`s
+`prisma.paymentIntent` and `prisma.user` for the first time — additive, read-only. One shared-file
+change: `services/slot-engine/src/regression/_fixtures.ts` `cleanDatabase()` gains
+`paymentIntent` + `user` deletes (the new suite is the first to create them; both other services'
+`cleanDatabase()` already wipe them; `User` FK cascades cover `authSession`/`webAuthnCredential`).
+No schema change, no mutation, no frontend, no other service.
+
+**Decision record:** `claude/claude-code-plan-f229-step4-guest-ledger.md` (committed `e07b0db`),
+signed off by the reviewing thread with all four §4 decisions as written.
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 5).
+**Status:** commit `4056f6e` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`4056f6e`).
+
+**Evidence:** live-fire against the running dev stack + **real `badminton_db` JBC pool**
+`ba1d1433-…` — 13 checks pass. `cash` / `upi_qr` / `razorpay_link` bookings created via
+`POST /bookings/manual` (Step 3) for a walk-in guest all appear with the right derived method
+(`cash` / `upi` / `link`), `amountPaise` (30000 for ₹300), payment status (`captured` / `captured`
+/ `pending`), resolved `guest.name`/`phone`, and `court`; a directly-seeded `isMemberBooking: true`
+row is **excluded**; `?status=CONFIRMED` drops the HELD link row; `?status=NONSENSE` → 400;
+`?limit=1` caps; no-auth → 401, non-admin JWT → 403, wrong-branch `branch_manager` → 403, unknown
+pool → 404; the route's row count never exceeds a direct `SELECT`. All seeded rows deleted,
+`SELECT count(*)` = 0. `pnpm -r build` / `typecheck` / `lint` clean (8 pre-existing lint
+warnings). Full 5-service regression green against `badminton_db_test` — identity-auth 12/12,
+tenant-management 11/11, **slot-engine 75/75** (74 baseline + 1 new), payment 19/19, notification
+7/7; clean first run.
+
+**No register/pending-findings/diagram change** — route-only step.
+
+## Batch 39 — F-229 Step 5: Reservations tab UI (admin-v2)
+
+**Findings:** [[F-229]] Step 5 of 6 (first frontend surface). Register row stays **Open / In
+progress**.
+
+**Change (admin-v2 only, no backend/service/schema):**
+- `GuestManagementScreen.tsx` — the Reservations `EmptyState` → `<ReservationsPanel branchId=…>`.
+- New `sections/ReservationsPanel.tsx` — the walk-in booking form, built to the approved
+  `Main_v2.dc.html` mockup: phone guest lookup (three states — not-searched / found /
+  not-found → inline name → `POST /identity/users/walk-in`), date + Morning/Afternoon/Evening
+  band + slot (`useAvailability`, band from the window's branch-local hour), a court picker
+  (guest-bookable only + a "Show all courts" toggle that reveals the rest labelled "Reserved" —
+  F-225 Option B), price pre-filled via `resolveGuestRate` (mirrors slot-engine's
+  `resolveGuestBlanketRate`), Cash / Payment-link cards with the "Send Razorpay link" vs
+  "Already paid via your QR" (UPI transaction ID) sub-choice, a dynamic submit label, and a
+  persistent `Banner` with the `shortUrl` on the `razorpay_link` path.
+- New `reservationHelpers.ts` (band grouping, `resolveGuestRate`, phone validation) + 3 hooks in
+  `queries.ts` (`useGuestLookup` / `useCreateWalkIn` / `useCreateManualBooking`).
+- `vite.config.ts` — proxy `/api/payment` → `:3004` (first admin-v2 consumer of the payment
+  service; Caddy already routes it in prod, so production is unaffected).
+- `lib/useAdminApi.ts` — `post()` gains an **optional** `headers` arg (additive, matches
+  admin-web's own shape) for the `Idempotency-Key` header.
+- `guestManagement/types.ts` — `Branch.timezone` added (already returned by
+  `GET /tenants/:id/branches`, just wasn't typed — reviewer's Decision-2 correction) + walk-in
+  response types.
+
+**Decisions (signed off):** (1) court picker built per the mockup + a "Court is assigned
+automatically for this pool" caption when POOLED (JBC's case) — `resourceId` is sent, honored
+for a future FIXED_INSTANCE tenant, ignored for POOLED (`slot-engine:3389`, F-225's existing
+design); (2) `Branch.timezone` folded in, no follow-up; (3) persistent `Banner` for the
+`razorpay_link` `shortUrl`; (4) silent-single / `Select`-when-many pool selector.
+
+**Blast radius:** one `EmptyState` swap on an existing screen; everything else additive. No
+service code, no schema.
+
+**Handed off:** 10 Sep 2026 (per-step, ahead of Step 6 — the `/ledger` rebuild).
+**Status:** commit `4332039` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`4332039`).
+
+**Evidence — browser live-fire against the dev stack + real `badminton_db`:**
+- **JBC owner:** a **cash** booking end-to-end through the real admin-v2 UI → `CONFIRMED` with a
+  `cash_` `captured` `PaymentIntent`, verified by DB read-back **and** the Step 4 guest-ledger
+  route; **razorpay_link** → `HELD` + `plink_mock_` `pending` + the link `Banner`;
+  **upi_qr** → `CONFIRMED` + `upi_<the typed txn id>` `captured`. not-found phone → name →
+  walk-in `User` created. Price pre-fill correct for a standard slot (₹400) and a peak slot
+  (₹600, JBC's 19:00–21:00 peak window). "Show all courts" reveals a de-authorised court with
+  the **RESERVED** tag in warning colour; dynamic submit labels for all three states.
+- **`courtowner1` owner:** the F-206 entitlement gate blocks the screen (no `GUEST_BOOKING`);
+  with a temporary grant the multi-pool **Court pool** `Select` (88 pools — F-202 test
+  pollution) renders, the tenant theme (red accent) is picked up via `--av2-*` tokens, and the
+  empty-slot state is handled. Temp grant and every test row removed afterward — verified
+  `count(*)` = 0.
+- **375px:** the `Date`/`Time-of-day`, court, and payment grids collapse to one column
+  (`repeat(auto-fit, …)`); no horizontal page overflow. **Dark and light** both render.
+- Whole-repo typecheck / build / lint clean (8 pre-existing lint warnings, none new). Full
+  5-service regression green against `badminton_db_test` — identity-auth 12/12,
+  tenant-management 11/11, slot-engine 75/75, payment 19/19, notification 7/7 (first run hit the
+  known service-health startup flake on 3 suites, clean on re-run).
+
+**No register/pending-findings/diagram change** — UI-only step.
+
+## Batch 40 — F-229 Step 6: `/ledger` rebuild (admin-v2) — final implementation step
+
+**Findings:** [[F-229]] Step 6 of 6 (last step). Register row **still Open / In progress** — the
+flip to Resolved + a F-229 Resolved summary row is a separate whole-finding close-out pass, same
+pattern as [[F-220]]'s Batch 33, to run after the reviewing thread's final sign-off and the merge
+to `main`.
+
+**Change (admin-v2 only, no backend/service/schema):**
+- `App.tsx` — `/ledger` route: the "Subscription Ledger" `StubScreen` → `<LedgerScreen />`.
+  `StubScreen` still serves 4 other routes.
+- New `screens/LedgerScreen.tsx`, built to the approved `Ledger_v2.dc.html`:
+  - the shared `Tabs` component (per the hand-off): **Guest** / **Members** / **Students**.
+  - **Guest** tab — real, backed by `GET /slot-engine/resource-pools/:id/guest-ledger` (Step 4),
+    rendered with the shared `Table`. Columns: Date, Guest, Court, Amount (right), Method,
+    Status. The Method badge **reuses the server-derived `payment.method`** (`cash` / `upi` /
+    `link` — not re-derived client-side): Cash green, Link blue, **UPI neutral** (the third,
+    distinct style — Bala's "your call, not a blocker"), intent-less rows → "Unpaid". Status
+    badge maps booking status (`CONFIRMED`→Confirmed, `HELD`→Pending, `CANCELLED`→Cancelled, …).
+    Date `"27 Sep, 6:00 PM"` day-first in the branch timezone.
+  - **Members** / **Students** — honest greyed lock-icon placeholders with `Ledger_v2`'s exact
+    copy ("Member Ledger — launching with the Membership module" / "Student Ledger — coming with
+    the Students module" + their one-line descriptions). Never fake data — Bala's demo-value
+    call, 10 Sep 2026.
+  - Branch selector + a Court-pool `Select` when the branch has >1 pool (same silent-single /
+    Select-when-many pattern as Step 5).
+- `nav.ts` — the destination label `"Subscription Ledger"` → `"Ledger"` (`shortLabel` was
+  already "Ledger"). The old label was mis-scoped copy (Bala's note); it now matches the mockup
+  and the real screen. No F-206 module gate on `/ledger` (unchanged — nav.ts's own comment).
+- `queries.ts` `+useGuestLedger(poolId)`, `types.ts` `+GuestLedgerRow` / `LedgerMethod`.
+
+**Blast radius:** one route swap + one nav label + an additive hook/type. No service code, no
+schema.
+
+**Handed off:** 10 Sep 2026 (per-step). **All six F-229 steps are now implemented on the
+branch** — Step 0 (relay) + Steps 1–6 (`User.name` · `/users/walk-in` · `/bookings/manual` ·
+`/resource-pools/:id/guest-ledger` · Reservations tab · `/ledger`).
+**Status:** commit `376e597` on `f229-manual-booking`, pushed.
+**Branch/PR:** `f229-manual-booking` (`376e597`).
+
+**Evidence — browser live-fire against the dev stack + real `badminton_db`:** 3 fresh guest
+bookings seeded through `POST /bookings/manual` (cash / upi_qr / razorpay_link) all appear in the
+**Guest** tab with the right method badge (Cash green / UPI neutral / Link blue) and status badge
+(Confirmed / Confirmed / Pending); pre-existing real JBC bookings render correctly as Cancelled /
+Unpaid. **Members** and **Students** tabs show the greyed lock-icon placeholders with the exact
+`Ledger_v2` copy. A first-pass bug — a disabled ledger query briefly rendering the empty state
+before the pool resolved — was caught and fixed (loading gate now checks `poolId` presence); a
+branch with no pool shows an info `Banner`. 375px: the table scrolls inside its own
+`overflow-x: auto` container, the page body does not scroll horizontally; dark + light both
+render. All seeded rows removed afterward (verified `count(*)` = 0). Whole-repo typecheck /
+build / lint clean (8 pre-existing lint warnings). Full 5-service regression green against
+`badminton_db_test`, **unchanged counts** — identity-auth 12/12, tenant-management 11/11,
+slot-engine 75/75, payment 19/19, notification 7/7; clean first run.
+
+**No register/pending-findings/diagram change** — UI-only step; whole-finding close-out pending.
+
+## Batch 41 — F-229 whole-pass close-out (register) + PR #21 to `main`
+
+**Findings:** [[F-229]] — its Open row (added Batch 34) converted to a **Resolved** summary row,
+`Resolved: 10 Sep 2026`, written fresh per the register's convention (Resolution replaces
+Impact/Action). Its `pending-findings.md` `admin-assisted-manual-booking-cash-payment` entry was
+already under "Promoted (audit trail)" with `Confirmed-ID: F-229` from Batch 34 — no change
+needed there (unlike [[F-220]]'s Batch 33, which had to write its Promoted entry at close-out).
+[[F-204]]'s "**Superseded by [[F-229]]**" clause (added Batch 34) is in F-204's own row and
+survives untouched.
+
+**Docs-only — no code.** All F-229 code landed in Batches 35–40 (Steps 1–6); Batch 34 was the
+Step 0 relay.
+
+**Decision record:** the 10 Sep 2026 F-229 implementation hand-off + the reviewing thread's
+per-step sign-offs (Steps 0–6) + Bala's instruction to run the close-out and open the PR now,
+not auto-merge, and leave the stack up for their own testing.
+
+**Handed off:** 10 Sep 2026.
+**Status:** commit `0c3b832` on `f229-manual-booking`, pushed. **PR #21 →
+`main` is open for review — deliberately not merged.** The Resolved row is written on the
+assumption PR #21 merges; if it does not, this row and F-204's supersede clause both need
+reverting.
+**Branch/PR:** `f229-manual-booking` → **PR #21** (the whole finding — Batches 34–41 — as one
+PR, not the per-batch docs PRs [[F-220]] used, at Bala's direction).
+
+**Close-out:** `pnpm register:check` green — **206 rows, Open 110, Resolved 96** (F-229 moved
+Open → Resolved; total unchanged). `pnpm diagram:verify` green — all 67 finding tags agree, no
+tagged FLOW node touched. Whole-repo typecheck / build / lint clean (8 pre-existing lint
+warnings). Full 5-service regression green against `badminton_db_test` — identity-auth 12/12,
+tenant-management 11/11, slot-engine 75/75, payment 19/19, notification 7/7.
+
+**Still owned by Chief, not done here:** whether F-228 (unified Gmail-first login, assigned in
+the same discovery doc §10) still needs relaying into git, and the F-207/F-209 urgency note the
+discovery doc §6 raised (this MVP's manual-toggle membership model may reduce their priority).
+
+## Batch 42 — F-229 fix: `crypto.randomUUID` on a plain-IP dev URL (Bala's mobile test)
+
+**Findings:** [[F-229]] — a fix to Step 5 code found during Bala's own mobile testing of PR #21,
+not a new finding. F-229 stays **Resolved** (the fix is part of the same PR, before merge).
+
+**Bug:** `POST /bookings/manual` from admin-v2 on a phone (`http://192.168.x.x:5175`) threw
+`crypto.randomUUID is not a function`. `crypto.randomUUID()` is defined only in a **secure
+context** (HTTPS or localhost) — over a plain-IP LAN URL it is `undefined`. It was used inline in
+`useCreateManualBooking` for the `Idempotency-Key` header (the one `crypto.randomUUID` call in
+admin-v2; `guest-member-pwa`'s `CourtBooking.tsx` has the same pattern but is out of F-229 scope
+and normally served over HTTPS).
+
+**Fix (`e5b311b`):** new `newIdempotencyKey()` helper in `reservationHelpers.ts` —
+`crypto.randomUUID()` when available, else a v4 UUID from `crypto.getRandomValues` (which is
+**not** secure-context-gated), else a `timestamp+random` string. Verified in-browser with
+`crypto.randomUUID` forced `undefined`: a `razorpay_link` booking now succeeds (`HELD` +
+`plink_mock_` intent, a valid v4 `idempotencyKey` from the fallback), no error. typecheck /
+build / lint clean.
+
+**Status:** commit `e5b311b` + this row, on `f229-manual-booking` → PR #21 (still open, not
+merged).
+
+## Batch 43 — F-229 hardening: no raw code errors on screen
+
+**Findings:** [[F-229]] — a sweep prompted by Batch 42 (Bala: "we should not [have] such code
+errors [on screen]"), for the same class as the `crypto.randomUUID` bug. F-229 stays
+**Resolved** (same PR, before merge). Commit `9c07de8`.
+
+**Three fixes:**
+1. **Timezone / date safety — a render-crash risk, not just a bad message.** `branch.timezone`
+   comes from the DB; a legacy/misconfigured branch could carry `""`, `"IST"`, or garbage, and
+   `new Intl.DateTimeFormat(_, { timeZone })` throws `RangeError` on a non-IANA string. Every
+   F-229 formatter (`branchHour`, `formatSlotLabel`, `branchLocalMinutes`, the Ledger's
+   `formatDateTime`) runs **during render** — an unguarded throw white-screens the screen, and
+   admin-v2 has **no error boundary** (flagged below). New `safeTimeZone()` validates the zone
+   once and falls back to UTC; `safeDate()` guards `Invalid Date`; `hhmmToMinutes()` regex-parses
+   and returns `NaN` instead of `.split`-throwing on a malformed peak window.
+2. **`friendlyError(err, fallback)`** added to `lib/errorMessage.ts` — `ZodError` / `APIError`
+   shown verbatim, a fetch/network `TypeError` gets a plain line, **anything else (a bug) is
+   `console.error`'d and shown as `fallback`, never leaked raw.** `errorMessage()` passed a bare
+   `Error.message` straight through — exactly how "crypto.randomUUID is not a function" reached a
+   `Banner`. `ReservationsPanel` + `LedgerScreen` switched to `friendlyError`.
+3. **Null-safety:** Ledger row `r.guest?.name`; `METHOD_TONE`/`METHOD_LABEL` fall back for an
+   unknown method string.
+
+**Verified:** `safeTimeZone` unit-tested against `""` / `"IST"` / `"Not/AZone"` / `"GMT+5:30"` /
+`"garbage"` / trailing-space — all resolve without throwing; `Invalid Date` → epoch. Browser
+sweep of `/guests` and `/ledger` (all three Ledger tabs, a full cash booking) — no admin-v2 code
+errors in the console. typecheck / build / lint clean (8 pre-existing warnings).
+
+**Flagged, not fixed here (broader than F-229):**
+- **admin-v2 has no React error boundary** — any render-time throw in any screen white-screens
+  the whole app. Worth a small `<ErrorBoundary>` around `<Outlet />` in `AppShell` (a non-DOM-
+  destroying one — see CLAUDE.md's F-215 note about error boundaries that swap the tree).
+- The **"Service worker registration failed"** console errors on the vite dev server — `sw.js`
+  is stamped at build time and absent in dev ([[F-197]]); console-only, never reaches the UI,
+  pre-existing.
+- `guest-member-pwa`'s `CourtBooking.tsx` has the same inline `crypto.randomUUID()` — out of
+  F-229 scope, and it is served over HTTPS in real use, but a `newIdempotencyKey`-style fix
+  there is a cheap future follow-up.
+
+**Status:** commit `9c07de8` + this row on `f229-manual-booking` → PR #21 (open, not merged).
+
+## Batch 44 — F-230: /bookings/manual walk-in guest respects per-court guest authorization
+
+**Finding:** [[F-230]] — reviewer-confirmed 11 Sep 2026 directly in the Technical Lead thread
+(handoff), against `f229-manual-booking` post-merge-review. `POST /bookings/manual` ([[F-229]])
+reuses `createHeldNegotiatedBooking` → slot-engine's `POST /bookings/negotiated`, which [[F-225]]
+built to call `assignPooledCourt(pool, active)` with **no** `{ guestOnly: true }` — correct for its
+original caller `/payment-links/negotiated` (an admin negotiating on behalf of a **member**, who
+may legitimately use a court reserved away from walk-in guests). `/bookings/manual` is a real
+walk-in-**guest** path, not a member-negotiated one, so it silently inherited the same unfiltered
+call — a walk-in guest could be assigned a court the branch had explicitly reserved away from
+guests via F-225's own toggle.
+
+**Blast-radius check (rule 3a):** `grep -r "bookings/negotiated"` across the repo — only two
+non-doc call sites: the route itself (`slot-engine/src/index.ts:3226`) and
+`createHeldNegotiatedBooking` (`payment/src/index.ts:854`), itself called from exactly 3 places —
+`/payment-links/negotiated` (member-negotiated, must stay unaffected) and `/bookings/manual`'s two
+branches (`razorpay_link`, cash/upi_qr — both share one `bookingFields` object). No other route,
+service, or regression helper calls `/bookings/negotiated` directly.
+
+**Fix:** `createHeldNegotiatedBooking`'s `fields` gains an opt-in `guestOnly?: boolean`, forwarded
+as `guestOnly: fields.guestOnly === true` in the request body to `POST /bookings/negotiated`.
+Slot-engine's route destructures `guestOnly` and passes `{ guestOnly: guestOnly === true }` into
+`assignPooledCourt` — an absent/falsy value is byte-identical to today's behavior.
+`/bookings/manual`'s shared `bookingFields` now sets `guestOnly: true` (covers both its branches
+from one line); `/payment-links/negotiated`'s own object is untouched.
+
+**Regression:** new section in `manual-booking.regression.ts`, mirroring slot-engine's own F-225
+"no authorized court free → resourceId:null" test (`court-slot-index.regression.ts:567`) through
+`/bookings/manual` instead of self-service `POST /bookings`. Captured **failing for real, pre-fix**
+— a POOLED pool (capacity 2, only court 1 guest-authorized), court 1 taken, a second walk-in guest
+via `/bookings/manual` landed on court 2 (`resourceId: "aba63198-..."`, the reserved one) instead
+of the expected `null` fallback. Applied the fix, rebuilt, reran: `resourceId: null`, matching
+F-225's guest self-service behavior in the identical scenario.
+
+**Evidence:** slot-engine **75/75** post-fix (F-225's own three sections unaffected — confirms
+`/payment-links/negotiated` and guest self-service both stayed byte-identical); payment **20/20**
+post-fix (19 pre-existing + this one). typecheck clean on both `slot-engine` and `payment`
+(`tsc --noEmit`). `pnpm register:check` + `pnpm diagram:verify` green.
+
+**Status:** commit `42f26e7` + this row, on `f229-manual-booking` → PR #21 (still open, not
+merged).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

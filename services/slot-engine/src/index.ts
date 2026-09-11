@@ -1603,6 +1603,92 @@ server.get('/resource-pools/:id/occupancy', async (request, reply) => {
   };
 });
 
+// GET /resource-pools/:id/guest-ledger — F-229: the admin "Ledger" screen's Guest tab.
+//
+// Every guest booking for this pool with its payment status joined. Owner / branch_manager
+// (requirePoolScope — same gate as the other pool-scoped admin reads). Read-only.
+//
+// The Cash / UPI / Link method label is derived purely from the PaymentIntent.gatewayRef prefix
+// set by POST /bookings/manual (Step 3) — there is deliberately no `method` column. `Booking`
+// has no `user` relation and `PaymentIntent` has no relation to `Booking` (referenceId is a bare
+// string), so both are joined in memory with one extra query each.
+const deriveLedgerMethod = (gatewayRef: string | null | undefined): 'cash' | 'upi' | 'link' | 'other' | null => {
+  if (!gatewayRef) return null;
+  if (gatewayRef.startsWith('cash_')) return 'cash';
+  if (gatewayRef.startsWith('upi_')) return 'upi';
+  if (gatewayRef.startsWith('plink_') || gatewayRef.startsWith('pay_')) return 'link';
+  return 'other';
+};
+
+server.get('/resource-pools/:id/guest-ledger', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  const pool = await requirePoolScope(auth, id, reply);
+
+  const { status, limit } = request.query as any;
+  if (status && !Object.values(BookingStatus).includes(status)) {
+    reply.status(400);
+    const err = new Error(`Invalid status. One of: ${Object.values(BookingStatus).join(', ')}`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  const take = Math.min(Math.max(Number(limit) || 200, 1), 500);
+
+  const bookings = await prisma.booking.findMany({
+    where: {
+      resourcePoolId: pool.id,
+      isMemberBooking: false,
+      // F-183: child rows carry no price and no PaymentIntent of their own — same exclusion
+      // GET /bookings/admin and GET /bookings/my already make.
+      parentBookingId: null,
+      ...(status ? { status: status as BookingStatus } : {}),
+    },
+    include: { window: true, resource: true },
+    orderBy: [{ window: { startTime: 'desc' } }],
+    take,
+  });
+
+  const bookingIds = bookings.map((b: any) => b.id);
+  const userIds = [...new Set(bookings.map((b: any) => b.userId))];
+
+  const [intents, users] = await Promise.all([
+    bookingIds.length
+      ? prisma.paymentIntent.findMany({ where: { referenceId: { in: bookingIds } } })
+      : Promise.resolve([] as any[]),
+    userIds.length
+      ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, phone: true } })
+      : Promise.resolve([] as any[]),
+  ]);
+  const intentByBooking = new Map(intents.map((i: any) => [i.referenceId, i]));
+  const userById = new Map(users.map((u: any) => [u.id, u]));
+
+  return bookings.map((b: any) => {
+    const intent = intentByBooking.get(b.id) ?? null;
+    return {
+      bookingId: b.id,
+      status: b.status,
+      date: b.window.startTime,
+      windowStart: b.window.startTime,
+      windowEnd: b.window.endTime,
+      guest: userById.get(b.userId) ?? { id: b.userId, name: null, phone: null },
+      court: b.resource?.name ?? (b.courtSlotIndex != null ? `Court ${b.courtSlotIndex}` : null),
+      courtSlotIndex: b.courtSlotIndex,
+      resourceId: b.resourceId,
+      price: b.price,
+      payment: intent
+        ? {
+            intentId: intent.id,
+            amountPaise: intent.amount,
+            status: intent.status,
+            gatewayRef: intent.gatewayRef,
+            method: deriveLedgerMethod(intent.gatewayRef),
+          }
+        : null,
+    };
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Availability Patterns
 // ---------------------------------------------------------------------------
@@ -3164,6 +3250,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
     userId,
     negotiatedPrice,
     coPlayers,
+    guestOnly,
   } = request.body as any;
 
   if (negotiatedPrice == null || isNaN(Number(negotiatedPrice))) {
@@ -3278,8 +3365,12 @@ server.post('/bookings/negotiated', async (request, reply) => {
       // vice versa. assignPooledCourt picks a real Resource + a matching courtSlotIndex,
       // or falls back to F-186's occupancy-scan index (resourceId null) for a pool with no
       // usable Resource list.
-      // F-225: NO { guestOnly } here — this is the admin/negotiated path. A court reserved from
-      // walk-in guests must still be assignable by an admin acting for a member.
+      // F-225: unfiltered by default — this is the admin/negotiated path. A court reserved from
+      // walk-in guests must still be assignable by an admin acting for a member. F-230: a caller
+      // may opt in with guestOnly (only /bookings/manual's walk-in-guest path does), which applies
+      // the same guestBookable gate the self-service path (line 3127) already respects — a real
+      // walk-in guest booked through the admin-assisted manual-booking route must never land on a
+      // court the branch reserved away from guests.
       let courtSlotIndex: number | null = null;
       let pooledResourceId: string | null = null;
       if (pool.allocationMode === AllocationMode.POOLED) {
@@ -3290,7 +3381,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
           },
           select: { courtSlotIndex: true, resourceId: true },
         });
-        const assigned = assignPooledCourt(pool, active);
+        const assigned = assignPooledCourt(pool, active, { guestOnly: guestOnly === true });
         pooledResourceId = assigned.resourceId;
         courtSlotIndex = assigned.courtSlotIndex;
       }

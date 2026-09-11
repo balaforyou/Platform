@@ -8,6 +8,7 @@ import { priceIntegritySections } from './price-integrity.regression';
 import { webhookSignatureAndIdempotencySections } from './webhook-signature-and-idempotency.regression';
 import { autopayAndRefundSections } from './autopay-and-refund.regression';
 import { negotiatedLinkSections } from './negotiated-link.regression';
+import { manualBookingSections } from './manual-booking.regression';
 
 async function main() {
   console.log('Starting local servers (Slot Engine, Identity & Auth, Payment)...');
@@ -46,6 +47,7 @@ async function main() {
         ...webhookSignatureAndIdempotencySections,
         ...autopayAndRefundSections,
         ...negotiatedLinkSections,
+        ...manualBookingSections,
       ],
       context,
     );

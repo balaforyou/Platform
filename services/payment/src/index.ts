@@ -848,6 +848,67 @@ const createPaymentLinkForHeldBooking = async ({
   }
 };
 
+// F-229: extracted verbatim from POST /payment-links/negotiated so POST /bookings/manual can
+// create the same HELD negotiated booking without duplicating the slot-engine call + error
+// mapping. Behaviour is identical — negotiated-link.regression.ts is the guard.
+const createHeldNegotiatedBooking = async (
+  fields: {
+    tenantId: string;
+    branchId: string;
+    resourcePoolId: string;
+    resourceId?: string;
+    windowId: string;
+    userId: string;
+    negotiatedPrice: number | string;
+    coPlayers?: string[];
+    // F-230: opt-in only. Unset (every caller except /bookings/manual's walk-in-guest path)
+    // preserves today's unfiltered admin/negotiated court assignment (F-225's own design for an
+    // admin negotiating on behalf of a member).
+    guestOnly?: boolean;
+  },
+  idempotencyKey: string,
+  reply: any,
+): Promise<any> => {
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+  const slotEngineUrl = process.env.SLOT_ENGINE_URL || 'http://localhost:3001';
+
+  try {
+    const bookingRes = await fetch(`${slotEngineUrl}/bookings/negotiated`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${internalKey}`,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        tenantId: fields.tenantId,
+        branchId: fields.branchId,
+        resourcePoolId: fields.resourcePoolId,
+        resourceId: fields.resourceId,
+        windowId: fields.windowId,
+        userId: fields.userId,
+        negotiatedPrice: fields.negotiatedPrice,
+        coPlayers: fields.coPlayers,
+        guestOnly: fields.guestOnly === true,
+      }),
+    });
+
+    const bookingBody = await bookingRes.json() as any;
+    if (!bookingRes.ok) {
+      reply.status(bookingRes.status);
+      const err = new Error(bookingBody.error?.message || 'Negotiated booking creation failed');
+      (err as any).statusCode = bookingRes.status;
+      (err as any).code = bookingBody.error?.code || 'NEGOTIATED_BOOKING_FAILED';
+      throw err;
+    }
+    return bookingBody.data ?? bookingBody;
+  } catch (e: any) {
+    if (e.statusCode) throw e;
+    reply.status(500);
+    throw new Error('Slot Engine communication failure: ' + e.message);
+  }
+};
+
 server.post('/payment-links', async (request, reply) => {
   const authHeader = request.headers['authorization'];
   const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
@@ -999,44 +1060,11 @@ server.post('/payment-links/negotiated', async (request, reply) => {
     }
   }
 
-  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
-  const slotEngineUrl = process.env.SLOT_ENGINE_URL || 'http://localhost:3001';
-
-  let booking: any;
-  try {
-    const bookingRes = await fetch(`${slotEngineUrl}/bookings/negotiated`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${internalKey}`,
-        'Idempotency-Key': idempotencyKey,
-      },
-      body: JSON.stringify({
-        tenantId,
-        branchId,
-        resourcePoolId,
-        resourceId,
-        windowId,
-        userId,
-        negotiatedPrice,
-        coPlayers,
-      }),
-    });
-
-    const bookingBody = await bookingRes.json() as any;
-    if (!bookingRes.ok) {
-      reply.status(bookingRes.status);
-      const err = new Error(bookingBody.error?.message || 'Negotiated booking creation failed');
-      (err as any).statusCode = bookingRes.status;
-      (err as any).code = bookingBody.error?.code || 'NEGOTIATED_BOOKING_FAILED';
-      throw err;
-    }
-    booking = bookingBody.data ?? bookingBody;
-  } catch (e: any) {
-    if (e.statusCode) throw e;
-    reply.status(500);
-    throw new Error('Slot Engine communication failure: ' + e.message);
-  }
+  const booking = await createHeldNegotiatedBooking(
+    { tenantId, branchId, resourcePoolId, resourceId, windowId, userId, negotiatedPrice, coPlayers },
+    idempotencyKey,
+    reply,
+  );
 
   const paymentLink = await createPaymentLinkForHeldBooking({
     bookingId: booking.id,
@@ -1049,6 +1077,211 @@ server.post('/payment-links/negotiated', async (request, reply) => {
 
   reply.status(paymentLink.reused ? 200 : 201);
   return { booking, paymentLink, description };
+});
+
+// ---------------------------------------------------------------------------
+// POST /bookings/manual — F-229: admin-assisted manual / walk-in booking.
+//
+// One route, three payment methods. Auth + body are the same as /payment-links/negotiated
+// (reuse requirePaymentLinkAdmin, require Idempotency-Key), plus:
+//   paymentMethod: 'cash' | 'razorpay_link' | 'upi_qr'
+//   upiTransactionId?: string      (required, non-empty, iff paymentMethod === 'upi_qr')
+//
+// - razorpay_link: a thin pass-through — identical to /payment-links/negotiated's own body
+//   (createHeldNegotiatedBooking + createPaymentLinkForHeldBooking), unchanged behaviour.
+// - cash / upi_qr: the same immediate-capture sequence the real Razorpay webhook composes on
+//   payment.captured — create the HELD negotiated booking, write a PaymentIntent already
+//   `captured` (no webhook will ever fire), then call slot-engine's POST /bookings/:id/confirm
+//   (the EXACT call the webhook makes). No new booking-state logic here: idempotency, the
+//   non-HELD rejection, and the F-183 child cascade all belong to that route.
+//
+// The Cash/UPI/Link distinction is never a column — it lives entirely in the gatewayRef prefix
+// (`cash_` / `upi_` / `plink_mock_`), which the F-229 ledger route (Step 4) derives from.
+// ---------------------------------------------------------------------------
+const MANUAL_PAYMENT_METHODS = ['cash', 'razorpay_link', 'upi_qr'] as const;
+type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number];
+
+server.post('/bookings/manual', async (request, reply) => {
+  const decoded = await requirePaymentLinkAdmin(request, reply);
+
+  const idempotencyKey = request.headers['idempotency-key'] as string | undefined;
+  if (!idempotencyKey) {
+    reply.status(400);
+    const err = new Error('Idempotency-Key header is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const {
+    tenantId,
+    branchId,
+    resourcePoolId,
+    resourceId,
+    windowId,
+    userId,
+    negotiatedPrice,
+    coPlayers,
+    paymentMethod,
+    upiTransactionId,
+  } = request.body as any;
+
+  if (!tenantId || !branchId || !resourcePoolId || !windowId || !userId || negotiatedPrice == null) {
+    reply.status(400);
+    const err = new Error('tenantId, branchId, resourcePoolId, windowId, userId, and negotiatedPrice are required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  if (!MANUAL_PAYMENT_METHODS.includes(paymentMethod)) {
+    reply.status(400);
+    const err = new Error(`paymentMethod must be one of: ${MANUAL_PAYMENT_METHODS.join(', ')}`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  const method: ManualPaymentMethod = paymentMethod;
+
+  const upiTxnId = typeof upiTransactionId === 'string' ? upiTransactionId.trim() : '';
+  if (method === 'upi_qr' && upiTxnId.length === 0) {
+    reply.status(400);
+    const err = new Error('upiTransactionId is required for paymentMethod upi_qr');
+    (err as any).statusCode = 400;
+    (err as any).code = 'UPI_TRANSACTION_ID_REQUIRED';
+    throw err;
+  }
+
+  // Same per-branch role check as /payment-links/negotiated (:989) — an admin JWT must be the
+  // owner or the manager scoped to THIS branch. Internal-key callers (decoded === null) skip it.
+  if (decoded) {
+    const roles: string[] = decoded.roles ?? [];
+    const isOwner = roles.includes('owner');
+    const isScopedManager = roles.includes(`branch_manager:${branchId}`);
+    if (!isOwner && !isScopedManager) {
+      reply.status(403);
+      const err = new Error('Forbidden: Not authorized for this branch');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  }
+
+  // F-230: guestOnly: true — /bookings/manual is the walk-in-GUEST path, so it must respect
+  // per-court guest authorization the same way self-service POST /bookings does (F-225), unlike
+  // /payment-links/negotiated (admin negotiating for a member — deliberately unfiltered, below).
+  const bookingFields = { tenantId, branchId, resourcePoolId, resourceId, windowId, userId, negotiatedPrice, coPlayers, guestOnly: true };
+
+  // --- razorpay_link: unchanged /payment-links/negotiated behaviour --------------------------
+  if (method === 'razorpay_link') {
+    const booking = await createHeldNegotiatedBooking(bookingFields, idempotencyKey, reply);
+    const paymentLink = await createPaymentLinkForHeldBooking({
+      bookingId: booking.id,
+      tenantId: booking.tenantId ?? tenantId,
+      userId: booking.userId ?? userId,
+      amount: Number(negotiatedPrice),
+      idempotencyKey,
+      reply,
+    });
+    reply.status(paymentLink.reused ? 200 : 201);
+    return { booking, paymentLink, paymentMethod: method };
+  }
+
+  // --- cash / upi_qr: immediate capture ------------------------------------------------------
+  const booking = await createHeldNegotiatedBooking(bookingFields, idempotencyKey, reply);
+
+  const amount = Math.round(Number(negotiatedPrice) * 100); // rupees(Decimal) -> paise(Int), verbatim from createPaymentLinkForHeldBooking
+  const expectedGatewayRef =
+    method === 'cash'
+      ? `cash_${crypto.createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 16)}`
+      : `upi_${upiTxnId}`;
+
+  const existing = await prisma.paymentIntent.findFirst({ where: { referenceId: booking.id } });
+
+  let intent: any;
+  if (existing && existing.gatewayRef === expectedGatewayRef && existing.status === 'captured') {
+    // Same request being retried (same key -> same booking -> same derived ref). Not an error —
+    // fall through to the idempotent confirm and return this intent. Also self-heals a
+    // confirm-failed-after-capture: a retry recovers automatically.
+    intent = existing;
+  } else if (existing && existing.status === 'captured') {
+    reply.status(400);
+    const err = new Error('Payment has already been captured for this booking');
+    (err as any).statusCode = 400;
+    (err as any).code = 'PAYMENT_ALREADY_CAPTURED';
+    throw err;
+  } else if (existing) {
+    reply.status(400);
+    const err = new Error('This booking already has a pending payment intent — resolve it before recording a manual payment');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BOOKING_HAS_PENDING_INTENT';
+    throw err;
+  } else {
+    try {
+      intent = await prisma.paymentIntent.create({
+        data: {
+          tenantId: booking.tenantId ?? tenantId,
+          userId: booking.userId ?? userId,
+          amount,
+          purpose: 'guest_booking',
+          referenceId: booking.id,
+          status: 'captured', // directly — no webhook will ever fire for cash / UPI-QR (precedent: autopay subscription.charged)
+          gatewayRef: expectedGatewayRef,
+        },
+      });
+    } catch (err: any) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const raced = await prisma.paymentIntent.findUnique({ where: { gatewayRef: expectedGatewayRef } });
+        if (!raced) throw err;
+        if (raced.referenceId !== booking.id) {
+          // Cross-booking collision — a reused admin-typed upiTransactionId. NEVER confirm this
+          // booking against another booking's payment proof.
+          reply.status(409);
+          const e = new Error('This UPI transaction ID has already been recorded against a different booking');
+          (e as any).statusCode = 409;
+          (e as any).code = 'UPI_TRANSACTION_ID_ALREADY_USED';
+          throw e;
+        }
+        intent = raced; // genuine same-booking race — safe to continue
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  // HELD -> CONFIRMED via the EXACT internal call the Razorpay webhook makes (:468). Idempotent
+  // if the booking is already CONFIRMED (a retry); rejects a non-HELD booking; cascades to
+  // F-183 child bookings atomically — all of that belongs to that route, not here.
+  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+  const slotEngineUrl = process.env.SLOT_ENGINE_URL || 'http://localhost:3001';
+  const confirmRes = await fetch(`${slotEngineUrl}/bookings/${booking.id}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+    body: JSON.stringify({}),
+  });
+  if (!confirmRes.ok) {
+    const errText = await confirmRes.text();
+    server.log.error(`F-229 /bookings/manual: confirm failed for booking ${booking.id}, intent ${intent.id} (captured): status ${confirmRes.status}, body ${errText}`);
+    reply.status(502);
+    const err = new Error(`Booking payment was recorded (intent ${intent.id}) but confirming the booking failed — retry or refund`);
+    (err as any).statusCode = 502;
+    (err as any).code = 'BOOKING_CONFIRM_FAILED';
+    throw err;
+  }
+  const confirmBody = await confirmRes.json() as any;
+  const confirmed = confirmBody.data ?? confirmBody;
+
+  reply.status(201);
+  return {
+    booking: confirmed,
+    payment: {
+      intentId: intent.id,
+      status: intent.status,
+      amount: intent.amount,
+      gatewayRef: intent.gatewayRef,
+      method,
+    },
+  };
 });
 
 // ---------------------------------------------------------------------------

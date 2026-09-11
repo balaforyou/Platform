@@ -52,6 +52,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: path => path.replace(/^\/api\/slot-engine/, ''),
       },
+      // F-229 Step 5: the Reservations tab records manual bookings via the payment service.
+      // First admin-v2 consumer of /api/payment. Production is unaffected - Caddy already
+      // routes /api/payment/* globally (deploy/gcp-vm/Caddyfile).
+      '/api/payment': {
+        target: 'http://localhost:3004',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/api\/payment/, ''),
+      },
     },
   },
 });

@@ -101,7 +101,11 @@ export async function cleanDatabase() {
   // clause, so pointing DATABASE_URL at a database holding real data destroys it.
   assertDisposableDatabase('cleanDatabase()');
   await db.bookingPlayer.deleteMany();
+  // F-229: guest-ledger.regression.ts is the first slot-engine suite to create PaymentIntent and
+  // User rows. Wipe them here too, matching identity-auth's and payment's own cleanDatabase().
+  await db.paymentIntent.deleteMany();
   await db.booking.deleteMany();
+  await db.user.deleteMany();
   await db.memberGroupAssignment.deleteMany();
   await db.subscription.deleteMany();
   await db.availabilityWindow.deleteMany();
