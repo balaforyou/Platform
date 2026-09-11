@@ -861,6 +861,10 @@ const createHeldNegotiatedBooking = async (
     userId: string;
     negotiatedPrice: number | string;
     coPlayers?: string[];
+    // F-230: opt-in only. Unset (every caller except /bookings/manual's walk-in-guest path)
+    // preserves today's unfiltered admin/negotiated court assignment (F-225's own design for an
+    // admin negotiating on behalf of a member).
+    guestOnly?: boolean;
   },
   idempotencyKey: string,
   reply: any,
@@ -885,6 +889,7 @@ const createHeldNegotiatedBooking = async (
         userId: fields.userId,
         negotiatedPrice: fields.negotiatedPrice,
         coPlayers: fields.coPlayers,
+        guestOnly: fields.guestOnly === true,
       }),
     });
 
@@ -1162,7 +1167,10 @@ server.post('/bookings/manual', async (request, reply) => {
     }
   }
 
-  const bookingFields = { tenantId, branchId, resourcePoolId, resourceId, windowId, userId, negotiatedPrice, coPlayers };
+  // F-230: guestOnly: true — /bookings/manual is the walk-in-GUEST path, so it must respect
+  // per-court guest authorization the same way self-service POST /bookings does (F-225), unlike
+  // /payment-links/negotiated (admin negotiating for a member — deliberately unfiltered, below).
+  const bookingFields = { tenantId, branchId, resourcePoolId, resourceId, windowId, userId, negotiatedPrice, coPlayers, guestOnly: true };
 
   // --- razorpay_link: unchanged /payment-links/negotiated behaviour --------------------------
   if (method === 'razorpay_link') {

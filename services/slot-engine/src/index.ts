@@ -3250,6 +3250,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
     userId,
     negotiatedPrice,
     coPlayers,
+    guestOnly,
   } = request.body as any;
 
   if (negotiatedPrice == null || isNaN(Number(negotiatedPrice))) {
@@ -3364,8 +3365,12 @@ server.post('/bookings/negotiated', async (request, reply) => {
       // vice versa. assignPooledCourt picks a real Resource + a matching courtSlotIndex,
       // or falls back to F-186's occupancy-scan index (resourceId null) for a pool with no
       // usable Resource list.
-      // F-225: NO { guestOnly } here — this is the admin/negotiated path. A court reserved from
-      // walk-in guests must still be assignable by an admin acting for a member.
+      // F-225: unfiltered by default — this is the admin/negotiated path. A court reserved from
+      // walk-in guests must still be assignable by an admin acting for a member. F-230: a caller
+      // may opt in with guestOnly (only /bookings/manual's walk-in-guest path does), which applies
+      // the same guestBookable gate the self-service path (line 3127) already respects — a real
+      // walk-in guest booked through the admin-assisted manual-booking route must never land on a
+      // court the branch reserved away from guests.
       let courtSlotIndex: number | null = null;
       let pooledResourceId: string | null = null;
       if (pool.allocationMode === AllocationMode.POOLED) {
@@ -3376,7 +3381,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
           },
           select: { courtSlotIndex: true, resourceId: true },
         });
-        const assigned = assignPooledCourt(pool, active);
+        const assigned = assignPooledCourt(pool, active, { guestOnly: guestOnly === true });
         pooledResourceId = assigned.resourceId;
         courtSlotIndex = assigned.courtSlotIndex;
       }

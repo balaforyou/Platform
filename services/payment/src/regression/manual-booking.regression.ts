@@ -61,6 +61,56 @@ const baseBody = (windowId: string, extra: Record<string, unknown>) => ({
   ...extra,
 });
 
+// F-230: a resourced POOLED pool with per-court guest authorization, mirroring slot-engine's own
+// F-225 fixture (services/slot-engine/src/regression/court-slot-index.regression.ts's
+// createResourcedPooledPool) so /bookings/manual's walk-in-guest path can be checked against the
+// same guestBookable gate the self-service path already respects.
+async function createResourcedPooledPool(capacity: number, authorizedIndices: number[]): Promise<{ pool: any; courts: any[] }> {
+  const poolRes = await fetch(`${slotEngineUrl}/resource-pools`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+    body: JSON.stringify({
+      tenantId: TENANT_ID, branchId: BRANCH_ID, name: `F-230 Pool ${Date.now()}`,
+      allocationMode: 'POOLED', capacity, basePrice: 200, defaultRate: 200,
+    }),
+  });
+  const pool = ((await poolRes.json()) as any).data;
+
+  await fetch(`${slotEngineUrl}/booking-rules`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+    body: JSON.stringify({
+      resourcePoolId: pool.id,
+      cancellationPolicyJson: { type: 'tiered', tiers: [{ min_hours_before_slot: 0, refund_percent: 0 }] },
+    }),
+  });
+
+  const courts: any[] = [];
+  for (let i = 1; i <= capacity; i++) {
+    const res = await fetch(`${slotEngineUrl}/resource-pools/${pool.id}/resources`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+      body: JSON.stringify({ name: `F230 Court ${i}` }),
+    });
+    courts.push(((await res.json()) as any).data);
+  }
+  const authorizedIds = courts.filter((_, i) => authorizedIndices.includes(i + 1)).map((c) => c.id);
+  await db.resource.updateMany({ where: { id: { in: authorizedIds } }, data: { guestBookable: true } });
+  return { pool, courts };
+}
+
+async function freshWindowFor(poolId: string, capacity: number): Promise<string> {
+  windowSeq += 1;
+  const start = futureAlignedHour(500 + windowSeq * 2);
+  const end = futureAlignedHour(501 + windowSeq * 2);
+  const res = await fetch(`${slotEngineUrl}/resource-pools/${poolId}/availability-windows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+    body: JSON.stringify({ startTime: start.toISOString(), endTime: end.toISOString(), capacity }),
+  });
+  return ((await res.json()) as any).data.id;
+}
+
 export const manualBookingSections: Section<PaymentContext>[] = [
   {
     name: 'F-229 /bookings/manual — cash: HELD->CONFIRMED via the real confirm route, PaymentIntent captured with cash_ ref and correct paise',
@@ -232,6 +282,40 @@ export const manualBookingSections: Section<PaymentContext>[] = [
 
       const badMethod = await inspect(await manual(baseBody(win, { paymentMethod: 'venmo' }), 'f229-badmethod', ownerJwt));
       if (badMethod.status !== 400) throw new Error(`bad method expected 400, got ${badMethod.raw}`);
+    },
+  },
+  {
+    name: 'F-230 /bookings/manual — walk-in guest respects per-court guest authorization: falls back to resourceId null, never lands on a court reserved away from guests',
+    async run() {
+      // Capacity 2, only court 1 guest-authorized — mirrors slot-engine's own F-225 "no
+      // authorized court free" test (court-slot-index.regression.ts:567), but through the
+      // walk-in-guest /bookings/manual route rather than self-service POST /bookings.
+      const { pool, courts } = await createResourcedPooledPool(2, [1]);
+      const win = await freshWindowFor(pool.id, 2);
+      const body = (extra: Record<string, unknown>) => ({
+        tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: win,
+        negotiatedPrice: 200, ...extra,
+      });
+
+      const first = await inspect(await manual(body({ userId: 'f230-guest-a', paymentMethod: 'cash' }), 'f230-guest-1'));
+      if (first.status !== 201) throw new Error(`first: expected 201, got ${first.raw}`);
+      const b1 = await db.booking.findUnique({ where: { id: first.json.data.booking.id }, select: { resourceId: true } });
+      if (b1?.resourceId !== courts[0].id) {
+        throw new Error(`first: expected the one guest-authorized Court 1, got ${JSON.stringify(b1)}`);
+      }
+
+      // Court 1 (the only guest-authorized court) is now taken. Capacity is 2, so the window
+      // still has room, and only the non-guest-authorized court 2 remains. Before the F-230 fix,
+      // /bookings/manual called /bookings/negotiated WITHOUT guestOnly, so this walk-in guest
+      // would have landed on court 2 anyway — F-225's admin/negotiated-for-a-member behaviour,
+      // wrongly applied to a real walk-in guest.
+      const second = await inspect(await manual(body({ userId: 'f230-guest-b', paymentMethod: 'cash' }), 'f230-guest-2'));
+      console.log('F230_EVIDENCE guest_fallback', JSON.stringify(second.json));
+      if (second.status !== 201) throw new Error(`second: expected 201 (not a rejection — capacity is 2), got ${second.raw}`);
+      const b2 = await db.booking.findUnique({ where: { id: second.json.data.booking.id }, select: { resourceId: true } });
+      if (b2?.resourceId !== null) {
+        throw new Error(`second: expected resourceId null fallback (no guest-authorized court free), got ${JSON.stringify(b2)} — walk-in guest was assigned a court reserved away from guests`);
+      }
     },
   },
 ];

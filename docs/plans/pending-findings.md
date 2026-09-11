@@ -1060,3 +1060,21 @@ numbers for `assignPooledCourt` have drifted a few lines from other work landing
 since this was written — described behavior unaffected, only the exact pointers.
 Confirmed-ID: F-225
 Confirmed: 4 Sep 2026
+
+### bookings-manual-guest-court-authorization-gap
+Batch: F-229 close-out follow-up, 11 Sep 2026
+Surfaced: 11 Sep 2026, Technical Lead review thread (Bala), directly against `f229-manual-booking`
+post-merge-review.
+Description: `POST /bookings/manual` (F-229's walk-in-guest booking route) reuses
+`createHeldNegotiatedBooking` → slot-engine's `POST /bookings/negotiated`, which F-225 deliberately
+built to call `assignPooledCourt(pool, active)` with no `{ guestOnly: true }` — correct for its
+original and only caller at the time, `/payment-links/negotiated` (an admin negotiating a booking
+*on behalf of a member*, who may legitimately use a court reserved away from walk-in guests).
+F-229 later gave `/bookings/manual` — a real walk-in-**guest** path, not a member-negotiated one —
+the same unfiltered call, so a walk-in guest booked through it could be assigned a court the branch
+had explicitly reserved away from guests via F-225's own `guestBookable` gate. Confirmed for real:
+a POOLED pool (capacity 2, only court 1 guest-authorized) with court 1 taken, a second walk-in
+guest through `/bookings/manual` landed on court 2 (the reserved one) instead of the expected
+`resourceId: null` fallback F-225's own guest self-service path uses in the identical situation.
+Confirmed-ID: F-230
+Confirmed: 11 Sep 2026
