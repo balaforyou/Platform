@@ -1,7 +1,9 @@
 /**
- * Google Identity Services — client-side ID-token flow (§2 of the signed plan).
- * GIS issues an ID token to the browser; identity-auth verifies its signature
- * against Google's JWKS. Only VITE_GOOGLE_CLIENT_ID is needed (no client secret).
+ * Google Identity Services — client-side ID-token flow. GIS issues an ID token to the browser;
+ * identity-auth verifies its signature against Google's JWKS. Only VITE_GOOGLE_CLIENT_ID is
+ * needed (no client secret). Shared by admin-v2 (POST /auth/admin/google/verify) and
+ * guest-member-pwa (POST /auth/google/verify, F-228 Step 3) — the caller decides what to do
+ * with the raw ID token via `onToken`; this module has no route-specific behavior.
  */
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
@@ -27,7 +29,7 @@ function loadGis(): Promise<void> {
 
 /**
  * Render Google's official "Sign in with Google" button into `container`.
- * `onToken` receives the raw ID-token JWT to POST to /auth/admin/google/verify.
+ * `onToken` receives the raw ID-token JWT to POST to the caller's own verify endpoint.
  */
 export async function renderGoogleButton(
   container: HTMLElement,

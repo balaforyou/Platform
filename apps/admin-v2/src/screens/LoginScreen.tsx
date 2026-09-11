@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Fingerprint } from 'lucide-react';
 import { useAdminAuth } from '../auth/AdminAuthContext';
 import { Button, Card, Banner, TextField } from '../components';
-import { renderGoogleButton, googleClientId } from '../lib/googleIdentity';
+import { renderGoogleButton, googleClientId } from '@badminton/ui-shared';
 import { passkeysSupported, PasskeyCancelled } from '../lib/webauthn';
 import { friendlyAuthError } from '../lib/errors';
 

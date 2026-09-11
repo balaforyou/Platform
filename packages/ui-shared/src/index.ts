@@ -5,3 +5,4 @@ export type { ColorRamp, RampStep } from './lib/colorRamp';
 export { TenantProvider, useTenant } from './context/TenantContext';
 export type { TenantBranding } from './context/TenantContext';
 export { AuthProvider, useAuth } from './context/AuthContext';
+export { renderGoogleButton, googleClientId } from './lib/googleIdentity';
