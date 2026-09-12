@@ -60,6 +60,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: path => path.replace(/^\/api\/payment/, ''),
       },
+      // F-197: notification opt-in calls POST /devices/register. First admin-v2 consumer
+      // of /api/notification — production is unaffected (Caddy already routes
+      // /api/notification/* globally, deploy/gcp-vm/Caddyfile).
+      '/api/notification': {
+        target: 'http://localhost:3005',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/api\/notification/, ''),
+      },
     },
   },
 });

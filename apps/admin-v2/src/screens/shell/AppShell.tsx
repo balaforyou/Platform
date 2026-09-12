@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Grid, Moon, Sun } from 'lucide-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -6,6 +6,7 @@ import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { useAdminTenant } from '../../auth/AdminTenantContext';
 import { Avatar, IconButton, SidebarNavItem, BottomNavItem } from '../../components';
 import { applyTheme, effectiveTheme, setStoredTheme } from '../../lib/theme';
+import { currentPermission, requestAndRegisterPushToken, type PushOptInResult } from '../../lib/firebase';
 import { NAV_DESTINATIONS, activeDestination, filterByEntitlement } from './nav';
 
 /**
@@ -18,18 +19,40 @@ import { NAV_DESTINATIONS, activeDestination, filterByEntitlement } from './nav'
  * (the mobile "Apps" overflow is a real route, /apps, not a modal).
  */
 export function AppShell() {
-  const { user, logout } = useAdminAuth();
+  const { user, logout, accessToken } = useAdminAuth();
   const { tenant, entitlements } = useAdminTenant();
   const location = useLocation();
   const navigate = useNavigate();
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [theme, setTheme] = useState(effectiveTheme());
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>(
+    currentPermission(),
+  );
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
     applyTheme(next);
     setStoredTheme(next);
     setTheme(next);
+  };
+
+  // F-197: if permission was already granted in a prior session, silently re-register on
+  // load. The modular Firebase SDK has no onTokenRefresh event; POST /devices/register's
+  // upsert on the unique token makes this idempotent whether the token rotated or not.
+  useEffect(() => {
+    if (pushPermission === 'granted' && user?.userId) {
+      requestAndRegisterPushToken(user.userId, accessToken).catch((err) => {
+        console.error('Silent push token re-registration failed:', err);
+      });
+    }
+  }, [user?.userId]);
+
+  const handleEnableNotifications = async () => {
+    if (!user?.userId) return;
+    const result: PushOptInResult = await requestAndRegisterPushToken(user.userId, accessToken).catch(
+      () => 'unsupported' as PushOptInResult,
+    );
+    setPushPermission(result === 'unsupported' ? 'unsupported' : Notification.permission);
   };
 
   const active = activeDestination(location.pathname);
@@ -113,6 +136,22 @@ export function AppShell() {
                 <DropdownMenu.Content align="end" sideOffset={6} className="av2-account-menu">
                   <div className="av2-account-menu-identity">{user?.displayName ?? user?.email ?? user?.userId}</div>
                   {user?.phone && <div className="av2-account-menu-phone">{user.phone}</div>}
+                  <DropdownMenu.Separator className="av2-account-menu-sep" />
+                  {pushPermission === 'unsupported' ? null : pushPermission === 'denied' ? (
+                    <div className="av2-account-menu-item" style={{ opacity: 0.6, cursor: 'default' }}>
+                      Notifications blocked (browser settings)
+                    </div>
+                  ) : (
+                    <DropdownMenu.Item
+                      onSelect={(e) => {
+                        if (pushPermission === 'granted') e.preventDefault();
+                        else handleEnableNotifications();
+                      }}
+                      className="av2-account-menu-item"
+                    >
+                      {pushPermission === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
+                    </DropdownMenu.Item>
+                  )}
                   <DropdownMenu.Separator className="av2-account-menu-sep" />
                   <DropdownMenu.Item onSelect={() => logout()} className="av2-account-menu-item">
                     Log out

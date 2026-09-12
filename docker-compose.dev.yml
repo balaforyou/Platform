@@ -140,6 +140,10 @@ services:
       <<: *common_env
       PORT: 3005
       IDENTITY_SERVICE_URL: http://identity-auth:3002
+      # F-197/F-025: real Firebase Admin SDK dispatch is opt-in on this being set.
+      # Substituted from the (gitignored) root .env at `docker compose` invocation time —
+      # never hardcoded here. Absent = falls back to the existing mock push dispatch.
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
     command: [sh, -c, "corepack enable && pnpm --filter @badminton/notification run dev"]
 
   guest-member-pwa:

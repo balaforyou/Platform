@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "fastify": "^4.27.0",
+    "firebase-admin": "^13.0.0",
     "@badminton/shared-middleware": "workspace:*",
     "@badminton/shared-types": "workspace:*",
     "@badminton/database": "workspace:*"
