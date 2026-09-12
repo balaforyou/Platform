@@ -45,7 +45,6 @@ export function AppShell() {
         console.error('Silent push token re-registration failed:', err);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.userId]);
 
   const handleEnableNotifications = async () => {
