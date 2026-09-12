@@ -2566,7 +2566,10 @@ dev-login case above, so it's covered by equivalent evidence, not zero evidence.
 
 **Findings:** F-197 (Resolved), F-025 (stays Open — push half done, SMS/MSG91 half untouched)
 **Status:** Done
-**Commits:** (this session's branch — see PR)
+**Commits:** `27ead52` (implementation), `ec66feb` (CI lint fix — a stray
+`react-hooks/exhaustive-deps` disable comment errored under this repo's actual eslint config,
+which has no react-hooks plugin registered at all), PR #30 → `main` merge commit `6055b97`.
+Independently confirmed on the real remote via `git fetch origin main` — not a relayed claim.
 
 Handover named a second finding, "F-226," for the backend real-dispatch half and stated both IDs
 already existed. **Independently re-verified before building anything: F-226 does not exist in
