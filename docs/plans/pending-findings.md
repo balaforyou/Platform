@@ -484,6 +484,10 @@ neither re-touches Google). Real migration, cross-service, own sign-off track â€
 folded into the topbar addendum itself, per rule 9.
 Confirmed-ID: F-219
 Confirmed: 2 Sep 2026
+Resolved: 12 Sep 2026 (commit `dd7e278` on branch `f219-admin-google-name-photo`; not yet merged
+to `main`, merge timing is a separate decision). Not a same-session find-and-fix â€” implementation
+was held after the 2 Sep 2026 confirmation and picked up fresh in this session against a handover
+that re-verified every claim against `main`@`7e3aa71` before coding began.
 
 ### admin-v2-build-initiative
 Batch: 25 (Slice 1; track opened Batch 24)

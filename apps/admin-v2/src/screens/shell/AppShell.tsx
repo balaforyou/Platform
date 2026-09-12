@@ -102,12 +102,16 @@ export function AppShell() {
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <button aria-label="Account menu" className="av2-avatar-trigger">
-                  <Avatar name={user?.email ?? user?.userId ?? '?'} size="sm" />
+                  <Avatar
+                    src={user?.photoUrl}
+                    name={user?.displayName ?? user?.email ?? user?.userId ?? '?'}
+                    size="md"
+                  />
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
                 <DropdownMenu.Content align="end" sideOffset={6} className="av2-account-menu">
-                  <div className="av2-account-menu-identity">{user?.email ?? user?.userId}</div>
+                  <div className="av2-account-menu-identity">{user?.displayName ?? user?.email ?? user?.userId}</div>
                   {user?.phone && <div className="av2-account-menu-phone">{user.phone}</div>}
                   <DropdownMenu.Separator className="av2-account-menu-sep" />
                   <DropdownMenu.Item onSelect={() => logout()} className="av2-account-menu-item">

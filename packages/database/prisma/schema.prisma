@@ -445,7 +445,9 @@ model User {
   phone           String?
   email           String?
   googleId        String?
-  name            String?       // F-229: admin-entered display name for admin-assisted / walk-in bookings. Distinct from F-219's planned displayName/photoUrl (Google-profile-sourced), which is not yet built.
+  name            String?       // F-229: admin-entered display name for admin-assisted / walk-in bookings. Distinct from F-219's displayName/photoUrl below (Google-profile-sourced).
+  displayName     String?       // F-219: real name from Google's ID-token `name` claim, persisted on a successful admin Google login so it survives refresh and passkey logins.
+  photoUrl        String?       // F-219: Google profile photo URL from the ID-token `picture` claim, same persistence rationale as displayName.
   isPhoneVerified Boolean       @default(false)
   isEmailVerified Boolean       @default(false)
   userType        UserType      @default(GUEST)
