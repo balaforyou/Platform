@@ -550,6 +550,10 @@ server.get('/branches/:id/about', async (request, reply) => {
     description: branch.aboutDescription || branch.tenant.aboutDescription || null,
     facilities: branch.facilities.length > 0 ? branch.facilities : branch.tenant.facilities,
     photos: branch.photos.length > 0 ? branch.photos : branch.tenant.photos,
+    // F-234: guest-member-pwa renders every slot/booking time using the viewer's own browser
+    // timezone (unguarded toLocaleTimeString()/toLocaleDateString() with no `timeZone` option)
+    // instead of the branch's — this is the one field that lets it stop doing that.
+    timezone: branch.timezone,
     workingDays: branch.workingDays,
     workingHoursStart: branch.workingHoursStart,
     workingHoursEnd: branch.workingHoursEnd,

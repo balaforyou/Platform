@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
 import { CheckCircle, AlertCircle, Activity, ArrowRight, Navigation } from 'lucide-react';
 
@@ -119,9 +119,9 @@ export default function BookingConfirmation() {
   }
 
   const isConfirmed = booking?.status === 'CONFIRMED' || booking?.status === 'CHECKED_IN';
-  const st = booking?.window ? new Date(booking.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-  const et = booking?.window ? new Date(booking.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-  const sDate = booking?.window ? new Date(booking.window.startTime).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '';
+  const st = booking?.window ? formatBranchTime(booking.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' }) : '';
+  const et = booking?.window ? formatBranchTime(booking.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' }) : '';
+  const sDate = booking?.window ? formatBranchTime(booking.window.startTime, branchAbout?.timezone, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '';
 
   return (
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '480px' }}>
@@ -198,8 +198,8 @@ export default function BookingConfirmation() {
                       .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
                       .map((child: any) => (
                         <div key={child.id}>
-                          + {new Date(child.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
-                          {new Date(child.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          + {formatBranchTime(child.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
+                          {formatBranchTime(child.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       ))}
                   </div>

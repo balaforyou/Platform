@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { apiRequest, TenantProvider, useTenant, AuthProvider, useAuth } from '@badminton/ui-shared';
+import { apiRequest, TenantProvider, useTenant, AuthProvider, useAuth, formatBranchTime } from '@badminton/ui-shared';
 import LoginScreen from './components/LoginScreen';
 import CompleteSignupScreen from './components/CompleteSignupScreen';
 import PwaInstallPrompt from './components/PwaInstallPrompt';
@@ -317,6 +317,12 @@ function MainDashboard() {
   const [upcoming, setUpcoming] = useState<any[]>([]);
   const [upcomingLoading, setUpcomingLoading] = useState(false);
   const [upcomingError, setUpcomingError] = useState<string | null>(null);
+  // F-234: the member-session card's branch (single-fetch shape, mirroring
+  // BookingConfirmation.tsx/BookingPay.tsx — a member has exactly one active assignment/branch).
+  const [memberSessionBranchAbout, setMemberSessionBranchAbout] = useState<any>(null);
+  // F-234: the upcoming-slots card can span more than one branch, so this needs the dedup-map
+  // shape (mirroring BookingHistory.tsx's branchAboutById exactly) rather than a single fetch.
+  const [branchAboutById, setBranchAboutById] = useState<Record<string, any>>({});
 
   const loadMemberSession = async () => {
     if (user?.userType !== 'MEMBER' || !accessToken) return;
@@ -337,6 +343,18 @@ function MainDashboard() {
   useEffect(() => {
     loadMemberSession();
   }, [accessToken, user?.userType]);
+
+  // F-234: `memberSession.assignment.resourcePool.branchId` is already in the payload
+  // loadMemberSession fetches above — no backend change needed, just reading it.
+  useEffect(() => {
+    const branchId = memberSession?.assignment?.resourcePool?.branchId;
+    if (!branchId) return;
+    let isMounted = true;
+    apiRequest<any>(`/tenant/branches/${branchId}/about`, { token: accessToken })
+      .then((res) => { if (isMounted && res) setMemberSessionBranchAbout(res); })
+      .catch(() => { /* leave it null — formatBranchTime falls back to UTC */ });
+    return () => { isMounted = false; };
+  }, [memberSession?.assignment?.resourcePool?.branchId, accessToken]);
 
   // F-156: the "Upcoming Slots" card below rendered a hardcoded paragraph from the baseline commit
   // onward — it had never been wired to booking data, so it read "No pre-scheduled matches today"
@@ -365,6 +383,28 @@ function MainDashboard() {
   useEffect(() => {
     loadUpcoming();
   }, [accessToken]);
+
+  // F-234: dedup-fetch each upcoming booking's own branch (ported from BookingHistory.tsx:24-41
+  // verbatim — a guest's upcoming bookings can genuinely span more than one branch, so this is the
+  // dedup-map shape, not the single-fetch shape used above for the member-session card).
+  useEffect(() => {
+    const missingIds = Array.from(new Set(upcoming.map((b) => b.branchId).filter(Boolean)))
+      .filter((id) => !(id in branchAboutById));
+    if (missingIds.length === 0) return;
+
+    let isMounted = true;
+    missingIds.forEach((branchId) => {
+      apiRequest<any>(`/tenant/branches/${branchId}/about`, { token: accessToken })
+        .then((res) => {
+          if (isMounted && res) {
+            setBranchAboutById((prev) => ({ ...prev, [branchId]: res }));
+          }
+        })
+        .catch(() => { /* leave this branch's timezone absent — formatBranchTime falls back to UTC */ });
+    });
+
+    return () => { isMounted = false; };
+  }, [upcoming, accessToken]);
 
   // Upcoming = has not started yet, and is still a live booking. CANCELLED and RELEASED_NO_SHOW are
   // excluded. HELD is deliberately included: a hold carries a 5-minute TTL swept server-side
@@ -423,8 +463,9 @@ function MainDashboard() {
     if (user?.userType !== 'MEMBER') return null;
 
     const booking = memberSession?.booking;
-    const windowStart = memberSession?.window?.startTime ? new Date(memberSession.window.startTime) : null;
+    const windowStartIso = memberSession?.window?.startTime ?? null;
     const poolName = memberSession?.assignment?.resourcePool?.name;
+    const branchTimezone = memberSessionBranchAbout?.timezone;
 
     return (
       <section className="p-6 rounded-2xl space-y-4" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }} id="member-session-card">
@@ -452,8 +493,8 @@ function MainDashboard() {
           <div className="space-y-4">
             <div className="grid gap-2 text-sm" style={{ color: 'var(--color-neutral-600)' }}>
               <div className="flex justify-between gap-4"><span>Slot</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{poolName}</span></div>
-              <div className="flex justify-between gap-4"><span>Time</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{windowStart ? windowStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : memberSession.assignment?.startTime}</span></div>
-              {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{new Date(memberSession.cutoffTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
+              <div className="flex justify-between gap-4"><span>Time</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{windowStartIso ? formatBranchTime(windowStartIso, branchTimezone, { hour: '2-digit', minute: '2-digit' }) : memberSession.assignment?.startTime}</span></div>
+              {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{formatBranchTime(memberSession.cutoffTime, branchTimezone, { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
             </div>
             {booking?.memberAttendanceConfirmedAt ? (
               <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-accent-2-100)', border: '1px solid var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }}>
@@ -558,8 +599,7 @@ function MainDashboard() {
           ) : (
             <div className="space-y-2" id="upcoming-slots-list">
               {upcomingSlots.slice(0, 3).map((b) => {
-                const start = new Date(b.window.startTime);
-                const end = new Date(b.window.endTime);
+                const timezone = branchAboutById[b.branchId]?.timezone;
                 const badge = upcomingBadge(b.status);
                 return (
                   <div
@@ -577,11 +617,11 @@ function MainDashboard() {
                       </span>
                     </div>
                     <div className="text-[11px] font-mono" style={{ color: 'var(--color-neutral-600)' }}>
-                      {start.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {formatBranchTime(b.window.startTime, timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
                       {' · '}
-                      {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatBranchTime(b.window.startTime, timezone, { hour: '2-digit', minute: '2-digit' })}
                       {' - '}
-                      {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatBranchTime(b.window.endTime, timezone, { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 );
