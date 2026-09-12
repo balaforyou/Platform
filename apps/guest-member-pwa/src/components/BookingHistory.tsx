@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
 import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
@@ -219,10 +219,10 @@ export default function BookingHistory() {
       ) : (
         <div className="space-y-4">
           {bookings.map((booking) => {
-            const st = new Date(booking.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const et = new Date(booking.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const sDate = new Date(booking.window.startTime).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
             const about = branchAboutById[booking.branchId];
+            const st = formatBranchTime(booking.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' });
+            const et = formatBranchTime(booking.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' });
+            const sDate = formatBranchTime(booking.window.startTime, about?.timezone, { weekday: 'short', month: 'short', day: 'numeric' });
 
             return (
               <div
@@ -265,8 +265,8 @@ export default function BookingHistory() {
                               .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
                               .map((child: any) => (
                                 <div key={child.id}>
-                                  + {new Date(child.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
-                                  {new Date(child.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  + {formatBranchTime(child.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
+                                  {formatBranchTime(child.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                               ))}
                           </div>

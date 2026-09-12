@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { apiRequest, formatBookingReference } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Smartphone, Activity, MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
 
@@ -11,6 +11,11 @@ export default function BookingPay() {
   const navigate = useNavigate();
 
   const [booking, setBooking] = useState<any>(null);
+  // F-234: `booking.branchId` (a bare scalar, same shape BookingConfirmation.tsx already resolves)
+  // was already in this screen's own `booking` fetch below but never read — this thread's own
+  // /branches/:id/about fetch, mirroring BookingConfirmation.tsx:73-83 exactly, is the only new
+  // network call this fix adds anywhere in the app.
+  const [branchAbout, setBranchAbout] = useState<any>(null);
   const [intent, setIntent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
@@ -64,6 +69,22 @@ export default function BookingPay() {
 
     initPayment();
   }, [bookingId, accessToken]);
+
+  // F-234: separate effect from initPayment, same reasoning as BookingConfirmation.tsx:70-72 —
+  // must run once `booking.branchId` is known rather than on every payment-init call, and a
+  // failure here should leave the time rendered in UTC (formatBranchTime's own fallback) rather
+  // than block payment.
+  useEffect(() => {
+    const branchId = booking?.branchId;
+    if (!branchId || branchAbout) return;
+
+    let isMounted = true;
+    apiRequest<any>(`/tenant/branches/${branchId}/about`, { token: accessToken })
+      .then((res) => { if (isMounted && res) setBranchAbout(res); })
+      .catch(() => { /* leave branchAbout null — formatBranchTime falls back to UTC */ });
+
+    return () => { isMounted = false; };
+  }, [booking?.branchId, branchAbout, accessToken]);
 
   const handleMockPayment = async () => {
     try {
@@ -312,9 +333,9 @@ export default function BookingPay() {
               {formatBookingReference(booking.id)}
             </div>
             <div className="text-[12.5px]" style={{ color: 'var(--color-neutral-700)' }}>
-              {new Date(booking.window?.startTime).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })} &middot;{' '}
-              {new Date(booking.window?.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
-              {new Date(booking.window?.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {formatBranchTime(booking.window?.startTime, branchAbout?.timezone, { weekday: 'long', month: 'long', day: 'numeric' })} &middot;{' '}
+              {formatBranchTime(booking.window?.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
+              {formatBranchTime(booking.window?.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}
             </div>
             {/* F-187: this is the screen shown immediately before payment, right after the
                 duration stepper — showing only the first hour here next to a price that already
@@ -329,8 +350,8 @@ export default function BookingPay() {
                   .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
                   .map((child: any) => (
                     <div key={child.id}>
-                      + {new Date(child.window.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{' '}
-                      {new Date(child.window.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      + {formatBranchTime(child.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
+                      {formatBranchTime(child.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   ))}
               </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { apiRequest } from '@badminton/ui-shared';
+import { apiRequest, branchHour, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, Activity, MapPin, ShieldAlert } from 'lucide-react';
 
@@ -74,6 +74,11 @@ export default function CourtBooking() {
   // if either fetch fails, so failures are swallowed rather than surfaced as a page-level error.
   const [branchAbout, setBranchAbout] = useState<any>(null);
   const [upcomingBooking, setUpcomingBooking] = useState<any | null>(null);
+  // F-234: `upcomingBooking` can be at a DIFFERENT branch than this screen's own `branchId` (it's
+  // filtered only by pool, not branch — see the effect below) so its card can't reuse `branchAbout`
+  // for the branch-local time it renders. Fetched separately, keyed on the upcoming booking's own
+  // `branchId`, same single-fetch shape as `branchAbout` above.
+  const [upcomingBranchAbout, setUpcomingBranchAbout] = useState<any>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -82,6 +87,14 @@ export default function CourtBooking() {
       .then(setBranchAbout)
       .catch(() => {});
   }, [branchId, accessToken]);
+
+  useEffect(() => {
+    if (!upcomingBooking?.branchId) { setUpcomingBranchAbout(null); return; }
+    if (upcomingBooking.branchId === branchId) { setUpcomingBranchAbout(branchAbout); return; }
+    apiRequest<any>(`/tenant/branches/${upcomingBooking.branchId}/about`, { token: accessToken })
+      .then(setUpcomingBranchAbout)
+      .catch(() => {});
+  }, [upcomingBooking?.branchId, branchId, branchAbout, accessToken]);
 
   // Same filter/sort as main.tsx's loadUpcoming (main.tsx:156-182), plus excluding this screen's
   // own poolId -- a booking being created here shouldn't echo back as "upcoming" mid-flow.
@@ -114,7 +127,11 @@ export default function CourtBooking() {
   );
   const groupedSlots = periodsDef.map((p) => ({
     ...p,
-    slots: sortedSlots.filter((s) => p.test(new Date(s.window.startTime).getHours())),
+    // F-234: branch-local hour, not the viewer's browser hour — a window genuinely stored at
+    // 07:00Z (7am branch-local) previously bucketed as Afternoon for an IST viewer (12:30pm
+    // local), landing under the wrong tab entirely rather than just displaying with the wrong
+    // label.
+    slots: sortedSlots.filter((s) => p.test(branchHour(s.window.startTime, branchAbout?.timezone))),
   }));
   const visibleSlots = groupedSlots.find((g) => g.key === activePeriod)?.slots ?? [];
 
@@ -315,8 +332,8 @@ export default function CourtBooking() {
 
   // Shared by the slot cards and the rate summary so both render a slot's time the same way.
   const formatTimeRange = (win: any) =>
-    `${new Date(win.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ` +
-    `${new Date(win.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    `${formatBranchTime(win.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} - ` +
+    `${formatBranchTime(win.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}`;
 
   // F-187: the selected base slot plus `additionalWindowsCount` contiguous hours after it,
   // sourced from the same sorted list `maxAdditionalAvailable` walks — so the chain the guest
@@ -494,8 +511,8 @@ export default function CourtBooking() {
           <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3" style={{ background: 'var(--color-accent-2-200)' }}>
             <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--color-accent-2-600)' }} />
             <div className="flex-1 text-[12.5px] font-semibold" style={{ color: 'var(--color-accent-2-800)' }}>
-              {new Date(upcomingBooking.window.startTime).toLocaleDateString([], { weekday: 'short' })}{' '}
-              {new Date(upcomingBooking.window.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              {formatBranchTime(upcomingBooking.window.startTime, upcomingBranchAbout?.timezone, { weekday: 'short' })}{' '}
+              {formatBranchTime(upcomingBooking.window.startTime, upcomingBranchAbout?.timezone, { hour: 'numeric', minute: '2-digit' })}
             </div>
             <Link to="/bookings/my" className="shrink-0 text-[12px] font-bold" style={{ color: 'var(--color-accent-2-700)' }}>
               Manage
