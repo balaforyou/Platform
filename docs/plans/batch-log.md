@@ -2487,6 +2487,95 @@ this batch's register row + pending-findings entry land, expect **210 rows, Open
 endpoint tag — `/branches/:id/about`'s new field is additive to an already-tagged route). Run both
 for real after committing and report the real output — don't assume these numbers, confirm them.
 
+## Batch 55 — F-219: capture and persist real admin name/photo from Google login
+
+**Confirmed 2 Sep 2026**, while building an admin-v2 topbar account-menu addendum for sub-slice
+0.3 — a systemic identity-auth gap, not an admin-v2 UI issue. `verifyGoogleIdToken`
+(`services/identity-auth/src/adminGoogleAuth.ts`) verified the Google ID token but only ever
+extracted `email`/`sub`; `name`/`picture` are present on every real token and simply discarded, so
+`AdminUser` (`apps/admin-v2/src/lib/claims.ts`) carried no `name`/`picture` for either the
+Google-login or dev-login path, and admin-v2's topbar showed only an email/initials `Avatar`.
+**Not a same-session find-and-fix** — full remediation design was worked out in full at
+confirmation time, but implementation was deliberately held and picked up fresh in a later
+session, against a handover that re-verified every one of its own claims against
+`main`@`7e3aa71` before any code was written.
+
+**Design, confirmed unchanged at pickup:** two options were weighed at confirmation time. (a)
+forward into the JWT only, no persistence — rejected: the value would visibly flicker, appearing
+after a fresh Google login then silently reverting to initials on the next `/auth/refresh` (never
+re-touches Google) or passkey login (never contacts Google at all). (b) persist on the `User`
+row — the approved design, durable across both paths since both read the same row.
+
+**Fix:** `VerifiedGoogleIdentity` extended with optional `name`/`picture`, extracted from the
+verified payload in `verifyGoogleIdToken`. New nullable `User.displayName`/`User.photoUrl`
+columns (migration `20260912120000_admin_display_name_photo_f219`, purely additive, same pattern
+as F-229's `User.name`). Persisted in `POST /auth/admin/google/verify` between the `user` fetch and
+`issueAdminSession`, real-Google-branch only — `??`-merged so a response missing the claim never
+overwrites a previously-good value, and the `dev-admin-token-` path explicitly skipped so dev/CI
+logins never write fabricated data. `issueAdminSession`'s parameter type and signed JWT payload
+extended with `displayName`/`photoUrl`; both its real call sites (Google login, WebAuthn/passkey
+login) carry the fields for free since both already pass a full `user` row. `apps/admin-v2/src/lib
+/claims.ts`'s `AdminUser` and `parseAdminClaims` decode the new claims the same individual-field
+way as `phone`. `AppShell.tsx`'s topbar `Avatar` and account-menu identity line prefer
+`displayName ?? email ?? userId`, `src` prefers `photoUrl` — `Avatar`'s existing `src`-missing
+fallback to initials needed no new handling. Also bumped the topbar avatar from `sm` (24px) to
+`md` (32px), a follow-up request during review.
+
+**A genuine blast-radius miss, caught only during live-fire testing, not by the original design's
+own call-site scan:** `/auth/refresh` — a separate, generic refresh route shared by every session
+type — signs its own JWT independently of `issueAdminSession`, not through it. The original plan
+traced `issueAdminSession`'s two real call sites correctly but missed that a second, distinct
+JWT-signing site existed at all. Live-fire testing `/auth/refresh` (decoding the returned JWT)
+surfaced the gap directly: the topbar reverted to initials on every page reload until this second
+site was found and fixed — exactly the flicker failure mode design (b) was chosen to avoid. Fixed
+by extending `/auth/refresh`'s own `server.jwt.sign(...)` payload with `displayName`/`photoUrl`,
+same pattern. The other three `server.jwt.sign` call sites in `identity-auth/src/index.ts` were
+checked and confirmed out of scope (member/guest OTP login, member's Google mock, a short-lived
+WebAuthn challenge cookie — none carry admin identity claims).
+
+**Live-fire verification, real evidence throughout, not reasoning from code:**
+- Real Google OAuth login (Bala's own account) through the dev-deployed stack — DB row read back
+  via `psql` confirmed `displayName`/`photoUrl` populated with the real name and a real
+  `googleusercontent.com` photo URL.
+- `/auth/refresh`'s returned JWT decoded (Node, not assumed) post-fix, confirming both claims
+  survive a page reload — this is what caught the missed second signing site.
+- Dev-login (`dev-admin-token-`) re-tested after the real Google login had already populated the
+  row: confirmed both fields stay untouched/`null` for a never-Google-logged-in dev user, and the
+  `Avatar` renders initials, not fabricated data.
+- Passkey enrollment (`WebAuthnCredential` row confirmed created via direct DB read) and a real
+  passkey login on the same previously-Google-authenticated account, both completed by Bala (a
+  native OS/cross-device biometric ceremony, not something drivable from an automated browser) —
+  confirmed rendering the real name/photo with zero Google round-trip, proving persistence rather
+  than a JWT-only illusion.
+- Whole-repo typecheck clean across all 14 workspace projects; `identity-auth` and `admin-v2`
+  builds clean.
+- Full 5-service regression suite green post-rebuild (rule 7), against `badminton_db_test`. An
+  initial full-suite run showed 3 suites failing together (identity-auth, tenant-management,
+  payment) — each re-run clean in complete isolation, then the full 5-suite set re-run clean
+  immediately after, confirming this project's own documented cross-suite port-collision pattern
+  (manually-started dev services on 3001–3005 colliding with the harness's own spawned instances)
+  rather than a real regression from this change.
+- Migration applied cleanly against both `badminton_db` (dev) and `badminton_db_test`, confirmed
+  via direct `psql \d "User"` reads on each.
+
+**Not tested:** a real Google account with no profile photo set (none available this session) —
+the null-fallback path is the same `Avatar` `src`-missing branch already exercised by the
+dev-login case above, so it's covered by equivalent evidence, not zero evidence.
+
+**Sign-off:** Bala, reviewed against the pushed branch diff (not the evidence report alone) — "F-219
+implementation approved. Nothing to send back for changes."
+
+**Branch/PR:** `f219-admin-google-name-photo` (commit `dd7e278`), not yet merged to `main` — merge
+timing is a separate decision, same as F-234's flow.
+
+**Close-out:** register row added directly as Resolved (Found 2 Sep 2026 — the real confirmation
+date, not today, since this wasn't a same-session find-and-fix; Resolved 12 Sep 2026), same
+same-session-row-add pattern as F-228/F-230/F-233/F-234 even though the underlying finding itself
+spans two sessions. pending-findings.md's existing `admin-v2-identity-pipeline-discards-
+google-name-photo` entry (already carrying `Confirmed-ID: F-219` / `Confirmed: 2 Sep 2026`) gets a
+`Resolved:` line added, not a duplicate entry. Run `pnpm register:check` and `pnpm diagram:verify`
+for real after committing and report the real output — don't assume, confirm.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
