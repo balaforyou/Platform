@@ -1178,3 +1178,23 @@ re-run clean against the new HEAD with no drift from the pre-deploy state.
 Confirmed-ID: F-233
 Confirmed: 12 Sep 2026
 Resolved: 12 Sep 2026 (same session — commit `8672d03` / merge `3b98e86b6f97e8e2d2c72dafb52e5ae3a1902358`)
+
+### branch-local-time-rendering-guest-member-pwa
+Batch: 54
+Surfaced: 12 Sep 2026, Chief kickoff — a real 5.5-hour timestamp discrepancy Bala observed on a
+live JBC slot, traced to guest-member-pwa rendering slot/booking times in the viewer's own browser
+timezone instead of the branch's, via unguarded `toLocaleTimeString()`/`toLocaleDateString()`/
+`.getHours()` calls with no `timeZone` option anywhere.
+Description: `Branch.timezone` confirmed still `'UTC'` for both real JBC branches, so stored
+timestamps are correct — this was a display bug, not a storage bug. Any real India-based guest saw
+times shifted by their browser's UTC offset on every guest-member-pwa screen except admin-v2's
+Guest Management Reservations screen (F-229 Step 5), the one place this was already handled
+correctly (`reservationHelpers.ts`'s `safeTimeZone`/`branchHour`/`formatSlotLabel`, reused as the
+pattern here rather than reinvented). `CourtBooking.tsx`'s Morning/Afternoon/Evening band filter
+used the same viewer-local hour for bucketing, not just display — a real correctness bug, not
+merely cosmetic (worked the arithmetic: a slot stored at 07:00Z, 7am branch-local since JBC's
+`Branch.timezone` really is 'UTC', buckets as Afternoon under an IST browser instead of Morning).
+Confirmed-ID: F-234
+Confirmed: 12 Sep 2026
+Resolved: 12 Sep 2026 (same session — commit `9f49694f574524b8355bbf9d70502e1eccb16e41` on branch
+`f234-branch-local-time-rendering`; not yet merged to `main`, merge timing is a separate decision)

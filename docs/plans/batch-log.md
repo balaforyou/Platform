@@ -2412,6 +2412,81 @@ directly as Resolved, same same-session pattern as F-228 and F-230 — from 208/
 `pnpm diagram:verify` green — all 67 finding tags agree, same advisory list as before, no tagged
 FLOW node touched (this finding names no new endpoint).
 
+## Batch 54 — F-234: branch-local time rendering in guest-member-pwa (viewer-browser-timezone bug)
+
+**Surfaced 12 Sep 2026**, Chief kickoff, following a real 5.5-hour timestamp discrepancy Bala
+observed on a live JBC slot. Traced to a display bug, not a storage bug: `Branch.timezone`
+confirmed still `'UTC'` for both real JBC branches, so `AvailabilityWindow.startTime` is stored
+correctly — guest-member-pwa was rendering it via unguarded `toLocaleTimeString()`/
+`toLocaleDateString()`/`.getHours()` calls, i.e. the viewer's own browser timezone, not the
+branch's. Every real India-based guest saw times shifted by their browser's UTC offset on every
+guest-member-pwa screen. `CourtBooking.tsx`'s Morning/Afternoon/Evening band filter used the same
+local-hour value for bucketing, not just display — confirmed as a real correctness bug (worked the
+arithmetic: a 07:00Z/branch-morning slot buckets as Afternoon for an IST viewer), not merely
+cosmetic.
+
+**Investigation + plan:** confirmed the one place this was already done right — admin-v2's
+`reservationHelpers.ts` (F-229 Step 5, `safeTimeZone`/`branchHour`/`formatSlotLabel`) — as the
+pattern to reuse (rule 3), not invent new logic. Confirmed `timezone` was in none of the three
+payloads guest-member-pwa consumes; `GET /branches/:id/about` picked as the place to add it
+(already called by three of the five affected files). Enumerated 8 real render sites across 5
+files (more than a single grep pass per file would have found — several files have 2+ independent
+sites). Resolved two genuinely open data-wiring questions: `BookingPay.tsx` gets its own new
+branch-fetch (mirroring the other files' pattern, frontend-only, since it had zero branch-fetch
+infrastructure), `main.tsx`'s member-session card and upcoming-slots card get two independent
+fetches (single-fetch vs. dedup-map, since a member has one active assignment but upcoming
+bookings can span multiple branches). Explicitly left the day-picker's viewer-local "which day is
+today" logic alone (`CourtBooking.tsx:33-40`, `264`/`298-312`) — a different concern (UX
+default-day question, not branch-local time-of-day rendering), flagged, not folded in (rule 9).
+
+**Fix:** new `packages/ui-shared/src/lib/branchTime.ts` (`safeTimeZone`/`branchHour`/
+`formatBranchTime`), exported from `ui-shared`'s index; `services/tenant-management`'s
+`/branches/:id/about` gains a `timezone` field (additive, 4-line diff); `CourtBooking.tsx`,
+`BookingConfirmation.tsx`, `BookingHistory.tsx`, `BookingPay.tsx`, `main.tsx` converted to
+branch-aware rendering. A genuine catch beyond the plan's own scope, found while implementing:
+`CourtBooking.tsx`'s "upcoming booking" card pulls from all of a user's bookings filtered only by
+pool, no branch filter — it needed its own independent branch-timezone fetch
+(`upcomingBranchAbout`), distinct from the screen's own `branchAbout`. Commit
+`9f49694f574524b8355bbf9d70502e1eccb16e41` on branch `f234-branch-local-time-rendering` (branched
+cleanly from `main`@`8912110`). 8 files changed, 201 insertions / 33 deletions.
+
+**Re-verification, live:** real Playwright session with `browser.newContext({ timezoneId:
+'Asia/Kolkata' })` (confirmed actually taking effect via `Intl.DateTimeFormat().resolvedOptions()
+.timeZone` reading back `"Asia/Calcutta"` and a known instant rendering with the correct +5:30
+shift), covering all 8 render sites across the 5 files, plus the specific screen from Bala's
+original screenshot (guest PWA's slot list, "New Japan Badminton Court" branch) re-checked showing
+the correct branch-local hour. `CourtBooking.tsx`'s band-filter bucketing bug got its own dedicated
+before/after check, not folded into the general display-fix verification. One site (`main.tsx`'s
+member-session card) verified against mocked network responses (`page.route()`) rather than a live
+MEMBER fixture with an active subscription, because a DB-mutation guardrail in the sandbox blocked
+the raw SQL needed to create that fixture — disclosed as lighter evidence than the other 7 sites,
+not silently equated. Full regression suite green after a fresh rebuild (rule 7 — no stale-build
+testing).
+
+**One related-but-different observation, deliberately not folded in, per the kickoff's own
+explicit scope call:** `admin-web` carries the same viewer-local-timezone anti-pattern (at least in
+`main.tsx`) but is being actively replaced by admin-v2 — out of scope by the kickoff's own terms;
+becomes its own follow-up finding only if admin-web stays in real use longer than expected, not
+bundled into F-234.
+
+**Decision record:** Chief-assigned ID, specified directly in the original kickoff handover
+(12 Sep 2026) — not a fresh assignment during this batch.
+
+**Handed off:** 12 Sep 2026.
+**Status:** implemented and pushed, **not yet merged to `main`** — the merge decision is a
+separate call. Independently re-verified against the real pushed branch: fresh clone, `git show
+9f49694` read in full and matches this description, `git merge-base --is-ancestor main
+origin/f234-branch-local-time-rendering` confirms clean ancestry (no rebase needed, `main` hasn't
+moved since the branch point).
+**Branch/PR:** `f234-branch-local-time-rendering` (commit `9f49694f574524b8355bbf9d70502e1eccb16e41`),
+no PR opened yet.
+
+**Close-out:** `pnpm register:check` — before this batch, 209 rows (Open 110, Resolved 99); once
+this batch's register row + pending-findings entry land, expect **210 rows, Open 110, Resolved
+100**. `pnpm diagram:verify` expected green, unchanged advisory list (this finding touches no new
+endpoint tag — `/branches/:id/about`'s new field is additive to an already-tagged route). Run both
+for real after committing and report the real output — don't assume these numbers, confirm them.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
