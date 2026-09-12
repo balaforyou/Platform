@@ -2562,6 +2562,98 @@ WebAuthn challenge cookie — none carry admin identity claims).
 the null-fallback path is the same `Avatar` `src`-missing branch already exercised by the
 dev-login case above, so it's covered by equivalent evidence, not zero evidence.
 
+## Batch 56 — F-197: admin-v2 notification opt-in + real FCM push dispatch (F-025 push half)
+
+**Findings:** F-197 (Resolved), F-025 (stays Open — push half done, SMS/MSG91 half untouched)
+**Status:** Done
+**Commits:** (this session's branch — see PR)
+
+Handover named a second finding, "F-226," for the backend real-dispatch half and stated both IDs
+already existed. **Independently re-verified before building anything: F-226 does not exist in
+`docs/findings_register.md`** (the register jumps F-225 → F-227 with no gap). Per this project's
+own rule, an unverified referenced ID gets neither invented content nor a silent skip — surfaced
+to the user directly, who confirmed: build the backend half under **F-025**, the real,
+already-registered finding covering this exact gap ("Real push (FCM) and real SMS notification
+delivery never verified"). F-025 stays **Open** rather than moving to Resolved — it explicitly
+covers both push and SMS, and only the push half was built here; SMS/MSG91 remains fully parked
+(Bala's cost-driven call) and fully mocked, untouched. Resolving it fully would have silently
+declared the SMS half done when it isn't.
+
+**Blast-radius check done up front (rule 3a), one genuinely critical finding from it:**
+`services/notification/src/queue.ts`'s `processQueue()`/`mockDispatch` is called directly by three
+regression suites that hard-assert mock behavior using fabricated tokens
+(`dispatch-and-routing.regression.ts`'s `providerRef` startsWith `mock-push` assertion on
+`fcm-test-token-abc123`). Real dispatch is gated on `FIREBASE_SERVICE_ACCOUNT_JSON` actually being
+configured — absent in `.env.ci`/regression env by design, so the mock path is preserved there with
+zero test changes. Also found: `apps/admin-v2/vite.config.ts` had no `/api/notification` dev-proxy
+entry (first admin-v2 consumer of that service) — added, mirroring the existing `/api/payment`
+entry; and `NotificationTemplate`/`templateBody` is stored but never rendered for any channel
+today, confirmed via grep — real push intentionally does not wire that in either, flagged rather
+than silently expanded into or silently left unmentioned (rule 9).
+
+**Fix — backend (F-025 push half):** new `services/notification/src/firebase.ts` lazily
+initializes the Firebase Admin SDK only when `FIREBASE_SERVICE_ACCOUNT_JSON` is set;
+`sendPush(token, eventType, variables)` calls `admin.messaging().send(...)`, catching
+`messaging/registration-token-not-registered` as a `StaleTokenError`. `queue.ts`'s single dispatch
+call site branches: `push` + configured → `sendPush`, everything else → the existing `mockDispatch`
+unchanged. A `StaleTokenError` deletes the stale `DeviceToken` row before falling through to the
+existing retry/dead-letter bookkeeping (built per the handover's flag, not required to ship but
+cheap) — **observed live**, not just coded: a real invalidated token correctly triggered the
+delete during verification below.
+
+**Fix — frontend (F-197):** new `apps/admin-v2/src/lib/firebase.ts`
+(`requestAndRegisterPushToken`): `Notification.requestPermission()` → `getToken()` against the
+already-registered `/sw.js` (no separate `firebase-messaging-sw.js`) → `POST /devices/register`
+(existing endpoint, unchanged). One `DropdownMenu.Item` added to `AppShell.tsx`'s account menu
+(the single shared layout route every admin-v2 screen mounts under) — "Enable notifications" /
+"Notifications enabled" / "Notifications blocked (browser settings)" by current
+`Notification.permission`. Silent re-registration on load when already granted, since the modular
+Firebase SDK dropped `onTokenRefresh` — `POST /devices/register`'s upsert-on-unique-token makes
+this idempotent regardless of rotation, confirmed live (multiple re-registrations, zero
+duplicate-key errors).
+
+**Env/secrets wiring:** the seven public Firebase web-config + VAPID vars added to `.env.example`,
+`deploy/gcp-vm/.env.ci`, and as build-args in `deploy/gcp-vm/docker-compose.yml` /
+`Dockerfile.caddy-static`, mirroring the existing `VITE_GOOGLE_CLIENT_ID` precedent exactly.
+`FIREBASE_SERVICE_ACCOUNT_JSON` (the real secret) was **not** added to any committed file —
+confirmed absent from `.env.ci` and the diff; it lives only in the gitignored local `.env` for this
+session's testing and, for production, only in the VM's own gitignored `.env` — same split that
+F-233 (Batch 53) was burned by getting wrong once already. `docker-compose.dev.yml`'s `notification`
+service gains a `${FIREBASE_SERVICE_ACCOUNT_JSON:-}` passthrough (substituted at `docker compose`
+invocation time, never hardcoded).
+
+**Live-fire verification, real evidence throughout:**
+- Full 5-service regression suite green against `badminton_db_test` post-rebuild (rule 7), **twice**
+  (once before the dev-stack live-fire pass, once as final confirmation) — `notification`'s
+  mock-push assertions passed unmodified both times, confirming the Firebase-configured gate stays
+  off in CI/regression as designed.
+- Whole-repo typecheck + build clean (`@badminton/notification`, `@badminton/admin-v2`).
+- A real environment hiccup during setup, disclosed rather than smoothed over: a Windows-path-length
+  pnpm symlink issue after adding the `firebase`/`firebase-admin` deps broke `vite`'s own bin
+  resolution — fixed with a clean `node_modules` reinstall, not worked around.
+- Real permission grant (Bala, real Chrome, real Windows machine) → real FCM token → real
+  `DeviceToken` row, confirmed via direct `psql` read-back, across several natural re-registrations
+  during testing (upsert behavior held, no crashes).
+- Denied-permission state confirmed independently in the sandboxed preview browser (which denies
+  `Notification.requestPermission()` by policy) — the account menu correctly showed "Notifications
+  blocked (browser settings)" with no crash.
+- Real end-to-end push: `POST /notifications/send` (real, unmodified endpoint) with a real
+  `low_occupancy_alert` event → real `admin.messaging().send()` → genuine FCM message ids
+  (`projects/slot-flow-admin/messages/...`) recorded as `providerRef`. First two attempts produced a
+  real message id but no visible toast; root-caused live (not assumed) to Windows notifications for
+  Chrome being off at the OS level — Bala corrected this mid-session, and the next two sends both
+  produced a real, on-screen "Low Occupancy Alert" toast, confirmed by Bala directly in the
+  conversation.
+- Stale-token cleanup observed live: an invalidated token correctly returned
+  `messaging/registration-token-not-registered`, was recorded in `errorMessage`, and its
+  `DeviceToken` row was confirmed deleted on the next read.
+- `pnpm register:check` green (211 rows, Open 109 / Resolved 102, no drift).
+
+**Not yet done, explicitly flagged:** `pnpm diagram:verify` and the branch push +
+independent-remote-verification step (rule 7) — next in this same close-out pass. No commit without
+explicit sign-off (rule 5) — a review branch is being pushed for independent diff review per
+standing practice, not merged to `main` without a further go-ahead.
+
 **Sign-off:** Bala, reviewed against the pushed branch diff (not the evidence report alone) — "F-219
 implementation approved. Nothing to send back for changes."
 

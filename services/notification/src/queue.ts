@@ -1,4 +1,5 @@
 import { PrismaClient } from '@badminton/database';
+import { isFirebaseConfigured, sendPush, StaleTokenError } from './firebase.js';
 
 // WHY: Shared Prisma instance for the queue module — tests import this
 //      module directly without starting the HTTP server.
@@ -39,12 +40,25 @@ export async function processQueue(): Promise<void> {
   for (const req of pending) {
     const attempt = req.attempts + 1;
     try {
-      const ref = await mockDispatch(req.channel, req.recipient, req.variables);
+      // WHY (F-197/F-025): real dispatch only for push, and only when Firebase is
+      // actually configured (absent in CI/regression — see firebase.ts). Every other
+      // channel, and push without a configured credential, keeps the existing mock.
+      const ref =
+        req.channel === 'push' && isFirebaseConfigured()
+          ? await sendPush(req.recipient, req.eventType, req.variables)
+          : await mockDispatch(req.channel, req.recipient, req.variables);
       await prisma.notificationRequest.update({
         where: { id: req.id },
         data: { status: 'sent', attempts: attempt, providerRef: ref, retryAfter: null },
       });
     } catch (err: any) {
+      if (err instanceof StaleTokenError) {
+        // WHY: the token is permanently invalid (uninstalled app, revoked permission,
+        // expired) — deleting it stops it from failing forever on every retry. The
+        // NotificationRequest itself still goes through the normal retry/dead-letter
+        // bookkeeping below (recipient just won't resolve to this token again).
+        await prisma.deviceToken.deleteMany({ where: { token: err.token } }).catch(() => {});
+      }
       if (attempt >= 4) {
         // WHY: All backoff intervals exhausted — transition to dead_letter (terminal state).
         await prisma.notificationRequest.update({
