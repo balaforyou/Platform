@@ -1147,3 +1147,34 @@ guest through `/bookings/manual` landed on court 2 (the reserved one) instead of
 `resourceId: null` fallback F-225's own guest self-service path uses in the identical situation.
 Confirmed-ID: F-230
 Confirmed: 11 Sep 2026
+
+### razorpay-key-drift-ci-baked-vs-vm-production
+Batch: F-228 production deploy, Round 2 (Razorpay key-drift fix), 11-12 Sep 2026
+Surfaced: 11 Sep 2026, during the F-228 deploy's own required live-fire OTP-booking check
+(`BK-8CC5D6FD`) — the real Razorpay Test Mode checkout returned "Payment Failed" on the frontend,
+with a `401` from Razorpay's own `standard_checkout/preferences` endpoint in the browser console.
+Description: `deploy/gcp-vm/.env.ci`'s `RAZORPAY_KEY_ID` (the value CI bakes into guest-member-pwa's
+shipped bundle as `VITE_RAZORPAY_KEY_ID`, per the 30 Aug 2026 "Bug 2" fix) was `rzp_test_TJllXnaezST7MV`,
+while the production VM's own `.env` (what the payment backend actually runs with) has carried a
+different key, `rzp_test_TLWpMFXUprxFba`, since at least 19 Aug 2026 — confirmed via two on-VM `.env`
+backups dated 19 Aug and 27 Aug, both predating the 30 Aug fix that introduced the mismatched value.
+Real-world effect: checkout.js opens with the frontend's baked-in key, fetches order preferences from
+Razorpay, and Razorpay correctly 401s because the order was created server-side under a different key
+entirely — every real Razorpay checkout on jbc.elitecourts.duckdns.org was silently broken for the
+~12 days between the 30 Aug fix and this 11 Sep catch. No automated suite could have caught this: real
+Razorpay checkout requires a static IP/HTTPS domain and is only testable on the deployed VM. No
+evidence of a paying customer hitting this in that window (JBC is not yet live with real paying
+customers). Root cause class: `.env.ci` (CI-build-time, PUBLIC values baked into shipped frontend
+images) and the VM's own `.env` (SECRET, backend-runtime-only) are two separate files by design
+(root `CLAUDE.md`'s deployment model), and the 30 Aug fix changed one without reconciling the other.
+Fixed same session: `deploy/gcp-vm/.env.ci`'s `RAZORPAY_KEY_ID` aligned to the VM's real value
+(commit `8672d03`, PR #26 `fix-razorpay-key-drift` → `main` at `3b98e86b6f97e8e2d2c72dafb52e5ae3a1902358`),
+CI rebuilt and pushed the corrected image, redeployed via `promote.sh`, both frontend bundle and
+backend confirmed on `rzp_test_TLWpMFXUprxFba` post-deploy. Re-verified live: `BK-8CC5D6FD` completed
+a real Razorpay Test Mode checkout end-to-end, `HELD → CONFIRMED`, DB read-back confirmed. Chief's
+independent verification: fresh clone of `main`, `HEAD` confirmed at `3b98e86`, `git show 8672d03`
+read in full and matches this description exactly, `pnpm register:check` and `diagram:verify` both
+re-run clean against the new HEAD with no drift from the pre-deploy state.
+Confirmed-ID: F-233
+Confirmed: 12 Sep 2026
+Resolved: 12 Sep 2026 (same session — commit `8672d03` / merge `3b98e86b6f97e8e2d2c72dafb52e5ae3a1902358`)
