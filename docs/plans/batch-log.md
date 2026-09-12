@@ -2357,6 +2357,61 @@ and `shared-service-worker-registration-failure-both-apps` get a Chief-assigned 
 their own findings — both owned by Chief now, same as F-228 itself was between F-229's Batch 34
 and this close-out.
 
+## Batch 53 — F-233: Razorpay key drift (CI-baked vs. VM production) — found, fixed, and closed same session during the F-228 production deploy
+
+**Surfaced during the F-228 production deploy itself**, not a separate investigation: the deploy's
+own required live-fire OTP-booking check (`BK-8CC5D6FD`) hit a real "Payment Failed" on a genuine
+Razorpay Test Mode checkout, traced live to a `401` from Razorpay's own `standard_checkout/preferences`
+endpoint (browser console + network log), then to the root cause via VM SSH: `deploy/gcp-vm/.env.ci`'s
+`RAZORPAY_KEY_ID` (`rzp_test_TJllXnaezST7MV`, baked into guest-member-pwa's shipped bundle) did not
+match the production VM's real `.env` (`rzp_test_TLWpMFXUprxFba`, confirmed unchanged since at least
+19 Aug 2026 via two on-VM `.env` backups). The 30 Aug 2026 "Bug 2" fix that started baking a "real,
+public" key into `.env.ci` picked a value that never actually matched the VM's live secret — a
+~12-day-old silent production outage on real Razorpay checkout, caught only because this deploy's
+live-fire requirement happened to exercise one for the first time since.
+
+**Fix:** `deploy/gcp-vm/.env.ci`'s `RAZORPAY_KEY_ID` aligned to the VM's real value. Commit `8672d03`
+on branch `fix-razorpay-key-drift`, PR #26 → `main`. CI green (checks + regression on the PR;
+`integration` image build/push green on the `main` merge run, headSha `3b98e86b6f97e8e2d2c72dafb52e5ae3a1902358`).
+Redeployed to production via `promote.sh 3b98e86b6f97e8e2d2c72dafb52e5ae3a1902358` — pre-flight disk
+check (12GB free, sufficient), all 7 images pulled, F-077 SHA guard passed, no pending migrations,
+6 services recreated, `verify-deployment.mjs`'s internal check passed all 8 components, Caddy
+HTTP-fallback check = 0 (genuinely HTTPS). Post-deploy confirmed both the shipped guest-member-pwa
+bundle and the running payment container's env now agree on `rzp_test_TLWpMFXUprxFba`.
+
+**Re-verification, live:** `BK-8CC5D6FD` retried end-to-end through a real Razorpay Test Mode
+checkout (user-entered test card, per the standing rule that card entry is never done by the
+assisting thread) — `HELD` → `CONFIRMED`, confirmed via DB read-back (`status = CONFIRMED`).
+
+**Two related-but-different observations surfaced while chasing this, deliberately not folded in,
+per Chief's explicit disposition, same discipline as the F-171/F-172/F-173 blast-radius lesson above:**
+- A Razorpay-SDK-bootstrap-failure raw-error leak on the frontend (`BookingPay.tsx`'s `payment.failed`
+  handler only covers a declined attempt *after* checkout opens; this key-mismatch failure happened
+  during SDK bootstrap, before that handler is even reachable, so Razorpay's own uncontrolled error
+  UI + a native `alert()` leaked straight through). Same class of gap as F-229's Batch 43 "no raw code
+  errors on screen" hardening, outside what that batch reached. Deferred — no ID assigned, not an
+  active bug, proposed fix direction (a deploy-time key-match assertion + a best-effort watchdog
+  banner) recorded for whenever it's picked up.
+- `/payment-links/negotiated` and `/bookings/manual`'s `razorpay_link` option are fully mocked in
+  every environment including production (`services/payment/src/index.ts:990-993`, `:816-817`) —
+  pre-existing, already confirmed by Bala as known/expected scope (payment-gateway integration for
+  that path not yet built). No finding needed, no action taken.
+
+**Decision record:** Chief-assigned ID (`chief-signoff-f228-production-deploy-2.md`, 12 Sep 2026) —
+next available after F-232. Confirmed, resolved, and disposition of the two adjacent observations
+all specified in that same sign-off, not inferred.
+
+**Handed off:** 12 Sep 2026.
+**Status:** merged to `main` (`3b98e86b6f97e8e2d2c72dafb52e5ae3a1902358`), deployed to production,
+independently re-verified by Chief against a fresh clone (`HEAD` = `3b98e86`, `git show 8672d03`
+read in full, matches this description).
+**Branch/PR:** `fix-razorpay-key-drift` (commit `8672d03`), PR #26 → `main`.
+
+**Close-out:** `pnpm register:check` green — **209 rows, Open 110, Resolved 99** (F-233 added
+directly as Resolved, same same-session pattern as F-228 and F-230 — from 208/110/98).
+`pnpm diagram:verify` green — all 67 finding tags agree, same advisory list as before, no tagged
+FLOW node touched (this finding names no new endpoint).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
