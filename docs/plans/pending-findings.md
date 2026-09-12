@@ -1202,3 +1202,38 @@ Confirmed-ID: F-234
 Confirmed: 12 Sep 2026
 Resolved: 12 Sep 2026 (same session — commit `9f49694f574524b8355bbf9d70502e1eccb16e41` on branch
 `f234-branch-local-time-rendering`; not yet merged to `main`, merge timing is a separate decision)
+
+### admin-v2-push-notification-shows-generic-fallback-text
+Batch: Production deploy #3 (F-234/F-219/F-197/F-025 push half), 12 Sep 2026
+Surfaced: 12 Sep 2026, during production deploy #3's own required live-fire push check —
+Bala confirmed two real pushes arrived on-screen, but both showed the generic fallback text
+("Slotflow Admin" / "You have a new notification.") instead of the real event title/body
+("Low Occupancy Alert" / "Tap to view details.").
+Description: real root cause confirmed directly in code by both the implementing thread and
+Chief independently, not a guess. `services/notification/src/firebase.ts`'s `sendPush` calls
+`admin.messaging(firebaseApp).send({ token, notification: { title, body }, data: {...} })`.
+`apps/admin-v2/public/sw.js`'s `push` handler (lines ~150-167, explicitly documented as already
+done ahead of any real backend, F-044 Phase B) does
+`payload = { title: 'Slotflow Admin', body: 'You have a new notification.', data: {} }; ...
+payload = { ...payload, ...event.data.json() }` — a flat-key merge. The raw Web Push payload FCM
+delivers over the wire nests the real title/body under a `notification` key, not flat top-level
+`title`/`body`, so the spread adds `payload.notification`/`payload.data` as new properties but
+never overwrites `payload.title`/`payload.body`, which stay the hardcoded defaults. Delivery,
+permission flow, token registration, and dispatch are all genuinely working — this is purely a
+display-content bug on the receiving end, confirmed present for every event type (same code path
+for all of `CHANNEL_POLICY`'s push-eligible events, not just `low_occupancy_alert`). Not a reason
+to roll back F-197/F-025 — the underlying push mechanism working end-to-end is worth more than
+withholding it over a fixable content bug, and F-197/F-025 already shipped and is signed off on
+its own real merits.
+Fix direction (assignment only, no implementation authorized yet): `sw.js`'s `push` handler should
+read `event.data.json().notification?.title` / `.notification?.body`, falling back to flat
+`title`/`body` for forward-compatibility and to the existing hardcoded defaults if neither is
+present — smaller, lower-risk than changing `firebase.ts` to a `data`-only FCM message shape
+(the alternative, which would give full control but is a bigger change). Technical Lead to
+confirm the approach at plan-mode time, not decided unilaterally here.
+Related, deliberately not folded in (rule 9): Bala's separate report that the push "only shows
+after opening the app" is not yet independently confirmed as a code defect by anyone — needs a
+real reproduction with the app genuinely backgrounded (not just a closed tab) before it becomes
+its own finding, or turns out to just be this bug making a real background push easy to miss.
+Confirmed-ID: F-236
+Confirmed: 12 Sep 2026 (Chief-originated)

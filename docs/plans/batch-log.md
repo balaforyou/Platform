@@ -2671,6 +2671,81 @@ google-name-photo` entry (already carrying `Confirmed-ID: F-219` / `Confirmed: 2
 `Resolved:` line added, not a duplicate entry. Run `pnpm register:check` and `pnpm diagram:verify`
 for real after committing and report the real output — don't assume, confirm.
 
+## Batch 57 — Production deploy #3 (F-234, F-219, F-197/F-025 push half) + F-236 assigned
+
+**Findings:** F-234, F-219, F-197 (all live in production, already Resolved as of Batches 54-56),
+F-025 push half (already documented Open with the push-half note, Batch 56); new finding **F-236**
+assigned (Open, unimplemented)
+**Status:** Deploy Done; F-236 unimplemented, low urgency
+**Commits:** deploy target `6055b9739fcdf60e18c5b672359875cb1dfcaf21` (`6055b97`) — no new app code,
+this batch is the production promotion of already-merged work plus this close-out's own docs commit
+
+Chief-authorized direct execution (Bala, direct — "shall we complete the push to GCP the changes
+until now"), same pattern as the F-228/F-233 production deploys. Named commit range
+`3b98e86..6055b97` (docs-only F-233 close-out, F-234 fix + close-out, F-219 fix + close-out,
+F-197/F-025 fix + lint cleanup, PR #30 merge).
+
+**Prerequisite handled before deploying:** `FIREBASE_SERVICE_ACCOUNT_JSON` was not yet on the
+production VM. Confirmed with Bala directly (reusing the same credential supplied earlier for
+dev, not a separate prod-specific one) before writing anything to the VM's `.env`. First transfer
+attempt (piping the ~2.3KB secret through `gcloud compute ssh`'s stdin) was silently truncated by
+`plink` down to a single garbage character — caught immediately by a length check, not assumed
+good; the VM's `.env` was cleaned up (one stray line removed, confirmed via `sed -i '$d'` +
+line-count check) and the secret re-sent via `scp` instead, with the transferred file's exact
+byte length (2365 = 30-char var name + the known 2335-char JSON) verified before appending and
+deleting the temp file. Zero secret content was ever echoed back into the conversation transcript.
+
+**Deploy mechanics:** `promote.sh <full-SHA>` — the doc's example used a short SHA, which does not
+match Docker Hub's `:<svc>-<full-sha>` immutable tag scheme; first attempt failed cleanly (`no
+matching manifest`, nothing mutated) before the full 40-char SHA was substituted and the real
+promotion ran clean: all 7 images pulled, F-077 migrate guard passed (`ok — image matches the
+deploy target`), F-219's migration applied for real on production, 6 services recreated
+(`migrate`/`postgres` correctly excluded), Caddy HTTPS confirmed genuinely live (HTTP-fallback
+grep = 0), `verify-deployment.mjs` — all 8 components PASS.
+
+**Live-fire checks, all real:**
+- F-234: confirmed from a browser reporting `Asia/Calcutta` (IST) as its own timezone — JBC's
+  Main Courts pool correctly showed `06:00–23:00` operating hours and an `11:00 AM` slot, both
+  unshifted (the pre-fix bug would have shown a ~5.5h shift for this exact viewer).
+- F-219: production `User` row for the real admin read back directly — `displayName`/`photoUrl`
+  populated with the real name and a genuine `googleusercontent.com` photo URL.
+- F-197/F-025 push half: a real production `DeviceToken` registered (Bala, his own device);
+  two real `low_occupancy_alert` sends both returned genuine FCM message ids
+  (`projects/slot-flow-admin/messages/8e13d432-...`, `...cd62986f-...`) — triggered via a
+  throwaway `curlimages/curl` container on the compose network reading `INTERNAL_SERVICE_KEY`
+  from `.env` (never as a CLI arg); Bala confirmed both arrived on-screen.
+- Baseline regression: a real OTP-verified guest booking held end-to-end (`BK-D0759B62`, correct
+  branch-local slot time, correct price); real Razorpay Test Mode checkout initialized correctly
+  under the right key (Test Mode ribbon, correct `JBC Courts` branding/amount, no 401) — the exact
+  failure class F-233 exposed, confirmed absent. Full card-entry completion wasn't finished (a
+  browser-automation focus quirk on Razorpay's cross-origin iframe, disclosed as a tooling
+  limitation, not an app-side symptom) — checkout initializing correctly under the right key is
+  itself the regression check that matters here.
+
+**New finding surfaced, not self-fixed:** real content-display bug found during the push check —
+delivery works, but the notification shows generic fallback text instead of the real event
+title/body. Root cause identified live (not guessed) and reported to Chief rather than patched
+unilaterally mid-deploy, since this deploy's authorization covered only the already-reviewed
+F-234/F-219/F-197/F-025 change set. Chief independently re-verified the root cause directly in
+code (both `firebase.ts` and `sw.js`) and assigned **F-236** (Open, unimplemented, low urgency —
+doesn't block anything). Logged in `docs/plans/pending-findings.md` and `docs/findings_register.md`
+per Chief's relay instruction, in this same close-out pass. A related but separate observation
+(push only showing after the app is opened) was deliberately **not** folded into F-236 — not yet
+independently confirmed as a code defect by anyone, needs real reproduction with the app genuinely
+backgrounded before it gets its own ID.
+
+**Independent verification (Chief):** fresh clone of `main`, `HEAD` confirmed at `3777494` (one
+docs-only commit ahead of the `6055b97` deploy target — confirmed as an unrelated batch-log
+addendum, not an unauthorized fix, via `git merge-base --is-ancestor 6055b97 HEAD`); F-236's root
+cause read directly in both `firebase.ts` and `sw.js`, confirmed exactly as reported; the SSH
+truncation-and-retry handled with sound operational discipline, nothing to flag. Production-only
+claims (real DB reads, the two real FCM message ids, real on-screen confirmation) accepted on the
+same evidentiary bar as F-228/F-233 — outside what an isolated verification thread can independently
+re-run, no network path to the production VM.
+
+`pnpm register:check` (212 rows, Open 110 / Resolved 102) and `pnpm diagram:verify` (67 tags, all
+agree) both green after this close-out's edits.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
