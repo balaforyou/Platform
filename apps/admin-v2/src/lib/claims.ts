@@ -7,6 +7,11 @@ export interface AdminUser {
   tenantId: string;
   userType: string;
   roles: string[];
+  /** F-219: real name from Google, persisted on a real Google login; null for dev-login
+   *  or an admin who has never signed in with Google. */
+  displayName: string | null;
+  /** F-219: Google profile photo URL, same persistence caveat as displayName. */
+  photoUrl: string | null;
 }
 
 /** Decode (not verify) a session JWT's payload into the admin identity the UI shows. */
@@ -28,6 +33,8 @@ export function parseAdminClaims(token: string): AdminUser | null {
       tenantId: claims.tenantId,
       userType: typeof claims.userType === 'string' ? claims.userType : 'STAFF',
       roles: Array.isArray(claims.roles) ? claims.roles : [],
+      displayName: typeof claims.displayName === 'string' ? claims.displayName : null,
+      photoUrl: typeof claims.photoUrl === 'string' ? claims.photoUrl : null,
     };
   } catch {
     return null;

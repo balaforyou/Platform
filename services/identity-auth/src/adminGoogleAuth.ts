@@ -33,6 +33,10 @@ export interface VerifiedGoogleIdentity {
   email: string;
   /** Google's `sub` claim — the stable account id. */
   googleId: string;
+  /** F-219: Google's `name` claim, when present on the verified token. */
+  name?: string;
+  /** F-219: Google's `picture` claim (profile photo URL), when present. */
+  picture?: string;
 }
 
 export class GoogleTokenError extends Error {
@@ -81,7 +85,10 @@ export async function verifyGoogleIdToken(
     throw new GoogleTokenError('Google account email is not verified');
   }
 
-  return { email, googleId };
+  const name = typeof payload.name === 'string' ? payload.name : undefined;
+  const picture = typeof payload.picture === 'string' ? payload.picture : undefined;
+
+  return { email, googleId, name, picture };
 }
 
 /**

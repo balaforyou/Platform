@@ -775,7 +775,14 @@ server.post('/auth/google/verify', async (request, reply) => {
 // (no `domain` attr — admin.elitecourts.duckdns.org gets a naturally isolated session,
 // same as index.ts:494-500).
 async function issueAdminSession(
-  user: { id: string; phone: string | null; email: string | null; userType: UserType },
+  user: {
+    id: string;
+    phone: string | null;
+    email: string | null;
+    userType: UserType;
+    displayName: string | null;
+    photoUrl: string | null;
+  },
   tenantId: string,
   reply: any,
 ): Promise<{ accessToken: string }> {
@@ -809,6 +816,10 @@ async function issueAdminSession(
     // the token to survive a page reload.
     email: user.email,
     userType: user.userType,
+    // F-219: real name/photo from a persisted Google login (or null for dev-login /
+    // never-logged-in-via-Google admins) so admin-v2's topbar shows more than initials.
+    displayName: user.displayName,
+    photoUrl: user.photoUrl,
     roles,
   }, { expiresIn: '15m' });
 
@@ -905,8 +916,24 @@ server.post('/auth/admin/google/verify', async (request, reply) => {
     throw err;
   }
 
-  const { accessToken } = await issueAdminSession(user, resolution.tenantId, reply);
-  return { accessToken, user };
+  // F-219: persist the real Google name/photo on the User row (not just the JWT) so it
+  // survives /auth/refresh and shows up on passkey logins too — both never re-contact
+  // Google. `??` so a response missing the claim never overwrites a previously-good
+  // value. Dev-login skipped: identity.name/picture are always undefined there, and an
+  // explicit skip avoids a no-op write on every dev/CI login.
+  let sessionUser = user;
+  if (!googleIdToken.startsWith('dev-admin-token-') && (identity.name || identity.picture)) {
+    sessionUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        displayName: identity.name ?? user.displayName,
+        photoUrl: identity.picture ?? user.photoUrl,
+      },
+    });
+  }
+
+  const { accessToken } = await issueAdminSession(sessionUser, resolution.tenantId, reply);
+  return { accessToken, user: sessionUser };
 });
 
 // ── Admin-v2 WebAuthn / fingerprint step-up (F-196) ────────────────────────────
@@ -1215,6 +1242,11 @@ server.post('/auth/refresh', async (request, reply) => {
     // returns only { accessToken }). Ignored by every other consumer.
     email: session.user.email,
     userType: session.user.userType,
+    // F-219: same as issueAdminSession — carried so a page reload doesn't revert a
+    // real Google-sourced name/photo back to initials. Null/ignored for non-admin
+    // consumers, same pattern as phone/email above.
+    displayName: session.user.displayName,
+    photoUrl: session.user.photoUrl,
     roles,
   }, { expiresIn: '15m' });
 
