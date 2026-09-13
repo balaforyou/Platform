@@ -2864,6 +2864,70 @@ its previously-deferred data-fix half now closed.
 `pnpm register:check` (216 rows, Open 110 / Resolved 106) and `pnpm diagram:verify` (67 tags, all
 agree) both green.
 
+## Batch 60 — Production deploy #4 (F-211/F-237/F-238 live)
+
+**Findings:** F-211, F-237, F-238 (all newly live in production this round); F-234, F-219,
+F-197/F-025 (confirmed already live in production from deploy #3, not newly landed by this
+promotion)
+**Status:** Done
+**Commits:** deploy target `694b93ba133affbbbc0cce489441a65873a668e4` (`694b93b`) — no new app
+code, this batch is the production promotion of already-merged work (range `3b98e86..694b93b`,
+20 commits, named finding-by-finding in the Chief handover this batch executed)
+
+Chief-authorized direct execution (Bala, direct — "its merged" as the promote go-ahead), same
+pattern as every prior round. **Disposition, confirmed directly rather than assumed:** the VM's
+`.env` `GIT_SHA` before this promotion read `6055b9739fcdf60e18c5b672359875cb1dfcaf21` (deploy
+#3's target) — meaning F-234, F-219, and F-197/F-025 were already live in production before this
+promotion started. This promotion's only genuinely new runtime surface is F-211/F-237/F-238;
+everything else in the 20-commit range is docs-only (F-233 close-out, F-236 assignment, F-210
+backfill, the F-211 data-fix closeout).
+
+**Deploy mechanics:** `promote.sh <full-SHA>` — all 7 images pulled, F-077 migrate guard passed
+(no pending migrations — F-211/F-237/F-238 needed no schema change), 6 services recreated
+(`migrate`/`postgres` correctly excluded), Caddy HTTPS confirmed genuinely live,
+`verify-deployment.mjs` — all 8 components PASS at `694b93ba133a`.
+
+**Live-fire checks, all real, against production itself — first time F-211/F-237/F-238 have ever
+run there:**
+- **F-211**: a throwaway pattern write (`00:00-01:00`, outside a real branch's `05:00-23:00`
+  hours) returned exactly `400 PATTERN_OUTSIDE_OPERATING_HOURS`; confirmed zero rows left behind
+  afterward.
+- **F-237**: no dev-login bypass exists on production (confirmed absent, by design) — minted a
+  real HS256 JWT signed with production's actual `JWT_SECRET` via a throwaway container (secret
+  read only from `--env-file`, never echoed), `roles: ["branch_manager:<real branch id>"]`,
+  backed by a real temporary `User`+`RoleAssignment` (deleted immediately after use). Real write
+  attempt returned `403 FORBIDDEN — Owner privilege required`.
+- **F-238**: Bala confirmed directly, real Google login, real browser — Guest Scheduler renders
+  in Guest Management → Setup Rules for "New Japan Badminton Court," showing both real patterns,
+  the evening one now correctly labelled Daily (not "Weekly Mon-Sat") — the Sunday data fix
+  reflected on its first-ever admin-facing surface.
+- **F-219** (re-confirmed, already-live): Bala confirmed directly, real Google login shows real
+  name/photo on the admin-v2 topbar.
+- **F-211 data fix itself**: direct `psql` read on production confirms both patterns'
+  `daysOfWeek = "1,2,3,4,5,6,7"`, untouched by this deploy.
+- **F-234** (re-confirmed, already-live): from a real IST-timezone browser, "New Japan Badminton
+  Court" showed `05:00-23:00` correctly, and — unplanned but strong combined proof — the real
+  Sunday evening slot picker showed 4 genuinely bookable slots (`07:00 PM-10:00 PM`, unshifted)
+  where before this session's earlier F-211 data fix there were zero. Same screenshot evidences
+  both F-234 and the F-211 data fix simultaneously.
+- **Baseline regression**: a real OTP-verified booking (`BK-6DF84E8F`, Sunday `07:00 PM-08:00
+  PM`, ₹400) held cleanly; real Razorpay Test Mode checkout initialized correctly under the right
+  key (Test Mode ribbon, correct `JBC Courts` branding/amount, no 401 — the exact F-233 failure
+  class, confirmed absent). Full card-entry completion hit the same cross-origin iframe
+  automation limitation as prior rounds — disclosed, not worked around; checkout initializing
+  correctly under the right key is the part that actually catches key-drift.
+
+**Disk pressure flagged, not silently absorbed:** `df -h /` went `78%→87%` used (`6.5G→3.9G`
+free) across this promotion; `docker system df` shows 52→59 images, 17.69GB reclaimable
+(81→84% of total image storage), only 7 images actually active. Real, growing pressure matching
+this project's known F-214-class accumulation pattern (`promote.sh` pulls new image sets without
+pruning old ones). **Not pruned this round** — the current `:rollback` tags need to stay intact
+until this deploy is independently signed off; pruning is Chief/Bala's call once that happens.
+
+`pnpm register:check` and `pnpm diagram:verify` unaffected by this batch (no register/docs
+changes beyond this entry — F-211/F-237/F-238's own rows already landed in Batch 58, the data-fix
+closeout in Batch 59).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
