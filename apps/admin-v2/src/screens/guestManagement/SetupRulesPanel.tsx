@@ -1,12 +1,14 @@
 import { AuthorizedCourts } from './sections/AuthorizedCourts';
 import { PricingRates } from './sections/PricingRates';
 import { CancellationPolicy } from './sections/CancellationPolicy';
+import { GuestScheduler } from './sections/GuestScheduler';
 
 /**
  * F-220 §3 — the Setup Rules tab's content: a stack of independent full-width sections scoped to
- * the branch selected on `GuestManagementScreen`. The four sections land one at a time (§3.1–§3.4);
- * this is the one place that grows. `GuestManagementScreen` remounts this via `key={branchId}` so
- * each branch gets its own fresh section state.
+ * the branch selected on `GuestManagementScreen`. All four sections (§3.1–§3.4) are now live —
+ * §3.4 (Guest Scheduler) was picked up 13 Sep 2026 as F-238, un-deferred from its 10 Sep MVP
+ * deferral. `GuestManagementScreen` remounts this via `key={branchId}` so each branch gets its
+ * own fresh section state.
  */
 export function SetupRulesPanel({ branchId }: { branchId: string }) {
   if (!branchId) {
@@ -22,10 +24,7 @@ export function SetupRulesPanel({ branchId }: { branchId: string }) {
       <AuthorizedCourts branchId={branchId} />
       <PricingRates branchId={branchId} />
       <CancellationPolicy branchId={branchId} />
-
-      <div className="setup-rules-next">
-        <b>1 more section lands next:</b> Dynamic Guest Scheduler — its own hand-off, same as this one.
-      </div>
+      <GuestScheduler branchId={branchId} />
     </div>
   );
 }

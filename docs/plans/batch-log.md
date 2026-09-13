@@ -2746,6 +2746,92 @@ re-run, no network path to the production VM.
 `pnpm register:check` (212 rows, Open 110 / Resolved 102) and `pnpm diagram:verify` (67 tags, all
 agree) both green after this close-out's edits.
 
+## Batch 58 — F-211 (write-time operating-hours guard) + F-237 (owner check) + F-238 (Guest Scheduler UI), + F-210 backfill
+
+**Findings:** F-210 (Resolved, backfill), F-211 (Resolved), F-237 (Resolved), F-238 (Resolved)
+**Status:** Done
+**Commits:** `4c8fa5a` (F-210 backfill docs) — applied patch and verification commit hashes added
+below once pushed
+
+Chief Architect thread investigated, wrote, and locally verified this patch (fresh clone of real
+`main`@`ac65870`) but had no repo push access this session — handed off as a real `git diff`
+(`f211-f237-f238.patch`, 5 files, +434/-9) rather than a PR, same evidence bar as every other
+Chief-verified change. Applied and closed out here.
+
+**F-211's own origin, worth recording accurately:** this finding traces directly to a real
+production incident from the previous session — an owner tried to book a walk-in guest slot on
+"New Japan Badminton Court" for 6 PM and instead silently saved a 1 PM slot. Investigated live
+against production (confirmed via real `psql` reads: Branch Settings claimed `05:00-23:00, all 7
+days`, real `AvailabilityPattern` rows left a daily `15:00-19:00` gap and zero Sunday evening
+inventory), written up as an architectural gap and relayed to Bala rather than fixed unilaterally,
+per standing practice — Chief assigned F-211 from that write-up and built the fix this session.
+
+**Before implementing, flagged two real ambiguities rather than guessing (per rule — a plan or
+patch's own claims are a hypothesis, not evidence):**
+1. The handover asked for an "F-210 register correction" — but F-210 had **no row anywhere** in
+   the register or `pending-findings.md`, only ever referenced (`[[F-210]]`) from inside F-220's
+   text. Confirmed this directly before writing anything. Bala's ruling: a **backfill**, not a
+   correction (nothing to correct) — same framing as F-205's own backfill, closer precedent
+   [[F-224]]/[[F-225]] (Chief-assigned findings shipped inside F-220's pass that still got
+   dedicated rows). Found 31 Aug 2026 (original Chief assignment date), Resolved 10 Sep 2026
+   (F-220 §1a's real merge, `1da6c7e` — independently confirmed via `git show`, not taken from the
+   handover). Written up in this same pass, before touching the code patch.
+2. Whether `requireOwnerOrInternal`'s non-awaited call in the patch was a bug (async function
+   called without `await`) — checked directly: it's synchronous (`const requireOwnerOrInternal =
+   (auth, reply) => {...}`, throws synchronously), and the existing F-225 precedent at
+   `guest-court-eligibility` calls it the identical way. Not a bug; confirmed, not assumed.
+
+**Full independent re-verification of the patch before applying, not taken on the handover's
+word:** `git apply --check` clean on `main`@`ac65870`; every referenced helper/type/component
+confirmed to exist with a matching signature — `requireOwnerOrInternal` (sync, matches F-225's
+call-site ordering exactly), `requirePoolScope` (returns the full pool including `branchId`),
+`patternDataFromBody` (already accepts `pricingMode`/`price` together), `usePatterns` +
+`courtGroupsKeys.patterns` (identical query-key shape, invalidation will actually match),
+`weekdayOptions` (1=Mon...7=Sun confirmed), `formatTimeRange`, `AvailabilityPattern`/`Branch`
+types, `AdminUser.roles`, every component prop used (`IconButton.loading`, `Badge` tones,
+`Toggle`). Zero surprises found in the code itself — only the F-210 documentation gap.
+
+**What was actually done, beyond applying the patch:**
+- `prisma generate` ran for real (this environment's network egress isn't blocked, unlike the
+  originating sandbox) — the one thing the handover flagged as unverified.
+- Whole-repo typecheck + build clean (`@badminton/ui-shared` built first to resolve its type
+  declarations, `@badminton/slot-engine`, `@badminton/admin-v2` — all 0 errors); `pnpm run lint`
+  clean, 0 errors, same 8 pre-existing warnings.
+- Full 5-service regression suite: first run showed identity-auth/tenant-management/notification
+  failing together — re-ran and found identity-auth/tenant-management were the documented
+  cross-suite port-collision pattern (both fully green on re-run), but notification's failure was
+  real and reproducible: a stale `FIREBASE_SERVICE_ACCOUNT_JSON` left in the local root `.env`
+  from the previous session's production-deploy work (added there only to relay it to the VM via
+  `scp`, no longer needed locally) made the regression suite's push-dispatch test attempt a real
+  Firebase send with a fixture token instead of the expected mock path. Removed the stray var from
+  local `.env` (production has its own copy now) — root-caused and fixed, not worked around;
+  confirmed unrelated to this patch. Full suite re-run 5/5 clean after.
+- Real DB verification per the plan's own bar, all four required checks, all against the real dev
+  stack (not assumed from code reading): (1) a genuine `branch_manager` JWT (minted via a
+  temporary test `RoleAssignment`, deleted after) got a real `403 FORBIDDEN` on the write route
+  (F-237); (2) a pattern write outside real branch hours (`22:00-23:00` against a real
+  `06:00-22:00` branch) returned exactly `400 PATTERN_OUTSIDE_OPERATING_HOURS` with the actual
+  hours in the message (F-211); (3) a write inside hours (`10:00-12:00`) succeeded (`201`) and its
+  windows were confirmed generated and consumed by a real `GET .../availability?date=` call, not
+  merely persisted; (4) a branch with genuinely no hours configured accepted a write unchanged
+  (fail-open). All test data (a throwaway `User`, `RoleAssignment`, `ResourcePool`, and the
+  patterns/windows created during testing) deleted afterward — dev database confirmed back to its
+  pre-test state via direct `psql` re-check.
+- Guest Scheduler (F-238) live-fire verified through the actual browser UI, not just the API: a
+  real Weekly pattern (Mon, 14:00-15:00, capacity 2) added through the real form, confirmed via
+  direct DB read-back; deleted through the UI, confirmed gone from the DB; the client-side
+  F-211-mirroring guard confirmed live (a 22:00-23:00 entry against 06:00-22:00 hours showed
+  "Outside branch hours (06:00–22:00)" and disabled Add, with no server round-trip needed to catch
+  it).
+
+**Not part of this batch, deliberately:** the actual Sunday-pattern data fix for the real affected
+branch remains held — Bala's own call, to decide per-branch after reviewing this full plan; no
+deploy dependency either way.
+
+`pnpm register:check` (216 rows, Open 110 / Resolved 106) and `pnpm diagram:verify` (67 tags, all
+agree) both green. Report and real diff going to Chief for independent re-verification before
+sign-off, same cadence as every prior slice.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

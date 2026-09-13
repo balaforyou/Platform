@@ -272,6 +272,42 @@ export function useSaveCancellationPolicy(branchId?: string) {
   });
 }
 
+/**
+ * F-220 §3.4 / F-238 — Dynamic Guest Scheduler. Writes `AvailabilityPattern` directly via the
+ * same routes the legacy admin-web Scheduling screen already uses — including the new F-211
+ * write-time operating-hours guard and the new F-237 owner check, both server-side.
+ */
+export function useSaveGuestSlot(poolId?: string) {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      daysOfWeek: string;
+      startTime: string;
+      endTime: string;
+      slotDurationMinutes: number;
+      capacity: number;
+      pricingMode?: 'FLAT' | 'PER_PERSON';
+      price?: number;
+    }) =>
+      api.post<AvailabilityPattern>(`/slot-engine/resource-pools/${poolId}/availability-patterns`, {
+        ...input,
+        status: 'ACTIVE',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: courtGroupsKeys.patterns(poolId) }),
+  });
+}
+
+export function useDeleteGuestSlot(poolId?: string) {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patternId: string) =>
+      api.delete(`/slot-engine/resource-pools/${poolId}/availability-patterns/${patternId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: courtGroupsKeys.patterns(poolId) }),
+  });
+}
+
 /** Query-key builders so mutations can invalidate exactly what they touched. */
 export const courtGroupsKeys = {
   branches: (tenantId?: string) => ['court-groups', 'branches', tenantId] as const,

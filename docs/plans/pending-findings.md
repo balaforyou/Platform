@@ -278,6 +278,20 @@ own rows and in `docs/plans/batch-log.md` Batches 30–33.
 Confirmed-ID: F-220
 Confirmed: 2 Sep 2026
 
+### admin-v2-branch-operating-hours-no-save-path
+Batch: F-211/F-237/F-238 close-out, 13 Sep 2026
+Surfaced: 31 Aug 2026 (`chief-handover-slice2-guest-member-findings.md` §5, Chief-assigned
+standalone). Delivered 10 Sep 2026 inside [[F-220]] §1a's Branch Settings rebuild, no dedicated
+implementation pass of its own. **Backfill, not a correction** — this entry, and the register row
+it backs, never existed until now despite the finding having shipped three days earlier under
+F-220. Same honest framing as F-205's own backfill; the closer precedent is [[F-224]]/[[F-225]] —
+both Chief-assigned findings that shipped inside F-220's larger pass and still got their own
+dedicated rows rather than being folded silently into F-220's text.
+Description: `Branch.workingDays`/`workingHoursStart`/`workingHoursEnd` had no admin save path
+anywhere — the data model existed, this was a UI gap only.
+Confirmed-ID: F-210
+Confirmed: 31 Aug 2026
+
 ### tenant-module-entitlement-system
 Batch: F-206 close-out
 Surfaced: 31 Aug 2026 (discovery-admin-v2-slice2-guest-booking-mgmt.md §8; consolidated into
@@ -1237,3 +1251,42 @@ real reproduction with the app genuinely backgrounded (not just a closed tab) be
 its own finding, or turns out to just be this bug making a real background push easy to miss.
 Confirmed-ID: F-236
 Confirmed: 12 Sep 2026 (Chief-originated)
+
+### branch-operating-hours-availability-pattern-write-time-guard
+Batch: F-211/F-237/F-238 close-out, 13 Sep 2026
+Surfaced: 13 Sep 2026, real production incident — an owner tried to book a walk-in guest slot on
+"New Japan Badminton Court" for 6 PM and instead saved a 1 PM slot with no error, no warning.
+Investigated live against production (real `AvailabilityPattern`/`Branch` reads: the branch's
+Branch Settings showed `05:00-23:00, all 7 days`, while its real patterns had a daily `15:00-19:00`
+gap and zero Sunday evening inventory), written up and relayed to Bala/Chief for disposition
+rather than fixed unilaterally. Chief assigned F-211 and built the fix same session.
+Description: `Branch.workingDays`/`workingHoursStart`/`workingHoursEnd` (Branch Settings, purely
+descriptive) and `AvailabilityPattern` (the actual source of real bookable inventory) are two
+independent data models with nothing cross-checking them at write time — a pattern can silently
+drift from what Branch Settings claims, in either direction, with no warning to the owner.
+Confirmed-ID: F-211
+Confirmed: 13 Sep 2026
+
+### slot-engine-availability-pattern-routes-missing-owner-check
+Batch: F-211/F-237/F-238 close-out, 13 Sep 2026
+Surfaced: 13 Sep 2026, Chief-assigned same session as [[F-211]]/[[F-238]] — same class of gap as
+[[F-223]]/[[F-227]], this route family was missed when `requireOwnerOrInternal` was introduced by
+[[F-225]] for the sibling `guest-court-eligibility` route.
+Description: `POST`/`PATCH`/`DELETE /resource-pools/:id/availability-patterns[/:patternId]`
+(`services/slot-engine/src/index.ts`) composed only `getInternalOrAdminAuth` →
+`requireModuleEntitlement` → `requirePoolScope` — no owner check, so a `branch_manager` could
+write/delete a branch's guest-scheduling patterns.
+Confirmed-ID: F-237
+Confirmed: 13 Sep 2026
+
+### admin-v2-dynamic-guest-scheduler-undeferred
+Batch: F-211/F-237/F-238 close-out, 13 Sep 2026
+Surfaced: 13 Sep 2026, Chief-assigned same session — [[F-220]] §3.4 Dynamic Guest Scheduler,
+un-deferred from its 10 Sep 2026 MVP deferral after its absence was confirmed to be the direct
+reason [[F-211]]'s drift went unnoticed: this was the only screen ever meant to show
+`AvailabilityPattern` rows, and it never actually rendered them.
+Description: admin-v2 had a dead `useAvailabilityPatterns` query and zero pattern UI anywhere —
+the only way to see or change a pool's real recurring bookable schedule was direct DB access or
+the legacy `admin-web` Scheduling screen.
+Confirmed-ID: F-238
+Confirmed: 13 Sep 2026

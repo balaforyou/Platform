@@ -606,6 +606,67 @@ async function validateAssignmentSchedule(resourcePoolId: string, daysOfWeek: un
   }
 }
 
+// F-211: patterns and branch operating hours are two independent models with nothing
+// cross-checking them at write time — confirmed to have caused a real production incident
+// (New Japan Badminton Court: Branch Settings claimed 7 days/05:00-23:00, real patterns left
+// Sunday evening with zero inventory). Mirrors the existing getBranchTimeZone(branchId) pattern
+// immediately below — same shared-Prisma read, no cross-service HTTP call needed.
+async function getBranchOperatingWindow(branchId: string): Promise<{
+  workingDays: string[];
+  workingHoursStart: string | null;
+  workingHoursEnd: string | null;
+}> {
+  const branch = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { workingDays: true, workingHoursStart: true, workingHoursEnd: true },
+  });
+  return branch ?? { workingDays: [], workingHoursStart: null, workingHoursEnd: null };
+}
+
+// Branch.workingDays stores full day names ("Monday" ... "Sunday"); AvailabilityPattern.daysOfWeek
+// stores ISO weekday digits (1=Mon ... 7=Sun, same convention as isoWeekday()/parseIsoDays() below).
+const DAY_NAME_TO_ISO: Record<string, string> = {
+  Monday: '1',
+  Tuesday: '2',
+  Wednesday: '3',
+  Thursday: '4',
+  Friday: '5',
+  Saturday: '6',
+  Sunday: '7',
+};
+
+// F-211: reject (fail closed, explicit code) a pattern write that falls outside the branch's own
+// stated operating hours/days. Fails open only when the branch has never had hours configured at
+// all (nothing real to validate against yet) — same "don't block on absent data" convention as
+// every other optional-field check in this file.
+async function validatePatternAgainstBranchHours(branchId: string, data: {
+  daysOfWeek?: string;
+  startTime?: string;
+  endTime?: string;
+}, reply: any) {
+  const { workingDays, workingHoursStart, workingHoursEnd } = await getBranchOperatingWindow(branchId);
+  if (!workingHoursStart || !workingHoursEnd || workingDays.length === 0) return; // never configured — nothing to validate against
+
+  const allowedIsoDays = new Set(workingDays.map((day) => DAY_NAME_TO_ISO[day]).filter(Boolean));
+  const patternDays = (data.daysOfWeek ?? '').split(',').map((day) => day.trim()).filter(Boolean);
+  const outsideDays = patternDays.filter((day) => !allowedIsoDays.has(day));
+
+  const outsideTime =
+    data.startTime !== undefined && data.endTime !== undefined &&
+    (data.startTime < workingHoursStart || data.endTime > workingHoursEnd);
+
+  if (outsideDays.length > 0 || outsideTime) {
+    reply.status(400);
+    const parts: string[] = [];
+    if (outsideDays.length > 0) parts.push(`day(s) [${outsideDays.join(',')}] are not in the branch's working days`);
+    if (outsideTime) parts.push(`time range ${data.startTime}-${data.endTime} falls outside branch hours ${workingHoursStart}-${workingHoursEnd}`);
+    const err = new Error(`Pattern outside branch operating hours: ${parts.join('; ')}`);
+    (err as any).statusCode = 400;
+    (err as any).code = 'PATTERN_OUTSIDE_OPERATING_HOURS';
+    throw err;
+  }
+}
+
 function patternDataFromBody(body: any, reply: any, partial = false) {
   const data: any = {};
   const required = ['daysOfWeek', 'startTime', 'endTime', 'slotDurationMinutes', 'capacity'];
@@ -1707,10 +1768,12 @@ server.get('/resource-pools/:id/availability-patterns', async (request, reply) =
 
 server.post('/resource-pools/:id/availability-patterns', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  requireOwnerOrInternal(auth, reply); // F-237: same class of gap as F-223, this route family was missed
   await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id } = request.params as any;
-  await requirePoolScope(auth, id, reply);
+  const pool = await requirePoolScope(auth, id, reply);
   const data = patternDataFromBody(request.body as any, reply);
+  await validatePatternAgainstBranchHours(pool.branchId, data, reply); // F-211
 
   const pattern = await prisma.availabilityPattern.create({
     data: {
@@ -1724,9 +1787,10 @@ server.post('/resource-pools/:id/availability-patterns', async (request, reply) 
 
 server.patch('/resource-pools/:id/availability-patterns/:patternId', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  requireOwnerOrInternal(auth, reply); // F-237
   await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id, patternId } = request.params as any;
-  await requirePoolScope(auth, id, reply);
+  const pool = await requirePoolScope(auth, id, reply);
 
   const existing = await prisma.availabilityPattern.findFirst({ where: { id: patternId, resourcePoolId: id } });
   if (!existing) {
@@ -1744,6 +1808,7 @@ server.patch('/resource-pools/:id/availability-patterns/:patternId', async (requ
     slotDurationMinutes: body.slotDurationMinutes !== undefined ? Number(body.slotDurationMinutes) : existing.slotDurationMinutes,
   };
   const data = patternDataFromBody(merged, reply, false);
+  await validatePatternAgainstBranchHours(pool.branchId, data, reply); // F-211
 
   return prisma.availabilityPattern.update({
     where: { id: patternId },
@@ -1753,6 +1818,7 @@ server.patch('/resource-pools/:id/availability-patterns/:patternId', async (requ
 
 server.delete('/resource-pools/:id/availability-patterns/:patternId', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
+  requireOwnerOrInternal(auth, reply); // F-237
   await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
   const { id, patternId } = request.params as any;
   await requirePoolScope(auth, id, reply);
