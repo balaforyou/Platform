@@ -2832,6 +2832,38 @@ deploy dependency either way.
 agree) both green. Report and real diff going to Chief for independent re-verification before
 sign-off, same cadence as every prior slice.
 
+## Batch 59 — F-211's immediate production data fix, closed out
+
+**Findings:** F-211 (Description updated with the follow-up closure — Resolution text from Batch
+58 untouched)
+**Status:** Done
+**Commits:** docs-only, this pass — no code change (the fix itself was a real production API
+call, not a commit)
+
+The one piece Batch 58 deliberately left open: the real Sunday-exclusion data fix for the specific
+branch/pattern the original F-211 incident traced to. Bala's explicit go-ahead, applied via the
+real `PATCH /resource-pools/:id/availability-patterns/:patternId` endpoint (internal-key auth, no
+raw SQL) — `AvailabilityPattern` `12f8324c-6099-414f-aae5-3c57eb6cfb0e` ("New Japan Badminton
+Court"'s evening pattern, `19:00-23:00`), `daysOfWeek` `1,2,3,4,5,6` → `1,2,3,4,5,6,7`.
+
+**Real evidence, not a trusted 200:** direct `psql` read-back against production confirmed
+`daysOfWeek = 1,2,3,4,5,6,7` on the actual row; a live `GET .../availability` call confirmed all
+four evening windows (19:00/20:00/21:00/22:00) genuinely generated and bookable — both for the
+remainder of that same Sunday (real-time proof the incident's exact failure mode is now fixed) and
+the following Sunday (20 Sep), confirming the fix holds going forward, not just for one date.
+
+**Scope discipline, explicit:** this touches one pattern on one branch only — no other branch's
+patterns were assumed fixed or touched. The daily `15:00-19:00` gap on this same branch (present
+every day, not just Sunday) remains explicitly open and undecided — a separate "deliberate break
+vs. drift" question only Bala can answer, never bundled into this go-ahead.
+
+Logged as a Description update on F-211's existing Resolved row (register format: a dated note
+survives in Description, never overwrites Resolution) rather than a new row — same real finding,
+its previously-deferred data-fix half now closed.
+
+`pnpm register:check` (216 rows, Open 110 / Resolved 106) and `pnpm diagram:verify` (67 tags, all
+agree) both green.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
