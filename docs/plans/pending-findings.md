@@ -278,6 +278,20 @@ own rows and in `docs/plans/batch-log.md` Batches 30–33.
 Confirmed-ID: F-220
 Confirmed: 2 Sep 2026
 
+### admin-v2-branch-operating-hours-no-save-path
+Batch: F-211/F-237/F-238 close-out, 13 Sep 2026
+Surfaced: 31 Aug 2026 (`chief-handover-slice2-guest-member-findings.md` §5, Chief-assigned
+standalone). Delivered 10 Sep 2026 inside [[F-220]] §1a's Branch Settings rebuild, no dedicated
+implementation pass of its own. **Backfill, not a correction** — this entry, and the register row
+it backs, never existed until now despite the finding having shipped three days earlier under
+F-220. Same honest framing as F-205's own backfill; the closer precedent is [[F-224]]/[[F-225]] —
+both Chief-assigned findings that shipped inside F-220's larger pass and still got their own
+dedicated rows rather than being folded silently into F-220's text.
+Description: `Branch.workingDays`/`workingHoursStart`/`workingHoursEnd` had no admin save path
+anywhere — the data model existed, this was a UI gap only.
+Confirmed-ID: F-210
+Confirmed: 31 Aug 2026
+
 ### tenant-module-entitlement-system
 Batch: F-206 close-out
 Surfaced: 31 Aug 2026 (discovery-admin-v2-slice2-guest-booking-mgmt.md §8; consolidated into
