@@ -2928,6 +2928,56 @@ until this deploy is independently signed off; pruning is Chief/Bala's call once
 changes beyond this entry — F-211/F-237/F-238's own rows already landed in Batch 58, the data-fix
 closeout in Batch 59).
 
+## Batch 61 — VM image disk prune, post production deploy #4 (operational, no finding ID)
+
+**Findings:** none — routine operational maintenance, per Chief's explicit instruction ("no new
+finding ID — this isn't a bug, it's routine maintenance surfaced by a deploy"). F-214 (VM
+image-retention policy) stays Open and unscoped, deliberately not decided by this pass.
+**Status:** Done
+**Commits:** none — VM-only operational change, no code/docs beyond this log entry
+
+Chief-authorized, one-off cleanup ("the `:rollback` tags from that round no longer need to
+survive, so this is now safe to run" — deploy #4 fully signed off, merge `651dcad`, independently
+confirmed against the real remote before starting). Same real recurring pattern this project has
+already named twice: F-214 itself, and the ad hoc prune during F-206's close-out (78→16 images,
+13.4→5.6GB reclaimed then). `promote.sh` pulls a full new image set on every promotion without
+pruning the old ones — the gap keeps growing round over round unless done deliberately.
+
+**Re-confirmed current state first, not assumed from Batch 60's numbers** (a few hours had
+passed): `df -h /` showed `88%` used (`3.7G` free, slightly worse than Batch 60's `87%`/`3.9G`) —
+`docker system df` showed 60 images, 17.91GB reclaimable, only 7 active.
+
+**What was kept, identified explicitly before touching anything:** the 7 images actually backing
+the running containers (`docker ps` + `docker inspect --format '{{.Config.Image}} -> {{.Image}}'`
+on every running container, confirmed digests matched the `694b93b` deploy's own pull output) —
+`gcp-vm-{slot-engine,identity-auth,tenant-management,payment,notification,caddy}` (694b93b) +
+`postgres:16-alpine` — plus one full prior generation, the `:rollback`-tagged set from deploy #3
+(`6055b97`), Bala's default policy ("keep one prior generation unless told otherwise") applied
+since nothing explicitly overrode it for this specific pass.
+
+**What was removed, by explicit image ID (not a blanket `docker image prune -a`, which would have
+also deleted the `:rollback` set — it isn't attached to any running container either, so a
+tag-blind prune can't tell it apart from truly stale images):** six full older generations —
+`3b98e86` (F-233's fix, superseded by deploy #3), `15bedc68`, `1da6c7e9` (F-220's PR #15),
+`ece5327d`, `85b2731a` (Slice 1 production), `c9b906c7` — 7 images each, 42 total; plus three
+unrelated leftover images (`node:22-bookworm-slim`, `node:22-alpine`, `curlimages/curl:latest`,
+each from an earlier ad hoc verification container, not part of the deploy pipeline).
+
+**Real before/after, not assumed:**
+| | Disk (`/`) | Images | Docker image storage |
+|---|---|---|---|
+| Before | 88% used, 3.7G free | 60 (7 active) | 21.2GB, 17.91GB reclaimable |
+| After | 41% used, 18G free | 15 (7 active) | 6.528GB, 3.308GB reclaimable (the kept rollback set) |
+
+**Production confirmed untouched and healthy afterward:** `verify-deployment.mjs` against
+`https://elitecourts.duckdns.org` — all 7 components still PASS at `694b93ba133a`; `docker ps`
+confirmed all 7 containers' uptime unchanged (52 minutes, same as immediately before the prune —
+proof they were never touched, not merely restarted-and-healthy).
+
+No code, register, or `pending-findings.md` change — this is operational cleanup, not a finding
+fix, per Chief's explicit instruction not to fold this into F-214's still-undecided retention
+policy.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
