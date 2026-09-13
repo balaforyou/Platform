@@ -1251,3 +1251,42 @@ real reproduction with the app genuinely backgrounded (not just a closed tab) be
 its own finding, or turns out to just be this bug making a real background push easy to miss.
 Confirmed-ID: F-236
 Confirmed: 12 Sep 2026 (Chief-originated)
+
+### branch-operating-hours-availability-pattern-write-time-guard
+Batch: F-211/F-237/F-238 close-out, 13 Sep 2026
+Surfaced: 13 Sep 2026, real production incident — an owner tried to book a walk-in guest slot on
+"New Japan Badminton Court" for 6 PM and instead saved a 1 PM slot with no error, no warning.
+Investigated live against production (real `AvailabilityPattern`/`Branch` reads: the branch's
+Branch Settings showed `05:00-23:00, all 7 days`, while its real patterns had a daily `15:00-19:00`
+gap and zero Sunday evening inventory), written up and relayed to Bala/Chief for disposition
+rather than fixed unilaterally. Chief assigned F-211 and built the fix same session.
+Description: `Branch.workingDays`/`workingHoursStart`/`workingHoursEnd` (Branch Settings, purely
+descriptive) and `AvailabilityPattern` (the actual source of real bookable inventory) are two
+independent data models with nothing cross-checking them at write time — a pattern can silently
+drift from what Branch Settings claims, in either direction, with no warning to the owner.
+Confirmed-ID: F-211
+Confirmed: 13 Sep 2026
+
+### slot-engine-availability-pattern-routes-missing-owner-check
+Batch: F-211/F-237/F-238 close-out, 13 Sep 2026
+Surfaced: 13 Sep 2026, Chief-assigned same session as [[F-211]]/[[F-238]] — same class of gap as
+[[F-223]]/[[F-227]], this route family was missed when `requireOwnerOrInternal` was introduced by
+[[F-225]] for the sibling `guest-court-eligibility` route.
+Description: `POST`/`PATCH`/`DELETE /resource-pools/:id/availability-patterns[/:patternId]`
+(`services/slot-engine/src/index.ts`) composed only `getInternalOrAdminAuth` →
+`requireModuleEntitlement` → `requirePoolScope` — no owner check, so a `branch_manager` could
+write/delete a branch's guest-scheduling patterns.
+Confirmed-ID: F-237
+Confirmed: 13 Sep 2026
+
+### admin-v2-dynamic-guest-scheduler-undeferred
+Batch: F-211/F-237/F-238 close-out, 13 Sep 2026
+Surfaced: 13 Sep 2026, Chief-assigned same session — [[F-220]] §3.4 Dynamic Guest Scheduler,
+un-deferred from its 10 Sep 2026 MVP deferral after its absence was confirmed to be the direct
+reason [[F-211]]'s drift went unnoticed: this was the only screen ever meant to show
+`AvailabilityPattern` rows, and it never actually rendered them.
+Description: admin-v2 had a dead `useAvailabilityPatterns` query and zero pattern UI anywhere —
+the only way to see or change a pool's real recurring bookable schedule was direct DB access or
+the legacy `admin-web` Scheduling screen.
+Confirmed-ID: F-238
+Confirmed: 13 Sep 2026

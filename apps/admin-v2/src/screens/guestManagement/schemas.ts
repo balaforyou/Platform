@@ -144,6 +144,81 @@ export const hourThreshold = z.coerce.number().int().min(0);
 
 const cancellationTierInput = z.object({ hours: hourThreshold, percent: refundPercent });
 
+/* -------------------------------------------------------------------------- */
+/* F-220 §3.4 / F-238 — Dynamic Guest Scheduler (Daily/Weekly only)             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Backs the "Add a guest slot" form. Writes `AvailabilityPattern` directly — Daily/Weekly share
+ * one schema, no stored distinction (Daily forces `daysOfWeek` to all 7, never shown to the
+ * admin). Single-Day is deliberately not offered here (Bala, 10 Sep 2026 — Option A): a one-off
+ * date goes through Branch Settings → Special Hours instead, avoiding the real collision risk
+ * two independent surfaces writing the same `AvailabilityOverride` row would create.
+ *
+ * `branchHours` (optional) is the F-211 client-side mirror of the server's write-time guard —
+ * when the branch has real hours configured, catch a day/time outside them before submit rather
+ * than only after a 400 `PATTERN_OUTSIDE_OPERATING_HOURS`.
+ */
+export const guestSlotSchema = (branchHours?: { workingDays: string[]; workingHoursStart: string | null; workingHoursEnd: string | null }) =>
+  z
+    .object({
+      recurrence: z.enum(['Daily', 'Weekly']),
+      daysOfWeek: z.array(z.enum(['1', '2', '3', '4', '5', '6', '7'])),
+      startTime: z.string().regex(HHMM_RE),
+      endTime: z.string().regex(HHMM_RE),
+      slotDurationMinutes: z.coerce.number().int().positive().refine(dividesADay, DIVIDES_A_DAY_MESSAGE),
+      capacity: z.coerce.number().int().positive(),
+      customRate: z.boolean(),
+      price: z.coerce.number().min(0).optional(),
+    })
+    .superRefine((v, ctx) => {
+      const effectiveDays = v.recurrence === 'Daily' ? ['1', '2', '3', '4', '5', '6', '7'] : v.daysOfWeek;
+      if (v.recurrence === 'Weekly' && v.daysOfWeek.length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['daysOfWeek'], message: 'Pick at least one day' });
+      }
+      const [sh, sm] = v.startTime.split(':').map(Number);
+      const [eh, em] = v.endTime.split(':').map(Number);
+      const start = sh * 60 + sm;
+      const end = eh * 60 + em;
+      // Mirrors the server's real INVALID_TIME_RANGE check (validateWholeSlotRange,
+      // slot-engine/src/index.ts) — catch it client-side, not after a 400.
+      if (end <= start) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['endTime'], message: 'End time must be after start time' });
+      } else if ((end - start) % v.slotDurationMinutes !== 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['slotDurationMinutes'],
+          message: `Time range must divide evenly into ${v.slotDurationMinutes}-minute slots`,
+        });
+      }
+      if (v.customRate && v.price === undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['price'], message: 'Enter a price, or turn off Custom Rate' });
+      }
+      // F-211 client-side mirror: only checked once the branch's own hours are real and configured.
+      if (branchHours?.workingHoursStart && branchHours?.workingHoursEnd && branchHours.workingDays.length > 0) {
+        const outsideDays = effectiveDays.filter((d) => !DAY_NAME_TO_ISO_SET(branchHours.workingDays).has(d));
+        if (outsideDays.length > 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['daysOfWeek'],
+            message: `Branch is closed on the day(s) selected — open days: ${branchHours.workingDays.join(', ')}`,
+          });
+        }
+        if (v.startTime < branchHours.workingHoursStart || v.endTime > branchHours.workingHoursEnd) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['startTime'],
+            message: `Outside branch hours (${branchHours.workingHoursStart}–${branchHours.workingHoursEnd})`,
+          });
+        }
+      }
+    });
+
+const DAY_NAME_TO_ISO_MAP: Record<string, string> = {
+  Monday: '1', Tuesday: '2', Wednesday: '3', Thursday: '4', Friday: '5', Saturday: '6', Sunday: '7',
+};
+const DAY_NAME_TO_ISO_SET = (workingDays: string[]) => new Set(workingDays.map((d) => DAY_NAME_TO_ISO_MAP[d]).filter(Boolean));
+
 export const cancellationPolicySchema = z
   .object({ tiers: z.tuple([cancellationTierInput, cancellationTierInput, cancellationTierInput]) })
   .superRefine((v, ctx) => {
