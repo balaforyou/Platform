@@ -237,3 +237,43 @@ Net: 1 confirmed-pre-existing skip, 1 confirmed-expected route-collapse failure,
 
 ### 9.4 Dev stack left running
 The docker stack (`dev-up.ps1`) and the `admin-v2` vite window it also started are still running as of this report, in case you want to poke at it directly. Stop with `.\dev-down.ps1`.
+
+---
+
+## 10. Correction 6 (follow-up) — `Button` secondary variant unreadable in dark mode
+
+### 10.1 The fix, exactly as specified
+
+`apps/guest-member-pwa/src/components/ui/Button.css`, `.gpwa-btn[data-variant='secondary']`: `background: #fff` (a static literal, never themed) → `background: var(--color-neutral-100)`. Also updated the variant's `:hover` rule (`color-mix(in srgb, #fff 94%, black)` → `color-mix(in srgb, var(--color-neutral-100) 94%, black)`) — not a separate speculative fix, the same static `#fff` literal feeding directly off the same declaration I was already changing; leaving it would have produced a mismatched hover shade (very bright in dark mode) against the newly-themed base.
+
+### 10.2 Real computed numbers, before/after (from the actual shipped `contrastRatio` function)
+
+| | Before | After |
+|---|---|---|
+| Light (`#fff` / `#f9f4ed` bg, `#201e1d` text) | 16.60:1 | 15.17:1 |
+| Dark (bg, `#f0e9dc` text) | **1.21:1 (fail — matches what Bala saw)** | **13.92:1 (pass)** |
+
+Light-mode regression check: `#ffffff` vs `#f9f4ed` (the two background candidates) contrast *to each other* is 1.094:1 — i.e. visually near-identical, confirming no visible light-mode change, consistent with the small 16.60→15.17 shift above (still comfortably AA/AAA either way).
+
+**Live-rendered confirmation:** the shared `Button` component (`.gpwa-btn`) isn't mounted anywhere reachable in the running app yet — confirmed by grep: the only real consumer of `<Button variant="secondary">` is `ConfirmDialog.tsx`'s Cancel button, and nothing outside `components/ui/` currently imports `ConfirmDialog` or `Button` (expected — Phase 0 built the components, wiring them into real screens is future work). So I injected the actual real CSS rule content (verbatim from the committed file) into the live page and rendered a real `button.gpwa-btn[data-variant='secondary']` element, then read `getComputedStyle` under explicit `data-theme="light"` and `data-theme="dark"`:
+- Light: `rgb(249, 244, 237)` bg / `rgb(32, 30, 29)` text — exactly `#f9f4ed`/`#201e1d`, matching the "after" numbers above.
+- Dark: `rgb(32, 29, 23)` bg / `rgb(240, 233, 220)` text — exactly `#201d17`/`#f0e9dc`, matching the "after" numbers above.
+
+### 10.3 Important, unasked-for finding — this fix doesn't change what Bala actually saw
+
+The screenshot's "View My Bookings" button is **not** the shared `Button` component at all. It's a separate, pre-existing, per-screen inline-styled button in `apps/guest-member-pwa/src/main.tsx:441` (`MainDashboard`, `id="view-my-bookings-btn"`):
+```
+style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', color: 'var(--color-text)', ... }}
+```
+Identical bug, identical root cause, but a completely different file — `Button.css`'s fix has zero visible effect on it. **Grepped the same `background: '#fff'` + `color: 'var(--color-text)'` pattern across the app and it's widespread**, not a one-off: `main.tsx` (two occurrences, including this one), `BookingHistory.tsx`, `BookingConfirmation.tsx`, `CourtBooking.tsx` (three occurrences) all pair a static `#fff` with a themed `--color-text`. (A broader grep for bare `background: '#fff'` alone, regardless of pairing, turns up ~20 more inline occurrences across `BranchDashboard.tsx`, `BranchSelect.tsx`, `LoginScreen.tsx`, `CompleteSignupScreen.tsx`, `BranchAbout.tsx`, `BookingPay.tsx`, `PwaInstallPrompt.tsx` — most paired with a static or non-inverting color so likely not all broken the same way, but worth a real per-file check before assuming otherwise.)
+
+**Not fixed here** — every one of these lives in per-screen content explicitly out of Phase 0's scope (no per-screen rebuild), and touching them means editing screens this slice deliberately doesn't touch. Flagging this as the real, scoped-properly item: **the actual visible dark-mode bug Bala's screenshot shows is still present after this commit** and needs its own pass (likely as part of whichever future slice rebuilds the Home screen, or a dedicated dark-mode inline-style sweep) — this Correction 6 only fixes the shared component so the *next* consumer of `Button variant="secondary"` doesn't inherit the same defect.
+
+### 10.4 Scan for other static-literal blind spots in `primary`/`destructive` (as asked, not fixed speculatively)
+
+- `primary`: `color: #3a2800` is a static literal, but its background (`--color-accent-2-400`) is `#e6ad02` in **both** light and dark (confirmed in `index.css` — this ramp doesn't invert), so the pairing is theme-stable by construction, not a blind spot. Already in the Correction 5 table at 6.97:1.
+- `destructive`: `background: var(--color-destructive)` / `color: #fff` — `--color-destructive` (`#b3261e`) is defined once in `index.css`, never redefined for dark, so it's the same red in both themes — also theme-stable, not a blind spot.
+- No other static color literal in `Button.css` pairs with a variable that inverts per theme. `secondary` was the only real instance.
+
+### 10.5 Build — clean
+`npx tsc --noEmit` and `npm run build` both clean in `guest-member-pwa` (`✓ built in 5.24s`).

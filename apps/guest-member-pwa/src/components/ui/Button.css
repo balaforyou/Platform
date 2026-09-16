@@ -27,7 +27,12 @@
   color: #3a2800;
 }
 .gpwa-btn[data-variant='secondary'] {
-  background: #fff;
+  /* F-235 Phase 0 Correction 6: was a static #fff literal, never themed -- --color-text
+     correctly inverts to pale cream in dark mode, landing on a background still pinned to
+     white, effectively unreadable. --color-neutral-100 is #f9f4ed in light mode (visually
+     indistinguishable from #fff) and #201d17 in dark mode, an already-verified AA pass against
+     --color-text (13.92:1, the same pairing checked for cards). */
+  background: var(--color-neutral-100);
   border: 1px solid var(--color-neutral-300);
   color: var(--color-text);
 }
@@ -41,7 +46,9 @@
     background: color-mix(in srgb, var(--color-accent-2-400) 94%, black);
   }
   .gpwa-btn[data-variant='secondary']:not(:disabled):hover {
-    background: color-mix(in srgb, #fff 94%, black);
+    /* Same Correction 6 fix -- was mixing from the static #fff, which no longer matches the
+       variant's own (now themed) base background above. */
+    background: color-mix(in srgb, var(--color-neutral-100) 94%, black);
   }
   .gpwa-btn[data-variant='destructive']:not(:disabled):hover {
     background: color-mix(in srgb, var(--color-destructive) 94%, black);
