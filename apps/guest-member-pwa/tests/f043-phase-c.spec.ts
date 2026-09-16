@@ -301,7 +301,12 @@ test.describe('F-043 Phase C scheduling UI', () => {
     const guestContext = await browser.newContext();
     const guestPage = await guestContext.newPage();
     await loginByOtp(guestPage, guestPhone);
-    await guestPage.goto(`/branches/${branchId}/book/${poolId}?tenant=${tenantSubdomain}`);
+    // F-235 Slice A: venue/pool selection now lives inside the merged /book screen. courtowner1
+    // has more than one real branch, so auto-select-first can't be relied on -- pick f043c-branch
+    // explicitly via the venue-switcher sheet, same as a real guest would.
+    await guestPage.goto(`/book?tenant=${tenantSubdomain}`);
+    await guestPage.click('.gpwa-branchbooking__venue-chip');
+    await guestPage.click(`[id^="branch-card-${branchId}"]`);
     const guestAvailabilityResponse = guestPage.waitForResponse((res) =>
       res.url().includes(`/api/slot-engine/resource-pools/${poolId}/availability?date=${guestDate}`)
       && res.request().method() === 'GET',
@@ -354,7 +359,9 @@ test.describe('F-043 Phase C scheduling UI', () => {
     await expect(bookingCard).toContainText('F043 Resource Pool');
     await guestPage.screenshot({ path: 'test-results/f043-guest-booking-held.png', fullPage: true });
 
-    await guestPage.goto(`/branches/${branchId}/book/${poolId}?tenant=${tenantSubdomain}`);
+    // Branch/pool selection is cached (localStorage['selected_branch_id'] + the single-pool
+    // auto-select), so returning to /book lands back on the same f043c-branch/pool directly.
+    await guestPage.goto(`/book?tenant=${tenantSubdomain}`);
     const closedAvailabilityResponse = guestPage.waitForResponse((res) =>
       res.url().includes(`/api/slot-engine/resource-pools/${poolId}/availability?date=${closedDate}`)
       && res.request().method() === 'GET',

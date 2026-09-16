@@ -1,0 +1,74 @@
+/* F-235 Slice A -- bottom-sheet shell cloned from components/ui/AccountSheet.css, same mechanism
+   as VenueSwitcherSheet.css. */
+
+.gpwa-about-sheet__overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-warm);
+  z-index: 60;
+  animation: gpwa-about-sheet-fade-in 0.2s ease-out;
+}
+
+.gpwa-about-sheet__content {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 430px;
+  max-height: 85vh;
+  margin: 0 auto;
+  background: var(--color-neutral-100);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  animation: gpwa-about-sheet-slide-up 0.24s ease-out;
+}
+
+@keyframes gpwa-about-sheet-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes gpwa-about-sheet-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gpwa-about-sheet__content {
+    animation: gpwa-about-sheet-fade-in 0.2s ease-out;
+  }
+}
+
+.gpwa-about-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex: none;
+}
+.gpwa-about-sheet__title {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 20px;
+  color: var(--color-text);
+  margin: 0;
+}
+.gpwa-about-sheet__close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.gpwa-about-sheet__body {
+  flex: 1;
+  overflow-y: auto;
+}

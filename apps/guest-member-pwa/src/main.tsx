@@ -303,13 +303,11 @@ function MainDashboard() {
     };
   };
 
+  // F-235 Slice A: venue selection now lives inside the merged /book screen itself (a
+  // venue-switcher chip, not a separate route), so there's no pre-step branching on whether a
+  // branch was previously saved -- /book reads localStorage['selected_branch_id'] itself.
   const handleBookNow = () => {
-    const savedBranch = localStorage.getItem('selected_branch_id');
-    if (savedBranch) {
-      navigate(`/branches/${savedBranch}`);
-    } else {
-      navigate('/branches');
-    }
+    navigate('/book');
   };
 
   const handleConfirmAttendance = async () => {

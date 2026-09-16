@@ -200,6 +200,12 @@
      pickEmphasisStep (see main.tsx's emphasisBackgrounds prop); the accent-700 fallback only
      applies before tenant resolution finishes. */
   --color-accent-emphasis: var(--color-accent-emphasis-dark, var(--color-accent-700));
+  /* F-235 Slice A: --slot-available-surface (CourtBooking.tsx's/BranchBooking.tsx's real
+     "available" slot card background) resolves to --surface-white, a bare #ffffff never
+     covered by Phase 0's dark pass -- paired with --color-text (which correctly inverts to
+     pale cream), the available slot cards were unreadable in dark mode. Same root-cause pattern
+     as Correction 6's Button.css fix, caught live while verifying this slice's real screen. */
+  --slot-available-surface: var(--color-neutral-100);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -228,6 +234,7 @@
     --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
     --color-accent-emphasis: var(--color-accent-emphasis-dark, var(--color-accent-700));
+    --slot-available-surface: var(--color-neutral-100);
   }
 }
 
