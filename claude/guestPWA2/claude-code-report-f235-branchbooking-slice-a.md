@@ -67,7 +67,30 @@ Ran all 4 for real against the live stack. **None currently pass in this environ
 `git status --short apps/admin-web apps/admin-v2` — clean, zero changes.
 
 ## 7. What's needed before this can be signed off
-1. Someone who can adjust `guest-booking.spec.ts`'s (and the shared branch's) fixture credentials/entitlement so the F-206 gate doesn't block it — real fixture/backend work, not a Slice A code change.
+1. ~~Someone who can adjust `guest-booking.spec.ts`'s fixture credentials so the F-206 gate doesn't block it~~ — **done, see §8.**
 2. A way to run `f043-phase-c.spec.ts` without the port collision — either tear down the shared docker stack for that one run, or give it non-conflicting ports.
 3. Someone to help pin down the `f023-full-system.spec.ts` `waitForResponse` timeout's real cause — reproduced three times identically, real page state says the app itself is correct, but I could not identify why Playwright's own listener misses the event.
 4. Real Android Chrome / iOS Safari passes — same standing item as every prior slice, needs a real device.
+
+---
+
+## 8. Follow-up — `guest-booking.spec.ts` login fixture fixed
+
+### 8.1 The fix, scoped exactly as asked
+`9999999999` (this spec's login phone) is `seed-test-data.ts`'s own seeded user (`userId: '33333333-...'`) — and that seed script explicitly gives it `RoleAssignment { role: 'OWNER' }` (`tests/seed-test-data.ts:125-129`). It was never a coincidental collision with a different fixture; it's this test's own seed deliberately making the login account an owner. F-206's `GUEST_BOOKING` module-entitlement gate correctly 403s that admin-role JWT off the guest-facing `resource-pools` endpoint.
+
+Checked how other specs that exercise real guest flows source their test phone: `f023-full-system.spec.ts` uses `guestCPhone = '+919866666666'`, `f043-phase-c.spec.ts` uses `guestPhone = '+919855555555'` — both fresh, arbitrary numbers never assigned a role anywhere, relying on this app's real self-registers-as-GUEST-on-first-verify behavior. Grepped the whole `tests/` and `services/` trees for a candidate before picking one, to avoid colliding with any other fixture's seeded identity: swapped `guest-booking.spec.ts`'s login to `9877712345`, confirmed unused anywhere. **No app code touched — one line in one test file, plus the explanatory comment.**
+
+### 8.2 Real verification — got well past the 403, hit a different, already-documented pre-existing issue
+
+Re-ran against the live stack. Real, reproducible progress (confirmed twice, identical both times): login succeeds as a genuine new guest → `/book` → venue-switcher sheet opens, real Coimbatore Main Arena card selected → About sheet opens, "Cafeteria" visible, closed → the merged screen's real multi-pool chip row renders (confirmed **133 real pool buttons** in the live accessibility snapshot, consistent with the pool-count investigation from the first pass) → `#court-pool-card-courtpool-e2e-001` ("E2E Test Court A") selected and shows `[active]` → real day-picker renders (WED 16 through TUE 22).
+
+**Then it stops at a different, real issue:** "02 · START" shows "No slots available on this date. Try another date." — `window-e2e-001` isn't landing on what the screen treats as today. This is **not new and not something I'm patching around** — `apps/guest-member-pwa/CLAUDE.md`'s own documented trap: *"`tests/seed-test-data.ts`'s `alignTimeToBoundary` mixes local-time `getHours`/`setHours` with a `+2h` offset... the generated window and the booking screen's default date disagree."* Read `seed-test-data.ts:183-196` directly to confirm this isn't a stale citation: `alignTimeToBoundary` does exactly what's described (local `getHours`/`setHours`, no timezone normalization), and `window-e2e-001`'s `startTime` is computed as `alignTimeToBoundary(now + 2h, 60)` at `seed-test-data.ts:194` — the exact mechanism the doc names.
+
+Per this task's own instruction, **not patching this silently** — it's `seed-test-data.ts`'s pre-existing time-of-day sensitivity, out of scope for a login-credential fix, and already a known, named issue in this app's own CLAUDE.md rather than something I'm newly discovering.
+
+### 8.3 Net result
+The credential fix is verified correct and working: the spec now authenticates as a genuine guest and clears the F-206 gate that was blocking it, reaching real venue/pool selection for the first time. It still doesn't pass end-to-end in this environment, but the blocker is now the already-documented seed-data time-of-day flakiness — a different, pre-existing, named issue — not the credential, and not anything in this slice's app code.
+
+### 8.4 Build — clean
+No app code changed this round, so no rebuild needed; `guest-booking.spec.ts` is TypeScript-checked implicitly by Playwright's own run (both real runs above executed without a compile error).

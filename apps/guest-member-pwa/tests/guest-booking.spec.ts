@@ -14,8 +14,14 @@ test.describe('Guest Booking Flow E2E', () => {
     // ==========================================
 
     // 1. Authentication (OTP Login)
+    // F-235 Slice A fixture fix: 9999999999 is seed-test-data.ts's own OWNER-role member
+    // (RoleAssignment role: 'OWNER'), not a genuine guest -- F-206's GUEST_BOOKING
+    // module-entitlement gate correctly 403s that admin-role JWT off the guest-facing
+    // resource-pools endpoint. Real guest flows in other specs (f023, f043) use a fresh,
+    // never-seeded-with-a-role phone number instead, relying on this app's real self-registers-
+    // as-GUEST-on-first-verify behavior -- same convention here.
     await page.goto('/login');
-    await page.fill('input[placeholder="99999 99999"]', '9999999999');
+    await page.fill('input[placeholder="99999 99999"]', '9877712345');
     await page.click('button[type="submit"]');
 
     // Wait for code input to show
