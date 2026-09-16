@@ -1,7 +1,7 @@
 # Claude Code Implementation Report — F-235 Phase 0: Tokens/Theming, Components, Nav/Shell
 
 **Branch:** `f235-phase0` (off `main`@`fe918121e0`)
-**Status:** Implemented and locally verified to the extent this environment allows (no Docker/Postgres available in this session — see §3). **Not committed, not pushed, not merged** — per project rule 6 and the handover's own §0, this is uncommitted on disk pending review. Awaiting explicit sign-off before any commit.
+**Status:** Implemented and locally verified to the extent this environment allows (no Docker/Postgres available in this session — see §3). Committed to `f235-phase0` (`243b576`) and pushed to origin per your request. **Not merged to `main`.** **Update, same day:** Correction 5 (§8 below) fixes the two dark-mode contrast issues reported in §3.4 — one was real, one was a mistake in my own original verification script. See §8 for the honest accounting and the real, re-verified numbers.
 
 ---
 
@@ -127,3 +127,73 @@ No per-screen content rebuild; no `admin-v2` changes; `ProtectedRoute`'s phone-g
 5. Confirmation that Correction 3's and Correction 4's resolutions (both made with your direct input this session) are what you want landed, vs. revised further.
 
 No commit, push, or merge has been made — everything above is on the `f235-phase0` branch, currently uncommitted on disk, pending this review.
+
+---
+
+## 8. Correction 5 (follow-up) — fixing the two reported dark-mode contrast failures
+
+### 8.1 Honest correction to my own §3.4: one of the two failures was never real
+
+Before implementing anything, I re-verified both pairs directly against the actual shipped files (not from memory), since re-deriving before trusting a finding's own text is standing practice here. Result:
+
+- **Shell active-nav-item / AccountSheet active-segment (real JBC `accent-700` on dark `neutral-100`) — confirmed real.** Re-ran the exact `generateAccentRamp('#166534')` computation against the real algorithm in `packages/ui-shared/src/lib/colorRamp.ts`: `accent-700` = `#316c42`. Contrast against dark `--color-neutral-100` (`#201d17`, read directly from `index.css`) = **2.68:1**, confirmed failing.
+- **StatusPill HELD dark — NOT actually broken.** I re-read the shipped `StatusPill.css` dark rule directly: `background: var(--color-accent-2-800); color: var(--color-accent-2-200);`. The real dark values for those two tokens (from `index.css`'s dark block) are `#fcf5e5` (800) and `#563e00` (200) — contrast is **9.27:1**, a clean pass. My original §3.4 table had used `#f8e6c1` for "accent-2-200," which is wrong — that's the dark value of `accent-2-700`, not `-200`. I mis-copied a value while hand-transcribing the CSS block into my ad hoc verification script during the first pass, and reported a defect that doesn't exist in the actual shipped code. **I did not change `StatusPill.css`'s dark HELD rule** — there was nothing to fix. Flagging this plainly rather than quietly "fixing" a non-bug, per this project's standing rule about not letting an unverified claim stand once a fresh check contradicts it.
+
+### 8.2 The real fix — `--color-accent-emphasis`, computed per-tenant
+
+Implemented exactly the mechanism you specified, reusing admin-v2's own CSS-indirection pattern rather than inventing a new one:
+
+- **`packages/ui-shared/src/lib/colorRamp.ts`**: added `contrastRatio(hexA, hexB)` (standard WCAG relative-luminance formula) and `pickEmphasisStep(ramp, backgroundHex, opts?)`, which picks the ramp step closest to a preferred step (default 700) whose contrast against `backgroundHex` clears a minimum ratio (default 4.5). Both exported from `packages/ui-shared/src/index.ts`.
+- **`packages/ui-shared/src/context/TenantContext.tsx`**: added an optional `emphasisBackgrounds?: Record<string, string>` prop to `TenantProvider`. When supplied, for each named background it calls `pickEmphasisStep` against that tenant's real, just-generated ramp and sets `--color-accent-emphasis-<key>` to the real resulting hex. Omitted entirely (as `admin-web` does — unchanged) means zero extra work and zero behavior change for that app; confirmed by re-typechecking/building `admin-web` after this change (clean, see §8.4).
+- **`apps/guest-member-pwa/src/main.tsx`**: `TenantProvider` now passes `emphasisBackgrounds={{ dark: '#201d17' }}` — the real dark-mode value of `--color-neutral-100`, the background Shell's nav and AccountSheet's segment actually render against.
+- **`apps/guest-member-pwa/src/index.css`**: new semantic token `--color-accent-emphasis`. Light mode (`:root`): `var(--color-accent-700)` — unchanged behavior. Both dark blocks (`:root[data-theme="dark"]` and the `@media (prefers-color-scheme: dark)` mirror): `var(--color-accent-emphasis-dark, var(--color-accent-700))` — the exact same `var()`-with-fallback indirection `apps/admin-v2/src/styles.css` uses for its own `--av2-accent` role token, just with a computed (not hand-picked) fallback source.
+- **`Shell.css`** (`.gpwa-shell__nav-item[data-active='true']`) and **`AccountSheet.css`** (`.gpwa-account-sheet__segment[data-active='true']` and its `:focus-visible` outline) now read `--color-accent-emphasis` instead of the literal `--color-accent-700`.
+
+**Nothing tenant-specific is hardcoded anywhere in this fix** — `pickEmphasisStep` operates on whatever ramp `generateAccentRamp` produces for that tenant's real `themeColor`, so a second tenant with a different hue gets its own correctly-computed emphasis step, not JBC's.
+
+### 8.3 Real computed numbers — before/after, plus generalization check across hues
+
+Ran directly against the actual compiled `dist/lib/colorRamp.js` (not a reimplementation):
+
+| Case | Before | After |
+|---|---|---|
+| JBC real `accent-700` vs dark `neutral-100` | 2.68:1 (fail) | — |
+| JBC real `--color-accent-emphasis` (resolves to step 500, `#62ab76`) vs dark `neutral-100` | — | **6.09:1 (pass)** |
+
+Generalization check — `pickEmphasisStep` run against two other, unrelated tenant hues (same dark `neutral-100` target, `#201d17`):
+- Blue (`#1d4ed8`): step 500 → `#6393ff`, **5.72:1** (pass)
+- Orange (`#c67139`, the dev-fallback tenant color used elsewhere in this codebase's comments): step 500 → `#d67f48`, **5.59:1** (pass)
+
+Full re-verified dark-mode table (everything, not just the two originally-reported pairs), all from the same script run against real shipped code:
+
+| Pair | Ratio | AA (4.5:1) |
+|---|---|---|
+| `--color-bg` / `--color-text` | 15.24:1 | Pass |
+| `--color-neutral-100` / `--color-text` | 13.92:1 | Pass |
+| `--color-neutral-100` / `--color-neutral-700` | 7.58:1 | Pass |
+| StatusPill CONFIRMED/CHECKED_IN dark (real JBC) | 8.90:1 | Pass |
+| StatusPill CANCELLED/RELEASED_NO_SHOW dark | 6.79:1 | Pass |
+| StatusPill HELD dark (as actually shipped — §8.1) | 9.27:1 | Pass |
+| Button primary | 6.97:1 | Pass |
+| **Shell active-nav / AccountSheet active-segment (fixed)** | **6.09:1** | **Pass** |
+
+No regressions — every previously-passing pair is unchanged; only the one real failure moved.
+
+Live-browser confirmation (not just node): started `guest-member-pwa`'s dev server, set `data-theme="dark"`, read `getComputedStyle(document.documentElement).getPropertyValue('--color-accent-emphasis')` before setting `--color-accent-emphasis-dark` (correctly fell back to the static `#8c491a` accent-700 fallback) and after simulating what `TenantContext` sets post-resolve (`--color-accent-emphasis-dark: #62ab76`) — resolved to `#62ab76` as expected. Also confirmed light mode (`data-theme` removed) still resolves `--color-accent-emphasis` to exactly `--color-accent-700`'s value — no light-mode regression.
+
+### 8.4 Build/typecheck — clean, both apps
+```
+packages/ui-shared: npx tsc                     — clean
+apps/guest-member-pwa: npx tsc --noEmit         — clean
+apps/guest-member-pwa: npm run build            — ✓ built in 2.57s
+apps/admin-web: npx tsc --noEmit                — clean (confirms the new optional
+                                                    emphasisBackgrounds prop is a true no-op
+                                                    for admin-web, which doesn't pass it)
+apps/admin-web: npm run build                   — ✓ built in 534ms
+```
+
+### 8.5 Playwright / live dev-stack — still not reachable
+Checked again this session: `docker ps` still fails ("cannot connect to the Docker API... daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified"). No backend/Postgres reachable. **Did not run** `findings-verification.spec.ts`, `guest-booking.spec.ts`, `f043-phase-c.spec.ts`, or `f023-full-system.spec.ts` — saying so plainly rather than guessing at their outcome. These are still expected to fail on the collapsed `/branches/...` routes (Correction 3), unrelated to this contrast fix.
+
+### 8.6 Related, not fixed — flagged, not expanded into scope
+`LoginScreen.tsx` and `CompleteSignupScreen.tsx` use `var(--color-accent-700)` inline in several places (e.g. the "Wrong number?" link) that would hit the same dark-mode contrast problem once dark mode reaches those screens. Not touched here — those screens are explicit Phase 0 non-goals (per-screen content rebuild is future work), and fixing them well means moving them onto semantic tokens/the shared `Button` component as part of that future slice, not a token swap grafted onto otherwise-untouched inline styles now.

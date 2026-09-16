@@ -130,3 +130,60 @@ export function generateAccentRamp(hex: string): ColorRamp {
   });
   return ramp;
 }
+
+function srgbChannelToLinear(v: number): number {
+  const c = v / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(hex: string): number {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return 0.2126 * srgbChannelToLinear(r) + 0.7152 * srgbChannelToLinear(g) + 0.0722 * srgbChannelToLinear(b);
+}
+
+/** WCAG 2.x relative-contrast ratio between two sRGB hex colors, 1:1 (identical) to 21:1
+ * (black/white). Standard formula: (L_lighter + 0.05) / (L_darker + 0.05). */
+export function contrastRatio(hexA: string, hexB: string): number {
+  const lA = relativeLuminance(hexA);
+  const lB = relativeLuminance(hexB);
+  const lighter = Math.max(lA, lB);
+  const darker = Math.min(lA, lB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * F-235 Phase 0 Correction 5: picks the ramp step closest to `preferredStep` (default 700, the
+ * step this platform has used as an "emphasis" text color) whose contrast against
+ * `backgroundHex` still clears `minRatio` (default 4.5, WCAG AA for text). Generalizes across
+ * any tenant hue -- `generateAccentRamp`'s fixed lightness curve means a step's contrast against
+ * a given background is NOT guaranteed constant across hues (sRGB relative luminance isn't a
+ * linear function of OKLCH's perceptual lightness), so this is computed per-tenant from the
+ * ramp's real output, never a hardcoded hex tuned to one tenant's color.
+ *
+ * Falls back to whichever step has the best available contrast if no step clears minRatio (a
+ * pathological input hue) -- callers always get a real, non-arbitrary answer.
+ */
+export function pickEmphasisStep(
+  ramp: ColorRamp,
+  backgroundHex: string,
+  opts?: { minRatio?: number; preferredStep?: RampStep },
+): RampStep {
+  const minRatio = opts?.minRatio ?? 4.5;
+  const preferred = opts?.preferredStep ?? 700;
+
+  const passing = RAMP_STEPS.filter((step) => contrastRatio(ramp[step], backgroundHex) >= minRatio);
+  const candidates = passing.length > 0 ? passing : RAMP_STEPS;
+
+  return candidates.reduce((best, step) => {
+    if (passing.length > 0) {
+      // Among steps that already clear the threshold, keep the one closest to the platform's
+      // usual emphasis step -- preserves as much of the tenant's brand hue/chroma as possible.
+      return Math.abs(step - preferred) < Math.abs(best - preferred) ? step : best;
+    }
+    // No step clears minRatio at all: fall back to whichever has the highest contrast.
+    return contrastRatio(ramp[step], backgroundHex) > contrastRatio(ramp[best], backgroundHex) ? step : best;
+  }, candidates[0]);
+}

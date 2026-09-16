@@ -604,6 +604,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <TenantProvider
         loadingFallback={<TenantResolveLoading />}
         errorFallback={(message) => <TenantResolveError message={message} />}
+        // F-235 Phase 0 Correction 5: --color-neutral-100's real dark-mode value (index.css) --
+        // the background Shell's active-nav-item and AccountSheet's active-segment render their
+        // --color-accent-emphasis text against. Computed per-tenant, see TenantContext.tsx.
+        emphasisBackgrounds={{ dark: '#201d17' }}
       >
         <AuthProvider>
           <BrowserRouter>

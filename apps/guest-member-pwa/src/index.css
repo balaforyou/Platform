@@ -120,6 +120,15 @@
   --color-accent-800: #643312;
   --color-accent-900: #402310;
 
+  /* F-235 Phase 0 Correction 5: semantic "emphasis" role token -- accent-700 is safe as text on
+     the light neutral backgrounds it's used against today, but real per-tenant accent-700 values
+     can fail AA (4.5:1) as text against the new dark neutral-100 (verified: JBC's real green,
+     2.68:1 -- see the implementation report). Light mode keeps accent-700 unchanged; the dark
+     blocks below alias this to --color-accent-emphasis-dark, computed per-tenant by
+     TenantContext's pickEmphasisStep (never a hardcoded hex) -- same var()-fallback indirection
+     apps/admin-v2/src/styles.css already uses for its own --av2-accent role token. */
+  --color-accent-emphasis: var(--color-accent-700);
+
   --font-heading: 'Caprasimo', system-ui, sans-serif;
   /* The canonical --font-body name is now vacant (the old Inter shorthand was renamed to
      --font-body-legacy-inter above). --font-body-organic still holds the Figtree family and has
@@ -187,6 +196,10 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+  /* F-235 Phase 0 Correction 5: real, per-tenant computed value from TenantContext's
+     pickEmphasisStep (see main.tsx's emphasisBackgrounds prop); the accent-700 fallback only
+     applies before tenant resolution finishes. */
+  --color-accent-emphasis: var(--color-accent-emphasis-dark, var(--color-accent-700));
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -214,6 +227,7 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+    --color-accent-emphasis: var(--color-accent-emphasis-dark, var(--color-accent-700));
   }
 }
 

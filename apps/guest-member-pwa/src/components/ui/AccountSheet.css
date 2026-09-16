@@ -117,11 +117,13 @@
 }
 .gpwa-account-sheet__segment[data-active='true'] {
   background: var(--color-neutral-100);
-  color: var(--color-accent-700);
+  /* F-235 Phase 0 Correction 5: was --color-accent-700, which fails AA as text against dark
+     mode's neutral-100 background for real tenant hues (see index.css's own comment). */
+  color: var(--color-accent-emphasis);
   box-shadow: var(--shadow-sm);
 }
 .gpwa-account-sheet__segment:focus-visible {
-  outline: 2px solid var(--color-accent-700);
+  outline: 2px solid var(--color-accent-emphasis);
   outline-offset: 2px;
 }
 

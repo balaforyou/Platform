@@ -57,7 +57,9 @@
   color: var(--color-neutral-700);
 }
 .gpwa-shell__nav-item[data-active='true'] {
-  color: var(--color-accent-700);
+  /* F-235 Phase 0 Correction 5: was --color-accent-700, which fails AA as text against dark
+     mode's neutral-100 background for real tenant hues (see index.css's own comment). */
+  color: var(--color-accent-emphasis);
 }
 .gpwa-shell__nav-item:active {
   opacity: 0.7;
