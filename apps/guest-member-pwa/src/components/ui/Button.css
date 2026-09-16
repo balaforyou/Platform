@@ -1,0 +1,68 @@
+/* F-235 Phase 0 Button.tsx states -- see claude/guestPWA2/05-*.md §3 for the exact spec each
+   rule below implements. */
+
+.gpwa-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.gpwa-btn[data-size='md'] {
+  min-height: 44px;
+}
+.gpwa-btn[data-size='lg'] {
+  min-height: 50px;
+}
+
+.gpwa-btn[data-variant='primary'] {
+  background: var(--color-accent-2-400);
+  color: #3a2800;
+}
+.gpwa-btn[data-variant='secondary'] {
+  background: #fff;
+  border: 1px solid var(--color-neutral-300);
+  color: var(--color-text);
+}
+.gpwa-btn[data-variant='destructive'] {
+  background: var(--color-destructive);
+  color: #fff;
+}
+
+@media (hover: hover) {
+  .gpwa-btn[data-variant='primary']:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-accent-2-400) 94%, black);
+  }
+  .gpwa-btn[data-variant='secondary']:not(:disabled):hover {
+    background: color-mix(in srgb, #fff 94%, black);
+  }
+  .gpwa-btn[data-variant='destructive']:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-destructive) 94%, black);
+  }
+}
+
+.gpwa-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.gpwa-btn[data-variant='primary']:focus-visible,
+.gpwa-btn[data-variant='secondary']:focus-visible {
+  outline: 2px solid var(--color-accent-700);
+  outline-offset: 2px;
+}
+.gpwa-btn[data-variant='destructive']:focus-visible {
+  outline: 2px solid var(--color-destructive);
+  outline-offset: 2px;
+}
+
+.gpwa-btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

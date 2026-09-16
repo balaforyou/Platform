@@ -415,6 +415,12 @@ model Booking {
   // WHY: Member booking existence and attendance confirmation are distinct states.
   // The grace sweep releases only member bookings where this is still null.
   memberAttendanceConfirmedAt DateTime?
+  // F-235 Phase 0 (F-129 folded in): T&C acceptance is per-booking, not per-user, since terms
+  // can change over time -- termsVersion lets a future content change be distinguished from
+  // what a given booking actually accepted. Same nullable-timestamp shape as
+  // memberAttendanceConfirmedAt above.
+  termsAcceptedAt DateTime?
+  termsVersion    String?
   price          Decimal?       @db.Decimal(10, 2)
   refundAmount   Decimal?       @db.Decimal(10, 2)
   createdAt      DateTime       @default(now())

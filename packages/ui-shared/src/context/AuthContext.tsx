@@ -1,16 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiRequest } from '../lib/api';
-import { useTenant } from './TenantContext';
 
 interface AuthContextType {
   accessToken: string | null;
   isAuthenticated: boolean;
   user: any | null;
-  requestOtp: (phone: string) => Promise<boolean>;
-  verifyOtp: (phone: string, code: string) => Promise<void>;
-  verifyGoogleMock: (email: string) => Promise<void>;
-  verifyGoogle: (idToken: string) => Promise<{ isNewSignup: boolean }>;
-  attachPhone: (phone: string, code: string) => Promise<void>;
+  setSession: (accessToken: string) => void;
+  mergeUser: (patch: Record<string, any>) => void;
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -24,7 +20,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const { tenant } = useTenant();
 
   // Helper function to decode JWT claims to read user details in-memory
   const parseJwt = (token: string) => {
@@ -95,82 +90,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [accessToken]);
 
-  const requestOtp = async (phone: string): Promise<boolean> => {
-    if (!tenant) throw new Error('Tenant context is required to request OTP');
-    
-    // Calls Identity Auth service to trigger SMS verification
-    await apiRequest('/identity/auth/otp/request', {
-      method: 'POST',
-      body: JSON.stringify({ phone, tenantId: tenant.id }),
-    });
-    return true;
+  // Direct extraction of what every login method used to do inline (setAccessToken + decode +
+  // setUser) — behavior unchanged, only the app-local login functions (guest-pwa's/admin-web's
+  // own lib/auth.ts) call this now instead of the login logic itself living here.
+  const setSession = (newAccessToken: string) => {
+    setAccessToken(newAccessToken);
+    const decoded = parseJwt(newAccessToken);
+    setUser(decoded);
   };
 
-  const verifyOtp = async (phone: string, code: string): Promise<void> => {
-    if (!tenant) throw new Error('Tenant context is required to verify OTP');
-
-    const res = await apiRequest<{ accessToken: string }>('/identity/auth/otp/verify', {
-      method: 'POST',
-      body: JSON.stringify({ phone, code, tenantId: tenant.id }),
-    });
-
-    if (res && res.accessToken) {
-      setAccessToken(res.accessToken);
-      const decoded = parseJwt(res.accessToken);
-      setUser(decoded);
-      console.log('OTP verified successfully.');
-    }
-  };
-
-  const verifyGoogleMock = async (email: string): Promise<void> => {
-    if (!tenant) throw new Error('Tenant context is required to verify Google login');
-
-    // Calls Identity Auth service with the mock Google token prefix required by the backend
-    const mockToken = `mock-google-token-${email}`;
-    const res = await apiRequest<{ accessToken: string }>('/identity/auth/google/verify', {
-      method: 'POST',
-      body: JSON.stringify({ googleIdToken: mockToken, tenantId: tenant.id }),
-    });
-
-    if (res && res.accessToken) {
-      setAccessToken(res.accessToken);
-      const decoded = parseJwt(res.accessToken);
-      setUser(decoded);
-      console.log('Mock Google OAuth login successful.');
-    }
-  };
-
-  const verifyGoogle = async (idToken: string): Promise<{ isNewSignup: boolean }> => {
-    if (!tenant) throw new Error('Tenant context is required to verify Google login');
-
-    const res = await apiRequest<{ accessToken: string; isNewSignup: boolean }>('/identity/auth/google/verify', {
-      method: 'POST',
-      body: JSON.stringify({ googleIdToken: idToken, tenantId: tenant.id }),
-    });
-
-    if (res && res.accessToken) {
-      setAccessToken(res.accessToken);
-      const decoded = parseJwt(res.accessToken);
-      setUser(decoded);
-      console.log('Google OAuth login successful.');
-    }
-
-    return { isNewSignup: !!res?.isNewSignup };
-  };
-
-  const attachPhone = async (phone: string, code: string): Promise<void> => {
-    const res = await apiRequest<{ phone: string; isPhoneVerified: boolean }>('/identity/auth/otp/attach-phone', {
-      method: 'POST',
-      body: JSON.stringify({ phone, code }),
-      token: accessToken,
-    });
-
-    if (res) {
-      // The JWT's own `phone` claim only refreshes on the next /auth/refresh; merge the
-      // updated fields into the in-memory user object now so callers can route immediately.
-      setUser((prev: any) => (prev ? { ...prev, phone: res.phone } : prev));
-      console.log('Phone attached and verified.');
-    }
+  // Direct extraction of what attachPhone used to do inline — shallow-merges a patch into the
+  // in-memory user object without touching accessToken, for attach-phone-style partial updates.
+  const mergeUser = (patch: Record<string, any>) => {
+    setUser((prev: any) => (prev ? { ...prev, ...patch } : prev));
   };
 
   const logout = async () => {
@@ -193,11 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessToken,
         isAuthenticated,
         user,
-        requestOtp,
-        verifyOtp,
-        verifyGoogleMock,
-        verifyGoogle,
-        attachPhone,
+        setSession,
+        mergeUser,
         logout,
         loading,
       }}

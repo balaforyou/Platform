@@ -157,6 +157,9 @@ test.describe('Member self-confirm attendance', () => {
     }));
     expect(dbBooking?.memberAttendanceConfirmedAt).toBeTruthy();
 
+    // F-235 Phase 0: logout moved from the old header into AccountSheet, opened via Shell's
+    // account trigger (see components/Shell.tsx / components/ui/AccountSheet.tsx).
+    await page.click('button[aria-label="Account"]');
     await page.click('#logout-btn');
     const noSessionApi = page.waitForResponse((res) => res.url().includes('/api/slot-engine/member/today-assignment') && res.request().method() === 'GET');
     await loginAs(page, noSessionPhone);

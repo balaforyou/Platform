@@ -1,0 +1,93 @@
+/* F-235 Phase 0 LoadingState.tsx -- see LoadingState.tsx's own header comment for the
+   reconstruction caveat (canvas artboard was inaccessible this session). */
+
+.gpwa-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3, 13px);
+  --gpwa-loading-ink: var(--color-neutral-900);
+  --gpwa-loading-cork: #6b8e23;
+  --gpwa-loading-teal: #2f6f6f;
+}
+
+.gpwa-loading--full {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg);
+  z-index: 100;
+}
+
+.gpwa-loading--compact {
+  padding: var(--space-6, 26px) 0;
+}
+
+.gpwa-loading--inline {
+  display: inline-flex;
+}
+.gpwa-loading--inline .gpwa-loading__stage {
+  width: 22px;
+  height: 22px;
+}
+
+.gpwa-loading__stage {
+  width: 140px;
+  height: auto;
+  overflow: visible;
+}
+.gpwa-loading--compact .gpwa-loading__stage {
+  width: 96px;
+}
+
+.gpwa-loading__label {
+  font-family: var(--font-body-organic);
+  font-size: 13px;
+  color: var(--color-neutral-700);
+  margin: 0;
+  text-align: center;
+}
+
+/* Two independently-fixed rackets: each only "strikes" (rotates in) as the shuttle reaches its
+   side, on its own timing offset -- never one racket sliding across the stage. */
+.gpwa-loading__racket--left {
+  transform-origin: 30px 50px;
+  animation: gpwa-racket-left 1.6s ease-in-out infinite;
+}
+.gpwa-loading__racket--right {
+  transform-origin: 190px 50px;
+  animation: gpwa-racket-right 1.6s ease-in-out infinite;
+}
+@keyframes gpwa-racket-left {
+  0%, 15% { transform: rotate(0deg); }
+  25% { transform: rotate(-18deg); }
+  35%, 100% { transform: rotate(0deg); }
+}
+@keyframes gpwa-racket-right {
+  0%, 65% { transform: rotate(0deg); }
+  75% { transform: rotate(18deg); }
+  85%, 100% { transform: rotate(0deg); }
+}
+
+/* Shuttle arcs left-racket -> right-racket -> left-racket, striking at each side in sync with
+   that side's racket keyframes above. */
+.gpwa-loading__shuttle {
+  animation: gpwa-shuttle-arc 1.6s ease-in-out infinite;
+}
+@keyframes gpwa-shuttle-arc {
+  0%, 15% { transform: translate(30px, 50px); }
+  50% { transform: translate(110px, 20px); }
+  65%, 100% { transform: translate(190px, 50px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Static single frame: shuttle centered, both rackets at rest -- never the looping animation. */
+  .gpwa-loading__racket--left,
+  .gpwa-loading__racket--right,
+  .gpwa-loading__shuttle {
+    animation: none;
+  }
+  .gpwa-loading__shuttle {
+    transform: translate(110px, 35px);
+  }
+}

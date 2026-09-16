@@ -1,0 +1,58 @@
+/* F-235 Phase 0 ConfirmDialog.tsx -- mirrors CancelBookingModal.tsx's existing card/scrim/error
+   visual treatment (see that file), generalized into a reusable dialog. */
+
+.gpwa-confirm__overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-warm);
+  backdrop-filter: blur(4px);
+  z-index: 50;
+}
+
+.gpwa-confirm__content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 32px);
+  max-width: 28rem;
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-neutral-300);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+  z-index: 51;
+}
+
+.gpwa-confirm__title {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 20px;
+  color: var(--color-text);
+  margin: 0 0 12px;
+}
+
+.gpwa-confirm__body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-neutral-700);
+}
+
+.gpwa-confirm__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-neutral-300);
+  color: var(--color-destructive);
+  font-size: 12px;
+}
+
+.gpwa-confirm__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
