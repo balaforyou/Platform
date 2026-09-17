@@ -79,6 +79,11 @@ test.describe('Guest Booking Flow E2E', () => {
     expect(amountToPay).toContain('₹150');
     console.log(`[ASSERT SUCCESS] Verified checkout payment page amount is: ${amountToPay?.trim()}`);
 
+    // F-235 Slice B: the pay button is now gated on real terms acceptance -- check the box and
+    // wait for it to actually clear the button's disabled state before clicking pay.
+    await page.click('#accept-terms-checkbox');
+    await expect(page.locator('#simulate-success-pay-btn')).toBeEnabled();
+
     // Click the local dev simulate payment button
     await page.click('#simulate-success-pay-btn');
     console.log('[STEP] Triggered server-side Razorpay webhook capture simulation...');
@@ -130,6 +135,8 @@ test.describe('Guest Booking Flow E2E', () => {
     
     // Pay for Booking 2
     await expect(page).toHaveURL(/\/bookings\/.*\/pay/);
+    await page.click('#accept-terms-checkbox');
+    await expect(page.locator('#simulate-success-pay-btn')).toBeEnabled();
     await page.click('#simulate-success-pay-btn');
     
     // Wait for Confirmation Page

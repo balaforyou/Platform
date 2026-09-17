@@ -436,6 +436,12 @@ test.describe('F-023 cross-system integration', () => {
     }));
     const guestBookingId = bookingBody.data.id;
 
+    // F-235 Slice B: the pay button is now gated on real terms acceptance -- check the box and
+    // wait for it to actually clear the button's disabled state (POST /terms + POST /intents
+    // both complete server-side) before clicking pay, matching real guest behaviour.
+    await guestPage.click('#accept-terms-checkbox');
+    await expect(guestPage.locator('#simulate-success-pay-btn')).toBeEnabled();
+
     const payPromise = guestPage.waitForResponse((res) => res.url().includes('/api/payment/payments/test/simulate-capture') && res.request().method() === 'POST');
     await guestPage.click('#simulate-success-pay-btn');
     const payRes = await payPromise;

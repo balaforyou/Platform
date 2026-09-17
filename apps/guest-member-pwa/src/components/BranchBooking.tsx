@@ -737,35 +737,52 @@ export default function BranchBooking() {
                   </div>
 
                   <div
-                    className="fixed inset-x-0 bottom-0 z-20 flex items-center gap-3 px-5 pt-3.5
+                    className="fixed inset-x-0 bottom-0 z-20 flex flex-col gap-2 px-5 pt-3.5
                       bg-[var(--color-neutral-900)] pb-[calc(14px+env(safe-area-inset-bottom))]
                       sm:static sm:px-0 sm:pt-0 sm:pb-0 sm:bg-transparent sm:block"
                   >
-                    <div className="flex flex-col gap-0.5 min-w-[80px] sm:hidden">
-                      <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '10px', letterSpacing: '0.08em', color: 'var(--color-neutral-500)' }}>
-                        TOTAL
-                      </div>
-                      <div className="font-extrabold" style={{ fontSize: '21px', color: 'var(--color-neutral-100)' }}>
-                        ₹{calculatePrice()}
-                      </div>
+                    {/* F-235 Slice B: persistent notice, independent of the conditional
+                        bookingError banner above -- both can be visible at once. The real
+                        checkbox/acceptance happens on the Payment screen once the booking exists.
+                        Split into two spans, not one color: the mobile bar's bg-neutral-900 is a
+                        fixed dark literal regardless of app theme, while the desktop bg goes
+                        theme-aware (sm:bg-transparent -> page bg). neutral-400 (always-light,
+                        matching the TOTAL label above) reads correctly against the always-dark
+                        mobile bar; neutral-700 (theme-inverted) reads correctly against the
+                        theme-aware desktop page background. Neither alone covers both. */}
+                    <div id="reserve-bar-terms-notice" className="text-[11px] sm:hidden" style={{ color: 'var(--color-neutral-400)' }}>
+                      By reserving, you agree to our court rules — you&rsquo;ll review and accept them before payment.
                     </div>
-                    <button
-                      onClick={handleReserve}
-                      disabled={submitting}
-                      className={primaryReserveBtn}
-                      id="reserve-court-btn"
-                    >
-                      {submitting ? (
-                        <>
-                          <Activity className="h-4 w-4 animate-spin" />
-                          <span>Processing Hold...</span>
-                        </>
-                      ) : (
-                        <span>Hold & Proceed to Pay</span>
-                      )}
-                    </button>
+                    <div className="hidden sm:block text-[11px] sm:mb-2" style={{ color: 'var(--color-neutral-700)' }}>
+                      By reserving, you agree to our court rules — you&rsquo;ll review and accept them before payment.
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-0.5 min-w-[80px] sm:hidden">
+                        <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '10px', letterSpacing: '0.08em', color: 'var(--color-neutral-500)' }}>
+                          TOTAL
+                        </div>
+                        <div className="font-extrabold" style={{ fontSize: '21px', color: 'var(--color-neutral-100)' }}>
+                          ₹{calculatePrice()}
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleReserve}
+                        disabled={submitting}
+                        className={primaryReserveBtn}
+                        id="reserve-court-btn"
+                      >
+                        {submitting ? (
+                          <>
+                            <Activity className="h-4 w-4 animate-spin" />
+                            <span>Processing Hold...</span>
+                          </>
+                        ) : (
+                          <span>Hold & Proceed to Pay</span>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <div className="sm:hidden" style={{ height: '84px' }} />
+                  <div className="sm:hidden" style={{ height: '108px' }} />
                 </>
               ) : (
                 <div

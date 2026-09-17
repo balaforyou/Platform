@@ -175,6 +175,17 @@ const createIntentHandler = async (request: any, reply: any) => {
     throw err;
   }
 
+  // F-235 Slice B: server-side enforcement of T&C acceptance -- a client-only checkbox with
+  // no backend check is bypassable by calling this endpoint directly. booking already carries
+  // termsAcceptedAt for free (the GET /bookings/:id call above has no select clause).
+  if (!booking.termsAcceptedAt) {
+    reply.status(400);
+    const err = new Error('Court terms must be accepted before payment');
+    (err as any).statusCode = 400;
+    (err as any).code = 'TERMS_NOT_ACCEPTED';
+    throw err;
+  }
+
   const amountPaise = Math.round(Number(booking.price) * 100);
   const gatewayRef = 'pay_mock_' + crypto.randomBytes(8).toString('hex');
 

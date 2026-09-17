@@ -15,6 +15,7 @@ export interface ConfirmDialogProps {
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
   error?: string | null;
+  confirmDisabled?: boolean;
 }
 
 // F-235 Phase 0: backs every confirm-then-acknowledge instance from the design brief's 0.4
@@ -34,6 +35,7 @@ export default function ConfirmDialog({
   onConfirm,
   loading = false,
   error = null,
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -56,7 +58,12 @@ export default function ConfirmDialog({
             <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={loading}>
               {cancelLabel}
             </Button>
-            <Button variant={destructive ? 'destructive' : 'primary'} onClick={onConfirm} loading={loading}>
+            <Button
+              variant={destructive ? 'destructive' : 'primary'}
+              onClick={onConfirm}
+              loading={loading}
+              disabled={confirmDisabled}
+            >
               {confirmLabel}
             </Button>
           </div>

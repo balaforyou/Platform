@@ -3619,6 +3619,74 @@ server.post('/bookings/:id/check-in', async (request, reply) => {
   });
 });
 
+// F-235 Slice B: T&C acceptance. Auth pattern copied verbatim from /cancel below (dual-auth,
+// then requireBookingAccess IDOR guard) -- the only real precedent in this file for a
+// guest-JWT-authenticated, IDOR-guarded, single-booking mutation route.
+server.post('/bookings/:id/terms', async (request, reply) => {
+  let isInternal = false;
+  let decodedUser: any = null;
+
+  try {
+    requireInternalKey(request, reply);
+    isInternal = true;
+  } catch (e) {
+    try {
+      decodedUser = await request.jwtVerify();
+    } catch (jwtErr) {
+      reply.status(401);
+      throw new Error('Unauthorized');
+    }
+  }
+
+  const { id } = request.params as any;
+  const { termsVersion } = request.body as any;
+
+  if (!termsVersion || typeof termsVersion !== 'string') {
+    reply.status(400);
+    const err = new Error('termsVersion is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const booking = await prisma.booking.findUnique({ where: { id } });
+  if (!booking) {
+    reply.status(404);
+    throw new Error('Booking not found');
+  }
+
+  // IDOR Guard (F-071): same helper cancel/check-in/read use.
+  if (!isInternal && decodedUser) {
+    requireBookingAccess(booking, decodedUser, reply);
+  }
+
+  // F-183: same guard as /cancel and /check-in -- a child booking shares its parent's userId
+  // and is not independently mutable. Terms acceptance is a parent-level fact (one acceptance
+  // covers the whole multi-hour booking, and payment's enforcement check only ever reads the
+  // parent), so writing it on a child id would be a real write that nothing ever reads.
+  if (booking.parentBookingId) {
+    reply.status(400);
+    const err = new Error('Cannot accept terms on a child booking directly — act on the parent booking id');
+    (err as any).statusCode = 400;
+    (err as any).code = 'CHILD_BOOKING_NOT_MUTABLE';
+    throw err;
+  }
+
+  if (booking.status === BookingStatus.CANCELLED) {
+    reply.status(400);
+    const err = new Error('Cannot accept terms on a cancelled booking');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BOOKING_ALREADY_CANCELLED';
+    throw err;
+  }
+
+  // Idempotent by construction -- re-calling just overwrites the timestamp/version.
+  return await prisma.booking.update({
+    where: { id },
+    data: { termsAcceptedAt: new Date(), termsVersion },
+  });
+});
+
 // Cancel (HELD | CONFIRMED → CANCELLED) with tiered refund calculation and IDOR check.
 server.post('/bookings/:id/cancel', async (request, reply) => {
   let isInternal = false;
