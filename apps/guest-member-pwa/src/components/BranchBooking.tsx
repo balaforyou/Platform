@@ -237,7 +237,6 @@ export default function BranchBooking() {
       if (firstNonEmpty) setActivePeriod(firstNonEmpty.key);
     }
     // Keys only on `slots` deliberately -- not groupedSlots/activePeriod.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slots]);
 
   useEffect(() => {
