@@ -1,19 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { apiRequest, TenantProvider, useTenant, AuthProvider, useAuth, formatBranchTime } from '@badminton/ui-shared';
+import { applyTheme, getStoredTheme } from './lib/theme';
+
+// F-235 Phase 0: apply the stored/OS theme before first paint, so no screen (LoginScreen
+// included) ever flashes the wrong light/dark theme before any provider mounts.
+applyTheme(getStoredTheme());
 import LoginScreen from './components/LoginScreen';
 import CompleteSignupScreen from './components/CompleteSignupScreen';
-import PwaInstallPrompt from './components/PwaInstallPrompt';
-import BranchSelect from './components/BranchSelect';
-import BranchDashboard from './components/BranchDashboard';
-import BranchAbout from './components/BranchAbout';
-import CourtBooking from './components/CourtBooking';
+import BranchBooking from './components/BranchBooking';
 import BookingPay from './components/BookingPay';
 import BookingHistory from './components/BookingHistory';
 import BookingConfirmation from './components/BookingConfirmation';
-import { AlertTriangle, Calendar, CheckCircle, Clock, User, LogOut, ArrowRight, MapPin, Phone, RefreshCw } from 'lucide-react';
+import Shell from './components/Shell';
+import LoadingState from './components/ui/LoadingState';
+import { AlertTriangle, Calendar, CheckCircle, Clock, User, ArrowRight, MapPin, Phone, RefreshCw } from 'lucide-react';
 import './index.css';
 
 // Capture beforeinstallprompt event globally to avoid React component mounting race conditions
@@ -80,34 +83,7 @@ function StartupBand({ label }: { label: string }) {
 
 /** Organic-themed replacement for TenantProvider's default tenant-resolution loading screen. */
 function TenantResolveLoading() {
-  return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
-      <style>{'@keyframes organic-tenant-spin { to { transform: rotate(360deg); } }'}</style>
-      <StartupBand label="STARTING UP" />
-      <div className="flex-1 flex flex-col items-center justify-center gap-[18px] p-8">
-        <div
-          style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '999px',
-            border: '4px solid var(--color-accent-200)',
-            borderTopColor: 'var(--color-accent-700)',
-            animation: 'organic-tenant-spin 1s linear infinite',
-          }}
-        />
-        <div
-          style={{
-            fontFamily: 'var(--font-body-organic)',
-            fontSize: '14.5px',
-            fontWeight: 600,
-            color: 'var(--color-neutral-800)',
-          }}
-        >
-          Finding your court
-        </div>
-      </div>
-    </div>
-  );
+  return <LoadingState variant="full" label="Finding your court" />;
 }
 
 /** Organic-themed replacement for TenantProvider's default tenant-not-found screen. */
@@ -193,112 +169,6 @@ function TenantResolveError({ message }: { message: string }) {
           </a>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** Uppercase state label for the shared dark band, by route. */
-function bandLabelForPath(pathname: string): string {
-  if (pathname === '/') return 'HOME';
-  if (pathname === '/branches') return 'CHOOSE A VENUE';
-  if (pathname === '/bookings/my') return 'MY BOOKINGS';
-  if (/^\/branches\/[^/]+\/about$/.test(pathname)) return 'VENUE INFO';
-  if (/^\/branches\/[^/]+\/book\//.test(pathname)) return 'BOOK A COURT';
-  if (/^\/branches\/[^/]+$/.test(pathname)) return 'COURT CATEGORIES';
-  if (/^\/bookings\/[^/]+\/pay$/.test(pathname)) return 'CONFIRM AND PAY';
-  if (/^\/bookings\/[^/]+\/confirmation$/.test(pathname)) return 'CONFIRMED';
-  return '';
-}
-
-/**
- * Shared Layout wrapper containing navbar, footer, and PwaInstallPrompt.
- */
-function Layout() {
-  const { tenant } = useTenant();
-  const { logout } = useAuth();
-  const { pathname } = useLocation();
-  const stateLabel = bandLabelForPath(pathname);
-
-  return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}>
-      {/* Shared dark band -- identical chrome on every authenticated screen */}
-      <header
-        className="sticky top-0 z-50 w-full"
-        style={{ background: 'var(--color-neutral-900)' }}
-      >
-        <div className="max-w-7xl mx-auto flex items-center justify-between" style={{ padding: '15px 18px' }}>
-          <Link to="/" className="flex items-center gap-3 group" aria-label="Home">
-            {tenant?.logo ? (
-              <img src={tenant.logo} alt={tenant.appName} className="h-8 w-auto object-contain rounded" />
-            ) : (
-              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '19px', color: 'var(--color-bg)' }}>
-                {tenant?.appName || 'Courts'}
-              </span>
-            )}
-          </Link>
-
-          <div className="flex items-center gap-3">
-            {stateLabel && (
-              <span
-                className="hidden sm:inline"
-                style={{
-                  fontFamily: 'var(--font-body-organic)',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  letterSpacing: '0.1em',
-                  color: 'var(--color-neutral-400)',
-                }}
-              >
-                {stateLabel}
-              </span>
-            )}
-            <Link
-              to="/bookings/my"
-              id="nav-my-bookings-btn"
-              className="transition-colors"
-              style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-400)' }}
-            >
-              My Bookings
-            </Link>
-            <button
-              onClick={logout}
-              title="Logout"
-              id="logout-btn"
-              className="flex items-center justify-center flex-none transition-colors"
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '999px',
-                background: 'var(--color-neutral-800)',
-                border: '1px solid var(--color-neutral-700)',
-                color: 'var(--color-accent-300)',
-              }}
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Shared Page Outlet */}
-      <main className="flex-1 flex flex-col">
-        <Outlet />
-      </main>
-
-      {/* Footer */}
-      <footer
-        className="py-6 text-center"
-        style={{
-          borderTop: '1px solid var(--color-neutral-300)',
-          background: 'var(--color-bg)',
-          color: 'var(--color-neutral-600)',
-          fontFamily: 'var(--font-body-organic)',
-          fontSize: '12px',
-        }}
-      >
-        &copy; 2026 {tenant?.name}. Powered by Whitelabel Badminton Platform.
-      </footer>
-      <PwaInstallPrompt />
     </div>
   );
 }
@@ -433,13 +303,11 @@ function MainDashboard() {
     };
   };
 
+  // F-235 Slice A: venue selection now lives inside the merged /book screen itself (a
+  // venue-switcher chip, not a separate route), so there's no pre-step branching on whether a
+  // branch was previously saved -- /book reads localStorage['selected_branch_id'] itself.
   const handleBookNow = () => {
-    const savedBranch = localStorage.getItem('selected_branch_id');
-    if (savedBranch) {
-      navigate(`/branches/${savedBranch}`);
-    } else {
-      navigate('/branches');
-    }
+    navigate('/book');
   };
 
   const handleConfirmAttendance = async () => {
@@ -672,11 +540,7 @@ function MainDashboard() {
 }
 
 function AuthLoadingSpinner() {
-  return (
-    <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-      <RefreshCw className="h-8 w-8 animate-spin" style={{ color: 'var(--color-accent-700)' }} />
-    </div>
-  );
+  return <LoadingState variant="full" />;
 }
 
 /**
@@ -716,15 +580,12 @@ function AppRoutes() {
       <Route
         element={
           <ProtectedRoute>
-            <Layout />
+            <Shell />
           </ProtectedRoute>
-        } 
+        }
       >
         <Route path="/" element={<MainDashboard />} />
-        <Route path="/branches" element={<BranchSelect />} />
-        <Route path="/branches/:branchId" element={<BranchDashboard />} />
-        <Route path="/branches/:branchId/about" element={<BranchAbout />} />
-        <Route path="/branches/:branchId/book/:poolId" element={<CourtBooking />} />
+        <Route path="/book" element={<BranchBooking />} />
         <Route path="/bookings/:bookingId/pay" element={<BookingPay />} />
         <Route path="/bookings/:bookingId/confirmation" element={<BookingConfirmation />} />
         <Route path="/bookings/my" element={<BookingHistory />} />
@@ -741,6 +602,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <TenantProvider
         loadingFallback={<TenantResolveLoading />}
         errorFallback={(message) => <TenantResolveError message={message} />}
+        // F-235 Phase 0 Correction 5: --color-neutral-100's real dark-mode value (index.css) --
+        // the background Shell's active-nav-item and AccountSheet's active-segment render their
+        // --color-accent-emphasis text against. Computed per-tenant, see TenantContext.tsx.
+        emphasisBackgrounds={{ dark: '#201d17' }}
       >
         <AuthProvider>
           <BrowserRouter>

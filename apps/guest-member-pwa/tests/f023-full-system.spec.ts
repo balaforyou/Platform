@@ -407,9 +407,16 @@ test.describe('F-023 cross-system integration', () => {
     const guestPage = await guestContext.newPage();
     await loginByOtp(guestPage, guestCPhone);
     await expect(guestPage).toHaveURL(/\/(\?tenant=courtowner1)?$/);
+    // F-235 Slice A: venue/pool selection now lives inside the merged /book screen. This
+    // fixture's branch (f023-branch-main) is a real, deliberate 2-pool case -- the multi-pool
+    // chip row this slice built is what makes selecting poolB specifically still possible, so
+    // this exercises that real UI path rather than a direct URL.
+    await guestPage.goto('/book?tenant=courtowner1');
+    await guestPage.click('.gpwa-branchbooking__venue-chip');
+    await guestPage.click(`[id^="branch-card-${branchId}"]`);
+    await guestPage.locator(`#court-pool-card-${poolBId}`).waitFor();
     const availabilityResPromise = guestPage.waitForResponse((res) => res.url().includes(`/api/slot-engine/resource-pools/${poolBId}/availability`) && res.request().method() === 'GET');
-    await guestPage.goto(`/branches/${branchId}/book/${poolBId}?tenant=courtowner1`);
-    await expect(guestPage).toHaveURL(new RegExp(`/branches/${branchId}/book/${poolBId}`));
+    await guestPage.click(`#court-pool-card-${poolBId}`);
     const availabilityRes = await availabilityResPromise;
     const availabilityBody = await availabilityRes.json();
     console.log('F023_REQUEST_RESPONSE guest_availability_get', JSON.stringify({ status: availabilityRes.status(), body: availabilityBody }));
@@ -428,6 +435,12 @@ test.describe('F-023 cross-system integration', () => {
       body: bookingBody,
     }));
     const guestBookingId = bookingBody.data.id;
+
+    // F-235 Slice B: the pay button is now gated on real terms acceptance -- check the box and
+    // wait for it to actually clear the button's disabled state (POST /terms + POST /intents
+    // both complete server-side) before clicking pay, matching real guest behaviour.
+    await guestPage.click('#accept-terms-checkbox');
+    await expect(guestPage.locator('#simulate-success-pay-btn')).toBeEnabled();
 
     const payPromise = guestPage.waitForResponse((res) => res.url().includes('/api/payment/payments/test/simulate-capture') && res.request().method() === 'POST');
     await guestPage.click('#simulate-success-pay-btn');

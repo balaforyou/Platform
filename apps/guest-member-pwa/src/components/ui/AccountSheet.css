@@ -1,0 +1,147 @@
+/* F-235 Phase 0 AccountSheet.tsx -- bottom-sheet presentation, slide-up transition, cross-fade
+   instead of sliding under prefers-reduced-motion (claude/guestPWA2/05-*.md §3). */
+
+.gpwa-account-sheet__overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-warm);
+  z-index: 60;
+  animation: gpwa-sheet-fade-in 0.2s ease-out;
+}
+
+.gpwa-account-sheet__content {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 430px;
+  margin: 0 auto;
+  background: var(--color-neutral-100);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 61;
+  animation: gpwa-sheet-slide-up 0.24s ease-out;
+}
+
+@keyframes gpwa-sheet-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes gpwa-sheet-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gpwa-account-sheet__content {
+    animation: gpwa-sheet-fade-in 0.2s ease-out;
+  }
+}
+
+.gpwa-account-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.gpwa-account-sheet__title {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 20px;
+  color: var(--color-text);
+  margin: 0;
+}
+.gpwa-account-sheet__close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.gpwa-account-sheet__user {
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--color-neutral-300);
+}
+.gpwa-account-sheet__user-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-text);
+  margin: 0;
+}
+.gpwa-account-sheet__user-email {
+  font-size: 12px;
+  color: var(--color-neutral-600);
+  margin: 2px 0 0;
+}
+
+.gpwa-account-sheet__section-label {
+  font-family: var(--font-body-organic);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: var(--color-neutral-700);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.gpwa-account-sheet__segmented {
+  display: flex;
+  gap: 4px;
+  background: var(--color-neutral-200);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 20px;
+}
+.gpwa-account-sheet__segment {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--color-neutral-700);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.gpwa-account-sheet__segment[data-active='true'] {
+  background: var(--color-neutral-100);
+  /* F-235 Phase 0 Correction 5: was --color-accent-700, which fails AA as text against dark
+     mode's neutral-100 background for real tenant hues (see index.css's own comment). */
+  color: var(--color-accent-emphasis);
+  box-shadow: var(--shadow-sm);
+}
+.gpwa-account-sheet__segment:focus-visible {
+  outline: 2px solid var(--color-accent-emphasis);
+  outline-offset: 2px;
+}
+
+.gpwa-account-sheet__logout {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border: none;
+  border-radius: 14px;
+  background: var(--color-destructive);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.gpwa-account-sheet__logout:active {
+  transform: scale(0.98);
+}

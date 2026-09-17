@@ -1,0 +1,75 @@
+/* F-235 Phase 0 Button.tsx states -- see claude/guestPWA2/05-*.md §3 for the exact spec each
+   rule below implements. */
+
+.gpwa-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.gpwa-btn[data-size='md'] {
+  min-height: 44px;
+}
+.gpwa-btn[data-size='lg'] {
+  min-height: 50px;
+}
+
+.gpwa-btn[data-variant='primary'] {
+  background: var(--color-accent-2-400);
+  color: #3a2800;
+}
+.gpwa-btn[data-variant='secondary'] {
+  /* F-235 Phase 0 Correction 6: was a static #fff literal, never themed -- --color-text
+     correctly inverts to pale cream in dark mode, landing on a background still pinned to
+     white, effectively unreadable. --color-neutral-100 is #f9f4ed in light mode (visually
+     indistinguishable from #fff) and #201d17 in dark mode, an already-verified AA pass against
+     --color-text (13.92:1, the same pairing checked for cards). */
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-neutral-300);
+  color: var(--color-text);
+}
+.gpwa-btn[data-variant='destructive'] {
+  background: var(--color-destructive);
+  color: #fff;
+}
+
+@media (hover: hover) {
+  .gpwa-btn[data-variant='primary']:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-accent-2-400) 94%, black);
+  }
+  .gpwa-btn[data-variant='secondary']:not(:disabled):hover {
+    /* Same Correction 6 fix -- was mixing from the static #fff, which no longer matches the
+       variant's own (now themed) base background above. */
+    background: color-mix(in srgb, var(--color-neutral-100) 94%, black);
+  }
+  .gpwa-btn[data-variant='destructive']:not(:disabled):hover {
+    background: color-mix(in srgb, var(--color-destructive) 94%, black);
+  }
+}
+
+.gpwa-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.gpwa-btn[data-variant='primary']:focus-visible,
+.gpwa-btn[data-variant='secondary']:focus-visible {
+  outline: 2px solid var(--color-accent-700);
+  outline-offset: 2px;
+}
+.gpwa-btn[data-variant='destructive']:focus-visible {
+  outline: 2px solid var(--color-destructive);
+  outline-offset: 2px;
+}
+
+.gpwa-btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

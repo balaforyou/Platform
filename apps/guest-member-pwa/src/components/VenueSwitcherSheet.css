@@ -1,0 +1,117 @@
+/* F-235 Slice A -- bottom-sheet shell cloned from components/ui/AccountSheet.css (same
+   overlay/slide-up/safe-area/reduced-motion mechanism, not a new pattern). Adds a scrollable
+   body, unlike AccountSheet's fixed-height content, since a branch list can run long. */
+
+.gpwa-venue-sheet__overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-warm);
+  z-index: 60;
+  animation: gpwa-venue-sheet-fade-in 0.2s ease-out;
+}
+
+.gpwa-venue-sheet__content {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 430px;
+  max-height: 80vh;
+  margin: 0 auto;
+  background: var(--color-neutral-100);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  animation: gpwa-venue-sheet-slide-up 0.24s ease-out;
+}
+
+@keyframes gpwa-venue-sheet-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes gpwa-venue-sheet-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gpwa-venue-sheet__content {
+    animation: gpwa-venue-sheet-fade-in 0.2s ease-out;
+  }
+}
+
+.gpwa-venue-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex: none;
+}
+.gpwa-venue-sheet__title {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 20px;
+  color: var(--color-text);
+  margin: 0;
+}
+.gpwa-venue-sheet__close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.gpwa-venue-sheet__body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gpwa-venue-sheet__branch-card {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-neutral-300);
+  text-align: left;
+}
+.gpwa-venue-sheet__branch-card[data-active='true'] {
+  border-color: var(--color-accent-700);
+  background: var(--color-accent-100);
+  /* Found live while verifying this slice: --color-accent-100 is always light (the tenant ramp
+     doesn't invert per theme), but the name/meta text below default to --color-text, which DOES
+     invert to pale cream in dark mode -- unreadable on this light highlight. Pin both to the
+     same non-inverting ramp (accent-100/accent-800 is the identical self-consistent pairing
+     StatusPill's CONFIRMED state already uses), rather than letting --color-text apply here. */
+}
+.gpwa-venue-sheet__branch-card[data-active='true'] .gpwa-venue-sheet__branch-name,
+.gpwa-venue-sheet__branch-card[data-active='true'] .gpwa-venue-sheet__branch-meta {
+  color: var(--color-accent-800);
+}
+.gpwa-venue-sheet__branch-name {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 17px;
+  color: var(--color-text);
+}
+.gpwa-venue-sheet__branch-meta {
+  font-family: var(--font-body-organic);
+  font-size: 12px;
+  color: var(--color-neutral-700);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

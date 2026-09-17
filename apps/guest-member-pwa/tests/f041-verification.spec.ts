@@ -183,6 +183,9 @@ test.describe('F-041 Independent Verification', () => {
     // STEP 3: Log out from PWA, log back in to Admin Web, verify update
     // -------------------------------------------------------------
     console.log('Logging out from PWA...');
+    // F-235 Phase 0: logout moved from the old header into AccountSheet, opened via Shell's
+    // account trigger (see components/Shell.tsx / components/ui/AccountSheet.tsx).
+    await page.click('button[aria-label="Account"]');
     await page.click('#logout-btn');
     await page.waitForURL(/\/login(\?tenant=courtowner1)?$/);
 

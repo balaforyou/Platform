@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useTenant } from '@badminton/ui-shared';
+import { requestOtp as requestOtpCall, attachPhone as attachPhoneCall } from '../lib/auth';
 import { ChevronRight, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
 
 // F-228 Step 3: reached only when a session is authenticated but the account has no phone on
@@ -15,7 +16,7 @@ const primaryBtn =
 
 export default function CompleteSignupScreen() {
   const { tenant } = useTenant();
-  const { requestOtp, attachPhone, logout } = useAuth();
+  const { accessToken, mergeUser, logout } = useAuth();
   const navigate = useNavigate();
 
   const [phone, setPhone] = useState('');
@@ -34,7 +35,8 @@ export default function CompleteSignupScreen() {
     try {
       setLoading(true);
       setError(null);
-      await requestOtp(phone);
+      if (!tenant) throw new Error('Tenant context is required to request OTP');
+      await requestOtpCall(phone, tenant.id);
       setOtpSent(true);
     } catch (err: any) {
       setError(err.message || 'Failed to request OTP. Please try again.');
@@ -53,7 +55,7 @@ export default function CompleteSignupScreen() {
     try {
       setLoading(true);
       setError(null);
-      await attachPhone(phone, code);
+      await attachPhoneCall(phone, code, accessToken, mergeUser);
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Invalid verification code. Please try again.');

@@ -61,6 +61,20 @@ export function paymentHeaders(userId: string = USER_ID) {
   };
 }
 
+/**
+ * F-235 Slice B: createIntentHandler now rejects with 400 TERMS_NOT_ACCEPTED until
+ * POST /bookings/:id/terms has run for the booking — real guest behavior, not
+ * something these fixtures can skip anymore. Call this right after creating a booking
+ * hold and before any /payments/intents call.
+ */
+export async function acceptTerms(bookingId: string, userId: string = USER_ID): Promise<void> {
+  await fetch(`${slotEngineUrl}/bookings/${bookingId}/terms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken(userId)}` },
+    body: JSON.stringify({ termsVersion: 'regression-test' }),
+  });
+}
+
 /** Produces a valid Razorpay HMAC signature for a raw payload string. */
 export function generateRazorpaySignature(payloadStr: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(payloadStr).digest('hex');

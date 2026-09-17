@@ -14,8 +14,14 @@ test.describe('Guest Booking Flow E2E', () => {
     // ==========================================
 
     // 1. Authentication (OTP Login)
+    // F-235 Slice A fixture fix: 9999999999 is seed-test-data.ts's own OWNER-role member
+    // (RoleAssignment role: 'OWNER'), not a genuine guest -- F-206's GUEST_BOOKING
+    // module-entitlement gate correctly 403s that admin-role JWT off the guest-facing
+    // resource-pools endpoint. Real guest flows in other specs (f023, f043) use a fresh,
+    // never-seeded-with-a-role phone number instead, relying on this app's real self-registers-
+    // as-GUEST-on-first-verify behavior -- same convention here.
     await page.goto('/login');
-    await page.fill('input[placeholder="99999 99999"]', '9999999999');
+    await page.fill('input[placeholder="99999 99999"]', '9877712345');
     await page.click('button[type="submit"]');
 
     // Wait for code input to show
@@ -27,30 +33,30 @@ test.describe('Guest Booking Flow E2E', () => {
     await expect(page).toHaveURL('/');
     await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible();
 
-    // 2. Click "Book Court Now"
+    // 2. Click "Book Court Now" -- F-235 Slice A: lands directly on the merged /book screen
+    // (venue-switcher chip + About badge + booking UI, no more separate /branches routes).
     await page.click('#book-court-dashboard-btn');
-    
-    // 3. Verify Branch Select and pick Coimbatore Main Arena
-    await expect(page).toHaveURL('/branches');
-    await expect(page.locator('text=Coimbatore Main Arena')).toBeVisible();
-    await page.click('[id^="branch-card-22222222-2222-2222-2222-222222222222"]');
+    await expect(page).toHaveURL('/book');
 
-    // 4. Verify Branch Dashboard
-    await expect(page).toHaveURL(/\/branches\/22222222-2222-2222-2222-222222222222/);
-    await expect(page.locator('text=COURT CATEGORIES')).toBeVisible();
+    // 3. Open the venue-switcher sheet and pick Coimbatore Main Arena
+    await page.click('.gpwa-branchbooking__venue-chip');
+    const coimbatoreCard = page.locator('[id^="branch-card-22222222-2222-2222-2222-222222222222"]');
+    await expect(coimbatoreCard).toBeVisible();
+    await coimbatoreCard.click();
 
-    // Go to about page
-    await page.click('#view-about-branch-btn');
-    await expect(page).toHaveURL(/\/branches\/22222222-2222-2222-2222-222222222222\/about/);
+    // 4. Open the About sheet for the same real venue-info content that used to live at
+    // /branches/:id/about.
+    await page.click('.gpwa-branchbooking__about-badge');
     await expect(page.locator('text=Cafeteria')).toBeVisible();
-    
-    // Back to dashboard
-    await page.click('text=Back to venue');
-    await page.click('[id^="court-pool-card-courtpool-e2e-001"]');
+    await page.click('.gpwa-about-sheet__close');
 
-    // 5. Verify Slot Grid Loads
-    await expect(page).toHaveURL(/\/book\/courtpool-e2e-001/);
-    
+    // This shared fixture branch actually carries many accumulated test pools (real, pre-existing
+    // e2e data-hygiene debt across other spec files -- confirmed 30 real ResourcePool rows under
+    // this one branch in badminton_db_e2e, not the single pool this test originally assumed), so
+    // the merged screen's real multi-pool chip row renders here -- pick the real e2e pool
+    // explicitly, same real UI path the old BranchDashboard click used to exercise.
+    await page.click('#court-pool-card-courtpool-e2e-001');
+
     // Pick the time slot 1
     await page.click('[id^="slot-card-window-e2e-001"]');
 
@@ -72,6 +78,11 @@ test.describe('Guest Booking Flow E2E', () => {
     const amountToPay = await page.locator('#pay-amount-display').textContent();
     expect(amountToPay).toContain('₹150');
     console.log(`[ASSERT SUCCESS] Verified checkout payment page amount is: ${amountToPay?.trim()}`);
+
+    // F-235 Slice B: the pay button is now gated on real terms acceptance -- check the box and
+    // wait for it to actually clear the button's disabled state before clicking pay.
+    await page.click('#accept-terms-checkbox');
+    await expect(page.locator('#simulate-success-pay-btn')).toBeEnabled();
 
     // Click the local dev simulate payment button
     await page.click('#simulate-success-pay-btn');
@@ -108,10 +119,14 @@ test.describe('Guest Booking Flow E2E', () => {
     await page.click('a[href="/"]');
     await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible();
     await page.click('#book-court-dashboard-btn');
-    
-    // Coimbatore Branch is cached, so we land on Coimbatore Branch Dashboard. Select the court pool card:
-    await page.click('[id^="court-pool-card-courtpool-e2e-001"]');
-    
+    await expect(page).toHaveURL('/book');
+
+    // Coimbatore branch is cached (localStorage['selected_branch_id']) -- no venue picker needed
+    // this time -- but pool selection isn't persisted across mounts, and this shared fixture
+    // branch has many real pools (see the note above), so the chip row appears again.
+    await expect(page.locator('text=Coimbatore Main Arena')).toBeVisible();
+    await page.click('#court-pool-card-courtpool-e2e-001');
+
     // Choose Slot 2
     await page.click('[id^="slot-card-window-e2e-002"]');
     
@@ -120,6 +135,8 @@ test.describe('Guest Booking Flow E2E', () => {
     
     // Pay for Booking 2
     await expect(page).toHaveURL(/\/bookings\/.*\/pay/);
+    await page.click('#accept-terms-checkbox');
+    await expect(page.locator('#simulate-success-pay-btn')).toBeEnabled();
     await page.click('#simulate-success-pay-btn');
     
     // Wait for Confirmation Page

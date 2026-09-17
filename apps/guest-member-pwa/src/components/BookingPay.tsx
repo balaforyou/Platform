@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Smartphone, Activity, MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { TERMS_VERSION } from '../constants/terms';
 
 export default function BookingPay() {
   const { bookingId } = useParams();
@@ -41,25 +42,33 @@ export default function BookingPay() {
   const [error, setError] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  // F-235 Slice B: real T&C acceptance, gating both pay buttons below. termsAccepted only
+  // flips true once POST /bookings/:id/terms actually succeeds -- the checkbox itself is not
+  // the gate, the server write is (see services/slot-engine/src/index.ts's /terms route and
+  // services/payment/src/index.ts's createIntentHandler enforcement).
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [acceptingTerms, setAcceptingTerms] = useState(false);
+  const [termsError, setTermsError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!bookingId) return;
 
-    const initPayment = async () => {
+    const loadBooking = async () => {
       try {
         setLoading(true);
-        // 1. Fetch booking details to display summary
+        // F-235 Slice B: intent creation moved out of this effect -- createIntentHandler now
+        // rejects with TERMS_NOT_ACCEPTED until the guest checks the box below, and calling it
+        // unconditionally on mount (as this used to) meant every booking hit that rejection
+        // before the guest ever saw the checkbox, since it fired before any interaction was
+        // possible. Real evidence: caught live via the browser during this slice's own
+        // verification -- the pay screen showed "Couldn't load booking details" / "Court terms
+        // must be accepted before payment" immediately on every booking, not on the account of
+        // the terms flow being tested. Intent creation now happens in handleTermsCheckbox below,
+        // once acceptance has actually been recorded server-side.
         const bookingRes = await apiRequest<any>(`/slot-engine/bookings/${bookingId}`, {
           token: accessToken,
         });
         setBooking(bookingRes);
-
-        // 2. Create or fetch payment intent
-        const intentRes = await apiRequest<any>('/payment/intents', {
-          method: 'POST',
-          token: accessToken,
-          body: JSON.stringify({ bookingId }),
-        });
-        setIntent(intentRes);
       } catch (err: any) {
         setError(err.message || 'Failed to initialize payment process.');
       } finally {
@@ -67,7 +76,7 @@ export default function BookingPay() {
       }
     };
 
-    initPayment();
+    loadBooking();
   }, [bookingId, accessToken]);
 
   // F-234: separate effect from initPayment, same reasoning as BookingConfirmation.tsx:70-72 —
@@ -85,6 +94,41 @@ export default function BookingPay() {
 
     return () => { isMounted = false; };
   }, [booking?.branchId, branchAbout, accessToken]);
+
+  const handleTermsCheckbox = async (checked: boolean) => {
+    if (!checked) {
+      // Unchecking is a pure UI reversal -- the server write from a prior check is harmless
+      // (idempotent) and simply gets re-asserted if the guest re-checks.
+      setTermsAccepted(false);
+      return;
+    }
+
+    try {
+      setAcceptingTerms(true);
+      setTermsError(null);
+      await apiRequest(`/slot-engine/bookings/${bookingId}/terms`, {
+        method: 'POST',
+        token: accessToken,
+        body: JSON.stringify({ termsVersion: TERMS_VERSION }),
+      });
+
+      // Only now -- after the server has actually recorded acceptance -- create the payment
+      // intent. createIntentHandler's TERMS_NOT_ACCEPTED check would otherwise reject this same
+      // call if it ran before the line above.
+      const intentRes = await apiRequest<any>('/payment/intents', {
+        method: 'POST',
+        token: accessToken,
+        body: JSON.stringify({ bookingId }),
+      });
+      setIntent(intentRes);
+      setTermsAccepted(true);
+    } catch (err: any) {
+      setTermsError(err.message || 'Could not record terms acceptance. Please try again.');
+      setTermsAccepted(false);
+    } finally {
+      setAcceptingTerms(false);
+    }
+  };
 
   const handleMockPayment = async () => {
     try {
@@ -409,13 +453,47 @@ export default function BookingPay() {
           </div>
         )}
 
+        {/* F-235 Slice B: real T&C acceptance, gating both pay methods below. First time this
+            F-129 business-supplied copy exists as real app text rather than register prose. */}
+        <div
+          className="p-4 space-y-3"
+          style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '16px' }}
+          id="terms-acceptance-block"
+        >
+          <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
+            COURT TERMS
+          </div>
+          <ul className="text-[12.5px] space-y-1 pl-4" style={{ color: 'var(--color-neutral-700)', listStyleType: 'disc' }}>
+            <li>Non-marking shoes are mandatory on court.</li>
+            <li>No food or drinks allowed on court.</li>
+            <li>{branchAbout?.name || 'This venue'} is not liable for injuries sustained during play.</li>
+          </ul>
+          <label className="flex items-start gap-2.5 text-[12.5px] font-bold" style={{ color: 'var(--color-text)' }}>
+            <input
+              type="checkbox"
+              id="accept-terms-checkbox"
+              checked={termsAccepted}
+              disabled={acceptingTerms}
+              onChange={(e) => handleTermsCheckbox(e.target.checked)}
+              style={{ marginTop: '2px', width: '16px', height: '16px', flexShrink: 0 }}
+            />
+            <span>I have read and agree to the court terms above.</span>
+          </label>
+          {termsError && (
+            <div className="flex items-start space-x-2 text-xs" style={{ color: 'var(--color-destructive)' }} id="terms-error-banner">
+              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{termsError}</span>
+            </div>
+          )}
+        </div>
+
         {/* Payment methods */}
         <div className="space-y-3">
           {/* Mock Dev Method -- restyle only, unchanged position/behavior/dev-gating. */}
           {isDev && (
             <button
               onClick={handleMockPayment}
-              disabled={paying}
+              disabled={paying || !termsAccepted}
               className="w-full p-4 flex items-center justify-between text-left transition-colors"
               style={{
                 background: 'var(--color-accent-2-100)',
@@ -482,7 +560,7 @@ export default function BookingPay() {
               mistake to fix. */}
           <button
             onClick={handleRazorpayCheckout}
-            disabled={paying}
+            disabled={paying || !termsAccepted}
             className="w-full min-h-[54px] rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: 'var(--color-accent-400)', color: 'var(--color-neutral-900)', border: 'none' }}
             id="real-razorpay-btn"

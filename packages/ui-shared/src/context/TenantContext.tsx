@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { apiRequest } from '../lib/api';
-import { generateAccentRamp } from '../lib/colorRamp';
+import { generateAccentRamp, pickEmphasisStep } from '../lib/colorRamp';
 
 export interface TenantBranding {
   id: string;
@@ -72,6 +72,7 @@ export function TenantProvider({
   children,
   loadingFallback,
   errorFallback,
+  emphasisBackgrounds,
 }: {
   children: React.ReactNode;
   /**
@@ -85,6 +86,19 @@ export function TenantProvider({
    * Receives the error message. When omitted, the neutral default below renders.
    */
   errorFallback?: (message: string) => React.ReactNode;
+  /**
+   * F-235 Phase 0 Correction 5: optional map of named background hexes (e.g. { dark: '#201d17' })
+   * an app wants a guaranteed-AA-contrast "emphasis" variant of the tenant accent ramp computed
+   * against. When provided, sets --color-accent-emphasis-<key> to the real ramp step (from this
+   * tenant's actual generateAccentRamp output) that clears 4.5:1 against that background --
+   * never a hardcoded value, since which step passes varies by tenant hue. The app's own static
+   * CSS then aliases a semantic --color-accent-emphasis token to the right
+   * --color-accent-emphasis-<key> per its own theme state (same var()-fallback indirection
+   * apps/admin-v2/src/styles.css already uses for its own --av2-accent role token). Omitted
+   * entirely (as admin-web does) means zero extra work -- no behavior change for apps that don't
+   * pass this.
+   */
+  emphasisBackgrounds?: Record<string, string>;
 }) {
   const [tenant, setTenant] = useState<TenantBranding | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,6 +152,14 @@ export function TenantProvider({
           const accentRamp = generateAccentRamp(resolved.themeColor);
           for (const step of Object.keys(accentRamp) as unknown as Array<keyof typeof accentRamp>) {
             document.documentElement.style.setProperty(`--color-accent-${step}`, accentRamp[step]);
+          }
+
+          // F-235 Phase 0 Correction 5: see this prop's own doc comment above.
+          if (emphasisBackgrounds) {
+            for (const [key, backgroundHex] of Object.entries(emphasisBackgrounds)) {
+              const step = pickEmphasisStep(accentRamp, backgroundHex);
+              document.documentElement.style.setProperty(`--color-accent-emphasis-${key}`, accentRamp[step]);
+            }
           }
 
           // We can set a fallback for secondary brand color too

@@ -1,0 +1,49 @@
+/* F-235 Phase 0 StatusPill.tsx color table -- see claude/guestPWA2/05-*.md §3 (Correction 2
+   adds RELEASED_NO_SHOW, matching BookingHistory.tsx's existing "Expired" treatment). */
+
+.gpwa-status-pill[data-status='CONFIRMED'],
+.gpwa-status-pill[data-status='CHECKED_IN'] {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+.gpwa-status-pill[data-status='HELD'] {
+  background: var(--color-accent-2-200);
+  color: var(--color-accent-2-800);
+}
+.gpwa-status-pill[data-status='CANCELLED'],
+.gpwa-status-pill[data-status='RELEASED_NO_SHOW'] {
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-700);
+}
+
+:root[data-theme='dark'] .gpwa-status-pill[data-status='CONFIRMED'],
+:root[data-theme='dark'] .gpwa-status-pill[data-status='CHECKED_IN'] {
+  background: var(--color-accent-800);
+  color: var(--color-accent-100);
+}
+:root[data-theme='dark'] .gpwa-status-pill[data-status='HELD'] {
+  background: var(--color-accent-2-800);
+  color: var(--color-accent-2-200);
+}
+:root[data-theme='dark'] .gpwa-status-pill[data-status='CANCELLED'],
+:root[data-theme='dark'] .gpwa-status-pill[data-status='RELEASED_NO_SHOW'] {
+  background: var(--color-neutral-700);
+  color: var(--color-neutral-200);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .gpwa-status-pill[data-status='CONFIRMED'],
+  :root:not([data-theme='light']) .gpwa-status-pill[data-status='CHECKED_IN'] {
+    background: var(--color-accent-800);
+    color: var(--color-accent-100);
+  }
+  :root:not([data-theme='light']) .gpwa-status-pill[data-status='HELD'] {
+    background: var(--color-accent-2-800);
+    color: var(--color-accent-2-200);
+  }
+  :root:not([data-theme='light']) .gpwa-status-pill[data-status='CANCELLED'],
+  :root:not([data-theme='light']) .gpwa-status-pill[data-status='RELEASED_NO_SHOW'] {
+    background: var(--color-neutral-700);
+    color: var(--color-neutral-200);
+  }
+}

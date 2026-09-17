@@ -92,18 +92,19 @@
   --color-neutral-800: #474238;
   --color-neutral-900: #2e2b25;
 
-  /* --color-accent-2 (sage) is fixed/universal across tenants -- not generated, matching the
+  /* --color-accent-2 (gold) is fixed/universal across tenants -- not generated, matching the
      "one tenant-derived color, everything else universal" convention --brand-secondary already
-     establishes above. */
-  --color-accent-2-100: #f0fae1;
-  --color-accent-2-200: #e1eecc;
-  --color-accent-2-300: #ccdbb2;
-  --color-accent-2-400: #aebf92;
-  --color-accent-2-500: #8fa073;
-  --color-accent-2-600: #728157;
-  --color-accent-2-700: #56633f;
-  --color-accent-2-800: #3d472b;
-  --color-accent-2-900: #272e1b;
+     establishes above. F-235 Phase 0: replaced the original sage ramp with the design brief's
+     resolved gold ramp (base #F2B705), all in-use pairings re-checked at >=6:1 contrast. */
+  --color-accent-2-100: #fcf5e5;
+  --color-accent-2-200: #f8e6c1;
+  --color-accent-2-300: #f3cf85;
+  --color-accent-2-400: #e6ad02;
+  --color-accent-2-500: #c29000;
+  --color-accent-2-600: #9b7200;
+  --color-accent-2-700: #785800;
+  --color-accent-2-800: #563e00;
+  --color-accent-2-900: #3a2800;
 
   /* --color-accent-* IS tenant-derived (TenantContext.tsx generates it at runtime from
      Tenant.themeColor via generateAccentRamp). These are only the pre-resolve fallback --
@@ -118,6 +119,15 @@
   --color-accent-700: #8c491a;
   --color-accent-800: #643312;
   --color-accent-900: #402310;
+
+  /* F-235 Phase 0 Correction 5: semantic "emphasis" role token -- accent-700 is safe as text on
+     the light neutral backgrounds it's used against today, but real per-tenant accent-700 values
+     can fail AA (4.5:1) as text against the new dark neutral-100 (verified: JBC's real green,
+     2.68:1 -- see the implementation report). Light mode keeps accent-700 unchanged; the dark
+     blocks below alias this to --color-accent-emphasis-dark, computed per-tenant by
+     TenantContext's pickEmphasisStep (never a hardcoded hex) -- same var()-fallback indirection
+     apps/admin-v2/src/styles.css already uses for its own --av2-accent role token. */
+  --color-accent-emphasis: var(--color-accent-700);
 
   --font-heading: 'Caprasimo', system-ui, sans-serif;
   /* The canonical --font-body name is now vacant (the old Inter shorthand was renamed to
@@ -153,6 +163,79 @@
   --slot-selected-meta: var(--color-accent-200);
   --scrim-warm: rgba(46, 43, 37, 0.72);
   --color-destructive: #b3261e;
+}
+
+/* F-235 Phase 0: dark theme, ported from admin-v2's own precedent (apps/admin-v2/src/lib/theme.ts,
+   apps/admin-v2/src/styles.css) -- data-theme attribute + matching block, not a new mechanism.
+   Explicit user choice ([data-theme="dark"]) always wins over the OS-preference media query below. */
+:root[data-theme="dark"] {
+  --color-bg: #16140f;
+  --color-text: #f0e9dc;
+  --color-neutral-100: #201d17;
+  --color-neutral-200: #2a261e;
+  --color-neutral-300: #3a3527;
+  --color-neutral-400: #55503d;
+  --color-neutral-500: #756e56;
+  --color-neutral-600: #968d70;
+  --color-neutral-700: #b8ae8c;
+  --color-neutral-800: #d9cfab;
+  --color-neutral-900: #f0e9dc;
+  --scrim-warm: rgba(0, 0, 0, 0.72);
+  /* --color-accent-* stays tenant-driven, unchanged -- TenantContext regenerates against the same
+     base hue at a dark-safe lightness step, no separate dark ramp needed since the ramp already
+     spans 100-900. */
+  --color-accent-2-100: #3a2800;
+  --color-accent-2-200: #563e00;
+  --color-accent-2-300: #785800;
+  --color-accent-2-400: #e6ad02;
+  --color-accent-2-500: #c29000;
+  --color-accent-2-600: #f3cf85;
+  --color-accent-2-700: #f8e6c1;
+  --color-accent-2-800: #fcf5e5;
+  --color-accent-2-900: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+  /* F-235 Phase 0 Correction 5: real, per-tenant computed value from TenantContext's
+     pickEmphasisStep (see main.tsx's emphasisBackgrounds prop); the accent-700 fallback only
+     applies before tenant resolution finishes. */
+  --color-accent-emphasis: var(--color-accent-emphasis-dark, var(--color-accent-700));
+  /* F-235 Slice A: --slot-available-surface (CourtBooking.tsx's/BranchBooking.tsx's real
+     "available" slot card background) resolves to --surface-white, a bare #ffffff never
+     covered by Phase 0's dark pass -- paired with --color-text (which correctly inverts to
+     pale cream), the available slot cards were unreadable in dark mode. Same root-cause pattern
+     as Correction 6's Button.css fix, caught live while verifying this slice's real screen. */
+  --slot-available-surface: var(--color-neutral-100);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #16140f;
+    --color-text: #f0e9dc;
+    --color-neutral-100: #201d17;
+    --color-neutral-200: #2a261e;
+    --color-neutral-300: #3a3527;
+    --color-neutral-400: #55503d;
+    --color-neutral-500: #756e56;
+    --color-neutral-600: #968d70;
+    --color-neutral-700: #b8ae8c;
+    --color-neutral-800: #d9cfab;
+    --color-neutral-900: #f0e9dc;
+    --scrim-warm: rgba(0, 0, 0, 0.72);
+    --color-accent-2-100: #3a2800;
+    --color-accent-2-200: #563e00;
+    --color-accent-2-300: #785800;
+    --color-accent-2-400: #e6ad02;
+    --color-accent-2-500: #c29000;
+    --color-accent-2-600: #f3cf85;
+    --color-accent-2-700: #f8e6c1;
+    --color-accent-2-800: #fcf5e5;
+    --color-accent-2-900: #ffffff;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+    --color-accent-emphasis: var(--color-accent-emphasis-dark, var(--color-accent-700));
+    --slot-available-surface: var(--color-neutral-100);
+  }
 }
 
 body {

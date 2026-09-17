@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { apiRequest, AuthProvider, TenantProvider, useAuth, useTenant } from '@badminton/ui-shared';
+import { requestOtp as requestOtpCall, verifyOtp as verifyOtpCall, verifyGoogleMock as verifyGoogleMockCall } from './lib/auth';
 import './styles.css';
 
 type Branch = {
@@ -414,7 +415,7 @@ function useAdminApi() {
 
 function LoginScreen() {
   const { tenant } = useTenant();
-  const { requestOtp, verifyOtp, verifyGoogleMock, isAuthenticated } = useAuth();
+  const { setSession, isAuthenticated } = useAuth();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('owner@example.com');
@@ -429,7 +430,8 @@ function LoginScreen() {
     setLoading(true);
     setError('');
     try {
-      await requestOtp(phone);
+      if (!tenant) throw new Error('Tenant context is required to request OTP');
+      await requestOtpCall(phone, tenant.id);
       setOtpSent(true);
     } catch (err) {
       setError((err as Error).message);
@@ -443,7 +445,8 @@ function LoginScreen() {
     setLoading(true);
     setError('');
     try {
-      await verifyOtp(phone, code);
+      if (!tenant) throw new Error('Tenant context is required to verify OTP');
+      await verifyOtpCall(phone, code, tenant.id, setSession);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -456,7 +459,8 @@ function LoginScreen() {
     setLoading(true);
     setError('');
     try {
-      await verifyGoogleMock(email);
+      if (!tenant) throw new Error('Tenant context is required to verify Google login');
+      await verifyGoogleMockCall(email, tenant.id, setSession);
     } catch (err) {
       setError((err as Error).message);
     } finally {

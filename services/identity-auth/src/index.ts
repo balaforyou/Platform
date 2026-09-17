@@ -490,7 +490,7 @@ server.post('/auth/otp/verify', async (request, reply) => {
 
   if (!user) {
     isNewSignup = true;
-    
+
     // WHY: Public OTP signup always creates GUEST accounts by default to secure the trust boundary.
     // Client cannot override this. Promotion only happens through authenticated internal APIs.
     user = await prisma.user.create({
@@ -529,6 +529,18 @@ server.post('/auth/otp/verify', async (request, reply) => {
         server.log.warn('Could not call resolve-invites on Slot Engine: ' + String(e));
       }
     }
+  } else if (!user.isPhoneVerified) {
+    // F-231: verifyOtpCode above already proved live possession of this phone for a
+    // pre-existing row (e.g. a walk-in-created guest, F-229, whose phone was typed in by an
+    // admin and never proven). The signup branch above sets isPhoneVerified: true at creation;
+    // this branch never touched the column at all, so the DB flag stayed false forever even
+    // after a completely legitimate login. Harmless while nothing read isPhoneVerified, but
+    // F-235 Slice C's booking-flow gate does read it -- fixed here as a hard co-requisite of
+    // that slice, not a bystander (see docs/findings_register.md).
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { isPhoneVerified: true },
+    });
   }
 
   // Create session
@@ -567,6 +579,8 @@ server.post('/auth/otp/verify', async (request, reply) => {
     tenantId,
     phone: user.phone,
     userType: user.userType,
+    // F-235 Slice C: real source of truth for the booking-flow phone-re-verify gate.
+    isPhoneVerified: user.isPhoneVerified,
     roles,
   }, { expiresIn: '15m' });
 
@@ -657,7 +671,15 @@ server.post('/auth/otp/attach-phone', async (request, reply) => {
     where: { phone_tenantId: { phone, tenantId } },
     select: { id: true },
   });
-  if (existing) {
+  // F-235 Slice C: without the self-exclusion, this always matched the CALLER's own row for a
+  // caller whose phone is already `phone` but not yet verified (e.g. a walk-in guest, F-229,
+  // re-proving a number already on their own account) -- phone is unique per tenant
+  // (schema.prisma), so `existing` is guaranteed to BE the caller in that case, and this threw
+  // "already linked to a different account" before ever reaching the real update below. Provably
+  // a no-op for this route's original caller (a Google-first account attaching its first phone,
+  // where caller.phone is always null): existing can never equal that caller's own row there, so
+  // this condition already excluded them by construction.
+  if (existing && existing.id !== decoded.userId) {
     reply.status(409);
     const err = new Error('This phone number is already linked to a different account.');
     (err as any).statusCode = 409;
@@ -754,6 +776,8 @@ server.post('/auth/google/verify', async (request, reply) => {
     tenantId,
     phone: user.phone,
     userType: user.userType,
+    // F-235 Slice C: same claim as /auth/otp/verify above.
+    isPhoneVerified: user.isPhoneVerified,
     roles,
   }, { expiresIn: '15m' });
 
@@ -782,6 +806,7 @@ async function issueAdminSession(
     userType: UserType;
     displayName: string | null;
     photoUrl: string | null;
+    isPhoneVerified: boolean;
   },
   tenantId: string,
   reply: any,
@@ -820,6 +845,9 @@ async function issueAdminSession(
     // never-logged-in-via-Google admins) so admin-v2's topbar shows more than initials.
     displayName: user.displayName,
     photoUrl: user.photoUrl,
+    // F-235 Slice C: structural consistency across all real session JWTs, even though only
+    // guest-member-pwa's gate reads it today.
+    isPhoneVerified: user.isPhoneVerified,
     roles,
   }, { expiresIn: '15m' });
 
@@ -1247,6 +1275,8 @@ server.post('/auth/refresh', async (request, reply) => {
     // consumers, same pattern as phone/email above.
     displayName: session.user.displayName,
     photoUrl: session.user.photoUrl,
+    // F-235 Slice C: same claim as the other 3 session-issuing sites.
+    isPhoneVerified: session.user.isPhoneVerified,
     roles,
   }, { expiresIn: '15m' });
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useTenant, renderGoogleButton } from '@badminton/ui-shared';
+import { requestOtp as requestOtpCall, verifyOtp as verifyOtpCall, verifyGoogle as verifyGoogleCall } from '../lib/auth';
 import { ChevronRight, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
 
 // F-190 Slice 1: shared button styling for 3a/3b's 54px touch-first controls. ds.css's own
@@ -15,7 +16,7 @@ const primaryBtn =
 
 export default function LoginScreen() {
   const { tenant } = useTenant();
-  const { requestOtp, verifyOtp, verifyGoogle, isAuthenticated, user, logout } = useAuth();
+  const { setSession, isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
 
   // Redirect once authenticated. F-228 Step 3: an account with no phone on file yet (a
@@ -45,7 +46,8 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       setError(null);
-      await requestOtp(phone);
+      if (!tenant) throw new Error('Tenant context is required to request OTP');
+      await requestOtpCall(phone, tenant.id);
       setOtpSent(true);
       console.log('OTP request successfully processed.');
     } catch (err: any) {
@@ -65,7 +67,8 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       setError(null);
-      await verifyOtp(phone, code);
+      if (!tenant) throw new Error('Tenant context is required to verify OTP');
+      await verifyOtpCall(phone, code, tenant.id, setSession);
       console.log('Login successful via OTP.');
     } catch (err: any) {
       setError(err.message || 'Invalid verification code. Please try again.');
@@ -78,7 +81,8 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       setError(null);
-      await verifyGoogle(idToken);
+      if (!tenant) throw new Error('Tenant context is required to verify Google login');
+      await verifyGoogleCall(idToken, tenant.id, setSession);
       console.log('Login successful via Google.');
       // Navigation happens via the isAuthenticated effect above once `user` updates.
     } catch (err: any) {

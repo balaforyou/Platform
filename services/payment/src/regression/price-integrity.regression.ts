@@ -5,6 +5,7 @@ import {
   paymentUrl,
   bookingHeaders,
   paymentHeaders,
+  acceptTerms,
   PaymentContext,
   BRANCH_ID,
   USER_ID,
@@ -58,6 +59,8 @@ export const priceIntegritySections: Section<PaymentContext>[] = [
       });
       const bookingHold = ((await bookingHoldRes.json()) as any).data;
       ctx.dupIntentBookingId = bookingHold.id;
+      // F-235 Slice B: real guest contract now requires this before any intent call.
+      await acceptTerms(bookingHold.id, USER_ID);
 
       const intentRes1 = await fetch(`${paymentUrl}/payments/intents`, {
         method: 'POST',
