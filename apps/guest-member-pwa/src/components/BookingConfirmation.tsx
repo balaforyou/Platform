@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { CheckCircle, AlertCircle, Activity, ArrowRight, Navigation, Download } from 'lucide-react';
-import { downloadBookingReceipt } from '../lib/receipt';
 
 export default function BookingConfirmation() {
   const { bookingId } = useParams();
@@ -203,7 +202,14 @@ export default function BookingConfirmation() {
           <button
             type="button"
             id="download-receipt-btn"
-            onClick={() => downloadBookingReceipt(booking, branchAbout, tenant?.appName || tenant?.name)}
+            onClick={() => {
+              // Dynamic import: jsPDF and its optional html2canvas/canvg dependencies (~230KB
+              // gzip) only load once a guest actually clicks this, not for every guest who
+              // reaches the confirmation screen.
+              import('../lib/receipt').then(({ downloadBookingReceipt }) => {
+                downloadBookingReceipt(booking, branchAbout, tenant?.appName || tenant?.name);
+              });
+            }}
             className="w-full min-h-[50px] flex items-center justify-center gap-2 font-bold text-[14px]"
             style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)', border: 'none', borderRadius: '14px' }}
           >
