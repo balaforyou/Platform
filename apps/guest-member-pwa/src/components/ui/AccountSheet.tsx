@@ -54,7 +54,7 @@ export default function AccountSheet({ open, onOpenChange }: AccountSheetProps) 
           <div className="gpwa-account-sheet__section-label">Profile</div>
           <div className="gpwa-account-sheet__profile">
             <div className="gpwa-account-sheet__profile-row">
-              <span>Signed in as</span>
+              <span>Phone</span>
               <span className="gpwa-account-sheet__profile-value">{user?.phone || 'Phone not available'}</span>
             </div>
             <div className="gpwa-account-sheet__profile-row">
