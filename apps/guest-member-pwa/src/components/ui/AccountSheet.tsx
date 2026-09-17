@@ -46,6 +46,25 @@ export default function AccountSheet({ open, onOpenChange }: AccountSheetProps) 
             {user?.email && <p className="gpwa-account-sheet__user-email">{user.email}</p>}
           </div>
 
+          {/* F-235 Slice E: real content, moved here from MainDashboard's "Profile Details" card --
+              the real mockup's Home/Dashboard artboard has no place for this in its bookings-list
+              body, but does have this exact header avatar as its own account-menu entry point
+              (confirmed against the canvas: a 42px circular avatar badge opening an account
+              surface), so this is the real, already-built landing spot for it. */}
+          <div className="gpwa-account-sheet__section-label">Profile</div>
+          <div className="gpwa-account-sheet__profile">
+            <div className="gpwa-account-sheet__profile-row">
+              <span>Signed in as</span>
+              <span className="gpwa-account-sheet__profile-value">{user?.phone || 'Phone not available'}</span>
+            </div>
+            <div className="gpwa-account-sheet__profile-row">
+              <span>Account type</span>
+              <span className="gpwa-account-sheet__profile-value gpwa-account-sheet__profile-value--accent">
+                {user?.roles?.[0] || 'member'}
+              </span>
+            </div>
+          </div>
+
           <div className="gpwa-account-sheet__section-label">Appearance</div>
           <div className="gpwa-account-sheet__segmented" role="radiogroup" aria-label="Theme">
             {(

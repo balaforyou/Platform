@@ -91,6 +91,28 @@
   margin-bottom: 8px;
 }
 
+/* F-235 Slice E: real Profile Details content, ported from MainDashboard's dashboard card. */
+.gpwa-account-sheet__profile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--color-neutral-600);
+  margin-bottom: 20px;
+}
+.gpwa-account-sheet__profile-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.gpwa-account-sheet__profile-value {
+  color: var(--color-text);
+}
+.gpwa-account-sheet__profile-value--accent {
+  color: var(--color-accent-emphasis);
+}
+
 .gpwa-account-sheet__segmented {
   display: flex;
   gap: 4px;
