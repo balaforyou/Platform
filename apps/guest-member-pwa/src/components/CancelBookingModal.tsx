@@ -1,20 +1,30 @@
 import { useEffect, useState } from 'react';
-import { apiRequest } from '@badminton/ui-shared';
+import { apiRequest, useTenant } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { ShieldAlert, Activity, X } from 'lucide-react';
+import { ShieldAlert, Activity, X, Download, CheckCircle } from 'lucide-react';
 
 interface CancelBookingModalProps {
   bookingId: string;
+  // F-235 Slice G: the full booking + its branch-about record, already fetched by
+  // BookingHistory.tsx (branchAboutById) -- passed down so the cancellation receipt (design
+  // brief §0.6) can be built from data already in memory, no new fetch.
+  booking: any;
+  branchAbout: any;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function CancelBookingModal({ bookingId, onClose, onSuccess }: CancelBookingModalProps) {
+export default function CancelBookingModal({ bookingId, booking, branchAbout, onClose, onSuccess }: CancelBookingModalProps) {
   const { accessToken } = useAuth();
+  const { tenant } = useTenant();
   const [preview, setPreview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // F-235 Slice G: once cancellation actually succeeds, hold the modal open one more beat to
+  // offer the new PDF receipt (design brief §0.6) rather than closing immediately -- onSuccess()
+  // (which refreshes the list and flips the status badge to Cancelled) still fires right away.
+  const [cancelled, setCancelled] = useState(false);
 
   useEffect(() => {
     const fetchPreview = async () => {
@@ -47,6 +57,10 @@ export default function CancelBookingModal({ bookingId, onClose, onSuccess }: Ca
         token: accessToken,
       });
 
+      // F-235 Slice G: onSuccess() now only refreshes the underlying list (status flips to
+      // Cancelled behind this modal) -- it no longer closes the modal itself, so there's a real
+      // moment to offer the new PDF receipt below before the guest dismisses it.
+      setCancelled(true);
       onSuccess();
     } catch (err: any) {
       setError(err.message || 'Failed to cancel the booking.');
@@ -90,6 +104,41 @@ export default function CancelBookingModal({ bookingId, onClose, onSuccess }: Ca
         ) : error ? (
           <div className="p-4 rounded-xl text-xs" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', color: 'var(--color-destructive)' }}>
             {error}
+          </div>
+        ) : cancelled ? (
+          // F-235 Slice G / design brief §0.6: held open one extra beat after a real successful
+          // cancel so the guest can download the new cancellation receipt (real refund breakdown,
+          // no new fetch) before dismissing -- the underlying list is already refreshed via
+          // onSuccess() above.
+          <div className="space-y-4">
+            <div className="flex flex-col items-center text-center gap-2 py-2">
+              <CheckCircle className="h-8 w-8" style={{ color: 'var(--color-accent-2-800)' }} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Booking cancelled</p>
+              <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }}>
+                Your refund of ₹{preview?.refundAmount} will be processed under the venue&rsquo;s policy.
+              </p>
+            </div>
+            <button
+              type="button"
+              id="download-cancellation-receipt-btn"
+              onClick={() => {
+                import('../lib/receipt').then(({ downloadCancellationReceipt }) => {
+                  downloadCancellationReceipt(booking, branchAbout, preview, tenant?.appName || tenant?.name);
+                });
+              }}
+              className="w-full py-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-2"
+              style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)' }}
+            >
+              <Download className="h-4 w-4" />
+              <span>Download Cancellation Receipt (PDF)</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full py-3 rounded-xl font-semibold text-xs transition-colors"
+              style={{ background: 'transparent', border: '1px solid var(--color-neutral-300)', color: 'var(--color-neutral-700)' }}
+            >
+              Done
+            </button>
           </div>
         ) : (
           <div className="space-y-4">

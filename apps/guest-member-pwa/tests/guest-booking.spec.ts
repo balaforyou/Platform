@@ -151,9 +151,12 @@ test.describe('Guest Booking Flow E2E', () => {
     await page.click('#view-my-bookings-confirmation-btn');
     await expect(page).toHaveURL('/bookings/my');
     
-    // Self Check-in
+    // Self Check-in -- F-235 Slice G: now a real two-step confirm (resolves F-093's open half),
+    // not a single tap. Open the confirm dialog, then confirm.
     await page.click('[id^="check-in-btn-"]');
+    await expect(page.locator('text=Confirm you\'re here')).toBeVisible();
+    await page.click('#confirm-check-in-btn');
     await expect(page.locator('text=Checked In')).toBeVisible();
-    console.log('[ASSERT SUCCESS] Verified self check-in triggers status update to Checked In.');
+    console.log('[ASSERT SUCCESS] Verified self check-in confirm step triggers status update to Checked In.');
   });
 });
