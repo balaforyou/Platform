@@ -424,14 +424,16 @@ export default function BranchBooking() {
         onSelect={handleSelectBranch}
       />
       <AboutSheet open={aboutSheetOpen} onOpenChange={setAboutSheetOpen} branchId={selectedBranchId} />
-      {user?.phone && (
-        <VerifyPhoneDialog
-          open={verifyPhoneOpen}
-          onOpenChange={setVerifyPhoneOpen}
-          phone={user.phone}
-          onVerified={doReserve}
-        />
-      )}
+      {/* F-235 Slice D: unconditional now -- a phone-absent guest (a fresh Google signup, no
+          longer forced through /complete-signup) needs to reach this dialog too, not just a
+          walk-in guest re-verifying an existing number. VerifyPhoneDialog's phone-entry mode
+          handles phone={''} by rendering an editable field instead of the read-only display. */}
+      <VerifyPhoneDialog
+        open={verifyPhoneOpen}
+        onOpenChange={setVerifyPhoneOpen}
+        phone={user?.phone || ''}
+        onVerified={doReserve}
+      />
 
       {/* Multi-pool chip row -- only renders when a branch genuinely has more than one pool.
           Real JBC branches have exactly one today (confirmed against the live DB), so this is

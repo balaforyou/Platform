@@ -9,7 +9,6 @@ import { applyTheme, getStoredTheme } from './lib/theme';
 // included) ever flashes the wrong light/dark theme before any provider mounts.
 applyTheme(getStoredTheme());
 import LoginScreen from './components/LoginScreen';
-import CompleteSignupScreen from './components/CompleteSignupScreen';
 import BranchBooking from './components/BranchBooking';
 import BookingPay from './components/BookingPay';
 import BookingHistory from './components/BookingHistory';
@@ -544,29 +543,17 @@ function AuthLoadingSpinner() {
 }
 
 /**
- * Route protection wrapper for the real app. Redirects unauthenticated users to /login, and
- * (F-228 Step 3) an authenticated account with no phone on file yet to /complete-signup — durable
- * across reloads, not just the immediate post-login moment, since /auth/refresh reissues the same
- * phone:null claim until that account finishes signup.
+ * Route protection wrapper for the real app. Redirects unauthenticated users to /login.
+ * F-235 Slice D: no more phone-presence check/redirect here -- a fresh Google signup with no
+ * phone on file goes straight to the dashboard now; phone capture moved to its real point of
+ * need (Reserve, via VerifyPhoneDialog's phone-entry mode).
  */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user, loading } = useAuth();
-
-  if (loading) return <AuthLoadingSpinner />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (!user?.phone) return <Navigate to="/complete-signup" replace />;
-  return <>{children}</>;
-}
-
-/**
- * Guards /complete-signup itself: authenticated only, deliberately no phone check (that's the
- * point of this route) — not ProtectedRoute, which would redirect back here in a loop.
- */
-function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) return <AuthLoadingSpinner />;
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
 }
 
 /**
@@ -576,7 +563,6 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginScreen />} />
-      <Route path="/complete-signup" element={<RequireAuth><CompleteSignupScreen /></RequireAuth>} />
       <Route
         element={
           <ProtectedRoute>

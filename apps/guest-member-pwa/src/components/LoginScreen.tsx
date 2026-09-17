@@ -1,85 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useTenant, renderGoogleButton } from '@badminton/ui-shared';
-import { requestOtp as requestOtpCall, verifyOtp as verifyOtpCall, verifyGoogle as verifyGoogleCall } from '../lib/auth';
-import { ChevronRight, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
-
-// F-190 Slice 1: shared button styling for 3a/3b's 54px touch-first controls. ds.css's own
-// .btn-primary/.btn-secondary classes don't exist in this app's CSS (100% Tailwind here) --
-// these replicate their real color/hover/active/focus-visible behavior via arbitrary-value
-// classes against Slice 0's tokens instead of a literal class name.
-const primaryBtn =
-  'w-full min-h-[54px] rounded-[14px] border-none cursor-pointer flex items-center justify-center gap-2 font-bold text-[15px] transition-colors ' +
-  'bg-[var(--color-accent-700)] text-[var(--color-accent-100)] hover:bg-[var(--color-accent-800)] active:bg-[var(--color-accent-900)] ' +
-  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent-700)] ' +
-  'disabled:opacity-45 disabled:cursor-not-allowed';
+import { verifyGoogle as verifyGoogleCall } from '../lib/auth';
+import { AlertCircle, ShieldCheck } from 'lucide-react';
 
 export default function LoginScreen() {
   const { tenant } = useTenant();
   const { setSession, isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect once authenticated. F-228 Step 3: an account with no phone on file yet (a
-  // brand-new Google signup) lands on /complete-signup instead of the dashboard — `phone` is
-  // already a JWT claim (null for that case), no extra state needed.
+  // F-235 Slice D: Gmail-only sign-in -- phone capture no longer gates entry to the app at all,
+  // it moves to its real point of need (Reserve, via VerifyPhoneDialog's phone-entry mode). Every
+  // authenticated user, phone or no phone, goes straight to the dashboard now.
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(user?.phone ? '/' : '/complete-signup');
+      navigate('/');
     }
-  }, [isAuthenticated, user?.phone, navigate]);
+  }, [isAuthenticated, navigate]);
 
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!phone || phone.trim().length < 10) {
-      setError('Please enter a valid mobile number.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      if (!tenant) throw new Error('Tenant context is required to request OTP');
-      await requestOtpCall(phone, tenant.id);
-      setOtpSent(true);
-      console.log('OTP request successfully processed.');
-    } catch (err: any) {
-      setError(err.message || 'Failed to request OTP. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!code || code.trim().length < 4) {
-      setError('Please enter a valid verification code.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      if (!tenant) throw new Error('Tenant context is required to verify OTP');
-      await verifyOtpCall(phone, code, tenant.id, setSession);
-      console.log('Login successful via OTP.');
-    } catch (err: any) {
-      setError(err.message || 'Invalid verification code. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleGoogleToken = async (idToken: string) => {
     try {
-      setLoading(true);
       setError(null);
       if (!tenant) throw new Error('Tenant context is required to verify Google login');
       await verifyGoogleCall(idToken, tenant.id, setSession);
@@ -87,8 +31,6 @@ export default function LoginScreen() {
       // Navigation happens via the isAuthenticated effect above once `user` updates.
     } catch (err: any) {
       setError(err.message || 'Google sign-in failed. Please try again.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -193,91 +135,8 @@ export default function LoginScreen() {
     </div>
   );
 
-  if (otpSent) {
-    // 3b -- Verify (JBC Booking.dc.html:208-239)
-    return (
-      <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-neutral-100)' }}>
-        {/* F-192 Slice F: the shared dark band. The in-band back arrow is gone -- the page body
-            already carries the "Wrong number?" control (setOtpSent(false)). */}
-        <div className="flex-none flex items-center justify-between" style={{ background: 'var(--color-neutral-900)', padding: '15px 18px' }}>
-          <span style={{ fontFamily: 'var(--font-heading)', fontSize: '19px', color: 'var(--color-bg)' }}>
-            {tenant?.appName || 'Courts'}
-          </span>
-          <span style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color: 'var(--color-neutral-400)' }}>
-            VERIFY
-          </span>
-        </div>
-
-        <div className="flex-1 flex flex-col gap-5 px-5 pt-7 pb-6 mx-auto w-full max-w-md">
-          {errorBanner}
-
-          <div className="flex flex-col gap-2">
-            <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '28px', lineHeight: 1.15, color: 'var(--color-text)' }}>
-              Enter the code
-            </h2>
-            <p style={{ fontSize: '14px', lineHeight: 1.55, color: 'var(--color-neutral-800)' }}>
-              Sent by SMS to +91 {phone}.{' '}
-              <button
-                type="button"
-                onClick={() => setOtpSent(false)}
-                className="underline font-semibold bg-transparent border-none cursor-pointer p-0"
-                style={{ color: 'var(--color-accent-700)' }}
-              >
-                Wrong number?
-              </button>
-            </p>
-          </div>
-
-          <form onSubmit={handleVerifyOtp} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              {/* F-190 Slice 1: kept as one input rather than rebuilt as 6 separate boxes -- a
-                  pure-CSS 6-box illusion needs per-character divider alignment that shifts as the
-                  user types, which is fragile for a cosmetic effect and risks the 8 e2e specs that
-                  depend on this exact placeholder. This still carries the wireframe's "empty vs
-                  active box" states via border color/width instead. */}
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="Enter 4 or 6 digit OTP"
-                className="w-full text-center font-bold text-xl tracking-widest outline-none transition-colors border bg-white border-[var(--color-neutral-300)] focus:border-2 focus:border-[var(--color-accent-700)]"
-                style={{ minHeight: '60px', borderRadius: '14px', color: 'var(--color-text)' }}
-              />
-              <p className="text-center text-xs" style={{ color: 'var(--color-neutral-700)' }}>
-                SMS OTP dev-fallback is active. Code is printed in the backend service logs.
-              </p>
-            </div>
-
-            <button type="submit" disabled={loading} className={primaryBtn}>
-              {loading ? (
-                <RefreshCw className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  <span>Verify and continue</span>
-                  <ShieldCheck className="h-5 w-5" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* F-190 Slice 1: real-mechanism copy, not the wireframe's fabricated "locked for 15
-              minutes" -- see services/identity-auth/src/index.ts:175-182 (3 requests/10min rate
-              limit) and :279 (3-attempt invalidation). The wireframe's "one booking per number per
-              day" line is dropped entirely: this screen has no resourcePoolId to read the real
-              maxDailyBookingsPerGuest from, and the correct number already renders where it
-              belongs (CourtBooking.tsx, F-187). */}
-          <div
-            className="mt-auto rounded-2xl px-4 py-3.5"
-            style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-800)', fontSize: '12.5px', lineHeight: 1.55 }}
-          >
-            Three wrong codes and you'll need to request a new one — you can request up to 3 codes every 10 minutes.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 3a -- Sign in (JBC Booking.dc.html:168-205)
+  // F-235 Slice D: Gmail-only sign-in. Phone/OTP form and the "or" divider removed --
+  // phone capture moves to Reserve-time (VerifyPhoneDialog's phone-entry mode).
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
       {/* F-192 Slice F: the shared dark band -- the wordmark moves here off the gradient strip. */}
@@ -315,53 +174,17 @@ export default function LoginScreen() {
             Book a court at {tenant?.appName}
           </h2>
           <p style={{ fontSize: '14px', lineHeight: 1.55, color: 'var(--color-neutral-800)' }}>
-            Sign in once so we know the courts are going to real players.
+            Sign in with Google so we know the courts are going to real players.
           </p>
         </div>
 
-        <form onSubmit={handleRequestOtp} className="flex flex-col gap-[9px]">
-          <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
-            GUEST · PHONE NUMBER
-          </div>
-          <div
-            className="flex items-center gap-2.5 px-4"
-            style={{ border: '1px solid var(--color-neutral-300)', background: '#fff', borderRadius: '14px', minHeight: '56px' }}
-          >
-            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-neutral-700)' }}>+91</span>
-            <span style={{ width: '1px', height: '22px', background: 'var(--color-neutral-300)' }} />
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              placeholder="99999 99999"
-              className="flex-1 bg-transparent border-none outline-none"
-              style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text)' }}
-            />
-          </div>
-          <button type="submit" disabled={loading} className={primaryBtn}>
-            {loading ? (
-              <RefreshCw className="h-5 w-5 animate-spin" />
-            ) : (
-              <>
-                <span>Send me a code</span>
-                <ChevronRight className="h-5 w-5" />
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="flex items-center gap-3">
-          <span className="flex-1" style={{ height: '1px', background: 'var(--color-neutral-300)' }} />
-          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-700)' }}>or</span>
-          <span className="flex-1" style={{ height: '1px', background: 'var(--color-neutral-300)' }} />
-        </div>
-
         <div className="flex flex-col gap-[9px]">
-          {/* F-228 Step 3: real GIS button (packages/ui-shared/src/lib/googleIdentity.ts), not a
-              styled button of our own — Google renders its own iframe into this container. */}
+          {/* F-228 Step 3 / F-235 Slice D: real GIS button (packages/ui-shared/src/lib/googleIdentity.ts),
+              not a styled button of our own -- Google renders its own iframe into this container.
+              Now the ONLY sign-in path -- the phone/OTP form and "or" divider are gone. */}
           <div ref={googleBtnRef} className="flex justify-center min-h-[54px]" />
           <div className="flex flex-col gap-0.5" style={{ fontSize: '12px', lineHeight: 1.55, color: 'var(--color-neutral-700)' }}>
-            <span>Members keep their booking history and skip the code next time.</span>
+            <span>We'll confirm a few details before your first booking.</span>
           </div>
         </div>
 

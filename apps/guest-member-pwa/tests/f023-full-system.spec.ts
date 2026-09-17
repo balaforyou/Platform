@@ -75,13 +75,32 @@ async function upsertUser(id: string, phone: string, userType: 'MEMBER' | 'GUEST
 }
 
 async function loginByOtp(page: any, phone: string, appPrefix = '') {
-  await page.goto(`${appPrefix}/login?tenant=courtowner1`);
-  await page.locator('input[placeholder="99999 99999"], input[placeholder="9999999999"]').fill(phone.replace('+91', ''));
-  await page.click('button[type="submit"]');
-  const otpInput = page.locator('input[placeholder="Enter 4 or 6 digit OTP"], input[placeholder="123456"]');
-  await otpInput.waitFor();
-  await otpInput.fill('123456');
-  await page.click('button[type="submit"]');
+  // F-235 Slice D: guest-pwa's /login lost its phone/OTP form (Gmail-only now) -- the admin
+  // path (appPrefix === '/admin', a different app/route, untouched by this slice) still drives
+  // the real UI. For guest, prime the session via the same real, unchanged OTP endpoints
+  // VerifyPhoneDialog already calls, bypassing the UI: page.request shares the page's cookie
+  // jar, so the real refresh_token cookie these calls set lands automatically, and
+  // AuthProvider's existing boot-time silent refresh picks it up on page.goto('/').
+  if (appPrefix === '/admin') {
+    await page.goto(`${appPrefix}/login?tenant=courtowner1`);
+    await page.locator('input[placeholder="99999 99999"], input[placeholder="9999999999"]').fill(phone.replace('+91', ''));
+    await page.click('button[type="submit"]');
+    const otpInput = page.locator('input[placeholder="Enter 4 or 6 digit OTP"], input[placeholder="123456"]');
+    await otpInput.waitFor();
+    await otpInput.fill('123456');
+    await page.click('button[type="submit"]');
+    return;
+  }
+
+  await page.request.post('/api/identity/auth/otp/request', {
+    data: { phone: phone.replace('+91', ''), tenantId },
+  });
+  await page.request.post('/api/identity/auth/otp/verify', {
+    data: { phone: phone.replace('+91', ''), tenantId, code: '123456' },
+  });
+  // TenantContext.tsx re-resolves the tenant from ?tenant= on every navigation (falling back to
+  // a default otherwise) -- the query param must survive onto this goto, not just the login URL.
+  await page.goto('/?tenant=courtowner1');
 }
 
 /**
