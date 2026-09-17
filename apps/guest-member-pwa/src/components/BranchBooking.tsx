@@ -5,6 +5,7 @@ import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, ChevronDown, Star, Activity, ShieldAlert } from 'lucide-react';
 import VenueSwitcherSheet, { type Branch } from './VenueSwitcherSheet';
 import AboutSheet from './AboutSheet';
+import VerifyPhoneDialog from './VerifyPhoneDialog';
 import './BranchBooking.css';
 
 // F-235 Slice A: the real merged Branch Select + Court Booking screen, replacing Phase 0's
@@ -41,6 +42,9 @@ export default function BranchBooking() {
   const [branchAbout, setBranchAbout] = useState<any>(null);
   const [venueSheetOpen, setVenueSheetOpen] = useState(false);
   const [aboutSheetOpen, setAboutSheetOpen] = useState(false);
+  // F-235 Slice C: phone-re-verify gate at Reserve, for a walk-in-created guest (F-229) whose
+  // phone was typed in by an admin and never proven live.
+  const [verifyPhoneOpen, setVerifyPhoneOpen] = useState(false);
 
   // No saved branch yet (first-ever visit): auto-select the first real branch. There is no
   // "pick a venue first" step in the merged design -- the switcher chip is how a guest corrects
@@ -346,6 +350,20 @@ export default function BranchBooking() {
   const handleReserve = async () => {
     if (!tenant || !branchId || !poolId || !selectedSlot || !user) return;
 
+    // F-235 Slice C: a walk-in-created guest (F-229) has a phone on file but never proved live
+    // possession of it. Reserve is the real, single choke point (same one the original design
+    // brief always pointed to) -- an already-verified guest (the normal case) sees zero change.
+    if (!user.isPhoneVerified) {
+      setVerifyPhoneOpen(true);
+      return;
+    }
+
+    await doReserve();
+  };
+
+  const doReserve = async () => {
+    if (!tenant || !branchId || !poolId || !selectedSlot || !user) return;
+
     try {
       setSubmitting(true);
       setBookingError(null);
@@ -406,6 +424,14 @@ export default function BranchBooking() {
         onSelect={handleSelectBranch}
       />
       <AboutSheet open={aboutSheetOpen} onOpenChange={setAboutSheetOpen} branchId={selectedBranchId} />
+      {user?.phone && (
+        <VerifyPhoneDialog
+          open={verifyPhoneOpen}
+          onOpenChange={setVerifyPhoneOpen}
+          phone={user.phone}
+          onVerified={doReserve}
+        />
+      )}
 
       {/* Multi-pool chip row -- only renders when a branch genuinely has more than one pool.
           Real JBC branches have exactly one today (confirmed against the live DB), so this is

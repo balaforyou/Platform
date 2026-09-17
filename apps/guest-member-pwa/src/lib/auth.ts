@@ -45,5 +45,9 @@ export async function attachPhone(
     body: JSON.stringify({ phone, code }),
     token: accessToken,
   });
-  if (res) mergeUser({ phone: res.phone });
+  // F-235 Slice C: attach-phone never re-signs a JWT, so isPhoneVerified must be merged
+  // explicitly or the client-side gate sees stale state until the next refresh cycle. Fixed
+  // here (the one shared helper) rather than per-caller -- CompleteSignupScreen.tsx had the
+  // same latent gap, just never observable before Slice C's gate started reading the claim.
+  if (res) mergeUser({ phone: res.phone, isPhoneVerified: res.isPhoneVerified });
 }
