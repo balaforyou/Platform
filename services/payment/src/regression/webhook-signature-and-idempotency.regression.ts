@@ -9,6 +9,7 @@ import {
   generateRazorpaySignature,
   bookingHeaders,
   paymentHeaders,
+  acceptTerms,
   PaymentContext,
   BRANCH_ID,
   USER_ID,
@@ -97,6 +98,8 @@ export const webhookSignatureAndIdempotencySections: Section<PaymentContext>[] =
       if (holdBooking.status !== 'HELD') {
         throw new Error(`Setup failed: Expected HELD booking, got ${holdBooking.status}`);
       }
+      // F-235 Slice B: real guest contract now requires this before any intent call.
+      await acceptTerms(holdBooking.id, USER_ID);
 
       const intentRes = await fetch(`${paymentUrl}/payments/intents`, {
         method: 'POST',
