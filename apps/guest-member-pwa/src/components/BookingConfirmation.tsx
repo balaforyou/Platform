@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
-import { useAuth } from '@badminton/ui-shared';
-import { CheckCircle, AlertCircle, Activity, ArrowRight, Navigation } from 'lucide-react';
+import { useAuth, useTenant } from '@badminton/ui-shared';
+import { CheckCircle, AlertCircle, Activity, ArrowRight, Navigation, Download } from 'lucide-react';
 
 export default function BookingConfirmation() {
   const { bookingId } = useParams();
   const { accessToken, user } = useAuth();
+  const { tenant } = useTenant();
 
   const [booking, setBooking] = useState<any>(null);
   // F-190 Slice 4: broadened from just .name so the real coordinates are available for a real
@@ -110,7 +111,7 @@ export default function BookingConfirmation() {
         <Link
           to="/bookings/my"
           className="mt-1"
-          style={{ minHeight: '44px', padding: '0 20px', display: 'inline-flex', alignItems: 'center', background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '14px', fontFamily: 'var(--font-body-organic)', fontSize: '13px', fontWeight: 700, color: 'var(--color-text)' }}
+          style={{ minHeight: '44px', padding: '0 20px', display: 'inline-flex', alignItems: 'center', background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '14px', fontFamily: 'var(--font-body-organic)', fontSize: '13px', fontWeight: 700, color: 'var(--color-text)' }}
         >
           Check my bookings
         </Link>
@@ -125,19 +126,19 @@ export default function BookingConfirmation() {
 
   return (
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '480px' }}>
-      {/* F-190 Slice 4: success/pending banner (JBC Booking.dc.html:315-319). "Booking Confirmed!"
-          is kept verbatim -- e2e-locked (guest-booking.spec.ts:82,127, f023-full-system.spec.ts:436
-          all assert exact text on #confirmation-title) and the right call regardless. (F-189 has
-          since added the assigned-court row further down -- see #confirmation-court-name -- rather
-          than "Court 3 is yours" in the banner.)
-          The pending state has no wireframe guidance (it only draws the success case)
-          -- adapted to the same banner structure. F-192 Slice F: pending state's amber routed
-          through the one sanctioned amber token set (--slot-almostfull-*). */}
+      {/* F-235 Slice F: rebuilt against the real "4. Payment + Confirmation" mockup artboard's
+          Confirmation half (canvas: https://claude.ai/artifact/4DapjUsKWiVahKfS8cCm8y) -- a full
+          panel (not a short band), checkmark, heading, centered date/venue, a REF pill, then the
+          new PDF receipt download (design brief §0.6) and a "Back to Home" action, all inside this
+          same panel. "Booking Confirmed!" is kept verbatim -- e2e-locked
+          (guest-booking.spec.ts:82,127, f023-full-system.spec.ts:436 assert exact text on
+          #confirmation-title). Pending state (no wireframe guidance, mockup only draws success)
+          keeps its own amber treatment (--slot-almostfull-*, F-192 Slice F). */}
       <div
-        className="flex flex-col items-start gap-4 px-6"
+        className="flex flex-col items-center gap-4 px-6 text-center"
         style={{
-          paddingTop: '44px',
-          paddingBottom: '36px',
+          paddingTop: '56px',
+          paddingBottom: '40px',
           background: isConfirmed ? 'var(--color-accent-2-800)' : 'var(--slot-almostfull-surface)',
         }}
       >
@@ -172,46 +173,85 @@ export default function BookingConfirmation() {
               : 'We are validating the signature with the bank. Please hold on.'}
           </p>
         </div>
+
+        {booking?.window && (
+          <div style={{ color: isConfirmed ? 'var(--color-accent-2-100)' : 'var(--slot-almostfull-text)' }}>
+            <div className="text-[13.5px] font-bold">{sDate} &middot; {st} - {et}</div>
+            {branchAbout?.name && <div className="text-[13.5px]" id="confirmation-venue-name">{branchAbout.name}</div>}
+          </div>
+        )}
+
+        {booking && (
+          <div
+            className="inline-flex items-center px-3 py-1.5 rounded-full font-mono text-[12.5px] font-bold"
+            style={{
+              background: isConfirmed ? 'rgba(255,255,255,0.15)' : 'var(--slot-almostfull-border)',
+              color: isConfirmed ? 'var(--color-bg)' : 'var(--slot-almostfull-text)',
+            }}
+          >
+            REF &middot; {formatBookingReference(booking.id)}
+          </div>
+        )}
+
+        {/* F-235 Slice F / design brief §0.6: PDF receipt, real and new -- generated entirely
+            client-side from data already on this screen (booking + branchAbout), no new fetch or
+            backend endpoint. Only offered once a booking is genuinely confirmed -- "after a
+            successful confirmation" per the design brief, and there's nothing final to put on a
+            receipt before then. */}
+        {isConfirmed && booking && (
+          <button
+            type="button"
+            id="download-receipt-btn"
+            onClick={() => {
+              // Dynamic import: jsPDF and its optional html2canvas/canvg dependencies (~230KB
+              // gzip) only load once a guest actually clicks this, not for every guest who
+              // reaches the confirmation screen.
+              import('../lib/receipt').then(({ downloadBookingReceipt }) => {
+                downloadBookingReceipt(booking, branchAbout, tenant?.appName || tenant?.name);
+              });
+            }}
+            className="w-full min-h-[50px] flex items-center justify-center gap-2 font-bold text-[14px]"
+            style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)', border: 'none', borderRadius: '14px' }}
+          >
+            <Download className="h-4 w-4" />
+            <span>Download Receipt (PDF)</span>
+          </button>
+        )}
+
+        <Link
+          to="/"
+          className="w-full min-h-[50px] flex items-center justify-center font-bold text-[14px]"
+          style={{
+            border: `1px solid ${isConfirmed ? 'var(--color-accent-2-200)' : 'var(--slot-almostfull-border)'}`,
+            color: isConfirmed ? 'var(--color-bg)' : 'var(--slot-almostfull-text)',
+            borderRadius: '14px',
+          }}
+        >
+          Back to Home
+        </Link>
       </div>
 
       <div className="px-5 py-6 space-y-6">
-        {/* Match details */}
+        {/* Real V1 detail rows with no equivalent on the mockup's Confirmation panel (which only
+            shows date/time/venue/reference, already ported into the header above) -- kept per
+            this project's governing principle rather than dropped, same fold-in shape as Slice
+            E's AccountSheet move. */}
         {booking && (
-          <div style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}>
-            <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-              <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Booking Reference</span>
-              <span className="text-[13.5px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>
-                {formatBookingReference(booking.id)}
-              </span>
-            </div>
-            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-              <div className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>{sDate}</div>
-              <div className="text-[12.5px]" style={{ color: 'var(--color-neutral-700)' }}>
-                {st} - {et}
-                {/* F-187: a multi-window (F-183) booking's additional hours are separate child
-                    rows, each with its own window — without this, a guest who booked 2+ hours
-                    would see only the first hour here despite paying for all of them. */}
-                {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
-                  <div id="confirmation-additional-windows">
-                    {booking.childBookings
-                      .slice()
-                      .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                      .map((child: any) => (
-                        <div key={child.id}>
-                          + {formatBranchTime(child.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
-                          {formatBranchTime(child.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            {branchAbout?.name && (
-              <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-                <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Venue</span>
-                <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }} id="confirmation-venue-name">
-                  {branchAbout.name}
-                </span>
+          <div style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}>
+            {/* F-187: a multi-window (F-183) booking's additional hours are separate child rows,
+                each with its own window — without this, a guest who booked 2+ hours would see
+                only the first hour despite paying for all of them. */}
+            {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
+              <div id="confirmation-additional-windows" className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)', color: 'var(--color-neutral-700)' }}>
+                {booking.childBookings
+                  .slice()
+                  .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
+                  .map((child: any) => (
+                    <div key={child.id} className="text-[12.5px]">
+                      + {formatBranchTime(child.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
+                      {formatBranchTime(child.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  ))}
               </div>
             )}
             {/* F-189: the assigned court. Real Resource name (F-205) when one was assigned;
@@ -254,21 +294,12 @@ export default function BookingConfirmation() {
             target="_blank"
             rel="noopener noreferrer"
             className="w-full min-h-[50px] flex items-center justify-center gap-2 font-bold text-[13.5px]"
-            style={{ border: '1px solid var(--color-neutral-300)', background: '#fff', color: 'var(--color-text)', borderRadius: '14px' }}
+            style={{ border: '1px solid var(--color-neutral-300)', background: 'var(--color-neutral-100)', color: 'var(--color-text)', borderRadius: '14px' }}
           >
             <Navigation className="h-4 w-4" />
             <span>Directions</span>
           </a>
         )}
-
-        {/* Go to Dashboard: secondary, non-sticky, stays in normal content flow. */}
-        <Link
-          to="/"
-          className="w-full py-3 rounded-2xl font-semibold text-center transition-colors text-xs block"
-          style={{ background: 'transparent', border: '1px solid var(--color-neutral-300)', color: 'var(--color-neutral-700)', fontFamily: 'var(--font-body-organic)' }}
-        >
-          Go to Dashboard
-        </Link>
       </div>
 
       {/* F-190 Slice 4: sticky primary action. Unlike BookingPay.tsx, this screen has exactly one
