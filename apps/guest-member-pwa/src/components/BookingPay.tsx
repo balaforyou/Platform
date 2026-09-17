@@ -319,7 +319,7 @@ export default function BookingPay() {
             marginTop: '4px',
             minHeight: '44px',
             padding: '0 20px',
-            background: '#fff',
+            background: 'var(--color-neutral-100)',
             border: '1px solid var(--color-neutral-300)',
             borderRadius: '14px',
             fontFamily: 'var(--font-body-organic)',
@@ -342,33 +342,37 @@ export default function BookingPay() {
     // colour, so this inherited base is inert -- kept as-is so the Slice 3-migrated summary card /
     // YOUR NUMBER / pay button stay byte-identical.
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '480px' }}>
-      {/* F-192 Slice E: the F-190 Slice 3 dark header shell is removed -- the shared Layout band
-          (Slice B) already carries the wordmark + "CONFIRM AND PAY" + account control. Per
-          wireframe frame 09 the back control becomes a "Back to slots" pill in the page.
-          navigate(-1) is plain browser-back semantics, unchanged. */}
+      {/* F-235 Slice F: header rebuilt against the real "4. Payment + Confirmation" mockup
+          artboard's Payment half (canvas: https://claude.ai/artifact/4DapjUsKWiVahKfS8cCm8y) --
+          a plain back-chevron + "Review & Pay" title, replacing the F-192 Slice E pill button.
+          navigate(-1) is unchanged browser-back semantics. The shared Layout band (Slice B)
+          still carries the wordmark + account control above this. */}
       <div className="px-5 py-6 space-y-6">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 transition-colors"
-          style={{
-            minHeight: '44px',
-            padding: '0 16px 0 12px',
-            background: 'var(--color-neutral-200)',
-            border: '1px solid var(--color-neutral-300)',
-            borderRadius: '999px',
-            fontFamily: 'var(--font-body-organic)',
-            fontSize: '13px',
-            fontWeight: 700,
-            color: 'var(--color-text)',
-          }}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to slots</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            aria-label="Back"
+            className="flex items-center justify-center transition-colors"
+            style={{
+              width: '36px',
+              height: '36px',
+              background: 'var(--color-neutral-200)',
+              border: '1px solid var(--color-neutral-300)',
+              borderRadius: '999px',
+              color: 'var(--color-text)',
+              flexShrink: 0,
+            }}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '20px', color: 'var(--color-text)' }}>
+            Review &amp; Pay
+          </h1>
+        </div>
 
         {/* Booking Summary */}
-        <div style={{ background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}>
           <div className="p-4" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
             {/* F-037: this showed `booking.id.slice(0, 8)` under the label "Booking ID" — a
                 truncated raw UUID, meaningless to the customer AND incomplete to quote back.
@@ -432,7 +436,7 @@ export default function BookingPay() {
             </div>
             <div
               className="flex items-center gap-2.5 px-4"
-              style={{ border: '1px solid var(--color-neutral-300)', background: '#fff', borderRadius: '14px', minHeight: '52px' }}
+              style={{ border: '1px solid var(--color-neutral-300)', background: 'var(--color-neutral-100)', borderRadius: '14px', minHeight: '52px' }}
             >
               <span className="text-[14px] font-bold" style={{ color: 'var(--color-text)' }}>{user.phone}</span>
               <span
@@ -452,43 +456,48 @@ export default function BookingPay() {
           </div>
         )}
 
-        {/* F-235 Slice B: real T&C acceptance, gating both pay methods below. First time this
-            F-129 business-supplied copy exists as real app text rather than register prose. */}
-        <div
-          className="p-4 space-y-3"
-          style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '16px' }}
+        {/* F-235 Slice F: restyled to the real mockup's single combined-paragraph shape (one
+            checkbox + one sentence carrying all three clauses, plus a small persistence caption)
+            instead of the F-235 Slice B bulleted-list-plus-separate-checkbox-line shape.
+            Presentation-only change -- #accept-terms-checkbox id and handleTermsCheckbox's
+            server-write-gated logic (POST /bookings/:id/terms, then /payment/intents) are
+            byte-identical to Slice B. */}
+        <label
+          className="flex items-start gap-3 p-4"
+          style={{ background: 'var(--color-accent-2-100)', border: '1px solid var(--color-accent-2-300)', borderRadius: '16px', cursor: acceptingTerms ? 'default' : 'pointer' }}
           id="terms-acceptance-block"
         >
-          <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
-            COURT TERMS
+          <input
+            type="checkbox"
+            id="accept-terms-checkbox"
+            checked={termsAccepted}
+            disabled={acceptingTerms}
+            onChange={(e) => handleTermsCheckbox(e.target.checked)}
+            style={{ marginTop: '2px', width: '18px', height: '18px', flexShrink: 0 }}
+          />
+          <div className="space-y-1.5">
+            <p className="text-[12.5px] font-bold leading-relaxed" style={{ color: 'var(--color-text)' }}>
+              I agree to the venue&rsquo;s court rules for this booking &mdash; non-marking shoes,
+              no food or drinks on court, no liability for injuries sustained during play at{' '}
+              {branchAbout?.name || 'this venue'}.
+            </p>
+            <p className="text-[11px]" style={{ color: 'var(--color-neutral-700)' }}>
+              Accepted terms are recorded against this specific booking.
+            </p>
+            {termsError && (
+              <div className="flex items-start space-x-2 text-xs pt-1" style={{ color: 'var(--color-destructive)' }} id="terms-error-banner">
+                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{termsError}</span>
+              </div>
+            )}
           </div>
-          <ul className="text-[12.5px] space-y-1 pl-4" style={{ color: 'var(--color-neutral-700)', listStyleType: 'disc' }}>
-            <li>Non-marking shoes are mandatory on court.</li>
-            <li>No food or drinks allowed on court.</li>
-            <li>{branchAbout?.name || 'This venue'} is not liable for injuries sustained during play.</li>
-          </ul>
-          <label className="flex items-start gap-2.5 text-[12.5px] font-bold" style={{ color: 'var(--color-text)' }}>
-            <input
-              type="checkbox"
-              id="accept-terms-checkbox"
-              checked={termsAccepted}
-              disabled={acceptingTerms}
-              onChange={(e) => handleTermsCheckbox(e.target.checked)}
-              style={{ marginTop: '2px', width: '16px', height: '16px', flexShrink: 0 }}
-            />
-            <span>I have read and agree to the court terms above.</span>
-          </label>
-          {termsError && (
-            <div className="flex items-start space-x-2 text-xs" style={{ color: 'var(--color-destructive)' }} id="terms-error-banner">
-              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{termsError}</span>
-            </div>
-          )}
-        </div>
+        </label>
 
-        {/* Payment methods */}
+        {/* Payment methods -- dev-only simulate button has no mockup equivalent (mockup shows one
+            sticky Pay button only), kept per this project's governing principle: real V1
+            functionality with no mockup equivalent is fitted in, never dropped. Not part of the
+            sticky footer below since it's a secondary, dev-only path. */}
         <div className="space-y-3">
-          {/* Mock Dev Method -- restyle only, unchanged position/behavior/dev-gating. */}
           {isDev && (
             <button
               onClick={handleMockPayment}
@@ -545,36 +554,49 @@ export default function BookingPay() {
               <span>{paymentError}</span>
             </div>
           )}
-
-          {/* F-190 Slice 3: one real button, not two -- UPI needs no separate button or
-              config.display work, Razorpay's Standard Checkout already surfaces it as a selectable
-              method inside the one overlay and hands off to the device's UPI apps (Intent)
-              directly. handleRazorpayCheckout is entirely unchanged -- same order-creation/verify/
-              navigate flow, same unrestricted options. Restyled to the wireframe's actual
-              payment-CTA color, a deliberate departure from 3a/3b's accent-700: accent-400
-              background, neutral-900 text, 54px height. Label is dynamic (real amount), matching
-              the wireframe's own {{pay.payLabel}} convention minus the fake UPI-app-name suffix it
-              originally paired with. #pay-amount-display above is not duplicated here -- the
-              button repeating the amount is the wireframe's own intentional redundancy, not a
-              mistake to fix. */}
-          <button
-            onClick={handleRazorpayCheckout}
-            disabled={paying || !termsAccepted}
-            className="w-full min-h-[54px] rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: 'var(--color-accent-400)', color: 'var(--color-neutral-900)', border: 'none' }}
-            id="real-razorpay-btn"
-          >
-            {paying ? (
-              <Activity className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Smartphone className="h-4 w-4" />
-                <span>Pay ₹{payAmount}</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
+
+      {/* F-235 Slice F: sticky TOTAL + Pay footer, matching the real mockup's Payment-half
+          sticky bar shape (same pattern BookingConfirmation.tsx's own sticky footer already
+          uses). F-190 Slice 3: one real button, not two -- UPI needs no separate button or
+          config.display work, Razorpay's Standard Checkout already surfaces it as a selectable
+          method inside the one overlay and hands off to the device's UPI apps (Intent) directly.
+          handleRazorpayCheckout is entirely unchanged -- same order-creation/verify/navigate
+          flow, same unrestricted options. #pay-amount-display (in the summary card above) is not
+          duplicated here -- the footer repeating the amount is the mockup's own intentional
+          redundancy (TOTAL label + Pay button both show it), not a mistake to fix. */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-20 px-5 pt-3.5 pb-[calc(14px+env(safe-area-inset-bottom))] flex items-center gap-4
+          sm:static sm:px-0 sm:pt-0 sm:pb-6"
+        style={{ background: 'var(--color-neutral-100)', borderTop: '1px solid var(--color-neutral-300)' }}
+      >
+        <div className="flex flex-col shrink-0">
+          <span style={{ fontFamily: 'var(--font-body-organic)', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
+            TOTAL
+          </span>
+          <span className="text-lg font-extrabold font-mono" style={{ color: 'var(--color-text)' }}>
+            ₹{payAmount}
+          </span>
+        </div>
+        <button
+          onClick={handleRazorpayCheckout}
+          disabled={paying || !termsAccepted}
+          className="flex-1 min-h-[54px] rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: 'var(--color-accent-400)', color: 'var(--color-neutral-900)', border: 'none' }}
+          id="real-razorpay-btn"
+        >
+          {paying ? (
+            <Activity className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <Smartphone className="h-4 w-4" />
+              <span>Pay ₹{payAmount}</span>
+            </>
+          )}
+        </button>
+      </div>
+      <div className="sm:hidden" style={{ height: '90px' }} />
     </div>
   );
 }
