@@ -40,12 +40,18 @@ test.describe('Findings Verification (F-009 client-side rendering)', () => {
     await page.goto('/login');
     await page.evaluate(() => localStorage.clear());
 
-    await page.fill('input[placeholder="99999 99999"]', '9999999999');
-    await page.click('button[type="submit"]');
-    await page.waitForSelector('input[placeholder="Enter 4 or 6 digit OTP"]');
-
-    await page.fill('input[placeholder="Enter 4 or 6 digit OTP"]', '123456');
-    await page.click('button[type="submit"]');
+    // F-235 Slice D: guest-pwa's /login lost its phone/OTP form (Gmail-only now) -- prime the
+    // session via the same real, unchanged OTP endpoints VerifyPhoneDialog already calls,
+    // bypassing the UI. page.request shares the page's cookie jar, so the real refresh_token
+    // cookie these calls set lands automatically, picked up by AuthProvider's existing
+    // boot-time silent refresh on page.goto.
+    await page.request.post('/api/identity/auth/otp/request', {
+      data: { phone: '9999999999', tenantId: '11111111-1111-1111-1111-111111111111' },
+    });
+    await page.request.post('/api/identity/auth/otp/verify', {
+      data: { phone: '9999999999', tenantId: '11111111-1111-1111-1111-111111111111', code: '123456' },
+    });
+    await page.goto('/');
 
     await expect(page).toHaveURL('/');
 

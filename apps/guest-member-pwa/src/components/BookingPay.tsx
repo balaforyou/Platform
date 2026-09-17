@@ -418,14 +418,13 @@ export default function BookingPay() {
             GET /bookings/:id never joins one in, so that reference has always silently resolved to
             undefined. useAuth().user.phone is the JWT's own phone claim, already decoded into
             AuthContext -- real, already-available, no new request. "Verified" is accurate, not
-            decorative -- but as of F-228 Step 3, not for the reason originally written here: this
-            route is inside main.tsx's ProtectedRoute, which redirects to /complete-signup whenever
-            the JWT's phone claim is null, so this screen is unreachable by a phone-incomplete
-            account. (The prior justification -- "every path to an access token requires phone OTP
-            first" -- described a signup-time gate on Google login that F-228 Step 1 removed; a
-            fresh Google signup can reach a valid access token with phone:null now, which is exactly
-            why the route-level gate above replaced it. F-228 Step 4 verified this is a full,
-            no-gap replacement, not a partial one.) */}
+            decorative -- but as of F-235 Slice D, not for the reason originally written here:
+            main.tsx's ProtectedRoute no longer gates on phone presence at all (a fresh Google
+            signup with no phone reaches every route, including this one). Phone presence AND
+            verification by the time this screen is reached are instead guaranteed by
+            BranchBooking.tsx's handleReserve, which blocks on `!user.isPhoneVerified` and routes
+            through VerifyPhoneDialog before ever calling POST /slot-engine/bookings -- the booking
+            this screen pays for cannot exist yet without that gate having already passed. */}
         {user?.phone && (
           <div className="flex flex-col gap-2">
             <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>

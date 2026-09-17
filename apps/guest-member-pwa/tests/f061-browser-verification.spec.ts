@@ -18,17 +18,39 @@ const OWNER_PHONE = '9999999999';
 const GUEST_PHONE = '9655500011';
 const OTP = '123456';
 const SHOTS = 'test-results/f061';
+// courtowner1's real tenant id -- same constant this spec's peers (f023, member-self-confirm)
+// already use.
+const COURTOWNER1_TENANT_ID = '11111111-1111-1111-1111-111111111111';
 
 async function loginByOtp(page: any, phone: string, appPrefix = '') {
-  await page.goto(`${appPrefix}/login?tenant=courtowner1`);
-  await page
-    .locator('input[placeholder="99999 99999"], input[placeholder="9999999999"]')
-    .fill(phone);
-  await page.click('button[type="submit"]');
-  const otp = page.locator('input[placeholder="Enter 4 or 6 digit OTP"], input[placeholder="123456"]');
-  await otp.waitFor();
-  await otp.fill(OTP);
-  await page.click('button[type="submit"]');
+  // F-235 Slice D: guest-pwa's /login lost its phone/OTP form (Gmail-only now) -- the admin
+  // path (appPrefix === '/admin', untouched by this slice) still drives the real UI. For guest,
+  // prime the session via the same real, unchanged OTP endpoints VerifyPhoneDialog already
+  // calls, bypassing the UI -- page.request shares the page's cookie jar, so the real
+  // refresh_token cookie these calls set lands automatically, picked up by AuthProvider's
+  // existing boot-time silent refresh on page.goto('/').
+  if (appPrefix === '/admin') {
+    await page.goto(`${appPrefix}/login?tenant=courtowner1`);
+    await page
+      .locator('input[placeholder="99999 99999"], input[placeholder="9999999999"]')
+      .fill(phone);
+    await page.click('button[type="submit"]');
+    const otp = page.locator('input[placeholder="Enter 4 or 6 digit OTP"], input[placeholder="123456"]');
+    await otp.waitFor();
+    await otp.fill(OTP);
+    await page.click('button[type="submit"]');
+    return;
+  }
+
+  await page.request.post('/api/identity/auth/otp/request', {
+    data: { phone, tenantId: COURTOWNER1_TENANT_ID },
+  });
+  await page.request.post('/api/identity/auth/otp/verify', {
+    data: { phone, tenantId: COURTOWNER1_TENANT_ID, code: OTP },
+  });
+  // TenantContext.tsx re-resolves the tenant from ?tenant= on every navigation (falling back to
+  // a default otherwise) -- the query param must survive onto this goto, not just the login URL.
+  await page.goto('/?tenant=courtowner1');
 }
 
 test.describe('F-061 browser verification', () => {
