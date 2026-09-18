@@ -17,6 +17,16 @@ interface CancelBookingModalProps {
 export default function CancelBookingModal({ bookingId, booking, branchAbout, onClose, onSuccess }: CancelBookingModalProps) {
   const { accessToken } = useAuth();
   const { tenant } = useTenant();
+  // F-241/F-243: a HELD booking was never paid for, so a refund-tier breakdown and
+  // refund-processing copy are both nonsensical here -- confirmed via cancel-preview
+  // (services/slot-engine/src/index.ts) returning refundPercent:100/refundAmount:price for
+  // HELD regardless, which reads as "you'll get back money that was never charged."
+  // Snapshotted once at mount, not derived live from `booking`: onSuccess() (called from
+  // handleConfirmCancel below) refreshes BookingHistory.tsx's list and flips this same booking's
+  // prop to CANCELLED before the modal's own "cancelled" success view renders, which silently
+  // reverted this to the CONFIRMED copy for a real HELD cancel -- caught live during F-240/248
+  // batch verification.
+  const [isHeld] = useState(() => booking?.status === 'HELD');
   const [preview, setPreview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -113,9 +123,13 @@ export default function CancelBookingModal({ bookingId, booking, branchAbout, on
           <div className="space-y-4">
             <div className="flex flex-col items-center text-center gap-2 py-2">
               <CheckCircle className="h-8 w-8" style={{ color: 'var(--color-accent-2-800)' }} />
-              <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Booking cancelled</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                {isHeld ? 'Hold released' : 'Booking cancelled'}
+              </p>
               <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }}>
-                Your refund of ₹{preview?.refundAmount} will be processed under the venue&rsquo;s policy.
+                {isHeld
+                  ? 'Your hold has been released. No payment was ever taken for this booking.'
+                  : <>Your refund of ₹{preview?.refundAmount} will be processed under the venue&rsquo;s policy.</>}
               </p>
             </div>
             <button
@@ -142,29 +156,38 @@ export default function CancelBookingModal({ bookingId, booking, branchAbout, on
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-xs leading-relaxed" style={{ color: 'var(--color-neutral-700)' }}>
-              Cancellations follow the venue&rsquo;s booking rules. Here&rsquo;s your refund under the current policy.
-            </p>
+            {isHeld ? (
+              // F-241/F-243: HELD is a hold, not a payment -- no refund to preview or process.
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--color-neutral-700)' }}>
+                Release this hold? No payment has been made for this booking, so there&rsquo;s nothing to refund.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--color-neutral-700)' }}>
+                  Cancellations follow the venue&rsquo;s booking rules. Here&rsquo;s your refund under the current policy.
+                </p>
 
-            <div
-              className="p-4 rounded-xl space-y-3 font-mono text-xs"
-              style={{ background: 'var(--color-neutral-200)', border: '1px solid var(--color-neutral-300)' }}
-            >
-              <div className="flex justify-between" style={{ color: 'var(--color-neutral-600)' }}>
-                <span>Original Price:</span>
-                <span style={{ color: 'var(--color-text)' }}>₹{preview?.originalPrice}</span>
-              </div>
-              <div className="flex justify-between" style={{ color: 'var(--color-neutral-600)' }}>
-                <span>Policy Refund %:</span>
-                <span className="font-bold" style={{ color: 'var(--color-accent-2-800)' }}>{preview?.refundPercent}%</span>
-              </div>
-              <div className="flex justify-between items-center pt-2.5 text-sm" style={{ borderTop: '1px solid var(--color-neutral-300)' }}>
-                <span className="font-semibold" style={{ color: 'var(--color-text)' }}>Calculated Refund:</span>
-                <span className="font-extrabold text-base" style={{ color: 'var(--color-accent-2-800)' }} id="refund-preview-display">
-                  ₹{preview?.refundAmount}
-                </span>
-              </div>
-            </div>
+                <div
+                  className="p-4 rounded-xl space-y-3 font-mono text-xs"
+                  style={{ background: 'var(--color-neutral-200)', border: '1px solid var(--color-neutral-300)' }}
+                >
+                  <div className="flex justify-between" style={{ color: 'var(--color-neutral-600)' }}>
+                    <span>Original Price:</span>
+                    <span style={{ color: 'var(--color-text)' }}>₹{preview?.originalPrice}</span>
+                  </div>
+                  <div className="flex justify-between" style={{ color: 'var(--color-neutral-600)' }}>
+                    <span>Policy Refund %:</span>
+                    <span className="font-bold" style={{ color: 'var(--color-accent-2-800)' }}>{preview?.refundPercent}%</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2.5 text-sm" style={{ borderTop: '1px solid var(--color-neutral-300)' }}>
+                    <span className="font-semibold" style={{ color: 'var(--color-text)' }}>Calculated Refund:</span>
+                    <span className="font-extrabold text-base" style={{ color: 'var(--color-accent-2-800)' }} id="refund-preview-display">
+                      ₹{preview?.refundAmount}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="flex space-x-3 pt-2">
               <button

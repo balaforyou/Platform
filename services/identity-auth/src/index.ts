@@ -778,6 +778,13 @@ server.post('/auth/google/verify', async (request, reply) => {
     userType: user.userType,
     // F-235 Slice C: same claim as /auth/otp/verify above.
     isPhoneVerified: user.isPhoneVerified,
+    // F-248: without these, a fresh Google login shows the generic icon until the *next*
+    // silent refresh -- /auth/refresh's own JWT sign call already carries both (F-219), so this
+    // just matches that shape rather than leaving the very first token behind it. AuthContext's
+    // parseJwt decodes the whole payload generically, so no frontend change is needed to consume
+    // these once they're present.
+    displayName: user.displayName,
+    photoUrl: user.photoUrl,
     roles,
   }, { expiresIn: '15m' });
 

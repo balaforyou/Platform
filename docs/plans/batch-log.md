@@ -2978,6 +2978,71 @@ No code, register, or `pending-findings.md` change — this is operational clean
 fix, per Chief's explicit instruction not to fold this into F-214's still-undecided retention
 policy.
 
+## Batch 62 — F-159/F-240/F-241/F-242/F-243/F-245/F-246/F-247/F-248, deploy pending
+
+Eight of the ten findings assigned from F-235's production deploy round's own live-fire
+verification (F-239 handled separately, Batch 61.5-equivalent via its own branch/PR; F-244
+deliberately excluded, needs its own dedicated plan-mode pass per the register's own note).
+Branch `f240-248-followup-findings`, cut from `main`@`11f7001`, merged forward onto
+`f239-guest-pricing-quote-fix`'s tip (`6d059be`) to pick up the real F-240-248 Open register rows
+and F-239's own fix/resolution before this batch's Resolved conversions were written — avoiding
+the exact duplicate-ID risk this project has hit before.
+
+**F-241 + F-243** (fixed together, same root cause): `CancelBookingModal.tsx` now branches on
+whether the booking being cancelled is `HELD`, showing a plain release-hold confirmation with no
+refund-tier math instead of the refund panel/copy, which previously ran unconditionally for both
+`HELD` and `CONFIRMED`. **A second real bug caught live during this fix's own first verification
+attempt, not assumed from the plan:** the branch flag was originally derived live from the
+`booking` prop, which the parent flips to `CANCELLED` before the modal's own success view
+re-renders — silently reverting a real `HELD` cancel's success copy back to the `CONFIRMED`
+wording. Fixed by snapshotting the flag once at mount instead.
+
+**F-245**: `POST /bookings/:id/cancel` now rejects with `400 SLOT_ALREADY_ENDED` when the slot has
+already started, checked before either status branch — an outright rejection, not a refund-tier
+resolution, so `refundAmount` stays `null` and the booking's status is left untouched. Client-side,
+`BookingHistory.tsx` hides the Cancel Match button for the same condition. Verified against real
+wall-clock time (booked a real slot, waited for its real UTC start to pass, confirmed the button
+gone) rather than a DB timestamp edit — direct mutation of `badminton_db`, a shared resource, was
+correctly refused by this session's own safety guard as out of scope for a live-fire test.
+
+**F-242 + F-247**: Home/Dashboard's upcoming-slots card gained the same Pay Now (`HELD` rows) and
+Directions (`hasCoordinates`-gated) actions `BookingHistory.tsx`'s equivalent card already had.
+
+**F-246**: Directions icon moved to `BookingHistory.tsx`'s header row (next to the status badge)
+with a new `gpwa-directions-pulse` opacity-pulse animation, `prefers-reduced-motion`-guarded.
+
+**F-240** (closes out [[F-159]] as its narrower remaining half): `BookingHistory.tsx` gained a
+persistent "Receipt" action reusing the existing `receipt.ts` PDF functions via the same lazy
+`import()` Slice F established, for `CONFIRMED`/`CHECKED_IN`/`CANCELLED` bookings.
+
+**F-248**: real Google `name`/`picture` now persisted onto `User.displayName`/`photoUrl` on both
+create and a real `??`-merge update in `memberGoogleAuth.ts` (F-219's exact pattern, ported);
+`/auth/google/verify`'s own JWT sign call now carries `displayName`/`photoUrl` (closing a
+first-login flicker gap `/auth/refresh` didn't have); new `apps/guest-member-pwa/src/components/ui/Avatar.tsx`
+wired into `Shell.tsx` and `AccountSheet.tsx`. **A second real, adjacent bug found in the same file
+during investigation:** `AccountSheet.tsx`'s name line read `user?.name` (F-229's walk-in field)
+instead of `user?.displayName` (F-219/this fix's real Google field) — corrected. New unit tests
+added to `memberGoogleAuth.test.ts` (11/11 green); a real Google OAuth login could not be performed
+in this sandbox (operating rule), so this half is verified at the unit/code level only, stated
+plainly rather than claimed as full live-fire.
+
+**Two real, separate observations surfaced during this batch's own live-fire verification,
+described for Chief rather than folded in (rule 9):** (1) the dev branch's `Branch.timezone` is
+configured as the literal string `"UTC"`, so displayed slot times are raw UTC instants, not real
+IST wall-clock — affects testing methodology and possibly real tenant config, not confirmed
+against production. (2) the Directions icon's `--color-accent-700` measures ~2.9:1 contrast
+against the dark-mode background, below WCAG AA's 3:1 for non-text UI — a pre-existing token
+choice, not a regression from F-246's repositioning.
+
+Full 5-service regression green post-rebuild (75/75, 15/15, 11/11, 20/20, 7/7) — stopped the local
+docker dev stack down to Postgres-only before running, restarted it after, confirmed hot-reload
+picked up all changes with no compile errors. `tsc --noEmit` + full build clean for `slot-engine`,
+`identity-auth`, `guest-member-pwa`. `pnpm register:check` and `pnpm diagram:verify` both green.
+
+**Holds for a combined deploy with F-239** — no separate `promote.sh` run for this batch alone,
+per Bala's standing call relayed through the Technical Lead thread. Not yet committed, pending
+explicit sign-off; PR to follow once committed and pushed.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

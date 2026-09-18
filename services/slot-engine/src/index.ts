@@ -3770,6 +3770,22 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
     throw new Error('Only held or confirmed bookings can be cancelled');
   }
 
+  // F-245: neither branch below rejected a booking whose slot has already started or ended --
+  // hoursBeforeSlot was only ever used to pick a refund tier, so a past-slot cancel silently
+  // succeeded with no tier matching (refundAmount stays null) rather than surfacing that
+  // anything unusual happened. Confirmed no real caller relies on cancelling a past-slot
+  // booking: neither admin-web nor admin-v2 call this route at all (grepped directly), and the
+  // only real caller anywhere is the guest-facing CancelBookingModal.tsx -- safe to reject
+  // outright rather than allow a silent no-op-refund "cancellation" of a match that already
+  // happened.
+  if (new Date() >= new Date(booking.window.startTime)) {
+    reply.status(400);
+    const err = new Error('This slot has already started or ended and can no longer be cancelled');
+    (err as any).statusCode = 400;
+    (err as any).code = 'SLOT_ALREADY_ENDED';
+    throw err;
+  }
+
   let refundAmount: Prisma.Decimal | null = null;
 
   if (booking.status === BookingStatus.CONFIRMED) {

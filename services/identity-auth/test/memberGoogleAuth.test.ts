@@ -10,6 +10,8 @@ interface FakeUser {
   userType: string;
   isPhoneVerified: boolean;
   isEmailVerified: boolean;
+  displayName?: string | null;
+  photoUrl?: string | null;
 }
 
 function matches(u: FakeUser, tenantId: string, googleId: string, email: string): boolean {
@@ -50,8 +52,17 @@ function fakePrisma(
           userType: data.userType,
           isPhoneVerified: data.isPhoneVerified,
           isEmailVerified: data.isEmailVerified,
+          displayName: data.displayName ?? null,
+          photoUrl: data.photoUrl ?? null,
         };
         rows.push(row);
+        return row;
+      },
+      update: async ({ where, data }: any) => {
+        const row = rows.find((u) => u.id === where.id);
+        if (!row) throw new Error('row not found');
+        row.displayName = data.displayName;
+        row.photoUrl = data.photoUrl;
         return row;
       },
     },
@@ -148,5 +159,71 @@ describe('findOrCreateMemberUser', () => {
     } as unknown as MemberAuthPrisma;
 
     await expect(findOrCreateMemberUser(prisma, IDENTITY, TENANT_ID)).rejects.toThrow('connection lost');
+  });
+
+  // F-248: real coverage for the new displayName/photoUrl capture -- neither path persisted
+  // Google's real name/photo before this fix.
+  const IDENTITY_WITH_PROFILE = { ...IDENTITY, name: 'Bala K', picture: 'https://example.com/p.jpg' };
+
+  it('persists displayName/photoUrl on a brand-new signup when the identity carries them', async () => {
+    const { prisma, rows } = fakePrisma([]);
+    const result = await findOrCreateMemberUser(prisma, IDENTITY_WITH_PROFILE, TENANT_ID);
+
+    expect(result.user).toMatchObject({ displayName: 'Bala K', photoUrl: 'https://example.com/p.jpg' });
+    expect(rows[0]).toMatchObject({ displayName: 'Bala K', photoUrl: 'https://example.com/p.jpg' });
+  });
+
+  it('creates displayName/photoUrl as null when the identity carries neither (OTP-style, no Google profile)', async () => {
+    const { rows, prisma } = fakePrisma([]);
+    await findOrCreateMemberUser(prisma, IDENTITY, TENANT_ID);
+
+    expect(rows[0]).toMatchObject({ displayName: null, photoUrl: null });
+  });
+
+  it('merges real name/photo onto an existing row that never had them, via a real update', async () => {
+    const existing: FakeUser = {
+      id: 'u1', tenantId: TENANT_ID, email: IDENTITY.email, googleId: IDENTITY.googleId,
+      phone: null, userType: 'GUEST', isPhoneVerified: true, isEmailVerified: false,
+      displayName: null, photoUrl: null,
+    };
+    const { prisma, rows } = fakePrisma([existing]);
+    const result = await findOrCreateMemberUser(prisma, IDENTITY_WITH_PROFILE, TENANT_ID);
+
+    expect(result.isNewSignup).toBe(false);
+    expect(result.user).toMatchObject({ displayName: 'Bala K', photoUrl: 'https://example.com/p.jpg' });
+    expect(rows[0]).toMatchObject({ displayName: 'Bala K', photoUrl: 'https://example.com/p.jpg' });
+  });
+
+  it('never overwrites an existing displayName/photoUrl when a later login carries neither (`??`-merge, not a blind overwrite)', async () => {
+    const existing: FakeUser = {
+      id: 'u1', tenantId: TENANT_ID, email: IDENTITY.email, googleId: IDENTITY.googleId,
+      phone: null, userType: 'GUEST', isPhoneVerified: true, isEmailVerified: false,
+      displayName: 'Already Real Name', photoUrl: 'https://example.com/already.jpg',
+    };
+    const { prisma, rows } = fakePrisma([existing]);
+    // IDENTITY (no name/picture) simulates a token response missing the claim.
+    const result = await findOrCreateMemberUser(prisma, IDENTITY, TENANT_ID);
+
+    expect(result.isNewSignup).toBe(false);
+    expect(result.user).toEqual(existing);
+    expect(rows[0]).toEqual(existing);
+  });
+
+  it('does not call update at all when the existing row already has both and the identity carries neither', async () => {
+    const existing: FakeUser = {
+      id: 'u1', tenantId: TENANT_ID, email: IDENTITY.email, googleId: IDENTITY.googleId,
+      phone: null, userType: 'GUEST', isPhoneVerified: true, isEmailVerified: false,
+      displayName: 'Already Real Name', photoUrl: null,
+    };
+    let updateCalled = false;
+    const prisma: MemberAuthPrisma = {
+      user: {
+        findFirst: async () => existing,
+        update: async (args: any) => { updateCalled = true; return args; },
+      },
+    } as unknown as MemberAuthPrisma;
+
+    await findOrCreateMemberUser(prisma, IDENTITY, TENANT_ID);
+    expect(updateCalled).toBe(false);
   });
 });

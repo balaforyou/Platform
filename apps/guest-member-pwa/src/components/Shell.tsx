@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Home as HomeIcon, CalendarCheck2, User as UserIcon } from 'lucide-react';
+import { useAuth } from '@badminton/ui-shared';
 import AccountSheet from './ui/AccountSheet';
+import Avatar from './ui/Avatar';
 import PwaInstallPrompt from './PwaInstallPrompt';
 import './Shell.css';
 
@@ -39,7 +41,12 @@ function isActive(pathname: string, matchPaths: string[]): boolean {
 // canary (member-self-confirm.spec.ts, f041-verification.spec.ts) that clicks #logout-btn today.
 export default function Shell() {
   const { pathname } = useLocation();
+  const { user } = useAuth();
   const [accountOpen, setAccountOpen] = useState(false);
+  // F-248: real Google name/photo, falling back to the generic icon when neither exists (a
+  // phone-only guest who never signed in with Google) -- same fallback-chain precedent
+  // admin-v2's AppShell.tsx already established for F-219.
+  const avatarName = user?.displayName || user?.name || user?.email || null;
 
   return (
     <div className="gpwa-shell">
@@ -49,7 +56,7 @@ export default function Shell() {
         aria-label="Account"
         onClick={() => setAccountOpen(true)}
       >
-        <UserIcon className="h-4 w-4" />
+        {avatarName ? <Avatar src={user?.photoUrl} name={avatarName} size={28} /> : <UserIcon className="h-4 w-4" />}
       </button>
 
       <main className="gpwa-shell__outlet">

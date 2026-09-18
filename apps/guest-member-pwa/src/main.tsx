@@ -15,7 +15,7 @@ import BookingHistory from './components/BookingHistory';
 import BookingConfirmation from './components/BookingConfirmation';
 import Shell from './components/Shell';
 import LoadingState from './components/ui/LoadingState';
-import { AlertTriangle, CheckCircle, Clock, MapPin } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, MapPin, Navigation } from 'lucide-react';
 import './index.css';
 
 // Capture beforeinstallprompt event globally to avoid React component mounting race conditions
@@ -271,6 +271,13 @@ function MainDashboard() {
     return () => { isMounted = false; };
   }, [upcoming, accessToken]);
 
+  // F-247: same real coordinate-validity check as BookingHistory.tsx/BookingConfirmation.tsx --
+  // Number.isFinite, not truthy, since 0/0 is a real point (Gulf of Guinea). branchAboutById
+  // already carries the coordinates this needs (fetched above); only the render was missing.
+  const hasCoordinates = (about: any) =>
+    typeof about?.latitude === 'number' && Number.isFinite(about.latitude) &&
+    typeof about?.longitude === 'number' && Number.isFinite(about.longitude);
+
   // Upcoming = has not started yet, and is still a live booking. CANCELLED and RELEASED_NO_SHOW are
   // excluded. HELD is deliberately included: a hold carries a 5-minute TTL swept server-side
   // (slot-engine/src/index.ts:2944), so a HELD row here is genuinely in flight. Dropping it would
@@ -468,6 +475,7 @@ function MainDashboard() {
             {upcomingSlots.slice(0, 3).map((b) => {
               const timezone = branchAboutById[b.branchId]?.timezone;
               const badge = upcomingBadge(b.status);
+              const about = branchAboutById[b.branchId];
               return (
                 <div
                   key={b.id}
@@ -483,12 +491,44 @@ function MainDashboard() {
                       {badge.label}
                     </span>
                   </div>
-                  <div className="text-[11px] font-mono" style={{ color: 'var(--color-neutral-600)' }}>
-                    {formatBranchTime(b.window.startTime, timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
-                    {' · '}
-                    {formatBranchTime(b.window.startTime, timezone, { hour: '2-digit', minute: '2-digit' })}
-                    {' - '}
-                    {formatBranchTime(b.window.endTime, timezone, { hour: '2-digit', minute: '2-digit' })}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-mono" style={{ color: 'var(--color-neutral-600)' }}>
+                      {formatBranchTime(b.window.startTime, timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {' · '}
+                      {formatBranchTime(b.window.startTime, timezone, { hour: '2-digit', minute: '2-digit' })}
+                      {' - '}
+                      {formatBranchTime(b.window.endTime, timezone, { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* F-247: same real Directions link BookingHistory.tsx already has --
+                          branchAboutById already carries the coordinates, only the render was
+                          missing here. */}
+                      {about && hasCoordinates(about) && (
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${about.latitude},${about.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Directions"
+                          className="inline-flex items-center"
+                          style={{ color: 'var(--color-accent-700)' }}
+                        >
+                          <Navigation className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                      {/* F-242: a HELD row here had no way to complete payment without an extra
+                          navigation to My Bookings first -- same pay-now-btn pattern
+                          BookingHistory.tsx already uses. */}
+                      {b.status === 'HELD' && (
+                        <Link
+                          to={`/bookings/${b.id}/pay`}
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded-lg shrink-0"
+                          style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
+                          id={`pay-now-btn-${b.id}`}
+                        >
+                          Pay Now
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
