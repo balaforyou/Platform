@@ -989,6 +989,327 @@ async function computeBranchMemberAttendance(branchId: string, date: string | un
   });
 }
 
+// F-250: shared read for the Guest Occupancy Dashboard and Guest Slot Inventory grid. One pass
+// over a branch's pools/resources/windows/bookings/member-assignments for a given day, on the
+// branch's own clock (not `computePoolGuestOccupancy`'s UTC-day bounds — that function has two
+// existing callers this deliberately doesn't touch, see the F-250 plan's blast-radius note).
+// `MemberGroupAssignment` is pool-level, not resource-level (a member batch occupies every court
+// in the pool for that hour), so a window's `memberBlocked` flag applies uniformly across the
+// pool's resources — matching how `computeBranchMemberAttendance` above already treats it.
+type GuestDayPool = {
+  id: string;
+  name: string;
+  minBookingDurationMinutes: number;
+  resources: { id: string; name: string; guestBookable: boolean }[];
+};
+type GuestDayBooking = {
+  id: string;
+  userId: string;
+  resourceId: string | null;
+  price: Prisma.Decimal | null;
+  isMemberBooking: boolean;
+};
+type GuestDayWindow = {
+  id: string;
+  resourcePoolId: string;
+  resourceId: string | null;
+  startTime: Date;
+  endTime: Date;
+  capacity: number;
+  price: Prisma.Decimal | null;
+  memberBlocked: boolean;
+  memberBooked: boolean;
+  guestBookings: GuestDayBooking[];
+};
+type BranchGuestDay = {
+  timeZone: string;
+  dateString: string;
+  pools: GuestDayPool[];
+  windows: GuestDayWindow[];
+  guestUserMap: Map<string, { name: string | null; phone: string | null }>;
+};
+
+async function computeBranchGuestDay(branchId: string, date: string | undefined, now: Date): Promise<BranchGuestDay> {
+  const timeZone = await getBranchTimeZone(branchId);
+  const dateString = date || todayDateString(now, timeZone);
+  let weekday: string;
+  let startOfDay: Date;
+  let endOfDay: Date;
+  try {
+    weekday = branchIsoWeekday(branchLocalToUtc(dateString, '12:00', timeZone), timeZone);
+    ({ startOfDay, endOfDay } = branchDayBounds(dateString, timeZone));
+  } catch (err: any) {
+    const e = new Error(`Invalid date "${dateString}": ${err.message}`);
+    (e as any).statusCode = 400;
+    (e as any).code = 'INVALID_DATE';
+    throw e;
+  }
+
+  const pools = await prisma.resourcePool.findMany({
+    where: { branchId },
+    select: {
+      id: true,
+      name: true,
+      minBookingDurationMinutes: true,
+      resources: { select: { id: true, name: true, guestBookable: true } },
+    },
+    orderBy: { name: 'asc' },
+  });
+  const poolIds = pools.map((pool) => pool.id);
+
+  await Promise.all(poolIds.map((poolId) => ensureAvailabilityWindowsForDate(poolId, dateString)));
+
+  const rawWindows = await prisma.availabilityWindow.findMany({
+    where: { resourcePoolId: { in: poolIds }, startTime: { gte: startOfDay, lte: endOfDay } },
+    orderBy: { startTime: 'asc' },
+  });
+  const windowIds = rawWindows.map((window) => window.id);
+
+  const [bookings, assignments] = await Promise.all([
+    windowIds.length > 0
+      ? prisma.booking.findMany({
+          where: {
+            windowId: { in: windowIds },
+            // F-183: exclude multi-hour child rows, same convention as guest-ledger.
+            parentBookingId: null,
+            status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
+          },
+          select: {
+            id: true,
+            windowId: true,
+            userId: true,
+            resourceId: true,
+            price: true,
+            isMemberBooking: true,
+          },
+        })
+      : Promise.resolve([]),
+    prisma.memberGroupAssignment.findMany({
+      where: { status: 'ACTIVE', resourcePoolId: { in: poolIds } },
+      select: { resourcePoolId: true, startTime: true, daysOfWeek: true },
+    }),
+  ]);
+
+  const matchingAssignments = assignments.filter((assignment) => (
+    assignment.daysOfWeek.split(',').map((day) => day.trim()).includes(weekday)
+  ));
+  const memberBlockedInstants = new Set<string>();
+  for (const assignment of matchingAssignments) {
+    try {
+      const expectedStart = slotStartForDate(dateString, assignment.startTime, timeZone);
+      memberBlockedInstants.add(`${assignment.resourcePoolId}:${expectedStart.getTime()}`);
+    } catch (err: any) {
+      // Same tolerance as computeBranchMemberAttendance: a malformed stored startTime must not
+      // fail the whole day's view.
+      console.warn(`[guestDay] skipping assignment on pool ${assignment.resourcePoolId}: ${err.message}`);
+    }
+  }
+
+  const bookingsByWindow = new Map<string, GuestDayBooking[]>();
+  for (const booking of bookings) {
+    const list = bookingsByWindow.get(booking.windowId) ?? [];
+    list.push(booking);
+    bookingsByWindow.set(booking.windowId, list);
+  }
+
+  const guestUserIds = [...new Set(bookings.filter((b) => !b.isMemberBooking).map((b) => b.userId))];
+  const guestUsers = guestUserIds.length > 0
+    ? await prisma.user.findMany({ where: { id: { in: guestUserIds } }, select: { id: true, name: true, phone: true } })
+    : [];
+  const guestUserMap = new Map(guestUsers.map((user) => [user.id, { name: user.name, phone: user.phone }]));
+
+  const windows: GuestDayWindow[] = rawWindows.map((window) => {
+    const windowBookings = bookingsByWindow.get(window.id) ?? [];
+    return {
+      id: window.id,
+      resourcePoolId: window.resourcePoolId,
+      resourceId: window.resourceId,
+      startTime: window.startTime,
+      endTime: window.endTime,
+      capacity: window.capacity,
+      price: window.price,
+      memberBlocked: memberBlockedInstants.has(`${window.resourcePoolId}:${window.startTime.getTime()}`),
+      memberBooked: windowBookings.some((b) => b.isMemberBooking),
+      guestBookings: windowBookings.filter((b) => !b.isMemberBooking),
+    };
+  });
+
+  return { timeZone, dateString, pools, windows, guestUserMap };
+}
+
+// GET /branches/:id/guest-occupancy-dashboard?date= — F-250 Guest Occupancy Dashboard.
+// Real branch-scoped metrics; no `computePoolGuestOccupancy` reuse (see computeBranchGuestDay's
+// own comment on why: UTC-day bounds there vs. branch-local-day here).
+server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  const { date } = request.query as any;
+
+  if (!isAuthorizedForBranch(auth, id)) {
+    reply.status(403);
+    const err = new Error('Forbidden: Not authorized for this branch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+
+  const day = await computeBranchGuestDay(id, date, new Date());
+  const now = new Date();
+
+  let totalCapacity = 0;
+  let confirmedSeats = 0;
+  let duesCollected = 0;
+  const distinctGuestUsers = new Set<string>();
+  for (const window of day.windows) {
+    totalCapacity += window.capacity;
+    confirmedSeats += window.guestBookings.length;
+    for (const booking of window.guestBookings) {
+      distinctGuestUsers.add(booking.userId);
+      duesCollected += booking.price != null ? Number(booking.price) : 0;
+    }
+  }
+
+  const slotMonitor = day.windows
+    .filter((window) => !window.memberBlocked)
+    .map((window) => ({
+      windowId: window.id,
+      resourcePoolId: window.resourcePoolId,
+      startTime: window.startTime.toISOString(),
+      endTime: window.endTime.toISOString(),
+      capacity: window.capacity,
+      bookedCount: window.guestBookings.length,
+      booked: window.guestBookings.length > 0,
+      active: now < window.endTime,
+    }));
+
+  // Live allocation is a per-resource snapshot of "now". For a POOLED pool (resourceId null on
+  // the window), every resource in the pool shares the same window snapshot — POOLED pools have
+  // no fixed per-court identity to disambiguate further, same limitation ReservationsPanel's own
+  // "Court is assigned automatically for this pool" copy already accepts.
+  const liveAllocation = day.pools.flatMap((pool) => pool.resources.map((resource) => {
+    const currentWindow = day.windows.find((window) => (
+      window.resourcePoolId === pool.id &&
+      (window.resourceId === resource.id || window.resourceId == null) &&
+      window.startTime <= now && now < window.endTime
+    ));
+    let status: 'open' | 'member' | 'guest' = 'open';
+    let guestName: string | null = null;
+    if (currentWindow) {
+      if (currentWindow.memberBlocked || currentWindow.memberBooked) {
+        status = 'member';
+      } else if (currentWindow.guestBookings.length > 0) {
+        status = 'guest';
+        const user = day.guestUserMap.get(currentWindow.guestBookings[0].userId);
+        guestName = user?.name || user?.phone || null;
+      }
+    }
+    return { resourceId: resource.id, resourceName: resource.name, resourcePoolId: pool.id, status, guestName };
+  }));
+
+  return {
+    date: day.dateString,
+    totalGuestsToday: distinctGuestUsers.size,
+    guestSlots: day.windows.length,
+    utilizationPercentage: totalCapacity > 0 ? Math.round((confirmedSeats / totalCapacity) * 100) : 0,
+    duesCollected,
+    slotMonitor,
+    liveAllocation,
+  };
+});
+
+// GET /branches/:id/guest-inventory-grid?date=&poolId= — F-250 Guest Slot Inventory.
+// Court×Hour cell state for one pool/day: member-blocked / guest-booked / guest-vacant / empty.
+server.get('/branches/:id/guest-inventory-grid', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+  const { date, poolId } = request.query as any;
+
+  if (!isAuthorizedForBranch(auth, id)) {
+    reply.status(403);
+    const err = new Error('Forbidden: Not authorized for this branch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+  if (!poolId) {
+    reply.status(400);
+    const err = new Error('poolId query parameter is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const day = await computeBranchGuestDay(id, date, new Date());
+  const pool = day.pools.find((p) => p.id === poolId);
+  if (!pool) {
+    reply.status(404);
+    const err = new Error('Resource pool not found on this branch');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+
+  const branch = await prisma.branch.findUnique({ where: { id }, select: { workingHoursStart: true, workingHoursEnd: true } });
+  const duration = pool.minBookingDurationMinutes || 60;
+  const rowStarts: Date[] = [];
+  let cursor = branchLocalToUtc(day.dateString, branch?.workingHoursStart || '06:00', day.timeZone);
+  const rangeEnd = branchLocalToUtc(day.dateString, branch?.workingHoursEnd || '22:00', day.timeZone);
+  while (cursor.getTime() < rangeEnd.getTime()) {
+    rowStarts.push(cursor);
+    cursor = new Date(cursor.getTime() + duration * 60 * 1000);
+  }
+
+  const poolWindows = day.windows.filter((window) => window.resourcePoolId === poolId);
+
+  const cells = pool.resources.flatMap((resource) => rowStarts.map((rowStart) => {
+    const window = poolWindows.find((w) => (
+      w.startTime.getTime() === rowStart.getTime() && (w.resourceId === resource.id || w.resourceId == null)
+    ));
+    if (!window) {
+      return { type: 'empty' as const, resourceId: resource.id, startTime: rowStart.toISOString() };
+    }
+    if (window.memberBlocked) {
+      return {
+        type: 'member-blocked' as const,
+        resourceId: resource.id,
+        windowId: window.id,
+        startTime: window.startTime.toISOString(),
+        endTime: window.endTime.toISOString(),
+      };
+    }
+    if (window.guestBookings.length > 0) {
+      const booking = window.guestBookings[0];
+      const user = day.guestUserMap.get(booking.userId);
+      return {
+        type: 'guest-booked' as const,
+        resourceId: resource.id,
+        windowId: window.id,
+        bookingId: booking.id,
+        startTime: window.startTime.toISOString(),
+        endTime: window.endTime.toISOString(),
+        guestName: user?.name ?? null,
+        guestPhone: user?.phone ?? null,
+        price: booking.price != null ? String(booking.price) : null,
+      };
+    }
+    return {
+      type: 'guest-vacant' as const,
+      resourceId: resource.id,
+      windowId: window.id,
+      startTime: window.startTime.toISOString(),
+      endTime: window.endTime.toISOString(),
+    };
+  }));
+
+  return {
+    date: day.dateString,
+    poolId,
+    resources: pool.resources,
+    rows: rowStarts.map((r) => r.toISOString()),
+    cells,
+  };
+});
+
 // ---------------------------------------------------------------------------
 // Price resolution helper
 // ---------------------------------------------------------------------------

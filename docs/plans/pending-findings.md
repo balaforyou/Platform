@@ -1421,3 +1421,30 @@ only repositioned the icon). `--color-accent-700` is a shared token with a wider
 this one icon.
 Confirmed-ID: F-249
 Confirmed: 18 Sep 2026
+
+### guest-occupancy-dashboard-inventory-admin-v2
+Batch: F-250 (Chief-planned, direct — not implementer-surfaced)
+Surfaced: 18 Sep 2026
+Description: Two admin-v2 nav destinations were unbuilt: `/dashboard` (LandingPage.tsx, a pure
+"you're authenticated" placeholder with its own code comment marking occupancy/KPI data as
+out-of-scope for 0.3) and `/inventory` (a generic StubScreen whose own placeholder copy — "Stock
+and equipment tracked per branch" — is misleading; confirmed by reading the real reference mockup
+that the intended screen is a Court×Hour guest-slot view, not physical stock). Scoped directly with
+Bala across three rounds of clarification: (1) Dashboard = Guest Occupancy only (4-metric row,
+slot monitor, live court allocation), member occupancy explicitly out of scope; (2) Inventory =
+a visual grid that, on tap, drops straight into the already-shipped F-229 walk-in booking flow
+(ReservationsPanel.tsx — phone lookup, slot pick, price, cash/Razorpay-link/UPI-QR payment) in one
+continuous motion, creating a one-off AvailabilityWindow first only when the tapped cell has no
+window yet (existing route, `POST /resource-pools/:id/availability-windows`, no new backend
+route needed); (3) explicitly NOT a reuse of F-238's Daily/Weekly recurring-pattern Guest
+Scheduler, and explicitly not a standalone "publish without a guest attached" action — confirmed
+distinct from F-238 by design, not overlapping (rule 9 disposition recorded in the plan doc). Two
+things flagged for the record but deliberately out of scope: whether the standalone Reservations
+tab becomes redundant once this ships (Bala's own call, post-delivery) and Inventory's future
+role as a cross-module business view once the Member module exists (not designed now). One
+adjacent gap surfaced during investigation, kept as its own concern per rule 9, not fixed here:
+`POST .../availability-windows` has no owner check (same class as F-223/F-237). Full plan:
+`claude/chief-plan-f250-guest-occupancy-dashboard-inventory.md`. Handover:
+`claude/claude-code-handover-f250-guest-occupancy-dashboard-inventory.md`.
+Confirmed-ID: F-250
+Confirmed: 18 Sep 2026
