@@ -3040,8 +3040,11 @@ picked up all changes with no compile errors. `tsc --noEmit` + full build clean 
 `identity-auth`, `guest-member-pwa`. `pnpm register:check` and `pnpm diagram:verify` both green.
 
 **Holds for a combined deploy with F-239** — no separate `promote.sh` run for this batch alone,
-per Bala's standing call relayed through the Technical Lead thread. Not yet committed, pending
-explicit sign-off; PR to follow once committed and pushed.
+per Bala's standing call relayed through the Technical Lead thread. Committed (`18f1ac5`) and
+pushed to `origin/f240-248-followup-findings` (built on top of `origin/f239-guest-pricing-quote-fix`,
+so it carries F-239's commits too) on explicit sign-off; independently reviewed and approved by the
+Technical Lead thread against the pushed SHA. Merges to `main` directly, superseding PR #43, per
+the Technical Lead's merge-sequencing call — single combined deploy (F-239 + F-240-248) once merged.
 
 ## Queued, not yet batched
 
