@@ -79,10 +79,10 @@ const FLOWS = {
 
   'FLOW-029': { name: 'Create Booking', endpoint: 'POST /bookings', auth: 'authed', findings: ['F-023', 'F-028', 'F-080'], transition: 'TRANSITION-BOOKING-001' },
   'FLOW-031': { name: 'View Booking', endpoint: 'GET /bookings/:id', auth: 'authed', findings: ['F-037 (fixed)'] },
-  'FLOW-032': { name: 'View My Bookings', endpoint: 'GET /bookings/my', auth: 'authed', findings: ['F-093', 'F-094'] },
+  'FLOW-032': { name: 'View My Bookings', endpoint: 'GET /bookings/my', auth: 'authed', findings: ['F-093 (fixed)', 'F-094'] },
   'FLOW-033': { name: 'View Admin Bookings', endpoint: 'GET /bookings/admin', auth: 'authed', findings: [] },
   'FLOW-034': { name: 'Confirm Booking', endpoint: 'POST /bookings/:id/confirm', auth: 'authed', findings: [], transition: 'TRANSITION-BOOKING-003 / -004' },
-  'FLOW-035': { name: 'Check In Booking', endpoint: 'POST /bookings/:id/check-in', auth: 'authed', findings: ['F-090 (fixed)', 'F-093', 'F-094'], transition: 'TRANSITION-BOOKING-005' },
+  'FLOW-035': { name: 'Check In Booking', endpoint: 'POST /bookings/:id/check-in', auth: 'authed', findings: ['F-090 (fixed)', 'F-093 (fixed)', 'F-094'], transition: 'TRANSITION-BOOKING-005' },
   'FLOW-036': { name: 'Preview Booking Cancellation', endpoint: 'GET /bookings/:id/cancel-preview', auth: 'authed', findings: [] },
   'FLOW-037': { name: 'Cancel Booking', endpoint: 'POST /bookings/:id/cancel', auth: 'authed', findings: ['F-092'], transition: 'TRANSITION-BOOKING-006 / -007 / -008' },
 
