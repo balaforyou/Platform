@@ -264,6 +264,28 @@ reject a typed past date at the browser level. Not fixed here — this is a desi
 Confirmed-ID:
 Confirmed:
 
+### guest-occupancy-dashboard-slot-monitor-active-flag-misleading
+Batch: F-250 follow-up (surfaced by Bala during manual verification, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: The Guest Occupancy Dashboard's Upcoming Guest Slot Monitor (`/dashboard`, F-250)
+labels a slot "Active" purely on `active: now < window.endTime`
+(`services/slot-engine/src/index.ts:1182`, inside the `guest-occupancy-dashboard` route's
+`slotMonitor` mapping) — this is true for the slot currently in progress AND every slot later
+today that hasn't even started yet, so they're indistinguishable in the UI. Confirmed live at
+real time 16:11 UTC (branch clock is UTC): both the 4:00–5:00 PM slot (genuinely in progress) and
+the 5:00–6:00 PM slot (not due to start for another 49 minutes) showed identically as "Active".
+Same root cause as `guest-slot-inventory-past-slots-rendered-bookable` above (no notion of
+"has this actually started yet", only "has it ended") but on a different screen/route. Separately,
+every already-`Closed` (past) slot still displays its booked-count as "X/4 Vacant" — e.g.
+`0/4 Vacant · Closed` for the 6:00–7:00 AM slot — which reads as if that vacancy is still
+actionable/bookable, when a closed slot can never be filled anymore; the vacancy count is only
+meaningful for a slot that hasn't ended yet. Not fixed here — logging per rule 2/9 rather than
+patching inline; a real fix needs a three-state model (not-started / in-progress / closed) rather
+than the current two-state Active/Closed split, and closed slots probably shouldn't show a
+vacancy count at all (or should be relabelled, e.g. "Unfilled" vs "Vacant").
+Confirmed-ID:
+Confirmed:
+
 ## Promoted (audit trail)
 
 ### booking-rule-route-missing-owner-and-entitlement-gate
