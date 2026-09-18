@@ -9,9 +9,12 @@ import type {
   AvailabilityOverride,
   AvailabilityPattern,
   AvailabilitySlot,
+  AvailabilityWindow,
   Branch,
+  GuestInventoryGrid,
   GuestLedgerRow,
   GuestLookupResult,
+  GuestOccupancyDashboard,
   ManualBookingResult,
   ManualPaymentMethod,
   ResourcePool,
@@ -305,6 +308,56 @@ export function useDeleteGuestSlot(poolId?: string) {
     mutationFn: (patternId: string) =>
       api.delete(`/slot-engine/resource-pools/${poolId}/availability-patterns/${patternId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: courtGroupsKeys.patterns(poolId) }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// F-250 — Guest Occupancy Dashboard + Guest Slot Inventory
+// ---------------------------------------------------------------------------
+
+/** `GET /branches/:id/guest-occupancy-dashboard?date=` — real branch-scoped guest metrics. */
+export function useGuestOccupancyDashboard(branchId?: string, date?: string) {
+  const api = useAdminApi();
+  return useQuery({
+    queryKey: ['guest-occupancy-dashboard', branchId, date],
+    enabled: !!branchId && !!date,
+    queryFn: () => api.get<GuestOccupancyDashboard>(`/slot-engine/branches/${branchId}/guest-occupancy-dashboard?date=${date}`),
+  });
+}
+
+/** `GET /branches/:id/guest-inventory-grid?date=&poolId=` — the Court×Hour cell states. */
+export function useGuestInventoryGrid(branchId?: string, poolId?: string, date?: string) {
+  const api = useAdminApi();
+  return useQuery({
+    queryKey: ['guest-inventory-grid', branchId, poolId, date],
+    enabled: !!branchId && !!poolId && !!date,
+    queryFn: () =>
+      api.get<GuestInventoryGrid>(`/slot-engine/branches/${branchId}/guest-inventory-grid?date=${date}&poolId=${poolId}`),
+  });
+}
+
+/**
+ * F-250: create the one-off `AvailabilityWindow` for a genuinely empty Inventory cell — the
+ * existing `POST /resource-pools/:id/availability-windows` route (F-091-gated, entitlement +
+ * pool-scoped), first frontend caller.
+ */
+export function useCreateAvailabilityWindow(poolId?: string) {
+  const api = useAdminApi();
+  return useMutation<AvailabilityWindow, Error, { resourceId?: string; startTime: string; endTime: string }>({
+    mutationFn: (body) => api.post<AvailabilityWindow>(`/slot-engine/resource-pools/${poolId}/availability-windows`, body),
+  });
+}
+
+/**
+ * F-250: cancel a guest booking made through the walk-in flow, from the Inventory grid's
+ * booked-cell detail view. Reuses the existing `POST /bookings/:id/cancel` route — already
+ * reachable by an owner/branch_manager admin JWT via `requireBookingAccess`'s generic path
+ * (confirmed in the F-250 plan's blast-radius check); this is its first admin-v2 caller.
+ */
+export function useCancelBooking() {
+  const api = useAdminApi();
+  return useMutation<unknown, Error, { bookingId: string }>({
+    mutationFn: ({ bookingId }) => api.post(`/slot-engine/bookings/${bookingId}/cancel`),
   });
 }
 

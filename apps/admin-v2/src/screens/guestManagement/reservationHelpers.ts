@@ -102,6 +102,16 @@ export function formatSlotLabel(window: AvailabilitySlot['window'], timezone: st
   return `${start} – ${fmt(window.endTime)}`;
 }
 
+/** "6:00 PM" in the branch timezone — for a single instant (e.g. an Inventory grid row header). */
+export function formatHourLabel(iso: string, timezone: string | undefined): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: safeTimeZone(timezone),
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(safeDate(iso));
+}
+
 const hhmmToMinutes = (hhmm: unknown): number => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm ?? '').trim());
   return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;

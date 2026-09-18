@@ -65,6 +65,18 @@ export type ResourcePool = {
   resources?: Resource[];
 };
 
+/** `POST /resource-pools/:id/availability-windows` response — the raw created row. */
+export type AvailabilityWindow = {
+  id: string;
+  resourcePoolId: string;
+  resourceId: string | null;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  pricingMode?: 'FLAT' | 'PER_PERSON' | null;
+  price?: string | null;
+};
+
 export type AvailabilitySlot = {
   window: {
     id: string;
@@ -145,6 +157,59 @@ export type AvailabilityPattern = {
   pricingMode?: 'FLAT' | 'PER_PERSON' | null;
   price?: string | null;
   status: 'ACTIVE' | 'SUSPENDED';
+};
+
+// F-250 — Guest Occupancy Dashboard (`GET /branches/:id/guest-occupancy-dashboard`).
+export type GuestSlotMonitorEntry = {
+  windowId: string;
+  resourcePoolId: string;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  bookedCount: number;
+  booked: boolean;
+  active: boolean;
+};
+export type LiveAllocationEntry = {
+  resourceId: string;
+  resourceName: string;
+  resourcePoolId: string;
+  status: 'open' | 'member' | 'guest';
+  guestName: string | null;
+};
+export type GuestOccupancyDashboard = {
+  date: string;
+  totalGuestsToday: number;
+  guestSlots: number;
+  utilizationPercentage: number;
+  duesCollected: number;
+  slotMonitor: GuestSlotMonitorEntry[];
+  liveAllocation: LiveAllocationEntry[];
+};
+
+// F-250 — Guest Slot Inventory (`GET /branches/:id/guest-inventory-grid`).
+export type GuestInventoryCell =
+  | { type: 'empty'; resourceId: string; startTime: string }
+  | { type: 'member-blocked'; resourceId: string; windowId: string; startTime: string; endTime: string }
+  | {
+      type: 'guest-booked';
+      resourceId: string;
+      windowId: string;
+      bookingId: string;
+      startTime: string;
+      endTime: string;
+      guestName: string | null;
+      guestPhone: string | null;
+      price: string | null;
+    }
+  | { type: 'guest-vacant'; resourceId: string; windowId: string; startTime: string; endTime: string };
+
+export type GuestInventoryGrid = {
+  date: string;
+  poolId: string;
+  resources: Resource[];
+  rows: string[];
+  cells: GuestInventoryCell[];
 };
 
 export type AvailabilityOverride = {

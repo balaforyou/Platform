@@ -3,7 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { useAdminAuth } from './auth/AdminAuthContext';
 import { LoadingState } from './components';
 import { LoginScreen } from './screens/LoginScreen';
-import { LandingPage } from './screens/LandingPage';
+import { GuestOccupancyDashboard } from './screens/GuestOccupancyDashboard';
+import { GuestSlotInventory } from './screens/GuestSlotInventory';
 import { EnrollPasskeyPrompt, wasPasskeyPromptDismissed } from './screens/EnrollPasskeyPrompt';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { TokenKitchenSink } from './dev/TokenKitchenSink';
@@ -51,7 +52,7 @@ export default function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<LandingPage />} />
+          <Route path="/dashboard" element={<GuestOccupancyDashboard />} />
           <Route
             path="/communications"
             element={
@@ -62,12 +63,7 @@ export default function App() {
             }
           />
           <Route path="/ledger" element={<LedgerScreen />} />
-          <Route
-            path="/inventory"
-            element={
-              <StubScreen title="Inventory" description="Stock and equipment tracked per branch." />
-            }
-          />
+          <Route path="/inventory" element={<GuestSlotInventory />} />
           <Route
             path="/members"
             element={
