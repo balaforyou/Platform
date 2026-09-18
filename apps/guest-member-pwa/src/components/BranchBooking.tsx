@@ -325,15 +325,13 @@ export default function BranchBooking() {
     return sortedSlots.slice(startIndex, startIndex + 1 + additionalWindowsCount);
   };
 
+  // F-239: sums the server-resolved guestPrice (GET /resource-pools/:id/availability) directly
+  // -- resolvePrice already bakes in PER_PERSON-vs-FLAT and peak-vs-standard rate resolution, so
+  // there is no rate/mode logic left to reimplement here. This is the same number POST /bookings
+  // will actually charge, not a second, independently-computed estimate of it.
   const calculatePrice = () => {
     if (!pool || !selectedSlot) return 0;
-    const size = 1;
-    return getSelectedChain().reduce((sum, slot) => {
-      const { window } = slot;
-      const mode = window.pricingMode || pool.pricingMode || 'FLAT';
-      const rate = window.price != null ? Number(window.price) : Number(pool.defaultRate);
-      return sum + (mode === 'PER_PERSON' ? rate * size : rate);
-    }, 0);
+    return getSelectedChain().reduce((sum, slot) => sum + Number(slot.guestPrice), 0);
   };
 
   const formatCancellationPolicy = (policy: any): string[] => {
@@ -619,7 +617,9 @@ export default function BranchBooking() {
                     {visibleSlots.map((slot) => {
                       const isSelected = selectedSlot?.window?.id === slot.window.id;
                       const timeRange = formatTimeRange(slot.window);
-                      const rate = slot.window.price != null ? slot.window.price : pool.defaultRate;
+                      // F-239: server-resolved (GET /resource-pools/:id/availability's guestPrice),
+                      // not recomputed from window.price/pool.defaultRate -- matches the real charge.
+                      const rate = slot.guestPrice;
                       const totalCapacity = Number(slot.window.capacity) || 0;
                       const remaining = Number(slot.remainingCapacity) || 0;
                       const isAlmostFull = totalCapacity > 0 && remaining > 0 && remaining / totalCapacity <= 0.25;
