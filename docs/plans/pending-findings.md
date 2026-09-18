@@ -223,28 +223,6 @@ F-228 steps and root cause not yet established.
 Confirmed-ID: F-232
 Confirmed: 11 Sep 2026
 
-### guest-occupancy-dashboard-slot-monitor-active-flag-misleading
-Batch: F-250 follow-up (surfaced by Bala during manual verification, not implementer-surfaced)
-Surfaced: 19 Sep 2026
-Description: The Guest Occupancy Dashboard's Upcoming Guest Slot Monitor (`/dashboard`, F-250)
-labels a slot "Active" purely on `active: now < window.endTime`
-(`services/slot-engine/src/index.ts:1182`, inside the `guest-occupancy-dashboard` route's
-`slotMonitor` mapping) — this is true for the slot currently in progress AND every slot later
-today that hasn't even started yet, so they're indistinguishable in the UI. Confirmed live at
-real time 16:11 UTC (branch clock is UTC): both the 4:00–5:00 PM slot (genuinely in progress) and
-the 5:00–6:00 PM slot (not due to start for another 49 minutes) showed identically as "Active".
-Same root cause as `guest-slot-inventory-past-slots-rendered-bookable` above (no notion of
-"has this actually started yet", only "has it ended") but on a different screen/route. Separately,
-every already-`Closed` (past) slot still displays its booked-count as "X/4 Vacant" — e.g.
-`0/4 Vacant · Closed` for the 6:00–7:00 AM slot — which reads as if that vacancy is still
-actionable/bookable, when a closed slot can never be filled anymore; the vacancy count is only
-meaningful for a slot that hasn't ended yet. Not fixed here — logging per rule 2/9 rather than
-patching inline; a real fix needs a three-state model (not-started / in-progress / closed) rather
-than the current two-state Active/Closed split, and closed slots probably shouldn't show a
-vacancy count at all (or should be relabelled, e.g. "Unfilled" vs "Vacant").
-Confirmed-ID:
-Confirmed:
-
 ## Promoted (audit trail)
 
 ### booking-rule-route-missing-owner-and-entitlement-gate
@@ -1523,4 +1501,19 @@ blocks the picker UI from offering past dates but doesn't reliably block manual 
 Confirmed via a repo-wide search: no calendar-picker component exists anywhere in the codebase —
 every "Calendar" hit is the lucide icon only.
 Confirmed-ID: F-253
+Confirmed: 19 Sep 2026
+
+### guest-occupancy-dashboard-slot-monitor-active-flag-misleading
+Batch: F-254 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Guest Occupancy Dashboard's Upcoming Guest Slot Monitor mislabels slot state —
+confirmed live at 16:11 UTC: the 4-5 PM window (genuinely in progress) and 5-6 PM window (49
+minutes from starting) both showed "Active" identically, because `active: now < window.endTime`
+(`services/slot-engine/src/index.ts:1182`) never checks `window.startTime <= now` — only whether
+the window has ended, not whether it's started. Same root gap as F-252 (Inventory grid), different
+route (`computeBranchGuestDay`'s `slotMonitor` mapping, Dashboard-facing, not the grid), so tracked
+separately rather than folded in. Compounding effect: already-closed windows still display their
+`bookedCount`/capacity as "X/4 Vacant" (the `slotMonitor` filter excludes only `memberBlocked`
+windows, never past ones), presenting dead vacancy as if it were still actionable.
+Confirmed-ID: F-254
 Confirmed: 19 Sep 2026
