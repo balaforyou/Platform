@@ -10,6 +10,7 @@ export interface ButtonProps {
   children: React.ReactNode;
   onClick?: () => void;
   type?: 'button' | 'submit';
+  id?: string;
 }
 
 // F-235 Phase 0: the app's first shared button component -- today's `primaryBtn` in
@@ -23,11 +24,13 @@ export default function Button({
   children,
   onClick,
   type = 'button',
+  id,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
 
   return (
     <button
+      id={id}
       type={type}
       onClick={onClick}
       disabled={isDisabled}

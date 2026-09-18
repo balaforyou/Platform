@@ -4,6 +4,7 @@ import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton
 import { useAuth } from '@badminton/ui-shared';
 import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
+import ConfirmDialog from './ui/ConfirmDialog';
 
 export default function BookingHistory() {
   const { accessToken } = useAuth();
@@ -14,6 +15,13 @@ export default function BookingHistory() {
 
   // States for cancellation modal
   const [selectedCancelId, setSelectedCancelId] = useState<string | null>(null);
+
+  // F-235 Slice G: check-in confirm step (resolves F-093's open half -- checking in irreversibly
+  // forfeits the booking's own refund path, so a bare tap should not be the only gate). Reuses
+  // ConfirmDialog.tsx, already proven in production via VerifyPhoneDialog.tsx (Slice C).
+  const [checkInTarget, setCheckInTarget] = useState<any>(null);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [checkInError, setCheckInError] = useState<string | null>(null);
 
   // F-190 Slice 5: real per-branch venue name + coordinates, keyed by Booking.branchId (a bare
   // scalar, same shape BookingConfirmation.tsx already resolves via /branches/:id/about for its
@@ -46,9 +54,17 @@ export default function BookingHistory() {
     typeof about?.latitude === 'number' && Number.isFinite(about.latitude) &&
     typeof about?.longitude === 'number' && Number.isFinite(about.longitude);
 
-  const fetchBookings = async () => {
+  // F-235 Slice G real bug found and fixed: this component's own top-level `if (loading) return
+  // <spinner/>` unmounted the ENTIRE tree -- including an open CancelBookingModal/ConfirmDialog
+  // -- every time this ran, since it always flipped the page-level `loading` flag. That silently
+  // destroyed CancelBookingModal's own `cancelled` (post-cancel receipt-offer) state the instant
+  // its onSuccess callback re-fetched the list -- caught live via the browser during this slice's
+  // own verification: a real cancel correctly wrote CANCELLED to the database, but the modal
+  // re-mounted fresh and fell back to its pre-cancel form. `silent` skips the page-level spinner
+  // for an in-place background refresh where real data is already on screen.
+  const fetchBookings = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       // GET /bookings/my
       const res = await apiRequest<any[]>('/slot-engine/bookings/my', {
@@ -58,7 +74,7 @@ export default function BookingHistory() {
     } catch (err: any) {
       setError(err.message || 'Failed to load booking history.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -66,18 +82,26 @@ export default function BookingHistory() {
     fetchBookings();
   }, [accessToken]);
 
-  const handleCheckIn = async (bookingId: string) => {
+  const handleConfirmCheckIn = async () => {
+    if (!checkInTarget) return;
     try {
-      // POST /bookings/:id/check-in
-      await apiRequest(`/slot-engine/bookings/${bookingId}/check-in`, {
+      setCheckingIn(true);
+      setCheckInError(null);
+      // POST /bookings/:id/check-in -- the underlying call is unchanged from before this slice,
+      // only now gated behind a real confirm step instead of firing on the raw tap.
+      await apiRequest(`/slot-engine/bookings/${checkInTarget.id}/check-in`, {
         method: 'POST',
         token: accessToken,
       });
-      
-      // Refresh list to show updated CHECKED_IN status
-      await fetchBookings();
+
+      setCheckInTarget(null);
+      // Refresh list to show updated CHECKED_IN status -- silent: no page-level spinner takeover
+      // for a background refresh where real data is already on screen.
+      await fetchBookings(true);
     } catch (err: any) {
-      alert(err.message || 'Check-in failed. Please try again.');
+      setCheckInError(err.message || 'Check-in failed. Please try again.');
+    } finally {
+      setCheckingIn(false);
     }
   };
 
@@ -168,9 +192,9 @@ export default function BookingHistory() {
         <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: '19px', color: 'var(--color-text)' }}>Failed to load bookings</h3>
         <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', lineHeight: 1.55, color: 'var(--color-neutral-600)', maxWidth: '260px' }}>{error}</p>
         <button
-          onClick={fetchBookings}
+          onClick={() => fetchBookings()}
           className="mt-1"
-          style={{ minHeight: '44px', padding: '0 20px', background: '#fff', border: '1px solid var(--color-neutral-300)', borderRadius: '14px', fontFamily: 'var(--font-body-organic)', fontSize: '13px', fontWeight: 700, color: 'var(--color-text)' }}
+          style={{ minHeight: '44px', padding: '0 20px', background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '14px', fontFamily: 'var(--font-body-organic)', fontSize: '13px', fontWeight: 700, color: 'var(--color-text)' }}
         >
           Retry load
         </button>
@@ -183,7 +207,7 @@ export default function BookingHistory() {
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="text-3xl tracking-tight" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>
-            My bookings
+            My Bookings
           </h2>
           <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }}>
             Manage your scheduled court matches, complete checkout, check-in, or request cancellations.
@@ -208,8 +232,13 @@ export default function BookingHistory() {
           <p className="text-xs max-w-xs mx-auto" style={{ color: 'var(--color-neutral-600)' }}>
             You don't have any booking reservations recorded. Reserve a court slot now to start playing!
           </p>
+          {/* F-235 Slice G: real bug found and fixed in passing -- this pointed at `/branches`,
+              a route Slice A removed when Branch Select merged into `/book`. Confirmed dead:
+              main.tsx has no `/branches` route at all. Small, confirmed, one-line -- fixed
+              directly rather than filed separately, same discipline as the AccountSheet label
+              fix. */}
           <Link
-            to="/branches"
+            to="/book"
             className="inline-flex py-3 px-6 rounded-2xl font-semibold text-xs transition-all shadow-lg"
             style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
           >
@@ -228,7 +257,7 @@ export default function BookingHistory() {
               <div
                 key={booking.id}
                 className="rounded-2xl p-6 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between gap-6"
-                style={{ background: '#fff', border: '1px solid var(--color-neutral-300)' }}
+                style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }}
                 id={`booking-card-${booking.id}`}
               >
                 <div className="space-y-3">
@@ -349,10 +378,13 @@ export default function BookingHistory() {
                       </Link>
                     )}
 
-                    {/* CONFIRMED & check-in is open: I'm Here */}
+                    {/* CONFIRMED & check-in is open: I'm Here. F-235 Slice G: opens a real confirm
+                        step (resolves F-093's open half) instead of firing check-in on the raw
+                        tap -- the actual POST now happens in handleConfirmCheckIn, only after the
+                        guest explicitly acknowledges the dialog's forfeits-refund copy below. */}
                     {isCheckInOpen(booking) && (
                       <button
-                        onClick={() => handleCheckIn(booking.id)}
+                        onClick={() => { setCheckInError(null); setCheckInTarget(booking); }}
                         className="py-2 px-4 text-xs font-semibold rounded-xl transition-all shadow-lg"
                         style={{ background: 'var(--color-accent-2-700)', color: 'var(--color-accent-2-100)' }}
                         id={`check-in-btn-${booking.id}`}
@@ -380,17 +412,37 @@ export default function BookingHistory() {
         </div>
       )}
 
-      {/* Cancellation Modal */}
+      {/* Cancellation Modal. F-235 Slice G: onSuccess no longer closes the modal itself -- it
+          only refreshes the list -- so there's a real moment for the new cancellation-receipt
+          offer inside CancelBookingModal before the guest dismisses it via its own Close/Done. */}
       {selectedCancelId && (
         <CancelBookingModal
           bookingId={selectedCancelId}
+          booking={bookings.find((b) => b.id === selectedCancelId)}
+          branchAbout={branchAboutById[bookings.find((b) => b.id === selectedCancelId)?.branchId]}
           onClose={() => setSelectedCancelId(null)}
-          onSuccess={async () => {
-            setSelectedCancelId(null);
-            await fetchBookings();
-          }}
+          onSuccess={() => fetchBookings(true)}
         />
       )}
+
+      {/* F-235 Slice G: check-in confirm step -- resolves F-093's open half. Reuses
+          ConfirmDialog.tsx (its second real caller, after VerifyPhoneDialog.tsx from Slice C). */}
+      <ConfirmDialog
+        open={!!checkInTarget}
+        onOpenChange={(open) => { if (!open) { setCheckInTarget(null); setCheckInError(null); } }}
+        title="Confirm you're here"
+        body={
+          <p style={{ fontSize: '13px', lineHeight: 1.55, color: 'var(--color-neutral-700)' }}>
+            Checking in confirms your attendance for this match. This cannot be undone, and a
+            checked-in booking is no longer eligible for cancellation or a refund.
+          </p>
+        }
+        confirmLabel="I'm Here"
+        confirmButtonId="confirm-check-in-btn"
+        onConfirm={handleConfirmCheckIn}
+        loading={checkingIn}
+        error={checkInError}
+      />
     </div>
   );
 }
