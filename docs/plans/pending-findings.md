@@ -1448,3 +1448,30 @@ adjacent gap surfaced during investigation, kept as its own concern per rule 9, 
 `claude/claude-code-handover-f250-guest-occupancy-dashboard-inventory.md`.
 Confirmed-ID: F-250
 Confirmed: 18 Sep 2026
+
+### identity-auth-refresh-cookie-no-domain-crossapp-localhost-collision
+Batch: F-251 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: identity-auth's refresh-token cookie (`services/identity-auth/src/index.ts:588-593`,
+`:791-796`, `:861-866`, `:1290-1295`, all four identical) has no `domain` attribute, making it
+host-only for the literal string `localhost`. Since browsers don't scope cookies by port, a
+refresh cookie set by guest-member-pwa (`localhost:8080`) is sent along with admin-v2's dev
+server (`localhost:5175`) too — admin-v2's silent-refresh-on-boot (`AdminAuthContext.tsx:59-72`)
+then silently authenticates as whatever guest identity's cookie happens to be sitting in the
+shared browser jar. Real evidence: an admin-v2 session was confirmed live-authenticated as a
+zero-role GUEST user (`8702c07a-7689-41fd-917c-ce7b23441831`), created weeks earlier via
+dev-mode's fixed-OTP guest self-registration, producing silent 403s on every tenant-scoped call
+and the "unexpected error" banner with an empty branch selector on `/dashboard`. **Confirmed
+local-dev-only, not a production exposure**: `deploy/gcp-vm/Caddyfile` serves admin-v2 on its own
+real hostname (`admin.elitecourts.duckdns.org`, distinct from the guest domain), and a
+domain-less cookie is host-only, so this specific collision cannot occur across the deployed
+HTTPS domains. Re-verified live against the real deployed hosts (not just the repo file):
+`admin.elitecourts.duckdns.org`, `jbc.elitecourts.duckdns.org`, and
+`courtowner1.elitecourts.duckdns.org` all resolve as genuinely distinct real hostnames, and
+`POST /api/identity/auth/admin/google/verify` on the admin host correctly 403'd (dev-login
+disabled in prod, confirming that separate documented fact too). One residual gap: this rests on
+live behavioral evidence, not an SSH-confirmed read of the Caddyfile actually running on the VM
+(no SSH access in this session) — CLAUDE.md's own standing warning is that VM config can drift
+from the repo.
+Confirmed-ID: F-251
+Confirmed: 19 Sep 2026
