@@ -223,47 +223,6 @@ F-228 steps and root cause not yet established.
 Confirmed-ID: F-232
 Confirmed: 11 Sep 2026
 
-### guest-slot-inventory-past-slots-rendered-bookable
-Batch: F-250 follow-up (surfaced by Bala during manual verification, not implementer-surfaced)
-Surfaced: 19 Sep 2026
-Description: The Guest Slot Inventory grid (`/inventory`, F-250) renders every cell for today
-whose window has already elapsed as "Open" (guest-vacant) and fully tappable, identically to a
-genuinely future vacant slot — confirmed live: at real time ~15:50 UTC on the branch's own UTC
-clock, cells for 6:00 AM through 2:00 PM (all already past) still showed green "Open" buttons,
-same as the real future slots. Root cause confirmed by reading the route: `GET
-/branches/:id/guest-inventory-grid` (`services/slot-engine/src/index.ts:1222`) and its
-`computeBranchGuestDay` helper (`:1032`) never compare a window's `startTime`/`endTime` against
-`now` when building `guest-vacant` vs `empty` cell state — only the Dashboard's separate Upcoming
-Guest Slot Monitor does that (`active: now < window.endTime`, in the sibling
-`guest-occupancy-dashboard` route). The frontend (`GuestSlotInventory.tsx`) has no
-past-cell-disabling logic either. Tapping a past cell is not silently broken — the downstream
-`WalkInBookingFlow`'s own `useAvailability` call correctly excludes elapsed slots server-side
-(confirmed during F-250's own verification), so the booking form opens but shows "No open
-slots" — but the grid itself gives no visual signal beforehand that the cell can't actually be
-booked, which is the real defect: an admin has no way to tell, before tapping, which "Open" cells
-are genuinely bookable versus already-elapsed dead ends.
-Confirmed-ID:
-Confirmed:
-
-### admin-v2-date-inputs-native-no-calendar-only-picker
-Batch: F-250 follow-up (surfaced by Bala during manual verification, not implementer-surfaced)
-Surfaced: 19 Sep 2026
-Description: Every date field in admin-v2 — the new Guest Slot Inventory grid
-(`GuestSlotInventory.tsx:179`), the walk-in booking flow (`WalkInBookingFlow.tsx:388`, F-229/F-250),
-and Branch Settings' Special Hours section (`SpecialHours.tsx:290`) — is a bare native
-`<input type="date">`, which allows free-text manual typing of an arbitrary date in addition to
-its browser-native picker. Confirmed via a repo-wide search: no real calendar-picker component
-exists anywhere in the codebase (admin-v2, admin-web, or guest-member-pwa) — every "Calendar" hit
-found is the `lucide-react` icon glyph, never an actual date-picker widget. This is a pre-existing
-pattern, not introduced by F-250 (`SpecialHours.tsx` predates it); F-250 simply added two more
-instances of the same gap. Real risk beyond UX polish: a manually-typed date bypasses whatever
-visual guidance a calendar affordance gives (e.g. which dates actually have configured hours),
-though the `min={todayIsoDate()}` attribute already present on both F-250 date inputs does still
-reject a typed past date at the browser level. Not fixed here — this is a design-system-level gap
-(no calendar-only date-picker component exists to adopt), not a narrow one-screen fix.
-Confirmed-ID:
-Confirmed:
-
 ### guest-occupancy-dashboard-slot-monitor-active-flag-misleading
 Batch: F-250 follow-up (surfaced by Bala during manual verification, not implementer-surfaced)
 Surfaced: 19 Sep 2026
@@ -1537,4 +1496,31 @@ live behavioral evidence, not an SSH-confirmed read of the Caddyfile actually ru
 (no SSH access in this session) — CLAUDE.md's own standing warning is that VM config can drift
 from the repo.
 Confirmed-ID: F-251
+Confirmed: 19 Sep 2026
+
+### inventory-grid-no-past-time-visual-signal
+Batch: F-252 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Guest Slot Inventory's Court×Hour grid renders already-elapsed time slots
+identically to genuine future vacant ones — confirmed live at ~15:50 UTC, 6:00 AM–2:00 PM on
+today's date all showed green "Open" buttons with no visual distinction. Root cause: neither
+`computeBranchGuestDay` nor the `guest-inventory-grid` route (`services/slot-engine/src/index.ts:1032`,
+`:1222`) compares a window's time against `now` — only the Dashboard's separate slot-monitor does
+that comparison (`now < window.endTime`, confirmed present there, confirmed absent in the grid
+route). Not silently broken: tapping a past cell correctly hits `useAvailability`'s existing
+exclusion and shows "No open slots" — but the grid gives no warning before the tap, a real
+dead-end on the exact fast-decision workflow this screen exists for.
+Confirmed-ID: F-252
+Confirmed: 19 Sep 2026
+
+### admin-v2-no-calendar-date-picker-component
+Batch: F-253 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: No calendar-only date picker exists anywhere in admin-v2 — pre-existing gap, not
+introduced by F-250. Every date field (`GuestSlotInventory.tsx:179`, `WalkInBookingFlow.tsx:388`,
+pre-existing `SpecialHours.tsx:290`) is a bare native `<input type="date">`; `min={todayIsoDate()}`
+blocks the picker UI from offering past dates but doesn't reliably block manual typing of one.
+Confirmed via a repo-wide search: no calendar-picker component exists anywhere in the codebase —
+every "Calendar" hit is the lucide icon only.
+Confirmed-ID: F-253
 Confirmed: 19 Sep 2026
