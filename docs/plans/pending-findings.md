@@ -37,6 +37,26 @@ Confirmed: <blank until Chief fills this in>
 
 ## Awaiting confirmation
 
+### guest-occupancy-dashboard-live-allocation-no-timestamp-and-layout-order
+Batch: F-250 follow-up (surfaced by Bala during manual verification, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: The Guest Occupancy Dashboard's "Live Guest Allocation" card
+(`GuestOccupancyDashboard.tsx:124-146`) shows each court's current status ("Open" / "Reserved: X"
+/ "Occupied (Member)") with no timestamp or "as of" label anywhere on the card — unlike the
+adjacent Upcoming Guest Slot Monitor, whose every row states an explicit time range. Confirmed by
+reading the component: no time-of-computation text is rendered at all for this section. Bala's
+own read, confirmed valid: the card "looks like an orphan" with nothing tying its live/current
+framing to a specific moment. Compounding this: the visual reference mockup
+(`AdminDashboard.jsx`'s Guest Occupancy sub-view, lines 1192-1221) places Live Guest Allocation
+side-by-side with the Slot Monitor (a 3-column grid, Slot Monitor 2 columns wide, Live Allocation
+1 column), not stacked below it — the actual F-250 implementation stacked them vertically instead
+(`GuestOccupancyDashboard.tsx:87` Slot Monitor Card, `:124` Live Allocation Card, in that order),
+which is very likely why it now reads as an afterthought at the bottom of the page rather than
+the immediately-glanceable "what's happening right now" panel it's meant to be. Not fixed here —
+layout/design-detail feedback surfaced during verification, not something to unilaterally
+restyle without a decision on the real fix shape (add a literal "as of HH:mm" label; and either
+match the mockup's side-by-side layout or otherwise re-order/re-emphasize the section).
+
 ### upcoming-slots-widget-single-window-display
 Batch: 20
 Surfaced: 26 Aug 2026
