@@ -1533,3 +1533,29 @@ sequence, not a side-by-side pair. This layout deviation is very likely the dire
 "orphan" feeling flagged during manual review.
 Confirmed-ID: F-255
 Confirmed: 19 Sep 2026
+
+### inventory-mobile-grid-overlap-column-cutoff
+Batch: F-256 (surfaced during Chief's screenshot UX review, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Guest Slot Inventory's mobile grid is close to unusable, confirmed against a real
+390×844 screenshot. The Branch/Date row visibly collides — "Japan Badminton Court, Coimbatore"
+runs into the date field, clipping the date value down to a single visible digit. Only ~2.5 of 4
+court columns fit in the viewport, with no scroll affordance of any kind (no fade edge, no scroll
+indicator, no sticky date/time column) to signal more courts exist off-screen. This is the primary
+target device for the screen's actual use case (an admin on the phone with a guest, deciding in
+real time), so it's more than cosmetic.
+Confirmed-ID: F-256
+Confirmed: 19 Sep 2026
+
+### walkinbookingflow-duplicated-modal-header
+Batch: F-257 (surfaced during Chief's screenshot UX review, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: The walk-in booking modal (`WalkInBookingFlow`, opened from the Inventory grid) shows
+a duplicated header on both desktop and mobile — confirmed in real screenshots. "New walk-in
+booking" appears as the dialog's own title bar (with the close ×), then again immediately below as
+a bold heading inside the card content, with an effectively repeated subtitle. Reads as two nested
+dialogs stacked on top of each other every time the flow opens. Likely a composition mismatch:
+`WalkInBookingFlow` kept its own header when extracted as a standalone component (F-250), and the
+generic modal wrapper around it also renders a title bar.
+Confirmed-ID: F-257
+Confirmed: 19 Sep 2026
