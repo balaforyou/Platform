@@ -2682,6 +2682,22 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
 
   await ensureGenerationForPoolDates(id, datesInRange(dateOnlyString(startRange), dateOnlyString(endRange), guestOpenWindowDays + 1));
 
+  // F-239: the guest-facing quote must resolve through the exact same function the real charge
+  // does (resolvePrice/resolveGuestBlanketRate, POST /bookings' own source of truth), rather than
+  // a second, drifted reimplementation client-side. Fetched once per request, same shape as
+  // POST /bookings' own branchGuestPricing read -- this route isn't inside a transaction, so a
+  // plain prisma call (not tx.branch...) is correct here.
+  const horizonTimeZone = await getBranchTimeZone(pool.branchId);
+  const branchGuestPricing = await prisma.branch.findUnique({
+    where: { id: pool.branchId },
+    select: { guestStandardRate: true, guestPeakRate: true, guestPeakWindows: true },
+  });
+  const guestPeakWindows: { start: string; end: string }[] = Array.isArray(branchGuestPricing?.guestPeakWindows)
+    ? (branchGuestPricing!.guestPeakWindows as any[]).filter(
+        (x) => x && typeof x.start === 'string' && typeof x.end === 'string',
+      )
+    : [];
+
   const windows = await prisma.availabilityWindow.findMany({
     where: {
       resourcePoolId: id,
@@ -2710,7 +2726,18 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
     // them. Behaviour here is unchanged — every window still scored, full breakdown returned.
     const { bookable, remainingCapacity } = await windowBookable(pool, window, nowInstant);
     if (bookable) {
-      availableSlots.push({ window, remainingCapacity });
+      // F-239: groupSize is always 1 here -- co-player collection has no UI path today (F-114),
+      // so the real server-side groupSize at booking time is always 1 + 0 in practice. A sibling
+      // field, not nested under `window`, matching remainingCapacity's own precedent as a
+      // computed-not-stored value -- `window` stays a faithful mirror of the DB row.
+      const guestPrice = resolvePrice(pool, window, 1, {
+        standardRate: branchGuestPricing?.guestStandardRate ?? null,
+        peakRate: branchGuestPricing?.guestPeakRate ?? null,
+        peakWindows: guestPeakWindows,
+        windowStartInstant: window.startTime,
+        timeZone: horizonTimeZone,
+      });
+      availableSlots.push({ window, remainingCapacity, guestPrice });
     }
   }
 
@@ -3741,6 +3768,22 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
   if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD) {
     reply.status(400);
     throw new Error('Only held or confirmed bookings can be cancelled');
+  }
+
+  // F-245: neither branch below rejected a booking whose slot has already started or ended --
+  // hoursBeforeSlot was only ever used to pick a refund tier, so a past-slot cancel silently
+  // succeeded with no tier matching (refundAmount stays null) rather than surfacing that
+  // anything unusual happened. Confirmed no real caller relies on cancelling a past-slot
+  // booking: neither admin-web nor admin-v2 call this route at all (grepped directly), and the
+  // only real caller anywhere is the guest-facing CancelBookingModal.tsx -- safe to reject
+  // outright rather than allow a silent no-op-refund "cancellation" of a match that already
+  // happened.
+  if (new Date() >= new Date(booking.window.startTime)) {
+    reply.status(400);
+    const err = new Error('This slot has already started or ended and can no longer be cancelled');
+    (err as any).statusCode = 400;
+    (err as any).code = 'SLOT_ALREADY_ENDED';
+    throw err;
   }
 
   let refundAmount: Prisma.Decimal | null = null;

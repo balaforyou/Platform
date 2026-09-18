@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
-import { useAuth } from '@badminton/ui-shared';
-import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation } from 'lucide-react';
+import { useAuth, useTenant } from '@badminton/ui-shared';
+import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
 import ConfirmDialog from './ui/ConfirmDialog';
 
 export default function BookingHistory() {
   const { accessToken } = useAuth();
+  const { tenant } = useTenant();
+  // F-240: a cancelled booking's real refund breakdown isn't sitting in memory anywhere on this
+  // screen (CancelBookingModal's `preview` state is transient, gone once it closes) -- a fresh
+  // cancel-preview fetch at click time is the only real source, confirmed the route explicitly
+  // still accepts CANCELLED (services/slot-engine/src/index.ts's cancel-preview route). Tracked
+  // per-booking so one card's fetch doesn't disable every other card's button.
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
+  const [downloadReceiptError, setDownloadReceiptError] = useState<{ id: string; message: string } | null>(null);
 
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +89,34 @@ export default function BookingHistory() {
   useEffect(() => {
     fetchBookings();
   }, [accessToken]);
+
+  // F-240: for CONFIRMED/CHECKED_IN, reuse the existing booking receipt as-is -- all its data is
+  // already in `booking`/`about`. For CANCELLED, the refund breakdown needs a fresh cancel-preview
+  // fetch (cancel-preview explicitly still allows CANCELLED and returns the real, already-applied
+  // refund from the booking row, not a re-derived "now" calculation). Dynamic import both times,
+  // same discipline established in Slice F/G, not a follow-up fix.
+  const handleDownloadReceipt = async (booking: any) => {
+    const about = branchAboutById[booking.branchId];
+    const tenantName = tenant?.appName || tenant?.name;
+    setDownloadReceiptError(null);
+    if (booking.status === 'CANCELLED') {
+      try {
+        setDownloadingReceiptId(booking.id);
+        const preview = await apiRequest<any>(`/slot-engine/bookings/${booking.id}/cancel-preview`, {
+          token: accessToken,
+        });
+        const { downloadCancellationReceipt } = await import('../lib/receipt');
+        downloadCancellationReceipt(booking, about, preview, tenantName);
+      } catch (err: any) {
+        setDownloadReceiptError({ id: booking.id, message: err.message || 'Could not load the cancellation receipt. Please try again.' });
+      } finally {
+        setDownloadingReceiptId(null);
+      }
+    } else {
+      const { downloadBookingReceipt } = await import('../lib/receipt');
+      downloadBookingReceipt(booking, about, tenantName);
+    }
+  };
 
   const handleConfirmCheckIn = async () => {
     if (!checkInTarget) return;
@@ -173,6 +209,11 @@ export default function BookingHistory() {
     return sameDay && diffHours <= 2;
   };
 
+  // F-245: the server now rejects cancelling a booking whose slot has already started/ended
+  // (400 SLOT_ALREADY_ENDED) -- mirror that here so the button isn't offered for an action
+  // guaranteed to fail, same time-gating shape as isCheckInOpen above.
+  const isCancelable = (booking: any) => new Date(booking.window.startTime) > new Date();
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
@@ -204,6 +245,19 @@ export default function BookingHistory() {
 
   return (
     <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 space-y-8 text-ink">
+      {/* F-246: checked index.css/component CSS first -- no existing pulse/blink/attention
+          keyframe anywhere in this app (only spin for loaders, fade/slide for sheets), so this
+          is a genuinely new one, not a reuse. Same inline-<style> convention this file's own
+          loading spinner already uses above. Decorative only, not a loading gate, so it's exempt
+          from design brief §0.3's "request-driven, never a fixed-duration timer" rule -- that
+          rule governs the LoadingState component's own behavior, not incidental UI animation. */}
+      <style>{`
+        @keyframes gpwa-directions-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+        .gpwa-booking-history__directions { animation: gpwa-directions-pulse 2s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .gpwa-booking-history__directions { animation: none; }
+        }
+      `}</style>
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="text-3xl tracking-tight" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>
@@ -266,6 +320,22 @@ export default function BookingHistory() {
                       {booking.window.resourcePool.name}
                     </h4>
                     {getStatusBadge(booking.status)}
+                    {/* F-246: moved here from the data grid below, next to the header/status badge
+                        where it's more likely to be noticed -- same href/hasCoordinates gate,
+                        unchanged. Pulse animation draws the eye without being a fixed-duration
+                        timer gate (this is decorative, not a loading state). */}
+                    {about && hasCoordinates(about) && (
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${about.latitude},${about.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Directions"
+                        className="gpwa-booking-history__directions inline-flex items-center"
+                        style={{ color: 'var(--color-accent-700)' }}
+                      >
+                        <Navigation className="h-4 w-4" />
+                      </a>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between text-[12.5px]" style={{ color: 'var(--color-neutral-700)' }}>
@@ -305,24 +375,12 @@ export default function BookingHistory() {
                     {/* F-190 Slice 5: real venue name (Booking.branchId -> /branches/:id/about),
                         replacing a hardcoded "Coimbatore Hub" string that predated this slice.
                         Absent entirely if the branch fetch hasn't resolved or failed — never a
-                        wrong or fabricated name. Directions reuses BookingConfirmation.tsx's
-                        (Slice 4) exact URL + hasCoordinates gate. */}
+                        wrong or fabricated name. F-246: the Directions link itself moved up to
+                        the header row, next to the status badge -- see above. */}
                     {about?.name && (
                       <div className="flex items-center space-x-1.5">
                         <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-neutral-700)' }} />
                         <span>{about.name}</span>
-                        {hasCoordinates(about) && (
-                          <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${about.latitude},${about.longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Directions"
-                            className="inline-flex items-center"
-                            style={{ color: 'var(--color-accent-700)' }}
-                          >
-                            <Navigation className="h-3 w-3" />
-                          </a>
-                        )}
                       </div>
                     )}
                     <div className="flex items-center space-x-1.5">
@@ -393,8 +451,8 @@ export default function BookingHistory() {
                       </button>
                     )}
 
-                    {/* CONFIRMED/HELD: Cancel booking */}
-                    {(booking.status === 'CONFIRMED' || booking.status === 'HELD') && (
+                    {/* CONFIRMED/HELD: Cancel booking -- F-245: only while the slot is still ahead */}
+                    {(booking.status === 'CONFIRMED' || booking.status === 'HELD') && isCancelable(booking) && (
                       <button
                         onClick={() => setSelectedCancelId(booking.id)}
                         className="py-2 px-4 text-xs font-semibold rounded-xl transition-colors hover:bg-[var(--color-accent-100)]"
@@ -404,7 +462,29 @@ export default function BookingHistory() {
                         Cancel Match
                       </button>
                     )}
+
+                    {/* F-240: persistent receipt access, not just the one-time Confirmation/
+                        Cancel-success screen -- the direct continuation of F-159. Real content:
+                        CONFIRMED/CHECKED_IN reuse the existing receipt as-is; CANCELLED fetches a
+                        fresh real refund breakdown at click time (see handleDownloadReceipt). */}
+                    {(booking.status === 'CONFIRMED' || booking.status === 'CHECKED_IN' || booking.status === 'CANCELLED') && (
+                      <button
+                        onClick={() => handleDownloadReceipt(booking)}
+                        disabled={downloadingReceiptId === booking.id}
+                        className="py-2 px-4 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors hover:bg-[var(--color-accent-100)] disabled:opacity-50"
+                        style={{ background: 'var(--color-neutral-200)', color: 'var(--color-neutral-700)', border: '1px solid var(--color-neutral-300)' }}
+                        id={`download-receipt-btn-${booking.id}`}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Receipt</span>
+                      </button>
+                    )}
                   </div>
+                  {downloadReceiptError && downloadReceiptError.id === booking.id && (
+                    <p className="text-[11px] text-right" style={{ color: 'var(--color-destructive)' }}>
+                      {downloadReceiptError.message}
+                    </p>
+                  )}
                 </div>
               </div>
             );

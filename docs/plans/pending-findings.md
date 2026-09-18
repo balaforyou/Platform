@@ -1409,3 +1409,15 @@ a static generic `<UserIcon>`, never the user's name/initials or photo — unlik
 already built and proven). Should reuse that existing chain, not reinvent it.
 Confirmed-ID: F-248
 Confirmed: 18 Sep 2026
+
+### directions-icon-dark-mode-contrast-below-wcag-aa
+Batch: F-240-248 batch, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during F-246's own dark-mode verification pass, described (not
+self-numbered) in the implementation report per rule 9 and this file's own gate.
+Description: `BookingHistory.tsx`'s Directions icon (and potentially other non-text UI uses of
+`--color-accent-700`) measures ~2.9:1 contrast against the dark-mode background, below WCAG AA's
+3:1 minimum for non-text UI. Pre-existing token choice, not a regression introduced by F-246 (which
+only repositioned the icon). `--color-accent-700` is a shared token with a wider blast radius than
+this one icon.
+Confirmed-ID: F-249
+Confirmed: 18 Sep 2026

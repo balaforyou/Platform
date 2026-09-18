@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { Sun, Moon, Monitor, LogOut, X } from 'lucide-react';
 import { useAuth } from '@badminton/ui-shared';
 import { applyTheme, getStoredTheme, setStoredTheme, type Theme } from '../../lib/theme';
+import Avatar from './Avatar';
 import './AccountSheet.css';
 
 export interface AccountSheetProps {
@@ -41,9 +42,16 @@ export default function AccountSheet({ open, onOpenChange }: AccountSheetProps) 
             </Dialog.Close>
           </div>
 
-          <div className="gpwa-account-sheet__user">
-            <p className="gpwa-account-sheet__user-name">{user?.name || user?.email || 'Guest'}</p>
-            {user?.email && <p className="gpwa-account-sheet__user-email">{user.email}</p>}
+          {/* F-248: two real bugs, same root cause, same file -- the avatar never existed at
+              all, and this name line read `user.name` (F-229's admin-typed walk-in field),
+              never `user.displayName` (F-219/this fix's real Google field). A Google-signed-in
+              guest saw their email here today, not their real name. */}
+          <div className="gpwa-account-sheet__user" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Avatar src={user?.photoUrl} name={user?.displayName || user?.name || user?.email || 'Guest'} size={44} />
+            <div>
+              <p className="gpwa-account-sheet__user-name">{user?.displayName || user?.name || user?.email || 'Guest'}</p>
+              {user?.email && <p className="gpwa-account-sheet__user-email">{user.email}</p>}
+            </div>
           </div>
 
           {/* F-235 Slice E: real content, moved here from MainDashboard's "Profile Details" card --
