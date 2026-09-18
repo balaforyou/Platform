@@ -1290,3 +1290,122 @@ the only way to see or change a pool's real recurring bookable schedule was dire
 the legacy `admin-web` Scheduling screen.
 Confirmed-ID: F-238
 Confirmed: 13 Sep 2026
+
+### guest-peak-pricing-quote-mismatch
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own required live-fire verification (Bala's real
+booking, real Razorpay charge). Independently verified in code by the Technical Lead thread
+before assignment, not taken on the report alone.
+Description: `apps/guest-member-pwa/src/components/BranchBooking.tsx`'s `calculatePrice()`
+(:328-336) computes the guest-facing quote from `window.price ?? pool.defaultRate` only — zero
+awareness of [[F-224]]'s branch-level guest pricing (`Branch.guestStandardRate`/`guestPeakRate`/
+`guestPeakWindows`). The server's real charge, `services/slot-engine/src/index.ts`'s
+booking-creation `resolvedPrice` (~3156-3163), passes `branchGuestPricing`'s real peak/standard
+rates into `resolvePrice` — a completely different pricing input the frontend never sees.
+Confirmed live with real money: `BK-243F8F74` (JBC, a 07:00-08:00 AM slot inside the branch's
+configured 06:00-09:00 guest-peak window) was quoted ₹400, charged ₹600 — the branch's actual
+configured rates, confirmed directly against production `Branch`/`Booking` rows.
+Confirmed-ID: F-239
+Confirmed: 18 Sep 2026
+
+### booking-receipt-pdf-not-persistently-accessible
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own live-fire verification. Direct continuation
+of [[F-159]] — see that row's 18 Sep 2026 update.
+Description: F-235 Slices F/G delivered real PDF receipt generation
+(`downloadBookingReceipt`/`downloadCancellationReceipt`, `apps/guest-member-pwa/src/lib/receipt.ts`),
+live-fire confirmed working in production — but both are offered only in the moment, on the
+Confirmation/Cancel-success screen. Nothing on `BookingHistory.tsx` re-offers either download
+later. Deliberately not folded into [[F-159]] nor absorbing it (rule 9): that row is "can a guest
+get a receipt at all" (now yes), this one is "can they get it again later" (still no).
+Confirmed-ID: F-240
+Confirmed: 18 Sep 2026
+
+### cancel-success-zero-refund-copy-misleading
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own live-fire verification.
+Description: `CancelBookingModal.tsx`'s post-cancel success copy reads "Your refund of ₹0 will be
+processed under the venue's policy" — technically true (nothing to process) but reads as if an
+action is underway on money that was never charged. Confirmed live: a real cancel inside the
+no-refund window showed exactly this copy.
+Confirmed-ID: F-241
+Confirmed: 18 Sep 2026
+
+### dashboard-upcoming-slot-no-pay-now-action
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own live-fire verification. Independently
+verified in code by the Technical Lead thread.
+Description: `apps/guest-member-pwa/src/main.tsx`'s upcoming-slots card (:467-498) renders only a
+name, a status badge, and a time range — no action buttons of any kind, confirmed by direct read.
+A guest who sees a `HELD` (unpaid) booking here has no way to complete payment without navigating
+to My Bookings first, unlike `BookingHistory.tsx`'s equivalent card, which has a real Pay Now
+link.
+Confirmed-ID: F-242
+Confirmed: 18 Sep 2026
+
+### cancel-preview-refund-math-shown-for-held-bookings
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own live-fire verification.
+Description: `GET /bookings/:id/cancel-preview` (`services/slot-engine/src/index.ts:4527`)
+explicitly allows `HELD` alongside `CONFIRMED` and runs the identical tiered-refund calculation
+against `booking.price` regardless of whether any money was ever captured. Confirmed live:
+cancelling a real `HELD` booking showed "Original Price: ₹600 / Policy Refund %: 100% /
+Calculated Refund: ₹600" for a booking nothing had ever been charged on.
+Confirmed-ID: F-243
+Confirmed: 18 Sep 2026
+
+### loading-state-loaders-resolve-too-fast
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, Bala's own observation of the app's real loading behavior in production.
+Description: the shuttlecock-and-racket `LoadingState` component (design brief §0.3) is
+request-driven and often resolves in milliseconds on a fast connection/cached session. A
+minimum-visible-duration fix was discussed and explicitly not implemented this session: it would
+directly reverse §0.3's own stated decision ("request-driven ... never a fixed-duration timer"),
+and the loaders most relevant here (tenant-resolve, auth-loading) are driven by
+`packages/ui-shared`'s shared `TenantContext.tsx` — a real fix's blast radius includes
+`admin-web`, not just `guest-member-pwa`. Needs its own plan-mode pass, not a quick patch.
+Confirmed-ID: F-244
+Confirmed: 18 Sep 2026
+
+### cancel-no-block-on-past-slot
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own live-fire verification, Bala's own question
+("is there a logic now to disable cancel for past timings"). Independently verified in code by
+the Technical Lead thread.
+Description: neither `apps/guest-member-pwa/src/components/BookingHistory.tsx:397`'s Cancel Match
+button condition (`status === 'CONFIRMED' || status === 'HELD'`, no time check) nor
+`POST /bookings/:id/cancel` (`services/slot-engine/src/index.ts:3691` onward) rejects the call
+when the slot has already occurred — the server computes `hoursBeforeSlot` purely to select a
+refund tier, with no earlier guard for a negative value. A guest (or staff) can "cancel" a
+booking whose slot already happened, and it silently succeeds at whatever the lowest refund tier
+is, rather than surfacing a distinct "this slot already happened" state.
+Confirmed-ID: F-245
+Confirmed: 18 Sep 2026
+
+### booking-history-directions-icon-placement-and-visibility
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own live-fire verification, Bala's own request.
+Description: move the Directions icon on `BookingHistory.tsx`'s cards from its current position
+(next to the venue-name line) up near the card's main header row, and give it a blink/fade-in-out
+animation to draw attention.
+Confirmed-ID: F-246
+Confirmed: 18 Sep 2026
+
+### dashboard-upcoming-slot-no-directions-link
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own live-fire verification, Bala's own report.
+Description: `apps/guest-member-pwa/src/main.tsx`'s upcoming-slots card has no Directions
+link/icon anywhere, unlike `BookingHistory.tsx`'s equivalent card ([[F-190]]).
+Confirmed-ID: F-247
+Confirmed: 18 Sep 2026
+
+### guest-pwa-header-avatar-no-name-photo-reuse
+Batch: F-235 production deploy round, 18 Sep 2026
+Surfaced: 18 Sep 2026, live during the deploy's own live-fire verification, Bala's own
+observation comparing against admin-v2's real avatar.
+Description: `apps/guest-member-pwa/src/components/Shell.tsx:52`'s account trigger always renders
+a static generic `<UserIcon>`, never the user's name/initials or photo — unlike `admin-v2`'s
+`AppShell.tsx`, which already has real Google name/photo-with-initials-fallback logic ([[F-219]],
+already built and proven). Should reuse that existing chain, not reinvent it.
+Confirmed-ID: F-248
+Confirmed: 18 Sep 2026
