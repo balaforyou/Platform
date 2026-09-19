@@ -218,6 +218,13 @@ return which rate source (`window` / `peak` / `standard` / `default`) was applie
 know this at all, not even incorrectly — it never receives the rate-source signal in the first
 place.
 
+## Observation 10 — Guest Scheduler's configured-slot times need AM/PM suffix
+
+UI/UX observation, not a functional defect. The Guest Scheduler's "Configured Slots" list shows
+pattern times as bare 24-hour values (`06:00 - 09:00`) with no AM/PM suffix — ambiguous at a
+glance next to every other time display in admin-v2, which uses 12-hour `h:mm AM/PM` formatting
+(`formatHourLabel`/`formatSlotLabel`). Not investigated or scoped here — just recorded.
+
 ## Open question for consolidation — not decided here
 
 Is "a pattern generates real windows that outlive the pattern itself, without any surfaced way to
