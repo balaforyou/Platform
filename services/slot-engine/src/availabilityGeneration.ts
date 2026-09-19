@@ -5,8 +5,18 @@ import {
   PrismaClient,
   PricingMode,
 } from '@badminton/database';
+import { DEFAULT_TIME_ZONE, branchLocalToUtc, safeTimeZone } from './branchTime.js';
 
 const prisma = new PrismaClient();
+
+// F-088 Stage 2 (part 4): mirrors index.ts's own getBranchTimeZone — this module has no access
+// to that function (separate file), so a minimal equivalent lives here rather than exporting
+// index.ts's copy across an otherwise-clean module boundary.
+async function getBranchTimeZoneFor(branchId: string): Promise<string> {
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { timezone: true } });
+  if (!branch) return DEFAULT_TIME_ZONE;
+  return safeTimeZone(branch.timezone, `branch ${branchId}`);
+}
 
 export type EnsureAvailabilityWindowsResult = {
   resourcePoolId: string;
@@ -61,11 +71,14 @@ function parseTime(value: string, fieldName: string) {
   return { hours: Number(match[1]), minutes: Number(match[2]) };
 }
 
-function atLocalUtcDate(date: Date, time: string, fieldName: string) {
-  const parsed = parseTime(time, fieldName);
-  const result = new Date(date);
-  result.setUTCHours(parsed.hours, parsed.minutes, 0, 0);
-  return result;
+// F-088 Stage 2 (part 4): previously ignored the branch's real timezone entirely, treating a
+// pattern's HH:mm as literal UTC (`setUTCHours`) regardless of what Branch.timezone said — the
+// exact mismatch F-100/F-088 describe. Now resolves the same way branchLocalToUtc/branchDayBounds
+// already do everywhere else in this file's sibling (`index.ts`), so a `06:00` pattern on an
+// Asia/Kolkata branch generates at 00:30 UTC (06:00 IST), not 06:00 UTC.
+function atLocalUtcDate(date: Date, time: string, fieldName: string, timeZone: string) {
+  parseTime(time, fieldName); // validates HH:mm shape; branchLocalToUtc re-parses for the actual conversion
+  return branchLocalToUtc(dateKey(date), time, timeZone);
 }
 
 function validateSlotDefinition(startTime: string, endTime: string, slotDurationMinutes: number, capacity: number) {
@@ -105,6 +118,7 @@ function buildCandidatesFromDefinition({
   pricingMode,
   price,
   generatedFromPatternId,
+  timeZone,
 }: {
   resourcePoolId: string;
   resourceIds: string[];
@@ -117,10 +131,11 @@ function buildCandidatesFromDefinition({
   pricingMode: PricingMode | null;
   price: Prisma.Decimal | null;
   generatedFromPatternId: string | null;
+  timeZone: string;
 }) {
   validateSlotDefinition(startTime, endTime, slotDurationMinutes, capacity);
-  const start = atLocalUtcDate(date, startTime, 'startTime');
-  const end = atLocalUtcDate(date, endTime, 'endTime');
+  const start = atLocalUtcDate(date, startTime, 'startTime', timeZone);
+  const end = atLocalUtcDate(date, endTime, 'endTime', timeZone);
   const stepMs = slotDurationMinutes * 60 * 1000;
   const candidates: GenerationCandidate[] = [];
   const generationDate = new Date(date);
@@ -167,6 +182,7 @@ export async function ensureAvailabilityWindowsForDate(
     (err as any).code = 'NOT_FOUND';
     throw err;
   }
+  const timeZone = await getBranchTimeZoneFor(pool.branchId);
 
   try {
     await prisma.generationLock.create({
@@ -242,6 +258,7 @@ export async function ensureAvailabilityWindowsForDate(
         pricingMode: override.pricingMode,
         price: override.price,
         generatedFromPatternId: null,
+        timeZone,
       });
     } else {
       const patterns = await tx.availabilityPattern.findMany({
@@ -270,6 +287,7 @@ export async function ensureAvailabilityWindowsForDate(
           pricingMode: pattern.pricingMode,
           price: pattern.price,
           generatedFromPatternId: pattern.id,
+          timeZone,
         }));
       }
     }
