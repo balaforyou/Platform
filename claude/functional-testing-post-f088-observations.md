@@ -169,6 +169,15 @@ the grid would highlight exactly one column instead of all three. **This is a ge
 gap, not just a display quirk** — an admin/staff member trying to match a guest's "Court 1"
 confirmation to a physical court on site has nothing real to go on today, on this specific pool.
 
+## Observation 6 — Inventory grid header should stay fixed while rows scroll
+
+UI/UX observation, not a functional defect. On the Guest Slot Inventory screen (desktop), the
+court column headers (`Court A`/`Court B`/`Court C`) scroll away with the rest of the grid once
+the time rows exceed the viewport — Bala wants the header row pinned/sticky so it stays visible
+while only the slot rows scroll vertically. No investigation needed; a straightforward `position:
+sticky` treatment on the header row, same idea as the existing sticky time-column treatment on
+mobile (F-256). Not designed or scoped here — just recorded so it isn't lost.
+
 ## Open question for consolidation — not decided here
 
 Is "a pattern generates real windows that outlive the pattern itself, without any surfaced way to
