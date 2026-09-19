@@ -1575,3 +1575,17 @@ volume exists. Reuses `Tabs` (proven on `LedgerScreen`) for the Today/This Month
 `/dashboard` — not a new nav destination.
 Confirmed-ID: F-258
 Confirmed: 19 Sep 2026
+
+### bookings-manual-no-past-date-check
+Batch: F-258 Phase 1 verification (surfaced while seeding live-fire test data, not implementer-surfaced)
+Surfaced: 20 Sep 2026
+Description: `POST /bookings/manual`/`POST /bookings/negotiated` (`services/slot-engine/src/index.ts`,
+~3900-3990) has no check against `window.startTime < now` — capacity, double-booking, and
+blocked-window checks all exist, date sanity does not. Confirmed live: a real CONFIRMED booking was
+created 3 weeks in the past on scratch tenant `11111111-...`/branch `22222222-...` (synthetic
+fixture data, no live-customer impact). Asymmetric with `POST /bookings/:id/cancel`, which correctly
+rejects touching an already-elapsed slot (`SLOT_ALREADY_ENDED`). Independently re-verified by Chief
+directly against the code (the `/bookings/negotiated` transaction, ~line 3900-3990) before
+confirming.
+Confirmed-ID: F-259
+Confirmed: 20 Sep 2026
