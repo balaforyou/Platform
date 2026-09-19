@@ -89,6 +89,48 @@ counts:
   empty) confirmed unchanged. Live-verified after: `guest-inventory-grid` for Sep 19/20 shows only
   `elapsed`/`empty`, no stray `guest-vacant` anywhere.
 
+## Observation 3 — same mechanism, second branch, seen via the Dashboard this time
+
+Checking the Guest Occupancy Dashboard for both branches with zero active patterns anywhere:
+
+- **"Japan Badminton Court, Coimbatore"** (`7d680518-...`/pool `54c44a14-...`, the one already
+  cleared above): Upcoming Guest Slot Monitor correctly shows *"No guest slots configured for
+  today."*
+- **"JBC – New Japan Badminton Court"** (`58d154ce-...`/pool `3025df55-...`): still showed four
+  real rows — `6:00-7:00 AM` through `9:00-10:00 AM`, all `0/4 Vacant` / `Closed`.
+
+**Confirmed by direct DB read — identical root cause, different pool.** 4 real `AvailabilityWindow`
+rows exist for today (`00:30-04:30 UTC` = `6:00-10:00 AM IST`), `generatedFromPatternId =
+b4df96a2-3b3f-45f9-ad4a-3af34588369d` — this pool's *original* real pattern (`06:00-10:00`,
+predating this whole testing round), which no longer appears in the pool's current pattern list
+(`GET .../availability-patterns` returns `[]` for both pools right now). These 4 rows were created
+`2026-09-19T11:16:49Z` — the exact moment this thread's own F-088 live-verification pass queried
+`guest-inventory-grid` against *both* pools right after the code fix deployed, while this pool's
+original pattern was still active. Same mechanism as Observations 1-2, just the other branch:
+a pattern generated real windows, the pattern is gone, the windows aren't. "Closed" is correct and
+expected — real time was 5:35 PM, well past `10:00 AM`.
+
+## Observation 4 — "Live Guest Allocation" is not driven by the guest slot schedule at all
+
+Raised while looking at the same Dashboard screenshots: what is "Live Guest Allocation" actually
+showing, given the Slot Monitor above it says "no slots configured"?
+
+**Confirmed by code read** (`services/slot-engine/src/index.ts`, the `guest-occupancy-dashboard`
+route's `liveAllocation` computation): it always lists **every physical court (`Resource`) in the
+pool**, one row per court, completely independent of whether any `AvailabilityWindow` or pattern
+exists. For each court, it looks for a window covering *this exact instant* (`window.startTime <=
+now && now < window.endTime`):
+- No window covers now → status defaults to **`Open`**.
+- A window covers now with a member block/booking → `Occupied (Member)`.
+- A window covers now with a guest booking → `Reserved — <name>`.
+
+**The card cannot distinguish "no guest slot exists right now" from "a real guest slot exists right
+now and happens to be vacant."** Both render identically as `Open`. With zero guest slots
+configured on either branch (this session's own testing state), every court still shows `Open` —
+technically correct (nobody is occupying the court this second) but potentially misleading to an
+admin reading it as "these courts are available for guests to book right now," which isn't
+guaranteed to be true absent a real configured slot.
+
 ## Open question for consolidation — not decided here
 
 Is "a pattern generates real windows that outlive the pattern itself, without any surfaced way to
@@ -101,6 +143,10 @@ defect? Real candidate angles, none decided:
   than requiring a direct DB script every time this comes up during testing.
 - Leave as-is and document the mental model (patterns are append-only generators, not live
   schedules) prominently wherever patterns are edited.
+
+Separately, is Observation 4 (Live Guest Allocation's `Open` conflating "no schedule" with "vacant
+scheduled slot") worth its own finding, or a copy/label tweak (e.g. distinguishing "Open" from
+"No slot configured")? Also not decided here.
 
 Not proposing a design here — flagging for discussion once Bala's functional-testing pass is done
 and everything found this round is consolidated together.
