@@ -186,6 +186,17 @@ against the light-mode background — likely the native icon rendering dark-on-l
 light-on-light) depending on browser default styling not being overridden for this theme. Not
 investigated or scoped — just recorded so it isn't lost.
 
+## Observation 8 — rename/add courts on "JBC – New Japan Badminton Court"
+
+Bala wants the three real courts on this branch's pool (`3025df55-...`, currently named `Court A`,
+`Court B`, `Court C`) renamed to `Court 5`, `Court 6`, `Court 7`, and a new fourth court added as
+`Court 8`. Not investigated or scoped here — just recorded. Worth noting the connection to
+Observation 5: this pool's `capacity` (4) currently exceeds its real court count (3), which is
+exactly what breaks F-205's real per-court assignment. **Adding the fourth court (`Court 8`) would
+resolve that mismatch as a side effect** (3 real courts -> 4, matching `capacity: 4`) — worth
+confirming that connection explicitly when this is picked up, rather than treating the rename/add
+and Observation 5's fix as two unrelated pieces of work.
+
 ## Open question for consolidation — not decided here
 
 Is "a pattern generates real windows that outlive the pattern itself, without any surfaced way to
