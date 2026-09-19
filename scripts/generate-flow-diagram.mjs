@@ -70,12 +70,12 @@ const FLOWS = {
   'FLOW-021': { name: 'Add Resource to Pool', endpoint: 'POST /resource-pools/:id/resources', auth: 'authed', findings: ['F-091 (fixed)'] },
   'FLOW-022': { name: 'Browse Branch Resource Pools', endpoint: 'GET /branches/:id/resource-pools', auth: 'authed', findings: ['F-091 (fixed)'] },
 
-  'FLOW-023': { name: 'Create Availability Window', endpoint: 'POST /resource-pools/:id/availability-windows', auth: 'authed', findings: ['F-043', 'F-087 (fixed)', 'F-088', 'F-091 (fixed)'] },
-  'FLOW-024': { name: 'Browse Availability', endpoint: 'GET /resource-pools/:id/availability', auth: 'public', findings: ['F-051', 'F-080', 'F-088'] },
-  'FLOW-025': { name: 'Manage Availability Patterns', endpoint: 'GET/POST/PATCH/DELETE .../availability-patterns', auth: 'authed', findings: ['F-043', 'F-088'] },
-  'FLOW-026': { name: 'Manage Availability Overrides', endpoint: 'GET/POST/PATCH/DELETE .../availability-overrides', auth: 'authed', findings: ['F-043', 'F-088'] },
+  'FLOW-023': { name: 'Create Availability Window', endpoint: 'POST /resource-pools/:id/availability-windows', auth: 'authed', findings: ['F-043', 'F-087 (fixed)', 'F-088 (fixed)', 'F-091 (fixed)'] },
+  'FLOW-024': { name: 'Browse Availability', endpoint: 'GET /resource-pools/:id/availability', auth: 'public', findings: ['F-051', 'F-080', 'F-088 (fixed)'] },
+  'FLOW-025': { name: 'Manage Availability Patterns', endpoint: 'GET/POST/PATCH/DELETE .../availability-patterns', auth: 'authed', findings: ['F-043', 'F-088 (fixed)'] },
+  'FLOW-026': { name: 'Manage Availability Overrides', endpoint: 'GET/POST/PATCH/DELETE .../availability-overrides', auth: 'authed', findings: ['F-043', 'F-088 (fixed)'] },
   'FLOW-027': { name: 'Block Availability Window', endpoint: 'POST /blocked-windows', auth: 'authed', findings: ['F-051', 'F-087 (fixed)', 'F-091 (fixed)'] },
-  'FLOW-028': { name: 'Generate Availability', endpoint: '(no endpoint - availabilityGeneration.ts)', auth: 'module', findings: ['F-046', 'F-088'] },
+  'FLOW-028': { name: 'Generate Availability', endpoint: '(no endpoint - availabilityGeneration.ts)', auth: 'module', findings: ['F-046', 'F-088 (fixed)'] },
 
   'FLOW-029': { name: 'Create Booking', endpoint: 'POST /bookings', auth: 'authed', findings: ['F-023', 'F-028', 'F-080'], transition: 'TRANSITION-BOOKING-001' },
   'FLOW-031': { name: 'View Booking', endpoint: 'GET /bookings/:id', auth: 'authed', findings: ['F-037 (fixed)'] },
@@ -127,7 +127,7 @@ const CAPABILITIES = {
       '<b>Gap flags</b><br>' +
       '&bull; <b>FLOW-028 has no endpoint and no established flow boundary</b> (FLOW-DISCOVERY-UNCERTAINTY-001). It is a module invoked lazily by 024/045/047 — do not draw it with an initiator.<br>' +
       '&bull; FLOW-024 remains public <i>by design</i> (BR-048). FLOW-023 and FLOW-027 were unauthenticated by defect and are now guarded (F-091, aea242f).<br>' +
-      '&bull; Whole capability is downstream of F-088 (Branch.timezone unreachable; every branch reports UTC).<br>' +
+      '&bull; F-088 parts 2-5 fixed 20 Sep 2026 (both real JBC branches now report Asia/Kolkata; window generation honors it). Part 1 (making Branch.timezone genuinely settable in the product, not a direct DB write) stays open.<br>' +
       '&bull; Only FLOW-024 has RE-010 rule coverage; the other five have none.',
   },
   'CAP-007': {
