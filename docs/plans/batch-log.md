@@ -3223,6 +3223,43 @@ Not yet done: this batch's own register/diagram changes are drafted, not yet com
 Chief's independent re-verification against the real deployed state (SHA, disk, live IST behavior)
 is the last step before this is treated as signed off, same bar as every round.
 
+## Batch 65 — Post-F-088 functional-testing findings (F-260-F-268), register disposition
+
+Bala ran live functional testing directly on production after Batch 64's timezone flip (creating/
+deleting real guest-slot patterns, testing both walk-in and guest self-service bookings), reporting
+11 real observations turn by turn, each investigated with real evidence (DB reads, code reads)
+rather than assumed. Folded into a running document
+(`claude/functional-testing-post-f088-observations.md`, branch
+`functional-testing-post-f088-observations`) and submitted to Chief for review as PR #53.
+
+Chief reviewed the PR in full, independently spot-checked the central technical claim
+(`AvailabilityWindow.generatedFromPatternId` is a bare `String?` with no relation/cascade —
+confirmed), and issued closed-form disposition: 8 of the 11 observations become real findings
+(Observations 1-3 folded into a single finding; Observation 8, a court rename/add, is explicitly
+not a finding — an operational action). Chief also flagged, independently and unprompted, that
+`docs/plans/batch-log.md` (this file) references "F-214" as an already-existing Open finding in
+several places (Batch 60's disk-pressure note onward) — but F-214 was never actually committed to
+`docs/findings_register.md`. Confirmed via direct `grep` of the register: zero `F-214` rows exist
+anywhere. Resolved per Chief's explicit instruction: log the VM-image-retention finding as
+**F-260**, with register text stating plainly that no F-214 row ever existed (only prose
+references — 4 of them, in this file), and that F-260 consolidates/supersedes every prior "F-214"
+reference, scope unchanged. Chief separately flagged (not to be acted on this batch) that F-213 and
+F-217 carry the identical never-committed-informal-ID problem, to be logged as F-269/F-270 whenever
+they're next picked up.
+
+**Register**: 9 new Open rows added — **F-260** (VM image/Docker Hub retention, superseding every
+informal "F-214" reference above), **F-261** (pattern deletion/edit never reconciles
+already-generated windows, folding Observations 1-3), **F-262** (Live Guest Allocation
+open-vs-unconfigured ambiguity), **F-263** (pooled-court cosmetic-fallback mismatch, same class as
+F-100), **F-264** (Inventory desktop header not sticky), **F-265** (light-mode calendar icon
+invisible, same class as F-249), **F-266** (no Peak/Standard rate differentiator on guest booking),
+**F-267** (Guest Scheduler missing AM/PM suffix), **F-268** (overlapping availability patterns
+accepted with zero validation). All 9 drafted and presented back to Bala/Chief for review before
+being written, per this project's standing "bring me the drafted register text before it lands"
+convention. `docs/plans/pending-findings.md` gained matching Promoted entries for all 9 (all
+≥ F-179, `scripts/check-register.mjs` enforces this). `pnpm register:check` and `pnpm
+diagram:verify` run clean before commit.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

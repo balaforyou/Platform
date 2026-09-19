@@ -1589,3 +1589,114 @@ directly against the code (the `/bookings/negotiated` transaction, ~line 3900-39
 confirming.
 Confirmed-ID: F-259
 Confirmed: 20 Sep 2026
+
+### vm-image-retention-policy-f214-supersede
+Batch: Post-F-088 disk-pressure pattern, first informally named "F-214" during Batch 60 (production deploy #4), never committed to the register (Chief-caught during PR #53 review)
+Surfaced: 13 Sep 2026
+Description: `promote.sh` pulls a full new 7-image set on every promotion without pruning old ones —
+real, recurring disk pressure, no automated retention policy decided. Confirmed via direct `grep`
+of `docs/findings_register.md` that no `F-214` row exists anywhere — every prior "F-214" reference
+(4 occurrences, all in `docs/plans/batch-log.md` prose) was informal, never a committed register
+row. This entry consolidates those references under `F-260` rather than `F-214`, since `F-214`
+would now sit badly out of numeric sequence relative to real committed IDs that landed in between.
+Three one-off prunes done to date (F-206's close-out, Batch 61 post-deploy-#4, and the F-088 Batch
+64 post-deploy prune) — each real, each reclaiming real disk, but none constitutes an actual
+retention policy.
+Confirmed-ID: F-260
+Confirmed: 20 Sep 2026
+
+### pattern-deletion-no-window-reconciliation
+Batch: Post-F-088 functional testing on real production (`claude/functional-testing-post-f088-observations.md`, Observations 1-3 folded, Chief-confirmed via PR #53 review)
+Surfaced: 20 Sep 2026
+Description: `ensureAvailabilityWindowsForDate` (`services/slot-engine/src/availabilityGeneration.ts`)
+is lazy, additive, and never retroactive — it never reconciles or removes windows already
+generated when the pattern that produced them is later edited or deleted, since
+`AvailabilityWindow.generatedFromPatternId` is a bare `String?` with no relation or cascade
+(confirmed directly against the real schema, independently spot-checked by Chief). Reproduced
+three times across two real pools during functional testing: a deleted/replaced pattern's
+already-generated windows for any previously-queried date kept showing as real bookable slots,
+disagreeing with the new/absent pattern, until manually cleared. Zero real bookings were lost or
+corrupted across all three reproductions.
+Confirmed-ID: F-261
+Confirmed: 20 Sep 2026
+
+### live-guest-allocation-open-vs-unconfigured-ambiguity
+Batch: Post-F-088 functional testing on real production (Observation 4, Chief-confirmed via PR #53 review)
+Surfaced: 20 Sep 2026
+Description: The `guest-occupancy-dashboard` route's `liveAllocation` computation
+(`services/slot-engine/src/index.ts`) lists every real `Resource` in a pool regardless of whether
+any window/pattern exists, and defaults to `'open'` status when no window covers the current
+instant — identical to a genuinely vacant scheduled window. Confirmed by code read: an admin
+cannot tell "no guest slot configured right now" from "a real vacant slot right now" from this
+card alone.
+Confirmed-ID: F-262
+Confirmed: 20 Sep 2026
+
+### pooled-court-assignment-cosmetic-fallback-mismatch
+Batch: Post-F-088 functional testing on real production, confirmed live with a real booking (Observation 5, Chief-confirmed via PR #53 review)
+Surfaced: 20 Sep 2026
+Description: `assignPooledCourt` (`services/slot-engine/src/index.ts:116-147`, F-205) only performs
+real per-court assignment when a pool's registered `Resource` count exactly equals its configured
+`capacity`; otherwise it silently falls back to F-186's cosmetic `1..capacity` index with
+`resourceId: null`. Confirmed live on "JBC - New Japan Badminton Court"'s real pool (3 real
+courts, `capacity: 4`): two real test bookings both recorded `resourceId: null,
+courtSlotIndex: 1` — the guest's confirmation showed "Court 1" with no tie to any actual physical
+court, and the admin Inventory grid correctly (given the fallback) rendered the booking across all
+three real court columns simultaneously. Same class as F-100 — a numeric setting (`capacity`)
+silently disagreeing with reality (real court count).
+Confirmed-ID: F-263
+Confirmed: 20 Sep 2026
+
+### inventory-grid-desktop-header-not-sticky
+Batch: Post-F-088 functional testing on real production (Observation 6, Chief-confirmed via PR #53 review)
+Surfaced: 20 Sep 2026
+Description: On the Guest Slot Inventory screen (desktop), the court column headers scroll away
+with the grid once time rows exceed the viewport. Same class as F-256's mobile sticky-time-column
+treatment, just not yet applied to the desktop header row.
+Confirmed-ID: F-264
+Confirmed: 20 Sep 2026
+
+### date-picker-calendar-icon-invisible-light-mode
+Batch: Post-F-088 functional testing on real production (Observation 7, Chief-confirmed via PR #53 review)
+Surfaced: 20 Sep 2026
+Description: The native `<input type="date">` field's browser-drawn calendar icon is visible in
+dark mode but disappears against the light-mode background on the Guest Slot Inventory screen.
+Same class as F-249's dark-mode contrast issue, inverse theme.
+Confirmed-ID: F-265
+Confirmed: 20 Sep 2026
+
+### guest-booking-no-peak-standard-rate-differentiator
+Batch: Post-F-088 functional testing on real production, confirmed by code read (Observation 9, Chief-confirmed via PR #53 review)
+Surfaced: 20 Sep 2026
+Description: `apps/guest-member-pwa/src/components/BranchBooking.tsx:700-702` labels the
+guest-facing price purely from `pricingMode` (`FLAT` vs `PER_PERSON`) — a different axis from rate
+source (Peak/Standard/window-override), which is resolved server-side
+(`resolveGuestBlanketRate`/`resolvePrice`) but never returned to the frontend at all. The screen
+shows identical "Flat booking rate" copy whether a guest is charged the real peak rate or the real
+standard rate. The amount charged is confirmed correct in both cases — a pricing-transparency gap,
+not a charging bug — but the same trust-erosion shape as F-239 was, milder.
+Confirmed-ID: F-266
+Confirmed: 20 Sep 2026
+
+### guest-scheduler-configured-slots-missing-ampm
+Batch: Post-F-088 functional testing on real production (Observation 10, Chief-confirmed via PR #53 review)
+Surfaced: 20 Sep 2026
+Description: The Guest Scheduler's "Configured Slots" list shows pattern times as bare 24-hour
+values (e.g. "06:00 - 09:00") with no AM/PM suffix, inconsistent with the rest of admin-v2's
+12-hour formatting (`formatHourLabel`/`formatSlotLabel`).
+Confirmed-ID: F-267
+Confirmed: 20 Sep 2026
+
+### overlapping-availability-patterns-no-validation
+Batch: Post-F-088 functional testing on real production, confirmed via code trace and live reproduction (Observation 11, Chief-confirmed via PR #53 review)
+Surfaced: 20 Sep 2026
+Description: `POST .../availability-patterns` (`services/slot-engine/src/index.ts:2385`) only
+validates a new pattern against the branch's own working hours (`validatePatternAgainstBranchHours`,
+F-211) — no check against other already-active patterns on the same pool/days exists. Traced the
+real consequence through `ensureAvailabilityWindowsForDate`: when two active patterns overlap, the
+earlier-created one silently wins the overlapping hours via the window-creation step's exact-match
+dedup, with no error and nothing surfaced to the admin indicating which pattern's capacity/pricing
+actually applies. Reproduced live on a real pool with two real overlapping patterns
+(`06:00-09:00` and `06:00-22:00`).
+Confirmed-ID: F-268
+Confirmed: 20 Sep 2026
