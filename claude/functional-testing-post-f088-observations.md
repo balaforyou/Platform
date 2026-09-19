@@ -110,6 +110,12 @@ original pattern was still active. Same mechanism as Observations 1-2, just the 
 a pattern generated real windows, the pattern is gone, the windows aren't. "Closed" is correct and
 expected — real time was 5:35 PM, well past `10:00 AM`.
 
+**Cleared** (same disciplined way): 4 windows, zero bookings confirmed first, `BEGIN`/`COMMIT`,
+before/after count (4 → 0), `AvailabilityOverride`/`AvailabilityPattern` (0/0) confirmed unchanged.
+Live-verified: `guest-occupancy-dashboard` for this branch now returns `slotMonitor: []`,
+`guestSlots: 0` — both branches now correctly show "no guest slots configured" everywhere
+(Dashboard, Inventory grid, guest booking screen).
+
 ## Observation 4 — "Live Guest Allocation" is not driven by the guest slot schedule at all
 
 Raised while looking at the same Dashboard screenshots: what is "Live Guest Allocation" actually
