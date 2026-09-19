@@ -172,6 +172,11 @@ export function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** "YYYY-MM" for the current calendar month — same clock convention as todayIsoDate(). */
+export function todayIsoMonth(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
 /**
  * A unique client-side idempotency key. `crypto.randomUUID()` is only defined in a **secure
  * context** (HTTPS or localhost) — on a plain-IP dev URL (`http://192.168.x.x:5175`, phone

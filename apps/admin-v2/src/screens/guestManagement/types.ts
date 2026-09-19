@@ -243,6 +243,27 @@ export type CancelPreview = {
   refundPercent: number;
 };
 
+// F-258 Phase 1 — Dashboard "This Month" tab (`GET /branches/:id/guest-month-summary?month=`).
+// Branch-wide totals, reusing computeBranchGuestDay's aggregation pattern — not guest-ledger's
+// per-pool route (see the backend comment). Rows carry full guest/court/price fields (unlike
+// GuestInventoryCell) since this is an admin-initiated monthly report, not a grid cell face.
+export type GuestMonthSummaryRow = {
+  bookingId: string;
+  windowStart: string;
+  windowEnd: string;
+  guestName: string | null;
+  guestPhone: string | null;
+  court: string | null;
+  price: number;
+  method: LedgerMethod | null;
+};
+export type GuestMonthSummary = {
+  month: string;
+  totalFees: number;
+  totalBookings: number;
+  rows: GuestMonthSummaryRow[];
+};
+
 export type AvailabilityOverride = {
   id: string;
   resourcePoolId: string;
