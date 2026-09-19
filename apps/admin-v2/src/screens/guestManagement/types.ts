@@ -160,6 +160,8 @@ export type AvailabilityPattern = {
 };
 
 // F-250 — Guest Occupancy Dashboard (`GET /branches/:id/guest-occupancy-dashboard`).
+// F-254: real 3-state model, replacing the old boolean `active` flag.
+export type SlotMonitorStatus = 'closed' | 'live' | 'upcoming';
 export type GuestSlotMonitorEntry = {
   windowId: string;
   resourcePoolId: string;
@@ -168,7 +170,7 @@ export type GuestSlotMonitorEntry = {
   capacity: number;
   bookedCount: number;
   booked: boolean;
-  active: boolean;
+  status: SlotMonitorStatus;
 };
 export type LiveAllocationEntry = {
   resourceId: string;
@@ -185,23 +187,20 @@ export type GuestOccupancyDashboard = {
   duesCollected: number;
   slotMonitor: GuestSlotMonitorEntry[];
   liveAllocation: LiveAllocationEntry[];
+  liveAllocationAsOf: string;
 };
 
-// F-250 — Guest Slot Inventory (`GET /branches/:id/guest-inventory-grid`).
+// F-250/F-252/F-256 — Guest Slot Inventory (`GET /branches/:id/guest-inventory-grid`), 5-state
+// cell model. No cell ever carries guest name/phone/price on its face (F-252 Q1) — that data
+// only exists behind the tap-through `GET /bookings/:id/guest-detail` (`BookingGuestDetail`
+// below).
 export type GuestInventoryCell =
   | { type: 'empty'; resourceId: string; startTime: string }
+  | { type: 'elapsed'; resourceId: string; windowId?: string; startTime: string; endTime?: string }
   | { type: 'member-blocked'; resourceId: string; windowId: string; startTime: string; endTime: string }
-  | {
-      type: 'guest-booked';
-      resourceId: string;
-      windowId: string;
-      bookingId: string;
-      startTime: string;
-      endTime: string;
-      guestName: string | null;
-      guestPhone: string | null;
-      price: string | null;
-    }
+  | { type: 'guest-booked'; resourceId: string; windowId: string; bookingId: string; startTime: string; endTime: string }
+  | { type: 'completed'; resourceId: string; windowId: string; bookingId: string; startTime: string; endTime: string }
+  | { type: 'cancelled'; resourceId: string; windowId: string; bookingId: string; startTime: string; endTime: string }
   | { type: 'guest-vacant'; resourceId: string; windowId: string; startTime: string; endTime: string };
 
 export type GuestInventoryGrid = {
@@ -210,6 +209,38 @@ export type GuestInventoryGrid = {
   resources: Resource[];
   rows: string[];
   cells: GuestInventoryCell[];
+};
+
+/** `GET /bookings/:id/guest-detail` — F-252's Inventory tap-through detail, shape varies by status. */
+export type BookingGuestDetailBase = {
+  bookingId: string;
+  courtLabel: string | null;
+  windowStart: string;
+  windowEnd: string;
+  guestName: string | null;
+  guestPhone: string | null;
+};
+export type BookingGuestDetail =
+  | (BookingGuestDetailBase & {
+      status: 'CONFIRMED' | 'CHECKED_IN';
+      price: string | null;
+      /** Friendly label ("Razorpay"/"Cash"/"UPI"), not the raw LedgerMethod enum. */
+      paymentMethod: string | null;
+      bookedBy: string;
+    })
+  | (BookingGuestDetailBase & {
+      status: 'CANCELLED';
+      priceAtBooking: string | null;
+      cancelledBy: string;
+      payment: string;
+    });
+
+/** `GET /bookings/:id/cancel-preview` — reused for the admin Cancel confirm-step (F-252 Q12). */
+export type CancelPreview = {
+  bookingId: string;
+  originalPrice: number;
+  refundAmount: number;
+  refundPercent: number;
 };
 
 export type AvailabilityOverride = {

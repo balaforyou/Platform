@@ -66,10 +66,17 @@ export function WalkInBookingFlow({
   branchId,
   initialSelection,
   onBooked,
+  showHeader = true,
 }: {
   branchId: string;
   initialSelection?: WalkInInitialSelection;
   onBooked?: () => void;
+  /**
+   * F-257: false when a wrapping `Modal` already owns the title bar (GuestSlotInventory's
+   * tap-to-book flow) — the internal `<h3>` duplicated it. `ReservationsPanel`'s standalone
+   * usage has no wrapping modal, so it keeps the default (own header, unchanged from before).
+   */
+  showHeader?: boolean;
 }) {
   const toast = useToast();
   const branches = useBranches();
@@ -279,7 +286,9 @@ export function WalkInBookingFlow({
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-5)' }}>
       <div>
-        <h3 style={{ margin: '0 0 2px', fontSize: 'var(--av2-text-base)', fontWeight: 700 }}>New walk-in booking</h3>
+        {showHeader && (
+          <h3 style={{ margin: '0 0 2px', fontSize: 'var(--av2-text-base)', fontWeight: 700 }}>New walk-in booking</h3>
+        )}
         <p style={{ margin: 0, ...hint }}>For a guest who’s here in person or on the phone right now.</p>
       </div>
 
