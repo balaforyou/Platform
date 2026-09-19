@@ -197,6 +197,27 @@ resolve that mismatch as a side effect** (3 real courts -> 4, matching `capacity
 confirming that connection explicitly when this is picked up, rather than treating the rename/add
 and Observation 5's fix as two unrelated pieces of work.
 
+## Observation 9 — guest booking screen never shows Peak vs Standard rate, only pricing mode
+
+**Real bug, confirmed by code read, not just a UX ask.** `apps/guest-member-pwa/src/components/
+BranchBooking.tsx:700-702` labels the price purely from `pricingMode` (`FLAT` vs `PER_PERSON`) —
+`(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON' ? '...' : 'Flat
+booking rate'`. That's a completely different axis from **rate source** (Peak vs Standard vs a
+per-window override), which is resolved server-side (`resolveGuestBlanketRate`/`resolvePrice`,
+`services/slot-engine/src/index.ts`) based on real time-of-day against the branch's configured
+`guestPeakWindows`. **The screen always shows "Flat booking rate" regardless of which rate source
+was actually used** — a guest booking a real `₹600` peak slot sees identical copy to one booking a
+`₹400` standard slot, with nothing anywhere distinguishing the two. Confirmed live-relevant: real
+JBC config has `guestPeakRate: 600`/`guestStandardRate: 400`/peak window `06:00-09:00` — exactly
+the pattern this session has been testing bookings against all round.
+
+Bala's ask: a real Peak/Standard differentiator on the booking screen, not just fixing the
+misleading "Flat" copy. Not designed or scoped here — the fix likely needs the server to also
+return which rate source (`window` / `peak` / `standard` / `default`) was applied alongside
+`guestPrice` (`GET /resource-pools/:id/availability`), since the frontend currently has no way to
+know this at all, not even incorrectly — it never receives the rate-source signal in the first
+place.
+
 ## Open question for consolidation — not decided here
 
 Is "a pattern generates real windows that outlive the pattern itself, without any surfaced way to
