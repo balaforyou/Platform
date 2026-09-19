@@ -225,6 +225,29 @@ pattern times as bare 24-hour values (`06:00 - 09:00`) with no AM/PM suffix — 
 glance next to every other time display in admin-v2, which uses 12-hour `h:mm AM/PM` formatting
 (`formatHourLabel`/`formatSlotLabel`). Not investigated or scoped here — just recorded.
 
+## Observation 11 — overlapping AvailabilityPatterns are accepted with no validation
+
+**Real gap, confirmed by code read.** `POST .../availability-patterns` (`services/slot-engine/src/
+index.ts:2385`) only validates a new pattern against the branch's own working hours
+(`validatePatternAgainstBranchHours`, F-211) — there is no check against *other already-active
+patterns* on the same pool/days at all. Bala created exactly this on the real branch: `06:00-09:00`
+and `06:00-22:00`, both `Daily`, both `capacity 4`, fully overlapping for the first three hours.
+
+**Traced what actually happens at generation time**, `ensureAvailabilityWindowsForDate`
+(`services/slot-engine/src/availabilityGeneration.ts`): every matching active pattern for a given
+weekday contributes candidates, and window creation dedupes on exact `(resourcePoolId, resourceId,
+startTime, endTime)`. Since both patterns here share 60-minute boundaries, **whichever pattern was
+created earlier silently wins the overlapping `06:00-09:00` hours** — the other pattern's
+identical-time candidates are skipped with no error, no warning, and nothing shown to the admin
+indicating which pattern's capacity/pricing actually applies for those hours. The non-overlapping
+`09:00-22:00` tail only ever comes from the broader pattern. Slot durations differing between two
+overlapping patterns would make this worse — misaligned boundaries could produce a genuine mix of
+both patterns' windows within the same hour, not just a clean pattern to determine.
+
+Real finding candidate: needs either a real overlap-rejection validation (mirroring
+`validatePatternAgainstBranchHours`'s existing shape) or an explicit, surfaced precedence rule if
+overlapping patterns are ever meant to be allowed on purpose. Not designed or scoped here.
+
 ## Open question for consolidation — not decided here
 
 Is "a pattern generates real windows that outlive the pattern itself, without any surfaced way to
