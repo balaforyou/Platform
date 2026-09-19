@@ -79,7 +79,10 @@ export const guestLedgerSections: Section<SlotEngineContext>[] = [
 
         const cashRow = byId.get(cashB.id)!;
         if (cashRow.guest?.name !== 'Ledger Guest' || cashRow.guest?.phone !== '+919111100001') throw new Error(`guest not resolved: ${JSON.stringify(cashRow.guest)}`);
-        if (cashRow.court !== 'Court 1') throw new Error(`court label wrong: ${cashRow.court}`);
+        // F-263: this pool has no real Resource rows (never provisioned by this fixture), so the
+        // seeded courtSlotIndex:1/resourceId:null booking hits the honest cosmetic-fallback label,
+        // not a real numbered court -- was 'Court 1' before F-263 fixed the mislabeling.
+        if (cashRow.court !== 'General allocation') throw new Error(`court label wrong: ${cashRow.court}`);
 
         // --- status filter ---
         const confirmed = await ledger('?status=CONFIRMED');
