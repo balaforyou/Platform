@@ -1603,7 +1603,7 @@ Three one-off prunes done to date (F-206's close-out, Batch 61 post-deploy-#4, a
 64 post-deploy prune) — each real, each reclaiming real disk, but none constitutes an actual
 retention policy.
 Confirmed-ID: F-260
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
 
 ### pattern-deletion-no-window-reconciliation
 Batch: Post-F-088 functional testing on real production (`claude/functional-testing-post-f088-observations.md`, Observations 1-3 folded, Chief-confirmed via PR #53 review)
@@ -1618,7 +1618,7 @@ already-generated windows for any previously-queried date kept showing as real b
 disagreeing with the new/absent pattern, until manually cleared. Zero real bookings were lost or
 corrupted across all three reproductions.
 Confirmed-ID: F-261
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
 
 ### live-guest-allocation-open-vs-unconfigured-ambiguity
 Batch: Post-F-088 functional testing on real production (Observation 4, Chief-confirmed via PR #53 review)
@@ -1630,7 +1630,7 @@ instant — identical to a genuinely vacant scheduled window. Confirmed by code 
 cannot tell "no guest slot configured right now" from "a real vacant slot right now" from this
 card alone.
 Confirmed-ID: F-262
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
 
 ### pooled-court-assignment-cosmetic-fallback-mismatch
 Batch: Post-F-088 functional testing on real production, confirmed live with a real booking (Observation 5, Chief-confirmed via PR #53 review)
@@ -1645,7 +1645,7 @@ court, and the admin Inventory grid correctly (given the fallback) rendered the 
 three real court columns simultaneously. Same class as F-100 — a numeric setting (`capacity`)
 silently disagreeing with reality (real court count).
 Confirmed-ID: F-263
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
 
 ### inventory-grid-desktop-header-not-sticky
 Batch: Post-F-088 functional testing on real production (Observation 6, Chief-confirmed via PR #53 review)
@@ -1654,7 +1654,7 @@ Description: On the Guest Slot Inventory screen (desktop), the court column head
 with the grid once time rows exceed the viewport. Same class as F-256's mobile sticky-time-column
 treatment, just not yet applied to the desktop header row.
 Confirmed-ID: F-264
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
 
 ### date-picker-calendar-icon-invisible-light-mode
 Batch: Post-F-088 functional testing on real production (Observation 7, Chief-confirmed via PR #53 review)
@@ -1663,7 +1663,7 @@ Description: The native `<input type="date">` field's browser-drawn calendar ico
 dark mode but disappears against the light-mode background on the Guest Slot Inventory screen.
 Same class as F-249's dark-mode contrast issue, inverse theme.
 Confirmed-ID: F-265
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
 
 ### guest-booking-no-peak-standard-rate-differentiator
 Batch: Post-F-088 functional testing on real production, confirmed by code read (Observation 9, Chief-confirmed via PR #53 review)
@@ -1676,7 +1676,7 @@ shows identical "Flat booking rate" copy whether a guest is charged the real pea
 standard rate. The amount charged is confirmed correct in both cases — a pricing-transparency gap,
 not a charging bug — but the same trust-erosion shape as F-239 was, milder.
 Confirmed-ID: F-266
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
 
 ### guest-scheduler-configured-slots-missing-ampm
 Batch: Post-F-088 functional testing on real production (Observation 10, Chief-confirmed via PR #53 review)
@@ -1685,7 +1685,7 @@ Description: The Guest Scheduler's "Configured Slots" list shows pattern times a
 values (e.g. "06:00 - 09:00") with no AM/PM suffix, inconsistent with the rest of admin-v2's
 12-hour formatting (`formatHourLabel`/`formatSlotLabel`).
 Confirmed-ID: F-267
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
 
 ### overlapping-availability-patterns-no-validation
 Batch: Post-F-088 functional testing on real production, confirmed via code trace and live reproduction (Observation 11, Chief-confirmed via PR #53 review)
@@ -1699,4 +1699,4 @@ dedup, with no error and nothing surfaced to the admin indicating which pattern'
 actually applies. Reproduced live on a real pool with two real overlapping patterns
 (`06:00-09:00` and `06:00-22:00`).
 Confirmed-ID: F-268
-Confirmed: 19 Sep 2026
+Confirmed: 20 Sep 2026
