@@ -3128,6 +3128,101 @@ round of the same pattern, same as Batches 61/61.5.
 Register unchanged this pass — F-258/F-259 were already closed out in PR #48 before this deploy;
 no new finding surfaced. `docs/deploy_via_dockerhub_reference.md` mechanics unchanged.
 
+## Batch 64 — F-088 Stage 2 kickoff (parts 2-5) + F-100, production timezone flip
+
+Bala reported a real live symptom on production (11:21 AM IST): past-real-time slots on the
+Guest Slot Inventory grid were still clickable and bookable. Verified live before responding —
+`guest-inventory-grid` against both real JBC branches returned `guest-vacant` (never `elapsed`)
+for slots labeled 6:00 AM-9:00 PM, confirming `Branch.timezone` was still the literal string
+`"UTC"`. Not a grid-logic bug — the elapsed/vacant comparison was correct given the data it had;
+the branch's own timezone value was wrong. This is exactly what **F-100** (Open since 15 Aug
+2026) already described as a deliberate demo-period tradeoff, now reconfirmed with real customer
+impact rather than a theoretical read. Relayed to Chief, who authorized kicking off **F-088**
+Stage 2 (parts 2-5; part 1 stays its own track) as a dedicated session, sequenced as: production
+audit first and reviewed standalone, then the clear + flip + generation fix as one combined plan.
+
+**Part 2 — production audit, real data, both real JBC branches** (tenant
+`b3c40ef8-1579-444c-921f-f97acb382899`, branches `7d680518-fc68-4b4f-8639-1d8f1dc7f30b` and
+`58d154ce-7795-4324-8686-abab593fdd9d` — corrected from F-100's own stale IDs in the same pass).
+Mechanistic finding, confirmed by code read: `atLocalUtcDate`
+(`services/slot-engine/src/availabilityGeneration.ts`) never read `Branch.timezone` at all —
+`setUTCHours` on a pattern's `HH:mm`, unconditionally. Real data pulled: 0 `MemberGroupAssignment`
+rows on either branch (F-088's own worst-case "every assignment goes `WINDOW_NOT_FOUND`
+simultaneously" hazard had zero live blast radius), 577 `AvailabilityWindow` / 52 `Booking` / 37
+`PaymentIntent` rows total. Tested the naive "shift existing timestamps by -5:30" fix against real
+data and found a concrete landmine: one real `CONFIRMED` booking's window would have retroactively
+become "already elapsed" under a blind uniform shift — the audit's own reason to not assume a
+migration shape without checking real rows first.
+
+**Guardrail — payment-side disposability, verified not assumed.** Bala confirmed everything on
+these two branches was UAT activity, which collapsed the audit's "protect the one booked window"
+complication entirely — but the payment side needed its own real check (this project's F-233
+precedent: a key/mode mismatch has happened before). Production's Razorpay key confirmed
+`rzp_test_TLWpMFXUprxFba` (genuine Test Mode). The specific flagged booking turned out to be a
+`cash_` walk-in entry, not a Razorpay charge at all. Every other captured `PaymentIntent` (8
+distinct `order_*` refs, not a sample) was verified directly against Razorpay's own API under the
+production credentials — all resolved successfully, which is only possible under the same test
+account (a live-mode order 404s under test credentials). No live money anywhere in this data.
+
+**The clear — real before/after counts, twice.** Pass 1 (the audited scope): 577
+`AvailabilityWindow` / 52 `Booking` / 37 `PaymentIntent` / 45 `GenerationLock` deleted inside one
+`BEGIN`/`COMMIT` transaction (`PaymentIntent` deleted explicitly first — bare `referenceId`
+string, no FK/cascade — then `AvailabilityWindow`, which cascades to `Booking` per schema;
+`AvailabilityOverride`/`AvailabilityPattern` left untouched as real branch config, not test junk).
+A `pg_dump` of the affected tables taken immediately before, as belt-and-suspenders. `Branch.timezone`
+flipped to `Asia/Kolkata` on both branches immediately after.
+
+**A real incident happened mid-flight — the exact hazard F-088's own note already documented,
+manifesting live during the fix's own deploy window, not a new defect, described here rather than
+opened as a separate finding (rule 9).** Between the DB-side flip landing and the code fix (part
+4) actually deploying, real `guest-inventory-grid` queries against production (this session's own
+verification calls) triggered lazy window generation under the still-unfixed code with the new
+timezone value already live — reproducing the wrong-anchor bug fresh. First pass: 32 windows.
+Before the fix could be authorized and merged, real activity in the interim grew this to 46
+windows with 3 real new bookings attached. Bala authorized both as disposable test data; both were
+cleared the same disciplined way — real counts pulled fresh immediately before each delete, not
+from a stale snapshot, confirmed zero after each pass. A third recount immediately before the
+final deploy found zero new activity — no third clear needed.
+
+**Part 3 (the flip) + part 4 (generation fix) — landed together, per the coupling F-088's own 20
+Aug 2026 note already required.** `atLocalUtcDate` now resolves via `branchLocalToUtc` against the
+pool's real branch timezone, mirroring every other timezone-aware call site in the file. Blast
+radius confirmed before touching it: one call site (`buildCandidatesFromDefinition`), three
+generic callers of `ensureAvailabilityWindowsForDate` platform-wide (`ensureGenerationForPoolDates`,
+`computePoolGuestOccupancy`, `computeBranchGuestDay`), none branch-specific. Full regression 5/5
+clean (identity-auth and tenant-management each flaked once on the first full run — confirmed
+environmental via isolated re-runs, 15/15 and 11/11 clean — then a clean 5/5 full re-run;
+Docker Desktop's own engine had stopped between sessions and needed restarting before any of this
+could run, unrelated to the code itself).
+
+**Deploy — authorized as time-sensitive, off-peak preference explicitly waived**, since the risk
+(more real traffic regenerating more wrongly-anchored windows) compounded the longer the fix sat
+unmerged, not the other way around. PR #51 merged (`0bd53b3451c1364c51c24123855d16bdac9d106c`,
+consolidating PRs #49/#50's already-merged content too), CI's `integration` job completed (~30
+min, normal duration), all 7 images confirmed on Docker Hub before promoting, `promote.sh` run,
+`verify-deployment.mjs` all 8 components at `0bd53b3451c1`, independently re-confirmed over HTTPS.
+
+**Live verification, real evidence, post-deploy:** `guest-inventory-grid` against both real
+branches now anchors the `06:00` pattern at `00:30 UTC` (=6:00 AM real IST, was `06:00 UTC` before
+the fix) and the `06:00-10:00` pattern identically. `Intl.DateTimeFormat` with `Asia/Kolkata`
+against that instant renders `"6:00 AM"` — confirms the label a real admin sees is correct, not
+just the stored instant. Both branches confirmed still `Asia/Kolkata` via the real tenant/branches
+API post-deploy.
+
+**Register**: **F-088** moved Open -> Resolved — parts 2-5 delivered and verified as above (part 5,
+F-087, was already Resolved before this round); **part 1 (making `Branch.timezone` genuinely
+settable in the product) stays open**, flagged explicitly in the Resolution text rather than
+closed by implication, no new finding ID self-assigned for it. **F-100** moved Open -> Resolved,
+referencing F-088's evidence directly rather than duplicating it, with its stale tenant/branch IDs
+corrected in the same pass. `scripts/generate-flow-diagram.mjs`'s own `F-088` tags (5 flow nodes)
+updated to `F-088 (fixed)` and its CAP-006 note corrected (previously claimed "every branch reports
+UTC", no longer true) — `pnpm diagram:flows` regenerated, `pnpm diagram:verify` and
+`pnpm register:check` both clean (238 rows, 112 Open / 126 Resolved).
+
+Not yet done: this batch's own register/diagram changes are drafted, not yet committed/pushed —
+Chief's independent re-verification against the real deployed state (SHA, disk, live IST behavior)
+is the last step before this is treated as signed off, same bar as every round.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
