@@ -274,3 +274,43 @@ config time" (a product gap) is Chief's call once consolidated.
 
 Not proposing a design here — flagging for discussion once Bala's functional-testing pass is done
 and everything found this round is consolidated together.
+
+## Final cleanup — real before/after evidence
+
+Once this functional-testing round wrapped, both real branches were reset to zero test data via
+one reviewed script (`BEGIN`/`COMMIT`, both real bookings confirmed known-test-mode first):
+
+| Table | Before | After |
+|---|---|---|
+| `AvailabilityWindow` | 30 | 0 |
+| `Booking` | 2 | 0 |
+| `PaymentIntent` | 2 | 0 |
+| `GenerationLock` | 19 | 0 |
+| `AvailabilityPattern` | 2 | 0 |
+| `AvailabilityOverride` | 1 (unchanged, real holiday config) | 1 |
+
+Live-verified after: `guest-occupancy-dashboard` for both real branches returns `slotMonitor: []`,
+`guestSlots: 0`. Both branches are fully clean, ready for the next real schedule to be configured
+deliberately (not as test data).
+
+## Summary — 11 observations, this round
+
+1. Pattern delete leaves already-generated windows behind (no reconciliation).
+2. Same mechanism, wider date range, second confirmation.
+3. Same mechanism again, second real pool, found via the Dashboard this time.
+4. "Live Guest Allocation" defaults to `Open` for a court with no configured slot at all, same as
+   a genuinely vacant scheduled one — cannot tell the two apart.
+5. Real per-court assignment silently falls back to a cosmetic "Court N" label when a pool's
+   `capacity` doesn't match its real registered court count — confirmed live with a real booking.
+6. Inventory grid header should stay fixed while rows scroll (UI).
+7. Date picker's calendar icon invisible in light mode (UI).
+8. Rename the three real courts on "JBC – New Japan Badminton Court" to 5/6/7 and add an 8th
+   (connects to #5 — adding the 4th court fixes that mismatch as a side effect).
+9. Guest booking screen has no Peak/Standard rate differentiator at all — "Flat booking rate" is
+   pricing-mode copy, not rate-source copy, and the server doesn't even return rate source today.
+10. Guest Scheduler's configured-slot times need AM/PM suffix (UI).
+11. Overlapping `AvailabilityPattern`s are accepted with zero validation — the earlier-created one
+    silently wins the overlap at generation time, with nothing surfaced to the admin.
+
+Ready for Chief's review and disposition — which of these become real findings (with IDs Chief
+assigns), which fold into existing ones, and which are accepted as-is or deferred.
