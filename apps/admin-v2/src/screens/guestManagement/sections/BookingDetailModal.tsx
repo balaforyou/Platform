@@ -52,7 +52,9 @@ export function BookingDetailModal({
       { bookingId },
       { onSuccess: setDetail, onError: (err) => toast.push(friendlyError(err, "Couldn’t load booking detail."), 'error') },
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deliberately re-fetches only on bookingId change — this project's ESLint config has no
+    // react-hooks plugin (confirmed in .eslintrc.json), so there's no exhaustive-deps rule to
+    // satisfy or suppress here.
   }, [bookingId]);
 
   const startCancel = async () => {
