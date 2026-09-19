@@ -137,6 +137,38 @@ technically correct (nobody is occupying the court this second) but potentially 
 admin reading it as "these courts are available for guests to book right now," which isn't
 guaranteed to be true absent a real configured slot.
 
+## Observation 5 — real court assignment silently falls back to a cosmetic label when capacity != real court count
+
+Live-fire tested a fresh pattern end to end: created `06:00-09:00 AM` on pool `3025df55-...`
+(`JBC – New Japan Badminton Court`), booked one slot via the real admin walk-in flow
+(`2c66265f-...`, Sep 20) and one via Bala's real Google-authenticated self-service checkout
+(`6dcfa4bb-...`, real Razorpay order `order_TdtXQ6yYwjSe7r`, `paid`, ₹600 — Sep 22). Both correct
+and fully verified (capacity, pricing, payment capture, both dashboard/inventory views agreeing).
+
+**Bala noticed the Inventory grid showed the Sep 22 booking as "Booked" on all three court
+columns (A/B/C) simultaneously**, and separately that the booking confirmation names a specific
+"Court 1" — the two seemed to contradict each other (one real slot booked, but three courts
+marked occupied, and a numbered court with no visible tie to any of the three real ones).
+
+**Root cause, confirmed by direct DB read + code read, not assumed:** both bookings recorded
+`resourceId: null`, `courtSlotIndex: 1`. Traced to `assignPooledCourt`
+(`services/slot-engine/src/index.ts:116-147`, F-205): **real per-court assignment only fires when
+the pool's actual registered `Resource` count exactly equals its configured `capacity`.** This
+pool has 3 real courts (Court A/B/C) but `capacity: 4` (set when the pattern was created) — since
+`3 != 4`, the code's own documented fallback kicks in: `resourceId: null` plus F-186's original
+purely cosmetic 1..capacity index. Two consequences, both now explained by one root cause:
+- **"Court 1" on the guest's confirmation is not tied to any real court** — it's the cosmetic
+  fallback index, not a real dynamic allocation, despite reading exactly like one.
+- **The Inventory grid correctly renders a null-`resourceId` window against every court row**
+  (there's no real court to pin it to) — so three columns showing "Booked" for one real booking is
+  the grid behaving correctly *given* the fallback, not a rendering bug.
+
+If the pool's `capacity` matched its real court count (3, not 4), F-205's real assignment would
+have fired: a genuine `resourceId` would be recorded, "Court 1/2/3" would mean something real, and
+the grid would highlight exactly one column instead of all three. **This is a genuine functional
+gap, not just a display quirk** — an admin/staff member trying to match a guest's "Court 1"
+confirmation to a physical court on site has nothing real to go on today, on this specific pool.
+
 ## Open question for consolidation — not decided here
 
 Is "a pattern generates real windows that outlive the pattern itself, without any surfaced way to
@@ -153,6 +185,13 @@ defect? Real candidate angles, none decided:
 Separately, is Observation 4 (Live Guest Allocation's `Open` conflating "no schedule" with "vacant
 scheduled slot") worth its own finding, or a copy/label tweak (e.g. distinguishing "Open" from
 "No slot configured")? Also not decided here.
+
+Observation 5 reads like a real, standalone finding candidate rather than a UX question — the
+capacity/real-court-count mismatch is a genuine pre-existing data-configuration issue (same class
+as F-100's branch-timezone mismatch: a numeric setting silently disagreeing with reality), not
+something this round's testing introduced. Whether the fix is "set this pool's capacity to 3" (an
+operational correction, like F-100's timezone flip) or "make the mismatch impossible/surfaced at
+config time" (a product gap) is Chief's call once consolidated.
 
 Not proposing a design here — flagging for discussion once Bala's functional-testing pass is done
 and everything found this round is consolidated together.
