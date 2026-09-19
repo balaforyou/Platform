@@ -1448,3 +1448,130 @@ adjacent gap surfaced during investigation, kept as its own concern per rule 9, 
 `claude/claude-code-handover-f250-guest-occupancy-dashboard-inventory.md`.
 Confirmed-ID: F-250
 Confirmed: 18 Sep 2026
+
+### identity-auth-refresh-cookie-no-domain-crossapp-localhost-collision
+Batch: F-251 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: identity-auth's refresh-token cookie (`services/identity-auth/src/index.ts:588-593`,
+`:791-796`, `:861-866`, `:1290-1295`, all four identical) has no `domain` attribute, making it
+host-only for the literal string `localhost`. Since browsers don't scope cookies by port, a
+refresh cookie set by guest-member-pwa (`localhost:8080`) is sent along with admin-v2's dev
+server (`localhost:5175`) too — admin-v2's silent-refresh-on-boot (`AdminAuthContext.tsx:59-72`)
+then silently authenticates as whatever guest identity's cookie happens to be sitting in the
+shared browser jar. Real evidence: an admin-v2 session was confirmed live-authenticated as a
+zero-role GUEST user (`8702c07a-7689-41fd-917c-ce7b23441831`), created weeks earlier via
+dev-mode's fixed-OTP guest self-registration, producing silent 403s on every tenant-scoped call
+and the "unexpected error" banner with an empty branch selector on `/dashboard`. **Confirmed
+local-dev-only, not a production exposure**: `deploy/gcp-vm/Caddyfile` serves admin-v2 on its own
+real hostname (`admin.elitecourts.duckdns.org`, distinct from the guest domain), and a
+domain-less cookie is host-only, so this specific collision cannot occur across the deployed
+HTTPS domains. Re-verified live against the real deployed hosts (not just the repo file):
+`admin.elitecourts.duckdns.org`, `jbc.elitecourts.duckdns.org`, and
+`courtowner1.elitecourts.duckdns.org` all resolve as genuinely distinct real hostnames, and
+`POST /api/identity/auth/admin/google/verify` on the admin host correctly 403'd (dev-login
+disabled in prod, confirming that separate documented fact too). One residual gap: this rests on
+live behavioral evidence, not an SSH-confirmed read of the Caddyfile actually running on the VM
+(no SSH access in this session) — CLAUDE.md's own standing warning is that VM config can drift
+from the repo.
+Confirmed-ID: F-251
+Confirmed: 19 Sep 2026
+
+### inventory-grid-no-past-time-visual-signal
+Batch: F-252 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Guest Slot Inventory's Court×Hour grid renders already-elapsed time slots
+identically to genuine future vacant ones — confirmed live at ~15:50 UTC, 6:00 AM–2:00 PM on
+today's date all showed green "Open" buttons with no visual distinction. Root cause: neither
+`computeBranchGuestDay` nor the `guest-inventory-grid` route (`services/slot-engine/src/index.ts:1032`,
+`:1222`) compares a window's time against `now` — only the Dashboard's separate slot-monitor does
+that comparison (`now < window.endTime`, confirmed present there, confirmed absent in the grid
+route). Not silently broken: tapping a past cell correctly hits `useAvailability`'s existing
+exclusion and shows "No open slots" — but the grid gives no warning before the tap, a real
+dead-end on the exact fast-decision workflow this screen exists for.
+Confirmed-ID: F-252
+Confirmed: 19 Sep 2026
+
+### admin-v2-no-calendar-date-picker-component
+Batch: F-253 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: No calendar-only date picker exists anywhere in admin-v2 — pre-existing gap, not
+introduced by F-250. Every date field (`GuestSlotInventory.tsx:179`, `WalkInBookingFlow.tsx:388`,
+pre-existing `SpecialHours.tsx:290`) is a bare native `<input type="date">`; `min={todayIsoDate()}`
+blocks the picker UI from offering past dates but doesn't reliably block manual typing of one.
+Confirmed via a repo-wide search: no calendar-picker component exists anywhere in the codebase —
+every "Calendar" hit is the lucide icon only.
+Confirmed-ID: F-253
+Confirmed: 19 Sep 2026
+
+### guest-occupancy-dashboard-slot-monitor-active-flag-misleading
+Batch: F-254 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Guest Occupancy Dashboard's Upcoming Guest Slot Monitor mislabels slot state —
+confirmed live at 16:11 UTC: the 4-5 PM window (genuinely in progress) and 5-6 PM window (49
+minutes from starting) both showed "Active" identically, because `active: now < window.endTime`
+(`services/slot-engine/src/index.ts:1182`) never checks `window.startTime <= now` — only whether
+the window has ended, not whether it's started. Same root gap as F-252 (Inventory grid), different
+route (`computeBranchGuestDay`'s `slotMonitor` mapping, Dashboard-facing, not the grid), so tracked
+separately rather than folded in. Compounding effect: already-closed windows still display their
+`bookedCount`/capacity as "X/4 Vacant" (the `slotMonitor` filter excludes only `memberBlocked`
+windows, never past ones), presenting dead vacancy as if it were still actionable.
+Confirmed-ID: F-254
+Confirmed: 19 Sep 2026
+
+### guest-occupancy-dashboard-live-allocation-no-timestamp-and-layout-order
+Batch: F-255 (surfaced during F-250 manual verification, Bala, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Guest Occupancy Dashboard's Live Guest Allocation card reads as an orphaned
+afterthought — two compounding issues, both confirmed. (1) No timestamp anywhere on the card —
+confirmed by reading `GuestOccupancyDashboard.tsx`, zero "as of" text, unlike the adjacent Slot
+Monitor's explicit per-row time ranges, so a viewer has no way to tell how current the
+"Reserved"/"Open"/"Occupied (Member)" per-court status is. (2) Real layout deviation from the
+approved reference mockup: the mockup placed Slot Monitor and Live Allocation side-by-side
+(2-column/1-column split), but the actual implementation stacks them vertically with Live
+Allocation last, confirmed directly in the component — both are separate full-width blocks in
+sequence, not a side-by-side pair. This layout deviation is very likely the direct cause of the
+"orphan" feeling flagged during manual review.
+Confirmed-ID: F-255
+Confirmed: 19 Sep 2026
+
+### inventory-mobile-grid-overlap-column-cutoff
+Batch: F-256 (surfaced during Chief's screenshot UX review, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Guest Slot Inventory's mobile grid is close to unusable, confirmed against a real
+390×844 screenshot. The Branch/Date row visibly collides — "Japan Badminton Court, Coimbatore"
+runs into the date field, clipping the date value down to a single visible digit. Only ~2.5 of 4
+court columns fit in the viewport, with no scroll affordance of any kind (no fade edge, no scroll
+indicator, no sticky date/time column) to signal more courts exist off-screen. This is the primary
+target device for the screen's actual use case (an admin on the phone with a guest, deciding in
+real time), so it's more than cosmetic.
+Confirmed-ID: F-256
+Confirmed: 19 Sep 2026
+
+### walkinbookingflow-duplicated-modal-header
+Batch: F-257 (surfaced during Chief's screenshot UX review, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: The walk-in booking modal (`WalkInBookingFlow`, opened from the Inventory grid) shows
+a duplicated header on both desktop and mobile — confirmed in real screenshots. "New walk-in
+booking" appears as the dialog's own title bar (with the close ×), then again immediately below as
+a bold heading inside the card content, with an effectively repeated subtitle. Reads as two nested
+dialogs stacked on top of each other every time the flow opens. Likely a composition mismatch:
+`WalkInBookingFlow` kept its own header when extracted as a standalone component (F-250), and the
+generic modal wrapper around it also renders a title bar.
+Confirmed-ID: F-257
+Confirmed: 19 Sep 2026
+
+### dashboard-this-month-tab-revenue-and-demand
+Batch: F-258 (Business Discovery Checklist written first, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Dashboard is real-time/today-only by design (F-250 scope); Bala wants a "This Month"
+tab showing total fee collection and demand analytics (by hour, by day). New business idea, not
+yet built — Business Discovery Checklist completed (`claude/discovery-f258-dashboard-this-month-tab.md`).
+Phased: Phase 1 (real monthly totals, needs `guest-ledger` extended with a date-range param —
+confirmed today it supports only `status`/`limit`) buildable now; Phase 2 (demand-by-hour/day)
+built as an honest empty-state shell ("Not enough bookings yet to show a reliable pattern"), gated
+on ≥30 bookings/month to unlock the section and ≥3 bookings/cell to color an individual cell — both
+thresholds confirmed by Bala, arbitrary-but-reasoned defaults worth revisiting once real customer
+volume exists. Reuses `Tabs` (proven on `LedgerScreen`) for the Today/This Month split inside
+`/dashboard` — not a new nav destination.
+Confirmed-ID: F-258
+Confirmed: 19 Sep 2026
