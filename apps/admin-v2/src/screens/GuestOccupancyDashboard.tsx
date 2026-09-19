@@ -1,9 +1,57 @@
 import { useEffect, useState } from 'react';
-import { Banner, Badge, Card, LoadingState, Select } from '../components';
-import { useBranches, useGuestOccupancyDashboard } from './guestManagement/queries';
-import { formatHourLabel, formatSlotLabel, todayIsoDate } from './guestManagement/reservationHelpers';
+import { Banner, Badge, Button, Card, LoadingState, Select, Tabs } from '../components';
+import { useBranches, useGuestMonthSummary, useGuestOccupancyDashboard } from './guestManagement/queries';
+import { formatHourLabel, formatSlotLabel, todayIsoDate, todayIsoMonth } from './guestManagement/reservationHelpers';
 import type { BadgeTone } from '../components';
-import type { SlotMonitorStatus } from './guestManagement/types';
+import type { GuestMonthSummaryRow, SlotMonitorStatus } from './guestManagement/types';
+
+const DASHBOARD_TABS = [
+  { key: 'today', label: 'Today' },
+  { key: 'month', label: 'This Month' },
+];
+
+const MONTH_METHOD_LABEL: Record<string, string> = { cash: 'Cash', upi: 'UPI', link: 'Razorpay', other: 'Other' };
+
+/** Minimal CSV field escaping — real names/phone numbers are the only free-text fields at risk. */
+function csvField(value: string | number | null | undefined): string {
+  const s = value == null ? '' : String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function buildMonthCsv(rows: GuestMonthSummaryRow[], timezone: string | undefined): string {
+  const header = ['Date', 'Time', 'Court', 'Guest', 'Phone', 'Price', 'Payment method'];
+  const lines = [header.map(csvField).join(',')];
+  for (const r of rows) {
+    lines.push(
+      [
+        csvField(new Date(r.windowStart).toLocaleDateString('en-GB')),
+        csvField(formatSlotLabel({ id: r.bookingId, startTime: r.windowStart, endTime: r.windowEnd, capacity: 1 }, timezone)),
+        csvField(r.court),
+        csvField(r.guestName),
+        csvField(r.guestPhone),
+        csvField(r.price),
+        csvField(r.method ? MONTH_METHOD_LABEL[r.method] ?? r.method : ''),
+      ].join(','),
+    );
+  }
+  lines.push('');
+  lines.push([csvField('Total'), '', '', '', '', csvField(rows.reduce((sum, r) => sum + r.price, 0)), ''].join(','));
+  return lines.join('\n');
+}
+
+function downloadMonthCsv(branchName: string, month: string, rows: GuestMonthSummaryRow[], timezone: string | undefined): void {
+  const csv = buildMonthCsv(rows, timezone);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const safeBranch = branchName.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${safeBranch}-guest-bookings-${month}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // F-254: real 3-state model, replacing the old boolean Active/Closed flag that couldn't tell a
 // slot 49 minutes from starting apart from one genuinely in progress (confirmed live at 16:11
@@ -29,14 +77,17 @@ const metricValue: React.CSSProperties = { fontSize: 'var(--av2-text-2xl, 28px)'
 export function GuestOccupancyDashboard() {
   const branches = useBranches();
   const [branchId, setBranchId] = useState('');
+  const [tab, setTab] = useState('today');
   const date = todayIsoDate();
+  const [month, setMonth] = useState(todayIsoMonth());
 
   useEffect(() => {
     if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
   }, [branchId, branches.data]);
 
   const branch = (branches.data ?? []).find((b) => b.id === branchId);
-  const dashboard = useGuestOccupancyDashboard(branchId, date);
+  const dashboard = useGuestOccupancyDashboard(tab === 'today' ? branchId : undefined, date);
+  const monthSummary = useGuestMonthSummary(tab === 'month' ? branchId : undefined, month);
 
   return (
     <div style={{ display: 'grid', gap: 'var(--av2-space-6)', maxWidth: 880, minWidth: 0 }}>
@@ -64,8 +115,54 @@ export function GuestOccupancyDashboard() {
         {branches.error && <Banner tone="error">{(branches.error as Error)?.message}</Banner>}
       </div>
 
+      <Tabs items={DASHBOARD_TABS} activeKey={tab} onChange={setTab} />
+
       {!branchId ? (
         <Banner tone="info">Select a branch to see its guest occupancy.</Banner>
+      ) : tab === 'month' ? (
+        monthSummary.isLoading ? (
+          <LoadingState label="Loading this month’s totals…" />
+        ) : monthSummary.error ? (
+          <Banner tone="error">{(monthSummary.error as Error)?.message ?? "Couldn’t load this month’s totals."}</Banner>
+        ) : monthSummary.data ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--av2-space-3)', flexWrap: 'wrap' }}>
+              <label style={{ display: 'grid', gap: 4 }}>
+                <span style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)', fontWeight: 600 }}>Month</span>
+                <input
+                  type="month"
+                  value={month}
+                  onChange={(e) => e.target.value && setMonth(e.target.value)}
+                  style={{
+                    padding: 'var(--av2-space-2) var(--av2-space-3)',
+                    borderRadius: 'var(--av2-radius)',
+                    border: '1px solid var(--av2-border)',
+                    background: 'var(--av2-surface)',
+                    color: 'var(--av2-text)',
+                    fontSize: 'var(--av2-text-sm)',
+                  }}
+                />
+              </label>
+              <Button
+                variant="secondary"
+                onClick={() => downloadMonthCsv(branch?.name ?? 'branch', month, monthSummary.data!.rows, branch?.timezone)}
+                disabled={monthSummary.data.rows.length === 0}
+              >
+                Export CSV
+              </Button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--av2-space-4)' }}>
+              <Card style={metricStyle}>
+                <span style={metricLabel}>Total Fees Collected</span>
+                <span style={metricValue}>₹{monthSummary.data.totalFees.toLocaleString('en-IN')}</span>
+              </Card>
+              <Card style={metricStyle}>
+                <span style={metricLabel}>Total Bookings</span>
+                <span style={metricValue}>{monthSummary.data.totalBookings}</span>
+              </Card>
+            </div>
+          </>
+        ) : null
       ) : dashboard.isLoading ? (
         <LoadingState label="Loading guest occupancy…" />
       ) : dashboard.error ? (

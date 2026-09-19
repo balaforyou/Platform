@@ -398,6 +398,26 @@ function branchDayBounds(dateString: string, timeZone: string) {
   return { startOfDay, endOfDay: new Date(nextDay.getTime() - 1) };
 }
 
+// F-258 Phase 1: same shape as branchDayBounds, first/last instant of a calendar month instead
+// of a day — a clean sibling rather than inlining against branchLocalToUtc a second time, since
+// This Month needs exactly the same "branch-local boundary, half-open, minus one ms" pattern.
+function branchMonthBounds(month: string, timeZone: string) {
+  const m = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!m) throw new Error(`branchMonthBounds: invalid month "${month}"`);
+  const year = Number(m[1]);
+  const monthNum = Number(m[2]);
+  if (monthNum < 1 || monthNum > 12) throw new Error(`branchMonthBounds: invalid month "${month}"`);
+  const startOfMonth = branchLocalToUtc(`${m[1]}-${m[2]}-01`, '00:00', timeZone);
+  const nextMonthYear = monthNum === 12 ? year + 1 : year;
+  const nextMonthNum = monthNum === 12 ? 1 : monthNum + 1;
+  const startOfNextMonth = branchLocalToUtc(
+    `${nextMonthYear}-${String(nextMonthNum).padStart(2, '0')}-01`,
+    '00:00',
+    timeZone,
+  );
+  return { startOfMonth, endOfMonth: new Date(startOfNextMonth.getTime() - 1) };
+}
+
 // F-179: digit-count-only parsing let an invalid calendar date (Feb 30, Apr 31) silently
 // normalise into a different real date via native Date rollover instead of being rejected —
 // same root cause and remedy shape as F-173/F-176 in branchTime.ts, reusing daysInMonth rather
@@ -1149,6 +1169,78 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
   return { timeZone, dateString, pools, windows, guestUserMap };
 }
 
+// F-258 Phase 1: This Month tab — branch-wide totals for a calendar month, reusing
+// computeBranchGuestDay's pattern (pool-list → collect pool ids → query across all of them),
+// NOT guest-ledger's per-pool route (guest-ledger is scoped to one resourcePoolId and caps
+// `take` at 500 — wrong shape for a branch-wide monthly total). `Booking.price` is
+// `Decimal? @db.Decimal(10,2)` (confirmed against packages/database/prisma/schema.prisma);
+// `Number(...)` is the same conversion computeBranchGuestDay's own duesCollected total already
+// uses above, reused here rather than guest-ledger's route, which returns the raw Decimal
+// unconverted (fine there — its only consumer does its own `Number(r.price)` at render time).
+async function computeBranchMonthTotals(branchId: string, month: string): Promise<{
+  month: string;
+  totalFees: number;
+  totalBookings: number;
+  rows: Array<{
+    bookingId: string;
+    windowStart: string;
+    windowEnd: string;
+    guestName: string | null;
+    guestPhone: string | null;
+    court: string | null;
+    price: number;
+    method: 'cash' | 'upi' | 'link' | 'other' | null;
+  }>;
+}> {
+  const timeZone = await getBranchTimeZone(branchId);
+  const { startOfMonth, endOfMonth } = branchMonthBounds(month, timeZone);
+
+  const pools = await prisma.resourcePool.findMany({ where: { branchId }, select: { id: true } });
+  const poolIds = pools.map((p) => p.id);
+
+  const bookings = poolIds.length
+    ? await prisma.booking.findMany({
+        where: {
+          resourcePoolId: { in: poolIds },
+          isMemberBooking: false,
+          // F-183: exclude multi-hour child rows, same convention as guest-ledger.
+          parentBookingId: null,
+          status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
+          window: { startTime: { gte: startOfMonth, lte: endOfMonth } },
+        },
+        include: { window: true, resource: true },
+        orderBy: [{ window: { startTime: 'desc' } }],
+      })
+    : [];
+
+  const bookingIds = bookings.map((b) => b.id);
+  const userIds = [...new Set(bookings.map((b) => b.userId))];
+  const [intents, users] = await Promise.all([
+    bookingIds.length ? prisma.paymentIntent.findMany({ where: { referenceId: { in: bookingIds } } }) : Promise.resolve([]),
+    userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, phone: true } }) : Promise.resolve([]),
+  ]);
+  const intentByBooking = new Map(intents.map((i) => [i.referenceId, i]));
+  const userById = new Map(users.map((u) => [u.id, u]));
+
+  const rows = bookings.map((b) => ({
+    bookingId: b.id,
+    windowStart: b.window.startTime.toISOString(),
+    windowEnd: b.window.endTime.toISOString(),
+    guestName: userById.get(b.userId)?.name ?? null,
+    guestPhone: userById.get(b.userId)?.phone ?? null,
+    court: b.resource?.name ?? (b.courtSlotIndex != null ? `Court ${b.courtSlotIndex}` : null),
+    price: b.price != null ? Number(b.price) : 0,
+    method: deriveLedgerMethod(intentByBooking.get(b.id)?.gatewayRef),
+  }));
+
+  return {
+    month,
+    totalFees: rows.reduce((sum, r) => sum + r.price, 0),
+    totalBookings: rows.length,
+    rows,
+  };
+}
+
 // GET /branches/:id/guest-occupancy-dashboard?date= — F-250 Guest Occupancy Dashboard.
 // Real branch-scoped metrics; no `computePoolGuestOccupancy` reuse (see computeBranchGuestDay's
 // own comment on why: UTC-day bounds there vs. branch-local-day here).
@@ -1359,6 +1451,42 @@ server.get('/branches/:id/guest-inventory-grid', async (request, reply) => {
     rows: rowStarts.map((r) => r.toISOString()),
     cells,
   };
+});
+
+// GET /branches/:id/guest-month-summary?month=YYYY-MM — F-258 Phase 1: the Dashboard's "This
+// Month" tab. Same branch-scope gate as guest-occupancy-dashboard/guest-inventory-grid above
+// (getInternalOrAdminAuth + isAuthorizedForBranch) — confirmed against the current code rather
+// than introducing a differently-named guard for the same resource.
+server.get('/branches/:id/guest-month-summary', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  const { id } = request.params as any;
+
+  if (!isAuthorizedForBranch(auth, id)) {
+    reply.status(403);
+    const err = new Error('Forbidden: Not authorized for this branch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
+  }
+
+  const { month } = request.query as any;
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    reply.status(400);
+    const err = new Error('month is required, format YYYY-MM');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_MONTH';
+    throw err;
+  }
+
+  try {
+    return await computeBranchMonthTotals(id, month);
+  } catch (err: any) {
+    reply.status(400);
+    const e = new Error(`Invalid month "${month}": ${err.message}`);
+    (e as any).statusCode = 400;
+    (e as any).code = 'INVALID_MONTH';
+    throw e;
+  }
 });
 
 // ---------------------------------------------------------------------------

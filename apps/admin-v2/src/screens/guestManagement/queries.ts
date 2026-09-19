@@ -16,6 +16,7 @@ import type {
   GuestInventoryGrid,
   GuestLedgerRow,
   GuestLookupResult,
+  GuestMonthSummary,
   GuestOccupancyDashboard,
   ManualBookingResult,
   ManualPaymentMethod,
@@ -335,6 +336,20 @@ export function useGuestInventoryGrid(branchId?: string, poolId?: string, date?:
     enabled: !!branchId && !!poolId && !!date,
     queryFn: () =>
       api.get<GuestInventoryGrid>(`/slot-engine/branches/${branchId}/guest-inventory-grid?date=${date}&poolId=${poolId}`),
+  });
+}
+
+/**
+ * F-258 Phase 1: the Dashboard's "This Month" tab — branch-wide totals for a calendar month
+ * (`GET /branches/:id/guest-month-summary?month=`), reusing computeBranchGuestDay's pattern
+ * server-side, not guest-ledger's per-pool route.
+ */
+export function useGuestMonthSummary(branchId?: string, month?: string) {
+  const api = useAdminApi();
+  return useQuery({
+    queryKey: ['guest-month-summary', branchId, month],
+    enabled: !!branchId && !!month,
+    queryFn: () => api.get<GuestMonthSummary>(`/slot-engine/branches/${branchId}/guest-month-summary?month=${month}`),
   });
 }
 
