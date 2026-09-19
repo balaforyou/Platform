@@ -1008,6 +1008,7 @@ type GuestDayBooking = {
   resourceId: string | null;
   price: Prisma.Decimal | null;
   isMemberBooking: boolean;
+  status: BookingStatus;
 };
 type GuestDayWindow = {
   id: string;
@@ -1020,6 +1021,10 @@ type GuestDayWindow = {
   memberBlocked: boolean;
   memberBooked: boolean;
   guestBookings: GuestDayBooking[];
+  // F-252/F-254/F-256: a CANCELLED booking on an elapsed window with nothing rebooked into it
+  // renders as its own "Cancelled" state — kept separate from guestBookings so the Dashboard's
+  // and grid's own occupancy counts (which must only ever count real seats) never see it.
+  cancelledBookings: GuestDayBooking[];
 };
 type BranchGuestDay = {
   timeZone: string;
@@ -1072,7 +1077,11 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
             windowId: { in: windowIds },
             // F-183: exclude multi-hour child rows, same convention as guest-ledger.
             parentBookingId: null,
-            status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
+            // F-252/F-256: CANCELLED is fetched too (for the Cancelled cell state on an elapsed
+            // window) but kept out of every occupancy count below — RELEASED_NO_SHOW is
+            // deliberately NOT fetched, since a released hold never became a real booking and
+            // renders as plain Elapsed (Chief-confirmed, F-252 Q&A).
+            status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN, BookingStatus.CANCELLED] },
           },
           select: {
             id: true,
@@ -1081,6 +1090,7 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
             resourceId: true,
             price: true,
             isMemberBooking: true,
+            status: true,
           },
         })
       : Promise.resolve([]),
@@ -1120,6 +1130,7 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
 
   const windows: GuestDayWindow[] = rawWindows.map((window) => {
     const windowBookings = bookingsByWindow.get(window.id) ?? [];
+    const nonMemberBookings = windowBookings.filter((b) => !b.isMemberBooking);
     return {
       id: window.id,
       resourcePoolId: window.resourcePoolId,
@@ -1130,7 +1141,8 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
       price: window.price,
       memberBlocked: memberBlockedInstants.has(`${window.resourcePoolId}:${window.startTime.getTime()}`),
       memberBooked: windowBookings.some((b) => b.isMemberBooking),
-      guestBookings: windowBookings.filter((b) => !b.isMemberBooking),
+      guestBookings: nonMemberBookings.filter((b) => b.status !== BookingStatus.CANCELLED),
+      cancelledBookings: nonMemberBookings.filter((b) => b.status === BookingStatus.CANCELLED),
     };
   });
 
@@ -1179,7 +1191,13 @@ server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => 
       capacity: window.capacity,
       bookedCount: window.guestBookings.length,
       booked: window.guestBookings.length > 0,
-      active: now < window.endTime,
+      // F-254: real 3-state model — the old `active: now < window.endTime` never checked
+      // whether the window had actually STARTED, so a slot 49 minutes from starting showed
+      // identically "Active" as one genuinely in progress (confirmed live, 16:11 UTC, F-254's
+      // own repro). Vacancy/booked counts are unchanged either way (F-255 Q&A — Chief confirmed
+      // the mock keeps them on Closed rows, correcting this finding's own earlier-written
+      // "stop showing vacancy counts" wording).
+      status: now >= window.endTime ? 'closed' as const : now >= window.startTime ? 'live' as const : 'upcoming' as const,
     }));
 
   // Live allocation is a per-resource snapshot of "now". For a POOLED pool (resourceId null on
@@ -1214,11 +1232,17 @@ server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => 
     duesCollected,
     slotMonitor,
     liveAllocation,
+    // F-255: the exact instant liveAllocation was computed against — rendered branch-local as
+    // "as of <time>" so the label can never drift from what's actually shown, regardless of
+    // client/server clock skew.
+    liveAllocationAsOf: now.toISOString(),
   };
 });
 
-// GET /branches/:id/guest-inventory-grid?date=&poolId= — F-250 Guest Slot Inventory.
-// Court×Hour cell state for one pool/day: member-blocked / guest-booked / guest-vacant / empty.
+// GET /branches/:id/guest-inventory-grid?date=&poolId= — F-250 Guest Slot Inventory, 5-state
+// model per F-252/F-256: member-blocked / elapsed / completed / cancelled / guest-booked /
+// guest-vacant / empty. A cell's face never carries guest name/phone/price (F-252 Q1) — that
+// only exists behind the tap-through GET /bookings/:id/guest-detail (below).
 server.get('/branches/:id/guest-inventory-grid', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   const { id } = request.params as any;
@@ -1260,13 +1284,20 @@ server.get('/branches/:id/guest-inventory-grid', async (request, reply) => {
   }
 
   const poolWindows = day.windows.filter((window) => window.resourcePoolId === poolId);
+  const now = new Date();
 
   const cells = pool.resources.flatMap((resource) => rowStarts.map((rowStart) => {
     const window = poolWindows.find((w) => (
       w.startTime.getTime() === rowStart.getTime() && (w.resourceId === resource.id || w.resourceId == null)
     ));
     if (!window) {
-      return { type: 'empty' as const, resourceId: resource.id, startTime: rowStart.toISOString() };
+      // A past hour with no window ever configured is equally "nothing to show" as an elapsed
+      // window with no booking — never actionable either way, so it renders the same as Elapsed
+      // rather than a stale-looking "+" for a slot that can no longer be created for real.
+      const elapsed = rowStart.getTime() + duration * 60 * 1000 <= now.getTime();
+      return elapsed
+        ? { type: 'elapsed' as const, resourceId: resource.id, startTime: rowStart.toISOString() }
+        : { type: 'empty' as const, resourceId: resource.id, startTime: rowStart.toISOString() };
     }
     if (window.memberBlocked) {
       return {
@@ -1277,19 +1308,39 @@ server.get('/branches/:id/guest-inventory-grid', async (request, reply) => {
         endTime: window.endTime.toISOString(),
       };
     }
+    const isElapsed = now >= window.endTime;
     if (window.guestBookings.length > 0) {
       const booking = window.guestBookings[0];
-      const user = day.guestUserMap.get(booking.userId);
       return {
-        type: 'guest-booked' as const,
+        type: isElapsed ? ('completed' as const) : ('guest-booked' as const),
         resourceId: resource.id,
         windowId: window.id,
         bookingId: booking.id,
         startTime: window.startTime.toISOString(),
         endTime: window.endTime.toISOString(),
-        guestName: user?.name ?? null,
-        guestPhone: user?.phone ?? null,
-        price: booking.price != null ? String(booking.price) : null,
+      };
+    }
+    // F-252: Cancelled is elapsed-only — a future slot cancelled and reopened with nothing
+    // rebooked into it renders as plain Open (Q1, confirmed by the mock's own footnote), never
+    // as its own state. Only an elapsed, unresolved cancellation gets the Cancelled treatment.
+    if (isElapsed && window.cancelledBookings.length > 0) {
+      const booking = window.cancelledBookings[0];
+      return {
+        type: 'cancelled' as const,
+        resourceId: resource.id,
+        windowId: window.id,
+        bookingId: booking.id,
+        startTime: window.startTime.toISOString(),
+        endTime: window.endTime.toISOString(),
+      };
+    }
+    if (isElapsed) {
+      return {
+        type: 'elapsed' as const,
+        resourceId: resource.id,
+        windowId: window.id,
+        startTime: window.startTime.toISOString(),
+        endTime: window.endTime.toISOString(),
       };
     }
     return {
@@ -2069,6 +2120,122 @@ server.get('/resource-pools/:id/guest-ledger', async (request, reply) => {
         : null,
     };
   });
+});
+
+// F-252: distinguishes an admin-created walk-in payment from a guest self-service one, for the
+// Inventory detail modal's "Booked by"/"Cancelled by" field. Checks the raw gatewayRef prefix
+// directly — NOT via deriveLedgerMethod's method bucket, which was tried first and confirmed
+// wrong against real data: deriveLedgerMethod buckets both `plink_` (admin's payment-link
+// intent, set by POST /bookings/manual) and `pay_` (a guest's own direct Razorpay checkout,
+// generated in services/payment/src/index.ts right next to its termsAcceptedAt check — a
+// guest-only requirement) into the same 'link' PAYMENT METHOD, which is correct for the
+// Cash/UPI/Link display but conflates two different CHANNELS. Confirmed live: the real JBC
+// booking 430244d5's gatewayRef is `pay_mock_...` — genuinely guest self-service — and the
+// method-bucket approach would have mislabeled it "Front desk (walk-in)". `cash_`/`upi_`/
+// `plink_` (never `pay_` alone) are set exclusively by POST /bookings/manual (confirmed sole
+// caller) and are never overwritten by the payment webhook (it only updates `status`, not
+// `gatewayRef` — confirmed by reading it directly), so checking for exactly these three
+// prefixes is a permanent, reliable signal, not a heuristic — inferring from User.name was
+// rejected for the same reason (nothing marks a User row as admin-entered vs. self-service).
+const deriveBookingChannel = (gatewayRef: string | null | undefined): string => {
+  if (!gatewayRef) return 'Online booking';
+  const isWalkIn = gatewayRef.startsWith('cash_') || gatewayRef.startsWith('upi_') || gatewayRef.startsWith('plink_');
+  return isWalkIn ? 'Front desk (walk-in)' : 'Online booking';
+};
+
+const PAYMENT_METHOD_LABEL: Record<string, string> = { cash: 'Cash', upi: 'UPI', link: 'Razorpay' };
+
+// GET /bookings/:id/guest-detail — F-252/F-254/F-255/F-256/F-257 batch: the Inventory grid's
+// tap-through detail for a Booked/Completed/Cancelled cell. Reuses guest-ledger's own
+// PaymentIntent-join pattern for one booking instead of a pool's worth (rule 3) — deliberately a
+// dedicated on-tap read rather than bloating guest-inventory-grid's per-cell payload with detail
+// most cells never need. Same dual-path auth as cancel/cancel-preview.
+server.get('/bookings/:id/guest-detail', async (request, reply) => {
+  let isInternal = false;
+  let decodedUser: any = null;
+  try {
+    requireInternalKey(request, reply);
+    isInternal = true;
+  } catch (e) {
+    try {
+      decodedUser = await request.jwtVerify();
+    } catch (jwtErr) {
+      reply.status(401);
+      throw new Error('Unauthorized');
+    }
+  }
+
+  const { id } = request.params as any;
+  const booking = await prisma.booking.findUnique({ where: { id }, include: { window: true, resource: true } });
+  if (!booking) {
+    reply.status(404);
+    throw new Error('Booking not found');
+  }
+
+  if (!isInternal && decodedUser) {
+    requireBookingAccess(booking, decodedUser, reply);
+  }
+
+  if (booking.parentBookingId) {
+    reply.status(400);
+    const err = new Error('Cannot view detail for a child booking directly — act on the parent booking id');
+    (err as any).statusCode = 400;
+    (err as any).code = 'CHILD_BOOKING_NOT_VIEWABLE';
+    throw err;
+  }
+
+  const [intent, user] = await Promise.all([
+    prisma.paymentIntent.findFirst({ where: { referenceId: booking.id } }),
+    prisma.user.findUnique({ where: { id: booking.userId }, select: { id: true, name: true, phone: true } }),
+  ]);
+  const method = deriveLedgerMethod(intent?.gatewayRef);
+  const channel = deriveBookingChannel(intent?.gatewayRef);
+  const courtLabel = booking.resource?.name ?? (booking.courtSlotIndex != null ? `Court ${booking.courtSlotIndex}` : null);
+
+  const base = {
+    bookingId: booking.id,
+    status: booking.status,
+    courtLabel,
+    windowStart: booking.window.startTime,
+    windowEnd: booking.window.endTime,
+    guestName: user?.name ?? null,
+    guestPhone: user?.phone ?? null,
+  };
+
+  if (booking.status === BookingStatus.CANCELLED) {
+    // F-252 Q3: three real variants, branched on whether a real captured payment ever existed
+    // (refundAmount/refundPercent alone can't distinguish "never collected" from "paid but cancelled
+    // too late for any refund" — both persist as refundAmount: null/0; confirmed by reading the
+    // /cancel route's transaction directly).
+    const methodLabel = method ? PAYMENT_METHOD_LABEL[method] ?? 'Payment' : 'Payment';
+    const captured = intent?.status === 'captured';
+    const refundAmount = Number(booking.refundAmount || 0);
+    const originalPrice = Number(booking.price || 0);
+    let payment: string;
+    if (!captured) {
+      payment = `${methodLabel} — not collected`;
+    } else if (refundAmount > 0) {
+      const refundPercent = originalPrice > 0 ? Math.round((refundAmount / originalPrice) * 100) : 0;
+      payment = `${methodLabel} — ₹${refundAmount} refunded (${refundPercent}%)`;
+    } else {
+      payment = `${methodLabel} — no refund (cancelled after cutoff)`;
+    }
+    return {
+      ...base,
+      priceAtBooking: booking.price != null ? String(booking.price) : null,
+      cancelledBy: channel,
+      payment,
+    };
+  }
+
+  return {
+    ...base,
+    price: booking.price != null ? String(booking.price) : null,
+    // Friendly label ("Razorpay"/"Cash"/"UPI"), not the raw LedgerMethod enum — confirmed live
+    // this needed fixing (first pass returned the bare enum value, e.g. "link", to the UI).
+    paymentMethod: method ? PAYMENT_METHOD_LABEL[method] ?? 'Other' : null,
+    bookedBy: channel,
+  };
 });
 
 // ---------------------------------------------------------------------------

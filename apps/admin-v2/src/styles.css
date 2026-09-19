@@ -478,3 +478,62 @@ body {
   padding: var(--av2-space-3) var(--av2-space-4); font-size: var(--av2-text-xs); color: var(--av2-muted); line-height: 1.6;
 }
 .setup-rules-next b { color: var(--av2-text); }
+
+/* F-255 — Guest Occupancy Dashboard: Slot Monitor (wider) + Live Allocation (narrower) side by
+   side on desktop, restoring the original F-250 mockup's intent; stacked on mobile is a
+   deliberate exception (side-by-side isn't viable at that width), not a regression. */
+.dashboard-panels {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--av2-space-4);
+  align-items: start;
+}
+@media (max-width: 767px) {
+  .dashboard-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* F-254: the Slot Monitor's booked/vacant word is dropped on mobile ("1/4" not "1/4 Booked") —
+   pure density trimming for the narrower badge, confirmed intentional against the mock. */
+@media (max-width: 767px) {
+  .slot-monitor-word {
+    display: none;
+  }
+}
+
+/* F-256 — Guest Slot Inventory: real mobile fixes. Branch/Date row overlapped at 390px
+   ("Coimbatore" ran into the date field, date clipped to one digit) and only ~2.5 of 4 court
+   columns were visible with no scroll affordance — confirmed live in the original F-250
+   screenshots this finding was raised from. */
+.inventory-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+@media (max-width: 767px) {
+  .inventory-filters {
+    grid-template-columns: 1fr;
+  }
+}
+.inventory-scroll-cue {
+  display: none;
+  margin: 0 0 var(--av2-space-2);
+  font-size: var(--av2-text-xs);
+  color: var(--av2-muted);
+}
+@media (max-width: 767px) {
+  .inventory-scroll-cue {
+    display: block;
+  }
+}
+.inventory-grid-scroll {
+  overflow-x: auto;
+}
+/* The time-of-day column stays pinned while the court columns scroll horizontally as a group —
+   applied to every row's first cell (see GuestSlotInventory.tsx's FragmentRow). */
+.inventory-grid-sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--av2-surface);
+}

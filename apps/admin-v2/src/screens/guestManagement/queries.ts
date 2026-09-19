@@ -11,6 +11,8 @@ import type {
   AvailabilitySlot,
   AvailabilityWindow,
   Branch,
+  BookingGuestDetail,
+  CancelPreview,
   GuestInventoryGrid,
   GuestLedgerRow,
   GuestLookupResult,
@@ -358,6 +360,30 @@ export function useCancelBooking() {
   const api = useAdminApi();
   return useMutation<unknown, Error, { bookingId: string }>({
     mutationFn: ({ bookingId }) => api.post(`/slot-engine/bookings/${bookingId}/cancel`),
+  });
+}
+
+/**
+ * F-252: real refund preview before an admin confirms a cancel — same `cancel-preview` route
+ * and two-step pattern `CancelBookingModal.tsx` (guest-pwa) already uses, reused rather than a
+ * bare one-click cancel (Q12).
+ */
+export function useCancelPreview() {
+  const api = useAdminApi();
+  return useMutation<CancelPreview, Error, { bookingId: string }>({
+    mutationFn: ({ bookingId }) => api.get<CancelPreview>(`/slot-engine/bookings/${bookingId}/cancel-preview`),
+  });
+}
+
+/**
+ * F-252: the Inventory grid's tap-through detail for a Booked/Completed/Cancelled cell —
+ * `GET /bookings/:id/guest-detail`, first admin-v2 caller. A mutation (not a query) since it's
+ * fetched on-demand when a detail modal opens, not kept live/cached against a cell.
+ */
+export function useBookingGuestDetail() {
+  const api = useAdminApi();
+  return useMutation<BookingGuestDetail, Error, { bookingId: string }>({
+    mutationFn: ({ bookingId }) => api.get<BookingGuestDetail>(`/slot-engine/bookings/${bookingId}/guest-detail`),
   });
 }
 

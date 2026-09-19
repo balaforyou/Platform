@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Banner, Button, Card, LoadingState, Modal, Select, useToast } from '../components';
+import { Banner, Card, LoadingState, Modal, Select, useToast } from '../components';
 import { friendlyError } from '../lib/errorMessage';
 import {
   useBranches,
-  useCancelBooking,
   useCreateAvailabilityWindow,
   useGuestInventoryGrid,
   usePools,
 } from './guestManagement/queries';
 import { WalkInBookingFlow, type WalkInInitialSelection } from './guestManagement/sections/WalkInBookingFlow';
-import { formatHourLabel, formatSlotLabel, todayIsoDate } from './guestManagement/reservationHelpers';
+import { BookingDetailModal } from './guestManagement/sections/BookingDetailModal';
+import { formatHourLabel, todayIsoDate } from './guestManagement/reservationHelpers';
 import type { GuestInventoryCell } from './guestManagement/types';
 
 const cellBase: React.CSSProperties = {
@@ -24,11 +24,31 @@ const cellBase: React.CSSProperties = {
   padding: '4px 6px',
 };
 
+// F-252: 5 real states, replacing the old binary bookable/not — a cell face is a status word
+// only, never a name/phone (Q1). Colors match the approved mockup exactly.
 const CELL_STYLE: Record<GuestInventoryCell['type'], React.CSSProperties> = {
   empty: {
     background: 'transparent',
     border: '1px dashed var(--av2-border)',
     color: 'var(--av2-muted)',
+    cursor: 'pointer',
+  },
+  elapsed: {
+    background: 'var(--av2-surface-alt)',
+    border: '1px solid var(--av2-border)',
+    color: 'var(--av2-muted)',
+    cursor: 'default',
+  },
+  completed: {
+    background: 'var(--av2-info-soft)',
+    border: '1px solid var(--av2-info-border)',
+    color: 'var(--av2-info-text)',
+    cursor: 'pointer',
+  },
+  cancelled: {
+    background: 'var(--av2-warning-soft)',
+    border: '1px solid var(--av2-warning-border)',
+    color: 'var(--av2-warning)',
     cursor: 'pointer',
   },
   'member-blocked': {
@@ -51,13 +71,22 @@ const CELL_STYLE: Record<GuestInventoryCell['type'], React.CSSProperties> = {
   },
 };
 
+const CELL_LABEL: Record<GuestInventoryCell['type'], string> = {
+  empty: '+',
+  elapsed: 'Elapsed',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  'member-blocked': 'Member',
+  'guest-vacant': 'Open',
+  'guest-booked': 'Booked',
+};
+
 /**
- * F-250 — the `/inventory` route's real content, replacing the generic `StubScreen`. A
- * Court×Hour grid (visual reference only: `AdminInventoryManager.jsx`'s layout/coloring, not its
- * publish/unpublish modal, which this replaces). Tapping any bookable cell — vacant-published or
- * genuinely empty — drops straight into `WalkInBookingFlow`, prefilled, ending in a completed,
- * paid booking in one motion. Member-blocked cells (real `MemberGroupAssignment` data) stay
- * read-only.
+ * F-250/F-252/F-256 — the `/inventory` route's real content. A Court×Hour grid (visual reference:
+ * `AdminInventoryManager.jsx`'s layout/coloring, not its publish/unpublish modal). Tapping a
+ * bookable cell (vacant-published or genuinely empty) drops straight into `WalkInBookingFlow`;
+ * tapping Booked/Completed/Cancelled opens the real tap-through detail (`BookingDetailModal`).
+ * Elapsed and Member-blocked cells are read-only.
  */
 export function GuestSlotInventory() {
   const toast = useToast();
@@ -80,10 +109,9 @@ export function GuestSlotInventory() {
 
   const grid = useGuestInventoryGrid(branchId, poolId, date);
   const createWindow = useCreateAvailabilityWindow(poolId);
-  const cancelBooking = useCancelBooking();
 
   const [bookingFlowSelection, setBookingFlowSelection] = useState<WalkInInitialSelection | null>(null);
-  const [detailCell, setDetailCell] = useState<Extract<GuestInventoryCell, { type: 'guest-booked' }> | null>(null);
+  const [detail, setDetail] = useState<{ bookingId: string; cellType: 'guest-booked' | 'completed' | 'cancelled' } | null>(null);
   const [creatingKey, setCreatingKey] = useState<string | null>(null);
 
   const cellByKey = useMemo(() => {
@@ -98,9 +126,9 @@ export function GuestSlotInventory() {
   const resources = grid.data?.resources ?? [];
 
   const handleCellClick = async (cell: GuestInventoryCell) => {
-    if (cell.type === 'member-blocked') return;
-    if (cell.type === 'guest-booked') {
-      setDetailCell(cell);
+    if (cell.type === 'member-blocked' || cell.type === 'elapsed') return;
+    if (cell.type === 'guest-booked' || cell.type === 'completed' || cell.type === 'cancelled') {
+      setDetail({ bookingId: cell.bookingId, cellType: cell.type });
       return;
     }
     if (cell.type === 'guest-vacant') {
@@ -134,16 +162,10 @@ export function GuestSlotInventory() {
     grid.refetch();
   };
 
-  const cancel = async () => {
-    if (!detailCell) return;
-    try {
-      await cancelBooking.mutateAsync({ bookingId: detailCell.bookingId });
-      toast.push('Booking cancelled.', 'success');
-      setDetailCell(null);
-      grid.refetch();
-    } catch (err) {
-      toast.push(friendlyError(err, 'Couldn’t cancel that booking. Try again.'), 'error');
-    }
+  const closeDetail = () => setDetail(null);
+  const onCancelledBooking = () => {
+    closeDetail();
+    grid.refetch();
   };
 
   return (
@@ -155,7 +177,9 @@ export function GuestSlotInventory() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--av2-space-3)', maxWidth: 640 }}>
+      {/* F-256: stacked (non-overlapping) on mobile via .inventory-filters; side by side on
+          desktop — fixes the real overlap ("Coimbatore" colliding with the date field). */}
+      <div className="inventory-filters" style={{ gap: 'var(--av2-space-3)', maxWidth: 640 }}>
         <Select label="Branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={branches.isLoading}>
           <option value="">{branches.isLoading ? 'Loading branches…' : 'Select branch'}</option>
           {(branches.data || []).map((b) => (
@@ -201,33 +225,43 @@ export function GuestSlotInventory() {
       ) : resources.length === 0 ? (
         <Banner tone="info">This pool has no individually-tracked courts.</Banner>
       ) : (
-        <Card style={{ overflowX: 'auto' }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: `100px repeat(${resources.length}, minmax(90px, 1fr))`,
-              gap: 6,
-              minWidth: 100 + resources.length * 90,
-            }}
-          >
-            <div />
-            {resources.map((resource) => (
-              <div key={resource.id} style={{ fontSize: 'var(--av2-text-xs)', fontWeight: 700, textAlign: 'center', padding: '4px 0' }}>
-                {resource.name}
-              </div>
-            ))}
+        <Card style={{ minWidth: 0 }}>
+          {/* F-256: explicit scroll cue, shown only at mobile widths (CSS-driven, matching this
+              codebase's existing shell-breakpoint convention — not a JS viewport check). Real bug
+              caught live: without `minWidth: 0` here, this Card is a grid ITEM whose default
+              min-width is `auto`, so it took on its content's full intrinsic width regardless of
+              the viewport — the grid never actually overflowed *inside* .inventory-grid-scroll,
+              the whole Card pushed the page wider instead, silently clipped by .av2-shell's own
+              `overflow-x: hidden` safety net rather than producing the intended internal scroll. */}
+          <p className="inventory-scroll-cue">Scroll for all {resources.length} courts →</p>
+          <div className="inventory-grid-scroll">
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `100px repeat(${resources.length}, minmax(90px, 1fr))`,
+                gap: 6,
+                minWidth: 100 + resources.length * 90,
+              }}
+            >
+              <div className="inventory-grid-sticky-col" />
+              {resources.map((resource) => (
+                <div key={resource.id} style={{ fontSize: 'var(--av2-text-xs)', fontWeight: 700, textAlign: 'center', padding: '4px 0' }}>
+                  {resource.name}
+                </div>
+              ))}
 
-            {rows.map((rowStart) => (
-              <FragmentRow
-                key={rowStart}
-                rowStart={rowStart}
-                resources={resources}
-                cellByKey={cellByKey}
-                timezone={branch?.timezone}
-                creatingKey={creatingKey}
-                onCellClick={handleCellClick}
-              />
-            ))}
+              {rows.map((rowStart) => (
+                <FragmentRow
+                  key={rowStart}
+                  rowStart={rowStart}
+                  resources={resources}
+                  cellByKey={cellByKey}
+                  timezone={branch?.timezone}
+                  creatingKey={creatingKey}
+                  onCellClick={handleCellClick}
+                />
+              ))}
+            </div>
           </div>
         </Card>
       )}
@@ -239,43 +273,17 @@ export function GuestSlotInventory() {
         size="lg"
       >
         {bookingFlowSelection && branchId && (
-          <WalkInBookingFlow branchId={branchId} initialSelection={bookingFlowSelection} onBooked={onBooked} />
+          <WalkInBookingFlow branchId={branchId} initialSelection={bookingFlowSelection} onBooked={onBooked} showHeader={false} />
         )}
       </Modal>
 
-      <Modal
-        open={!!detailCell}
-        onOpenChange={(open) => { if (!open) setDetailCell(null); }}
-        title="Booking detail"
-        footer={
-          <Button
-            variant="secondary"
-            style={{ color: 'var(--av2-danger)', borderColor: 'var(--av2-danger-border)' }}
-            onClick={cancel}
-            loading={cancelBooking.isPending}
-            disabled={cancelBooking.isPending}
-          >
-            Cancel booking
-          </Button>
-        }
-      >
-        {detailCell && (
-          <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: 'var(--av2-text-sm)' }}>
-            <dt style={{ color: 'var(--av2-muted)' }}>Slot</dt>
-            <dd style={{ margin: 0 }}>
-              {formatSlotLabel({ id: detailCell.windowId, startTime: detailCell.startTime, endTime: detailCell.endTime, capacity: 1 }, branch?.timezone)}
-            </dd>
-            <dt style={{ color: 'var(--av2-muted)' }}>Guest</dt>
-            <dd style={{ margin: 0 }}>{detailCell.guestName || detailCell.guestPhone || 'Guest'}</dd>
-            {detailCell.price && (
-              <>
-                <dt style={{ color: 'var(--av2-muted)' }}>Price</dt>
-                <dd style={{ margin: 0 }}>₹{detailCell.price}</dd>
-              </>
-            )}
-          </dl>
-        )}
-      </Modal>
+      <BookingDetailModal
+        bookingId={detail?.bookingId ?? null}
+        cellType={detail?.cellType ?? null}
+        timezone={branch?.timezone}
+        onClose={closeDetail}
+        onCancelled={onCancelledBooking}
+      />
     </div>
   );
 }
@@ -297,7 +305,7 @@ function FragmentRow({
 }) {
   return (
     <>
-      <div style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)', display: 'flex', alignItems: 'center' }}>
+      <div className="inventory-grid-sticky-col" style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)', display: 'flex', alignItems: 'center' }}>
         {formatHourLabel(rowStart, timezone)}
       </div>
       {resources.map((resource) => {
@@ -305,23 +313,16 @@ function FragmentRow({
         const cell = cellByKey.get(key);
         if (!cell) return <div key={resource.id} />;
         const busy = creatingKey === key;
+        const disabled = cell.type === 'member-blocked' || cell.type === 'elapsed' || busy;
         return (
           <button
             key={resource.id}
             type="button"
-            disabled={cell.type === 'member-blocked' || busy}
+            disabled={disabled}
             onClick={() => onCellClick(cell)}
             style={{ ...cellBase, ...CELL_STYLE[cell.type], opacity: busy ? 0.6 : 1 }}
           >
-            {busy
-              ? '…'
-              : cell.type === 'guest-booked'
-                ? (cell.guestName || cell.guestPhone || 'Booked')
-                : cell.type === 'member-blocked'
-                  ? 'Member'
-                  : cell.type === 'guest-vacant'
-                    ? 'Open'
-                    : '+'}
+            {busy ? '…' : CELL_LABEL[cell.type]}
           </button>
         );
       })}
