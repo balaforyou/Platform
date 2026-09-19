@@ -3046,6 +3046,88 @@ so it carries F-239's commits too) on explicit sign-off; independently reviewed 
 Technical Lead thread against the pushed SHA. Merges to `main` directly, superseding PR #43, per
 the Technical Lead's merge-sequencing call — single combined deploy (F-239 + F-240-248) once merged.
 
+## Batch 63 — Production deploy: F-252/F-254/F-255/F-256/F-257 + F-258 Phase 1 (711a599)
+
+**Real baseline discrepancy found and resolved before touching the VM, not assumed.** The
+handover for this deploy stated the last known-live SHA as `11f7001` (F-235's own confirmed
+deploy). Rule 8 re-verification (`git fetch`, `git merge-base --is-ancestor`) confirmed the git
+ancestry the handover asked for, but a further check this session initiated on its own —
+reading `version.json`/`/health` directly against the real production HTTPS endpoints before
+deploying anything — found production was **actually already running `8dcc4e8`** (PR #44's
+merge — the F-239 + F-240-248 combined deploy Batch 62 above describes as "deploy pending"),
+which is *newer* than `11f7001`. No batch-log entry exists recording when or how that promotion
+happened; this is flagged here as a real gap in this file's own record, not resolved by
+guessing. Consequence: the real undeployed range was `8dcc4e8..711a599`, not `11f7001..711a599`
+— meaning **F-250's entire original Guest Occupancy Dashboard + Guest Slot Inventory build had
+never gone live before this promotion**, on top of the two batches the handover named. Bala's
+call: proceed, treating F-250 as in-scope for this round's own verification too, not just
+F-252-257/F-258's incremental checks.
+
+**Deploy mechanics:** all 7 images confirmed pushed by CI for `711a59908ca8114f8e9489dd6baa2e540f9eed3d`
+(Docker Hub tag check, before touching the VM) — `promote.sh 711a59908ca8114f8e9489dd6baa2e540f9eed3d`
+run on the VM, F-077 migrate guard passed (no pending migrations), all 6 services recreated,
+`verify-deployment.mjs` reported all 8 components at `711a59908ca8` — independently re-confirmed
+via a direct `curl` against `https://elitecourts.duckdns.org` and `https://admin.elitecourts.duckdns.org`
+`version.json`/`/health`, not just the script's own exit code.
+
+**Real evidence, not a code read:**
+- **F-250 (first time live):** `guest-occupancy-dashboard` for JBC's real branch showed real
+  today-data (16 upcoming windows, correct branch working hours); `guest-inventory-grid` against
+  a real past date (2026-09-11, a real existing production booking) correctly resolved `elapsed`
+  (64 cells) and `completed` (4 cells, correct bookingId) states from real data.
+- **F-254/F-255 (3-state Slot Monitor):** real `upcoming` state confirmed for today (before
+  working hours started) and real `closed` state confirmed for 2026-09-18 (fully elapsed) —
+  both against real current wall-clock time. `live` wasn't observable at the exact query moment
+  (before the branch's working hours opened for the day) but is the same code path already
+  live-fire verified during this batch's own implementation.
+- **F-258 Phase 1:** `guest-month-summary?month=2026-09` against JBC's real branch returned 1
+  real booking, ₹400 total — matches the single real September booking that exists in
+  production data.
+- **F-259 (must stay untouched):** verified by diff, not a live repro — `git diff 8dcc4e8..711a599`
+  shows `services/payment/src/index.ts` byte-for-byte unchanged, and the `/bookings/negotiated`
+  transaction in `slot-engine/src/index.ts` untouched (no hunk within hundreds of lines of it).
+  A live repro (creating an uncancellable past-dated booking on JBC's real production data) was
+  explicitly decided against — diff-based confirmation was judged sufficient without writing a
+  permanent stray row into real customer data.
+- **Baseline regression (real OTP + Razorpay):** a real guest booking was created end-to-end
+  through `jbc.elitecourts.duckdns.org` — real OTP login (existing session), real slot selection
+  (₹400 standard-rate quote, matching F-239's fix), real `HELD` booking (`BK-DA0D551D`) created,
+  real Razorpay Test-Mode checkout iframe reached. **Could not complete card entry**: the
+  checkout renders in a genuinely cross-origin `api.razorpay.com` iframe, and this sandboxed
+  browser tool could not deliver keyboard input into it (confirmed via `Tab` moving focus back to
+  the parent page, not into the iframe) — consistent with this project's already-documented
+  constraint that real Razorpay/Google-OAuth completion happens only via Bala's own browser, not
+  Claude Code's. The hold was cleanly released afterward (`Cancel Match` → real `SLOT_ALREADY_ENDED`-
+  adjacent `HELD`-cancel copy from F-243, correct) rather than left to expire — no stray booking
+  left in production. Quote-to-hold integrity confirmed; full payment completion stays an
+  operating-rule gap, not a regression.
+- **admin-v2 UI walkthrough (F-252/256/257 modal/mobile checks):** **not performed this round** —
+  production's admin-v2 requires real Google OAuth or a passkey (confirmed live, no dev-login
+  bypass, matching F-251's finding), which this sandbox cannot complete. Stated plainly rather
+  than skipped silently; these exact UI behaviors were already live-fire verified against real
+  JBC data during each batch's own implementation (F-250's, F-252-257's, and F-258's own rounds
+  above), on the same code now confirmed byte-identical in production via SHA match.
+
+**Disk (pre-flight + post-deploy prune, F-214's known accumulation pattern, third round):**
+| | Disk (`/`) | Images | Docker image storage |
+|---|---|---|---|
+| Before deploy | 60% used, 12G free | 30 (7 active) | 12.32GB, 8.985GB reclaimable (72%) |
+| After deploy, before prune | 70% used, 8.8G free | 37 (7 active) | 15.49GB, 11.82GB reclaimable (76%) |
+| After prune | 42% used, 17G free | 16 (7 active) | 6.861GB, 3.312GB reclaimable (48%) |
+
+Removed: all 21 images (7 services × 3 generations) tagged for `11f7001`, `694b93b`, and
+`6055b973` — none referenced by the running containers or the `gcp-vm-<svc>:rollback` tags
+(confirmed via `promote.sh`'s own rollback logic, which resolves purely from the local
+`gcp-vm-<svc>:rollback` tag, never the original `balamuralikrishna/...` tag). Kept: current
+(`711a599`) and one rollback generation (`8dcc4e8`), both as `gcp-vm-<svc>` / `gcp-vm-<svc>:rollback`
+and their original Docker Hub tags. Container uptime confirmed unchanged (15 minutes, matching
+time since promotion) — proof the prune touched only images, not running services. F-214 itself
+(a real retention policy/schedule) remains open and undecided — this is a one-off cleanup, third
+round of the same pattern, same as Batches 61/61.5.
+
+Register unchanged this pass — F-258/F-259 were already closed out in PR #48 before this deploy;
+no new finding surfaced. `docs/deploy_via_dockerhub_reference.md` mechanics unchanged.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
