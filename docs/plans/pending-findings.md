@@ -1559,3 +1559,19 @@ dialogs stacked on top of each other every time the flow opens. Likely a composi
 generic modal wrapper around it also renders a title bar.
 Confirmed-ID: F-257
 Confirmed: 19 Sep 2026
+
+### dashboard-this-month-tab-revenue-and-demand
+Batch: F-258 (Business Discovery Checklist written first, not implementer-surfaced)
+Surfaced: 19 Sep 2026
+Description: Dashboard is real-time/today-only by design (F-250 scope); Bala wants a "This Month"
+tab showing total fee collection and demand analytics (by hour, by day). New business idea, not
+yet built — Business Discovery Checklist completed (`claude/discovery-f258-dashboard-this-month-tab.md`).
+Phased: Phase 1 (real monthly totals, needs `guest-ledger` extended with a date-range param —
+confirmed today it supports only `status`/`limit`) buildable now; Phase 2 (demand-by-hour/day)
+built as an honest empty-state shell ("Not enough bookings yet to show a reliable pattern"), gated
+on ≥30 bookings/month to unlock the section and ≥3 bookings/cell to color an individual cell — both
+thresholds confirmed by Bala, arbitrary-but-reasoned defaults worth revisiting once real customer
+volume exists. Reuses `Tabs` (proven on `LedgerScreen`) for the Today/This Month split inside
+`/dashboard` — not a new nav destination.
+Confirmed-ID: F-258
+Confirmed: 19 Sep 2026
