@@ -178,6 +178,14 @@ while only the slot rows scroll vertically. No investigation needed; a straightf
 sticky` treatment on the header row, same idea as the existing sticky time-column treatment on
 mobile (F-256). Not designed or scoped here — just recorded so it isn't lost.
 
+## Observation 7 — date picker's calendar icon invisible in light mode
+
+UI/UX observation, not a functional defect. On the Guest Slot Inventory screen's native `<input
+type="date">` field, the browser-drawn calendar icon is visible in dark mode but disappears
+against the light-mode background — likely the native icon rendering dark-on-light (or
+light-on-light) depending on browser default styling not being overridden for this theme. Not
+investigated or scoped — just recorded so it isn't lost.
+
 ## Open question for consolidation — not decided here
 
 Is "a pattern generates real windows that outlive the pattern itself, without any surfaced way to
