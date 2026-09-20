@@ -1,12 +1,13 @@
 import { jsPDF } from 'jspdf';
 import { formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
+import { describeCourtAssignment } from './courtLabel';
 
 // F-235 Slice F / design brief §0.6: client-side PDF receipt, generated entirely from data
 // already on the confirmation screen (booking + branchAbout) -- no new fetch, no backend
 // endpoint. Content per the design brief: venue, date/time, court/pool, price, booking
 // reference, status.
 function buildBookingRows(booking: any, branchAbout: any): [string, string][] {
-  const court = booking.resource?.name ?? (booking.courtSlotIndex != null ? `Court ${booking.courtSlotIndex}` : 'Not yet assigned');
+  const court = describeCourtAssignment(booking.resource?.name, booking.resourceId, booking.courtSlotIndex) ?? 'Not yet assigned';
   const startTime = booking.window?.startTime;
   const endTime = booking.window?.endTime;
   return [

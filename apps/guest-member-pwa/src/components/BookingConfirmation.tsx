@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { CheckCircle, AlertCircle, Activity, ArrowRight, Navigation, Download } from 'lucide-react';
+import { describeCourtAssignment } from '../lib/courtLabel';
 
 export default function BookingConfirmation() {
   const { bookingId } = useParams();
@@ -258,7 +259,7 @@ export default function BookingConfirmation() {
                 the cosmetic "Court N" (F-186) as fallback; nothing at all when neither is set
                 (a legacy pre-F-205 booking) — never a blank row implying data that isn't real. */}
             {(() => {
-              const court = booking.resource?.name ?? (booking.courtSlotIndex != null ? `Court ${booking.courtSlotIndex}` : null);
+              const court = describeCourtAssignment(booking.resource?.name, booking.resourceId, booking.courtSlotIndex);
               return court ? (
                 <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
                   <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Court</span>

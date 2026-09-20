@@ -5,6 +5,7 @@ import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
 import ConfirmDialog from './ui/ConfirmDialog';
+import { describeCourtAssignment } from '../lib/courtLabel';
 
 export default function BookingHistory() {
   const { accessToken } = useAuth();
@@ -390,9 +391,11 @@ export default function BookingHistory() {
                     {/* F-189: the assigned court — real Resource name (F-205), else the cosmetic
                         "Court N" (F-186), else nothing (a legacy pre-F-205 booking). */}
                     {(() => {
-                      const court =
-                        booking.resource?.name ??
-                        (booking.courtSlotIndex != null ? `Court ${booking.courtSlotIndex}` : null);
+                      const court = describeCourtAssignment(
+                        booking.resource?.name,
+                        booking.resourceId,
+                        booking.courtSlotIndex,
+                      );
                       return court ? (
                         <div className="flex items-center space-x-1.5">
                           <Hash className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-neutral-700)' }} />

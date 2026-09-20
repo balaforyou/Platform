@@ -27,6 +27,18 @@ const primaryReserveBtn =
   'flex-1 sm:w-full min-h-[54px] py-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ' +
   'bg-[var(--color-accent-400)] text-[var(--color-neutral-900)] hover:bg-[var(--color-accent-300)] active:bg-[var(--color-accent-500)]';
 
+// F-266: matches admin-v2's `RateSource`/`RATE_SOURCE_LABEL`
+// (apps/admin-v2/src/screens/guestManagement/reservationHelpers.ts) exactly, so a guest and an
+// admin see the same wording for the same rate. Duplicated rather than shared -- no package
+// exists between this app and admin-v2 (same tradeoff as `lib/courtLabel.ts` in this batch).
+type RateSource = 'window' | 'peak' | 'standard' | 'default';
+const RATE_SOURCE_LABEL: Record<RateSource, string> = {
+  window: "this slot's set price",
+  peak: 'the guest peak rate',
+  standard: 'the guest standard rate',
+  default: "the pool's default rate",
+};
+
 export default function BranchBooking() {
   const { tenant } = useTenant();
   const { accessToken, user } = useAuth();
@@ -694,13 +706,25 @@ export default function BranchBooking() {
                           })()}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-                        <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Pricing</span>
-                        <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
-                          {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON'
-                            ? 'Per-person rate multiplication'
-                            : 'Flat booking rate'}
-                        </span>
+                      <div className="flex flex-col gap-0.5 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Pricing</span>
+                          <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
+                            {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON'
+                              ? 'Per-person rate multiplication'
+                              : 'Flat booking rate'}
+                          </span>
+                        </div>
+                        {/* F-266: which rate was actually applied (window override / peak /
+                            standard / pool default) -- a different axis from the FLAT/PER_PERSON
+                            label above, shown alongside it rather than replacing it. */}
+                        {selectedSlot.rateSource && (
+                          <div className="flex justify-end">
+                            <span className="text-[11.5px]" style={{ color: 'var(--color-neutral-600)' }}>
+                              at {RATE_SOURCE_LABEL[selectedSlot.rateSource as RateSource] ?? selectedSlot.rateSource}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex justify-between items-center py-3">
