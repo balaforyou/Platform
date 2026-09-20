@@ -50,6 +50,13 @@
   --av2-warning: #d97706;
   --av2-warning-soft: #fffbeb;
   --av2-warning-border: #fde68a;
+  /* F-265: native form-control chrome (date-picker icon, <select> arrows, scrollbars) follows
+     the BROWSER's own prefers-color-scheme when no color-scheme is declared -- independent of
+     this app's own data-theme toggle. Declaring it here (and in both dark blocks below) makes
+     native chrome always match what the app is actually showing, closing the real gap: a
+     manually-toggled theme that disagrees with the OS/browser's own preference (confirmed live
+     in both directions) left the calendar icon the same color as its background. */
+  color-scheme: light;
   --av2-radius: 12px;
   --av2-radius-sm: 8px;
   --av2-shadow: 0 1px 3px rgb(15 23 42 / 0.08), 0 1px 2px rgb(15 23 42 / 0.04);
@@ -108,6 +115,7 @@
   --av2-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
   --av2-shadow-lg: 0 20px 40px -12px rgb(0 0 0 / 0.6);
   --av2-ring: #34d399;
+  color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -134,6 +142,7 @@
     --av2-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
     --av2-shadow-lg: 0 20px 40px -12px rgb(0 0 0 / 0.6);
     --av2-ring: #34d399;
+    color-scheme: dark;
   }
 }
 
@@ -526,8 +535,19 @@ body {
     display: block;
   }
 }
+/* F-264: `overflow-x: auto` alone forces `overflow-y`'s computed value to `auto` too (CSS
+   Overflow spec: an axis set to non-`visible` forces the other away from `visible`) — making this
+   a real scroll-container ancestor for `position: sticky` purposes regardless of whether it
+   currently overflows. Confirmed live it didn't (content just grew and the page scrolled instead,
+   the same reason .av2-topbar's own sticky is separately broken — F-271). Giving it a real bounded
+   height makes it a genuinely engaged scroll container, so `.inventory-grid-sticky-header` below
+   actually has something to stick within. 440px = header row (~32px) + ~8 hourly data rows
+   (~44-50px each incl. the grid's own 6px gap), measured live against the real rendered grid.
+   Self-contained -- doesn't depend on fixing F-271 (a bigger, separate, app-wide change). */
 .inventory-grid-scroll {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 440px;
 }
 /* The time-of-day column stays pinned while the court columns scroll horizontally as a group —
    applied to every row's first cell (see GuestSlotInventory.tsx's FragmentRow). */
@@ -535,5 +555,13 @@ body {
   position: sticky;
   left: 0;
   z-index: 1;
+  background: var(--av2-surface);
+}
+/* F-264: the court-name header row stays pinned to the top of .inventory-grid-scroll's own
+   (now real) scroll box while time rows scroll past underneath it. */
+.inventory-grid-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: var(--av2-surface);
 }

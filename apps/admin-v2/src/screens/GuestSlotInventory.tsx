@@ -243,9 +243,13 @@ export function GuestSlotInventory() {
                 minWidth: 100 + resources.length * 90,
               }}
             >
-              <div className="inventory-grid-sticky-col" />
+              <div className="inventory-grid-sticky-col inventory-grid-sticky-header" style={{ zIndex: 3 }} />
               {resources.map((resource) => (
-                <div key={resource.id} style={{ fontSize: 'var(--av2-text-xs)', fontWeight: 700, textAlign: 'center', padding: '4px 0' }}>
+                <div
+                  key={resource.id}
+                  className="inventory-grid-sticky-header"
+                  style={{ fontSize: 'var(--av2-text-xs)', fontWeight: 700, textAlign: 'center', padding: '4px 0' }}
+                >
                   {resource.name}
                 </div>
               ))}
