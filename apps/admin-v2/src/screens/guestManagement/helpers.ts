@@ -22,9 +22,21 @@ export function formatDaysOfWeek(daysOfWeek: string) {
     .join(', ');
 }
 
+// F-267: a bare "HH:mm" wall-clock string, not an instant -- no date or timezone to convert
+// against, so a plain hour/minute parse is the right shape here, not the ISO-based
+// formatHourLabel/formatSlotLabel (reservationHelpers.ts), which are built for real
+// AvailabilityWindow instances and would need an arbitrary placeholder Date to call on pattern
+// data at all.
+export function formatWallClockTime(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
 export function formatTimeRange(startTime?: string | null, endTime?: string | null) {
   if (!startTime || !endTime) return 'Closed';
-  return `${startTime} - ${endTime}`;
+  return `${formatWallClockTime(startTime)} - ${formatWallClockTime(endTime)}`;
 }
 
 export function formatDate(value: string) {

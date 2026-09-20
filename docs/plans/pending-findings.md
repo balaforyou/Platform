@@ -1729,3 +1729,17 @@ could consume instead, but admin-v2 was left untouched (out of scope for that fi
 recomputes the same precedence a second, independently-drifting time.
 Confirmed-ID: F-270
 Confirmed: 20 Sep 2026
+
+### av2-shell-overflow-x-hidden-breaks-topbar-sticky
+Batch: F-264 implementation, surfaced during investigation and independently confirmed by Chief
+Surfaced: 20 Sep 2026
+Description: `.av2-topbar`'s `position: sticky` doesn't actually work anywhere in admin-v2. Root
+cause: `.av2-shell`'s `overflow-x: hidden` (a defensive backstop added for an unrelated earlier
+bug — an unguarded grid child taking the page sideways) forces `.av2-shell`'s own `overflow-y` to
+compute to `auto` per the CSS Overflow spec, making it the nearest scroll-container ancestor for
+`.av2-topbar`'s sticky positioning — but nothing actually scrolls `.av2-shell` internally (it just
+grows past `100vh`; the real page scrolls at the document level instead), so the topbar's sticky
+position never engages. Confirmed via real DOM inspection: `.av2-topbar`'s bounding rect showed
+`top: -370px` after scrolling, proving it doesn't stick.
+Confirmed-ID: F-271
+Confirmed: 20 Sep 2026
