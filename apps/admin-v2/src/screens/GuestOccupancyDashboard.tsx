@@ -3,7 +3,7 @@ import { Banner, Badge, Button, Card, LoadingState, Select, Tabs } from '../comp
 import { useBranches, useGuestMonthSummary, useGuestOccupancyDashboard } from './guestManagement/queries';
 import { formatHourLabel, formatSlotLabel, todayIsoDate, todayIsoMonth } from './guestManagement/reservationHelpers';
 import type { BadgeTone } from '../components';
-import type { GuestMonthSummaryRow, SlotMonitorStatus } from './guestManagement/types';
+import type { GuestMonthSummaryRow, LiveAllocationEntry, SlotMonitorStatus } from './guestManagement/types';
 
 const DASHBOARD_TABS = [
   { key: 'today', label: 'Today' },
@@ -58,6 +58,23 @@ function downloadMonthCsv(branchName: string, month: string, rows: GuestMonthSum
 // UTC — both showed "Active"). Vacancy/booked counts are unchanged either way (F-255 Q&A).
 const SLOT_STATUS_LABEL: Record<SlotMonitorStatus, string> = { closed: 'Closed', live: 'Live now', upcoming: 'Upcoming' };
 const SLOT_STATUS_TONE: Record<SlotMonitorStatus, BadgeTone> = { closed: 'neutral', live: 'success', upcoming: 'warning' };
+
+// F-262: 'unconfigured' distinguishes "nothing scheduled for this resource right now" from a
+// genuine 'open' vacancy -- reusing 'neutral' for both would make them look identical, defeating
+// the point. 'warning' matches the same "not active, not a problem, just not now" reasoning
+// SLOT_STATUS_TONE already uses for 'upcoming' above.
+const LIVE_ALLOCATION_LABEL: Record<LiveAllocationEntry['status'], string> = {
+  guest: 'Reserved',
+  member: 'Occupied (Member)',
+  open: 'Open',
+  unconfigured: 'No slot configured',
+};
+const LIVE_ALLOCATION_TONE: Record<LiveAllocationEntry['status'], BadgeTone> = {
+  guest: 'success',
+  member: 'info',
+  open: 'neutral',
+  unconfigured: 'warning',
+};
 
 const metricStyle: React.CSSProperties = {
   display: 'flex',
@@ -242,8 +259,10 @@ export function GuestOccupancyDashboard() {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 'var(--av2-space-3)' }}>
                   {dashboard.data.liveAllocation.map((court) => {
-                    const tone: BadgeTone = court.status === 'guest' ? 'success' : court.status === 'member' ? 'info' : 'neutral';
-                    const label = court.status === 'guest' ? `Reserved — ${court.guestName ?? 'Guest'}` : court.status === 'member' ? 'Occupied (Member)' : 'Open';
+                    const tone = LIVE_ALLOCATION_TONE[court.status];
+                    const label = court.status === 'guest'
+                      ? `Reserved — ${court.guestName ?? 'Guest'}`
+                      : LIVE_ALLOCATION_LABEL[court.status];
                     return (
                       <div key={court.resourceId} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <span style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 700 }}>{court.resourceName}</span>

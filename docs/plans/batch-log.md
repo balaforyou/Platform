@@ -3384,6 +3384,47 @@ three suites hit the same cross-suite-timing flake as Batch 66, confirmed enviro
 clean in isolation, then green together on a clean re-run). `pnpm register:check`/`diagram:verify`
 both clean. Branch `f261-f268-pattern-reconcile-overlap-validation`.
 
+## Batch 68 — F-262 (Live Allocation "no slot configured" vs. genuine vacancy)
+
+Batch C of the post-F-088 functional-testing findings, last of the three non-cosmetic items
+(F-264/265/267 remain parked as Batch D, cosmetic). Investigated the real current code path fresh
+against `main`@`cdb9f02` (post-#58, pre-this-batch) — nothing had drifted from the handover's
+description.
+
+**Root cause, confirmed**: `guest-occupancy-dashboard`'s `liveAllocation` block
+(`services/slot-engine/src/index.ts:1369-1387`) initializes each resource's `status` to `'open'`
+and only reassigns it inside `if (currentWindow)` — so a resource with no window at all covering
+`now` and a resource with a real window that's genuinely vacant both fell through to the identical
+`'open'` value, with no way for an admin to tell them apart on the dashboard card.
+
+**Fix**: reused the `currentWindow` absence signal the block already computes (no new lookup, no
+new data) — `let status = currentWindow ? 'open' : 'unconfigured'`, with the existing `member`/
+`guest` branches left completely untouched. Frontend
+(`apps/admin-v2/src/screens/GuestOccupancyDashboard.tsx`) replaced an ad-hoc ternary with a
+`Record`-based label/tone map matching the same convention already established for `slotMonitor`'s
+own status two cards up, labeled "No slot configured" with `warning` tone (distinct from `'open'`'s
+`neutral`, this system's most muted tone — reusing it would have made the two states look
+identical, defeating the fix). `LiveAllocationEntry`'s type declaration
+(`guestManagement/types.ts`) updated to the 4-value union — Chief caught this file missing from the
+plan's own touched-files list before implementation began, a real gap in the initial plan, not
+just a nitpick (the plan's own `Record<LiveAllocationEntry['status'], ...>` snippet only
+type-checks correctly once this lands).
+
+**Live-fire evidence, real, on a scratch pool under JBC's real Coimbatore branch**: a genuine
+schedule gap (a pattern covering `14:00-15:00` only, queried at `~09:26`) showed `'unconfigured'`;
+adding a second pattern covering the current hour flipped the same resource back to `'open'`,
+cross-checked against real JBC production data at the same instant (also correctly `'open'`); a
+real booking on the current-hour window correctly flipped it to `'guest'` with the real guest name.
+**The `member` branch was not independently live-fire re-verified this round** — confirmed
+byte-for-byte untouched by the diff itself, but constructing a real `MemberGroupAssignment` fixture
+wasn't attempted since no such row exists in production today — disclosed plainly rather than
+claimed, consistent with this project's standing discipline on evidence claims.
+
+**Register**: F-262 moved Open → Resolved, no new findings surfaced. Full regression suite 5/5 on
+the first run touching the changed code — zero fixture impact, confirmed by the run itself (no
+regression fixture references this route at all). `pnpm register:check`/`diagram:verify` both
+clean. Branch `f262-live-allocation-unconfigured-state`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

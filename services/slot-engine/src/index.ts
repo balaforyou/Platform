@@ -1372,7 +1372,11 @@ server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => 
       (window.resourceId === resource.id || window.resourceId == null) &&
       window.startTime <= now && now < window.endTime
     ));
-    let status: 'open' | 'member' | 'guest' = 'open';
+    // F-262: `currentWindow` being undefined means nothing was ever scheduled for this resource
+    // at this exact instant -- distinct from a real window that's genuinely vacant. Reuses the
+    // same absence signal `guest-inventory-grid`'s own elapsed/empty vs. guest-vacant split
+    // already keys off one level up; no new lookup, no new data.
+    let status: 'open' | 'member' | 'guest' | 'unconfigured' = currentWindow ? 'open' : 'unconfigured';
     let guestName: string | null = null;
     if (currentWindow) {
       if (currentWindow.memberBlocked || currentWindow.memberBooked) {

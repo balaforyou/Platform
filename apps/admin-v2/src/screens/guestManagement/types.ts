@@ -176,7 +176,7 @@ export type LiveAllocationEntry = {
   resourceId: string;
   resourceName: string;
   resourcePoolId: string;
-  status: 'open' | 'member' | 'guest';
+  status: 'open' | 'member' | 'guest' | 'unconfigured';
   guestName: string | null;
 };
 export type GuestOccupancyDashboard = {
