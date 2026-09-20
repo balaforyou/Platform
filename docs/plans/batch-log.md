@@ -3425,6 +3425,48 @@ the first run touching the changed code — zero fixture impact, confirmed by th
 regression fixture references this route at all). `pnpm register:check`/`diagram:verify` both
 clean. Branch `f262-live-allocation-unconfigured-state`.
 
+## Batch 69 — F-264 + F-265 + F-267 (cosmetic, admin-v2-only) + F-271 discovered
+
+Last batch of the post-F-088 functional-testing findings — three independent, unrelated-root-cause
+cosmetic fixes riding together only because they're small and low-priority (F-264/265/267 stay
+distinct findings per rule 9). Per the handover's explicit ask, the two trickiest claims were
+confirmed live in a real browser rather than reasoned from code alone, and both investigations
+surfaced a real, more precise root cause than the original framing.
+
+**F-264**: live DOM inspection (`getComputedStyle`, `scrollingElement`) proved the actual scroll
+happens at the page level, not inside `.inventory-grid-scroll` — because that element's own
+`overflow-x: auto` forces `overflow-y` to compute to `auto` too (CSS Overflow spec), making it a
+real-but-inert sticky-positioning scroll container. Confirmed this isn't hypothetical: the exact
+same mechanism (via a different ancestor, `.av2-shell`'s defensive `overflow-x: hidden`) already
+breaks `.av2-topbar`'s own advertised sticky behavior today, live-confirmed via its bounding rect
+(`top: -370px` after scrolling). Fixed F-264 by making `.inventory-grid-scroll` a genuinely engaged
+scroll container (`max-height: 440px`, derived from live-measured row heights) and pinning the
+header to its own top — self-contained, no dependency on the separate topbar bug. **F-271 logged**
+for the topbar's own break, Chief-confirmed independently (real DOM nesting check in
+`AppShell.tsx`) before being assigned.
+
+**F-265**: live testing of all four real app-theme/OS-preference combinations (toggling the app's
+own theme control while emulating the browser's `prefers-color-scheme`) found native form-control
+chrome follows the OS/browser's own preference, not this app's `data-theme` toggle, since
+`color-scheme` was never declared — confirmed a blanket `filter: invert(1)` (the handover's own
+suggested "standard technique") would have fixed one mismatch direction while breaking the
+already-working case. Fixed by declaring `color-scheme: light`/`dark` tracking the app's own active
+theme instead, closing the whole mismatch class. Chief independently caught a real factual error in
+the investigation (only one date input was checked, not the three F-253 already documented) — all
+three (`GuestSlotInventory.tsx`, `WalkInBookingFlow.tsx`, `SpecialHours.tsx`) confirmed and verified
+live in the corrected pass.
+
+**F-267**: confirmed `formatTimeRange` (not `formatHourLabel`/`formatSlotLabel`, which need a real
+instant + timezone a bare pattern rule doesn't have) as the real culprit; fixed with a new small
+`formatWallClockTime(hhmm)` helper, no `Intl`/`Date` needed. Verified live on JBC Coimbatore's real
+pattern: "06:00 - 22:00" now renders "6:00 AM - 10:00 PM".
+
+**Register**: F-264/F-265/F-267 moved Open → Resolved. **F-271** logged fresh (Open) — a real,
+pre-existing, app-wide topbar-sticky bug surfaced as a byproduct of F-264's investigation,
+Chief-confirmed before being assigned, not folded into F-264's own fix. Full regression suite 5/5 —
+none of these three touch a backend route, zero fixture impact confirmed by the run itself.
+`pnpm register:check`/`diagram:verify` both clean. Branch `batch-d-f264-f265-f267-cosmetic-fixes`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
