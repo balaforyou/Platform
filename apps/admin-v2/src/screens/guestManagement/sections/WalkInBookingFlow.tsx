@@ -23,6 +23,7 @@ import {
   RATE_SOURCE_LABEL,
   resolveGuestRate,
   slotsInBand,
+  stripCourtPrefix,
   todayIsoDate,
   type Band,
 } from '../reservationHelpers';
@@ -542,7 +543,7 @@ export function WalkInBookingFlow({
                         color: reserved ? 'var(--av2-warning)' : selected ? 'var(--av2-accent-hover)' : 'var(--av2-text)',
                       }}
                     >
-                      {c.name}
+                      {stripCourtPrefix(c.name)}
                     </span>
                     {reserved && (
                       <span

@@ -1,80 +1,111 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Circle, Lock, Minus, Plus, type LucideIcon } from 'lucide-react';
 import { Banner, Card, LoadingState, Modal, Select, useToast } from '../components';
 import { useBranches, useGuestInventoryGrid, usePools } from './guestManagement/queries';
 import { WalkInBookingFlow, segBtn, segStrip, type WalkInInitialSelection } from './guestManagement/sections/WalkInBookingFlow';
 import { BookingDetailModal } from './guestManagement/sections/BookingDetailModal';
-import { BANDS, bandOf, branchHour, formatHourLabel, todayIsoDate, type Band } from './guestManagement/reservationHelpers';
+import { BANDS, bandOf, branchHour, formatHourLabel, stripCourtPrefix, todayIsoDate, type Band } from './guestManagement/reservationHelpers';
 import type { GuestInventoryCell } from './guestManagement/types';
 
+// The real tap target — kept at the existing 44px minimum (touch-accessibility, F-256's own
+// mobile history on this screen) even though the badge rendered inside it is smaller than that,
+// deliberately not shrinking the interactive element to the mockup's literal 28px badge size.
 const cellBase: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   minHeight: 44,
   borderRadius: 'var(--av2-radius-sm)',
-  fontSize: 'var(--av2-text-xs)',
-  fontWeight: 600,
-  textAlign: 'center',
-  padding: '4px 6px',
+  border: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
+  padding: 0,
+};
+
+const badgeBase: React.CSSProperties = {
+  width: 30,
+  height: 30,
+  borderRadius: '50%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flex: 'none',
 };
 
 // F-252: 5 real states, replacing the old binary bookable/not — a cell face is a status word
 // only, never a name/phone (Q1).
 //
-// Cell-state visual grouping (Chief-approved, post-F-264): the 7 real, distinct `type`s are
-// unchanged in data and in handleCellClick's branching below — only their look groups into 4
-// families for a simpler at-a-glance read: inert/muted (elapsed, empty — empty keeps a dashed
-// border as its own tap affordance, elapsed doesn't, since only one of the two is actionable),
-// blocked (member-blocked), booked (completed/cancelled/guest-booked — all still tap through to
-// the real, unchanged BookingDetailModal, which branches correctly on the real cellType), open
-// (guest-vacant). Checked live in both light and dark theme before landing (F-265 precedent).
-const CELL_STYLE: Record<GuestInventoryCell['type'], React.CSSProperties> = {
+// Cell-state visual grouping (Chief-approved, post-F-264, icon-badge follow-up): the 7 real,
+// distinct `type`s are unchanged in data and in handleCellClick's branching below — only their
+// look groups into 4 families for a simpler at-a-glance read. `empty` sits in the `open` family
+// (both tappable-to-book, F-272) rendered as the OUTLINE variant of the same accent hue —
+// carrying forward the exact dashed-vs-solid distinction the pre-badge design already used to
+// mean "not yet published" vs "already open" — rather than being lumped with `elapsed` (truly
+// inert) just because they once shared a muted color. Checked live in both light and dark theme
+// before landing (F-265 precedent).
+type Family = 'inert' | 'blocked' | 'booked' | 'open';
+
+const TYPE_FAMILY: Record<GuestInventoryCell['type'], Family> = {
+  empty: 'open',
+  elapsed: 'inert',
+  'member-blocked': 'blocked',
+  completed: 'booked',
+  cancelled: 'booked',
+  'guest-booked': 'booked',
+  'guest-vacant': 'open',
+};
+
+const FAMILY_ICON: Record<Family, LucideIcon> = {
+  inert: Minus,
+  blocked: Lock,
+  booked: Circle,
+  open: Plus,
+};
+
+// `empty` (outline) vs `guest-vacant` (filled) both read as `open` — the only family with two
+// real fill treatments, keyed by cell type rather than family for that one case.
+const CELL_BADGE_STYLE: Record<GuestInventoryCell['type'], React.CSSProperties> = {
   empty: {
     background: 'transparent',
-    border: '1px dashed var(--av2-border)',
-    color: 'var(--av2-muted)',
-    cursor: 'pointer',
+    border: '1.5px dashed var(--av2-accent)',
+    color: 'var(--av2-accent)',
   },
   elapsed: {
     background: 'var(--av2-surface-alt)',
     border: '1px solid var(--av2-border)',
     color: 'var(--av2-muted)',
-    cursor: 'default',
   },
   'member-blocked': {
     background: 'var(--av2-info-soft)',
     border: '1px solid var(--av2-info-border)',
     color: 'var(--av2-info-text)',
-    cursor: 'pointer',
   },
   completed: {
     background: 'var(--av2-accent)',
     border: '1px solid var(--av2-accent)',
     color: 'var(--av2-accent-fg, #fff)',
-    cursor: 'pointer',
   },
   cancelled: {
     background: 'var(--av2-accent)',
     border: '1px solid var(--av2-accent)',
     color: 'var(--av2-accent-fg, #fff)',
-    cursor: 'pointer',
   },
   'guest-booked': {
     background: 'var(--av2-accent)',
     border: '1px solid var(--av2-accent)',
     color: 'var(--av2-accent-fg, #fff)',
-    cursor: 'pointer',
   },
   'guest-vacant': {
     background: 'var(--av2-accent-soft)',
     border: '1px solid var(--av2-accent)',
     color: 'var(--av2-accent-hover)',
-    cursor: 'pointer',
   },
 };
 
+// Kept for accessibility only (rule: icon-only cells still need a real accessible name) — never
+// rendered as visible text any more.
 const CELL_LABEL: Record<GuestInventoryCell['type'], string> = {
-  empty: '+',
+  empty: 'Empty — tap to book',
   elapsed: 'Elapsed',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -82,6 +113,17 @@ const CELL_LABEL: Record<GuestInventoryCell['type'], string> = {
   'guest-vacant': 'Open',
   'guest-booked': 'Booked',
 };
+
+// Legend strip — the `open` family's FILLED (`guest-vacant`) treatment only. `empty`'s outline
+// variant deliberately gets no separate row: the filled/outline split is about *when* a slot was
+// published, not a distinct actionable state worth teaching up front — the screen's own subtitle
+// ("Tap any open cell to book it") already covers the actionable framing for both.
+const LEGEND: { family: Family; label: string; style: React.CSSProperties }[] = [
+  { family: 'open', label: 'Open', style: CELL_BADGE_STYLE['guest-vacant'] },
+  { family: 'blocked', label: 'Member', style: CELL_BADGE_STYLE['member-blocked'] },
+  { family: 'booked', label: 'Booked', style: CELL_BADGE_STYLE['guest-booked'] },
+  { family: 'inert', label: 'Elapsed', style: CELL_BADGE_STYLE.elapsed },
+];
 
 /**
  * F-250/F-252/F-256 — the `/inventory` route's real content. A Court×Hour grid (visual reference:
@@ -233,6 +275,22 @@ export function GuestSlotInventory() {
         ))}
       </div>
 
+      {/* Icon-badge legend — the `open` family's filled treatment only; `empty`'s outline variant
+          deliberately has no row of its own (see CELL_BADGE_STYLE's comment above). */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--av2-space-4)', fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' }}>
+        {LEGEND.map(({ family, label, style }) => {
+          const Icon = FAMILY_ICON[family];
+          return (
+            <span key={family} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--av2-space-2)' }}>
+              <span style={{ ...badgeBase, width: 20, height: 20, ...style }}>
+                <Icon size={12} {...(family === 'booked' ? { fill: 'currentColor' } : {})} />
+              </span>
+              {label}
+            </span>
+          );
+        })}
+      </div>
+
       {!branchId || !poolId ? (
         <Banner tone="info">Select a branch and court pool to see the inventory grid.</Banner>
       ) : grid.isLoading ? (
@@ -260,14 +318,23 @@ export function GuestSlotInventory() {
                 minWidth: 100 + resources.length * 90,
               }}
             >
-              <div className="inventory-grid-sticky-col inventory-grid-sticky-header" style={{ zIndex: 3 }} />
+              {/* Diagonal-split "Time / Court" corner label — visual idea reused from the mockup,
+                  not its table markup, using this screen's own sticky-corner cell. */}
+              <div
+                className="inventory-grid-sticky-col inventory-grid-sticky-header"
+                style={{ zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', gap: 4 }}
+              >
+                <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--av2-muted)' }}>Time</span>
+                <span style={{ fontSize: 11, fontWeight: 300, color: 'var(--av2-border)' }}>/</span>
+                <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--av2-text)' }}>Court</span>
+              </div>
               {resources.map((resource) => (
                 <div
                   key={resource.id}
                   className="inventory-grid-sticky-header"
                   style={{ fontSize: 'var(--av2-text-xs)', fontWeight: 700, textAlign: 'center', padding: '4px 0' }}
                 >
-                  {resource.name}
+                  {stripCourtPrefix(resource.name)}
                 </div>
               ))}
 
@@ -333,15 +400,21 @@ function FragmentRow({
         // F-272: 'empty'/'guest-vacant' taps are now synchronous (no DB write on tap) — no
         // per-cell busy state needed any more. F-273: member-blocked is clickable again (shows a
         // toast), so only 'elapsed' stays disabled.
+        const family = TYPE_FAMILY[cell.type];
+        const Icon = FAMILY_ICON[family];
         return (
           <button
             key={resource.id}
             type="button"
             disabled={cell.type === 'elapsed'}
             onClick={() => onCellClick(cell)}
-            style={{ ...cellBase, ...CELL_STYLE[cell.type] }}
+            aria-label={CELL_LABEL[cell.type]}
+            title={CELL_LABEL[cell.type]}
+            style={cellBase}
           >
-            {CELL_LABEL[cell.type]}
+            <span style={{ ...badgeBase, ...CELL_BADGE_STYLE[cell.type] }}>
+              <Icon size={16} {...(family === 'booked' ? { fill: 'currentColor' } : {})} />
+            </span>
           </button>
         );
       })}
