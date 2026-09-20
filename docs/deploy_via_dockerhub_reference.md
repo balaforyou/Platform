@@ -100,7 +100,7 @@ is no `$VAR` for an intermediate shell to eat — `<SHA>` is a literal you subst
 | # | doc step | what the script does |
 |---|---|---|
 | 1 | — | `curl` the target SHA's `docker-compose.yml` / `Caddyfile` / `verify-deployment.mjs` from GitHub raw; install the compose file + Caddyfile on the VM only if they differ (CRLF-insensitive), with a dated `.bak.promote.<epoch>` audit copy |
-| 2 | — | snapshot **both** halves before any mutation: `gcp-vm-<svc>:rollback` image tags (all 7) and `docker-compose.yml.rollback` / `Caddyfile.rollback` |
+| 2 | — | snapshot **both** halves before any mutation: `gcp-vm-<svc>:rollback` image tags (all 7) and `docker-compose.yml.rollback` / `Caddyfile.rollback` — F-260: also captures the *pre-move* `:rollback` image ID per component (the generation this promotion is about to make obsolete), used by the prune step below |
 | 5 | Step 5 | `docker pull balamuralikrishna/badminton-platform:<svc>-<SHA>` ×7 |
 | 6 | Step 6 | retag each → `gcp-vm-<svc>` |
 | 7 | Step 7 | write `GIT_SHA=<SHA>` into `.env` (the key Compose interpolation actually reads for the migrate guard — **not** `EXPECTED_GIT_SHA`; see the comment in the script); assert `SITE_ADDRESS=` present |
@@ -108,6 +108,7 @@ is no `$VAR` for an intermediate shell to eat — `<SHA>` is a literal you subst
 | — | — | `wait_for_ready` — poll all 7 endpoints `verify-deployment.mjs` checks until each returns `200` (`up -d` returns on container-start, not app-ready) |
 | 10 | Step 10 | `docker compose logs caddy \| grep -c "listening only on the HTTP port"` must be `0` |
 | 9 | Step 9 | `verify-deployment.mjs https://elitecourts.duckdns.org <SHA>` in a throwaway `node:22` container — all 7 must PASS |
+| 11 | — | **F-260**: prune the generation this promotion superseded — `docker rmi` (no `-f`) by image ID on each component's pre-move `:rollback` ID captured at step 2. Runs only after step 9 passes (a failed promotion never reaches this line), and never on `--rollback`. Keeps exactly current + 1 prior generation (14 images: 7 active, 7 `:rollback`) — a plain, non-forced `rmi` refuses if the ID is still referenced by another live tag (e.g. a component whose image didn't actually change this round), so it can never remove a still-in-use image, confirmed live against the real VM before relying on it. Formalizes the informal manual prune previously run by hand three times (F-206's close-out, Batch 61, Batch 64). |
 
 Any failure prints `<script> <SHA> --rollback`, which restores **both** the
 `gcp-vm-<svc>:rollback` image tags and the `*.rollback` config, then recreates.

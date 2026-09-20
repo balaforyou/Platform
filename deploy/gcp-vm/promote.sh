@@ -156,7 +156,16 @@ for f in docker-compose.yml Caddyfile; do
   # (fresh / rebuilt VM). Missing here just means "nothing to snapshot yet".
   if [ -f "$HERE/$f" ]; then cp -p "$HERE/$f" "$HERE/$f.rollback"; fi
 done
+# F-260: capture what :rollback currently points to (if anything) BEFORE this same loop moves
+# the tag forward -- that pre-move image is the generation this promotion makes obsolete (current
+# + 1 prior is the retention target; anything older gets pruned once the new stack is confirmed
+# healthy, near the end of this script). Recorded by image ID, not tag, since the tag itself is
+# about to move and would no longer point at it.
+SUPERSEDED_IDS=()
 for c in "${COMPONENTS[@]}"; do
+  if sudo docker image inspect "gcp-vm-$c:rollback" >/dev/null 2>&1; then
+    SUPERSEDED_IDS+=("$(sudo docker image inspect -f '{{.Id}}' "gcp-vm-$c:rollback")")
+  fi
   if sudo docker image inspect "gcp-vm-$c" >/dev/null 2>&1; then
     sudo docker tag "gcp-vm-$c" "gcp-vm-$c:rollback"
   else
@@ -245,6 +254,20 @@ echo "   grep -c 'listening only on the HTTP port' = $fb   (must be 0)"
 echo "-- verify-deployment.mjs $SITE $SHA (+ admin-v2 at $ADMIN_V2_SITE)"
 sudo docker run --rm --network host -v "/tmp/promote-verify-$SHA.mjs:/verify.mjs:ro" \
   node:22-bookworm-slim node /verify.mjs "$SITE" "$SHA" "$ADMIN_V2_SITE"
+
+# 11. F-260: prune the generation this promotion superseded, now that the new stack is confirmed
+#     healthy (verify-deployment.mjs above passed) -- a failed promotion never reaches this line
+#     (the ERR trap exits first), so the only-working generation is never at risk. Plain
+#     `docker rmi` (no -f): if a captured ID is still referenced by another real tag today (e.g. a
+#     component whose image didn't actually change this round, so its old-rollback ID is also the
+#     new current/rollback ID), Docker refuses rather than force-deleting anything -- confirmed
+#     live against this exact VM before relying on it. Keeps exactly current + 1 prior generation
+#     (14 images: 7 active, 7 :rollback).
+echo "-- pruning superseded generation (keep current + 1 prior)"
+for id in "${SUPERSEDED_IDS[@]:-}"; do
+  [ -n "$id" ] || continue
+  sudo docker rmi "$id" 2>/dev/null && echo "   removed $id" || echo "   kept $id (still referenced, or already gone)"
+done
 
 echo ""
 echo "== PROMOTION COMPLETE — $SHA is live at $SITE =="
