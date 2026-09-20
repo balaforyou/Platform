@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Banner, Card, LoadingState, Modal, Select, useToast } from '../components';
-import { friendlyError } from '../lib/errorMessage';
-import {
-  useBranches,
-  useCreateAvailabilityWindow,
-  useGuestInventoryGrid,
-  usePools,
-} from './guestManagement/queries';
-import { WalkInBookingFlow, type WalkInInitialSelection } from './guestManagement/sections/WalkInBookingFlow';
+import { useBranches, useGuestInventoryGrid, usePools } from './guestManagement/queries';
+import { WalkInBookingFlow, segBtn, segStrip, type WalkInInitialSelection } from './guestManagement/sections/WalkInBookingFlow';
 import { BookingDetailModal } from './guestManagement/sections/BookingDetailModal';
-import { formatHourLabel, todayIsoDate } from './guestManagement/reservationHelpers';
+import { BANDS, bandOf, branchHour, formatHourLabel, todayIsoDate, type Band } from './guestManagement/reservationHelpers';
 import type { GuestInventoryCell } from './guestManagement/types';
 
 const cellBase: React.CSSProperties = {
@@ -25,7 +19,15 @@ const cellBase: React.CSSProperties = {
 };
 
 // F-252: 5 real states, replacing the old binary bookable/not — a cell face is a status word
-// only, never a name/phone (Q1). Colors match the approved mockup exactly.
+// only, never a name/phone (Q1).
+//
+// Cell-state visual grouping (Chief-approved, post-F-264): the 7 real, distinct `type`s are
+// unchanged in data and in handleCellClick's branching below — only their look groups into 4
+// families for a simpler at-a-glance read: inert/muted (elapsed, empty — empty keeps a dashed
+// border as its own tap affordance, elapsed doesn't, since only one of the two is actionable),
+// blocked (member-blocked), booked (completed/cancelled/guest-booked — all still tap through to
+// the real, unchanged BookingDetailModal, which branches correctly on the real cellType), open
+// (guest-vacant). Checked live in both light and dark theme before landing (F-265 precedent).
 const CELL_STYLE: Record<GuestInventoryCell['type'], React.CSSProperties> = {
   empty: {
     background: 'transparent',
@@ -39,34 +41,34 @@ const CELL_STYLE: Record<GuestInventoryCell['type'], React.CSSProperties> = {
     color: 'var(--av2-muted)',
     cursor: 'default',
   },
-  completed: {
-    background: 'var(--av2-info-soft)',
-    border: '1px solid var(--av2-info-border)',
-    color: 'var(--av2-info-text)',
-    cursor: 'pointer',
-  },
-  cancelled: {
-    background: 'var(--av2-warning-soft)',
-    border: '1px solid var(--av2-warning-border)',
-    color: 'var(--av2-warning)',
-    cursor: 'pointer',
-  },
   'member-blocked': {
     background: 'var(--av2-info-soft)',
     border: '1px solid var(--av2-info-border)',
     color: 'var(--av2-info-text)',
-    cursor: 'default',
+    cursor: 'pointer',
   },
-  'guest-vacant': {
-    background: 'var(--av2-accent-soft)',
+  completed: {
+    background: 'var(--av2-accent)',
     border: '1px solid var(--av2-accent)',
-    color: 'var(--av2-accent-hover)',
+    color: 'var(--av2-accent-fg, #fff)',
+    cursor: 'pointer',
+  },
+  cancelled: {
+    background: 'var(--av2-accent)',
+    border: '1px solid var(--av2-accent)',
+    color: 'var(--av2-accent-fg, #fff)',
     cursor: 'pointer',
   },
   'guest-booked': {
     background: 'var(--av2-accent)',
     border: '1px solid var(--av2-accent)',
     color: 'var(--av2-accent-fg, #fff)',
+    cursor: 'pointer',
+  },
+  'guest-vacant': {
+    background: 'var(--av2-accent-soft)',
+    border: '1px solid var(--av2-accent)',
+    color: 'var(--av2-accent-hover)',
     cursor: 'pointer',
   },
 };
@@ -108,11 +110,12 @@ export function GuestSlotInventory() {
   const branch = (branches.data ?? []).find((b) => b.id === branchId);
 
   const grid = useGuestInventoryGrid(branchId, poolId, date);
-  const createWindow = useCreateAvailabilityWindow(poolId);
 
   const [bookingFlowSelection, setBookingFlowSelection] = useState<WalkInInitialSelection | null>(null);
   const [detail, setDetail] = useState<{ bookingId: string; cellType: 'guest-booked' | 'completed' | 'cancelled' } | null>(null);
-  const [creatingKey, setCreatingKey] = useState<string | null>(null);
+  // F-264/segments: replaces the old vertical-scroll-with-sticky-header time axis — approved
+  // direction, no finding ID (new UI). Defaults to the mockup's own default (Morning, BANDS[0]).
+  const [band, setBand] = useState<Band>(BANDS[0].key);
 
   const cellByKey = useMemo(() => {
     const map = new Map<string, GuestInventoryCell>();
@@ -122,11 +125,22 @@ export function GuestSlotInventory() {
     return map;
   }, [grid.data]);
 
-  const rows = grid.data?.rows ?? [];
+  const allRows = grid.data?.rows ?? [];
+  const rows = useMemo(
+    () => allRows.filter((r) => bandOf(branchHour(r, branch?.timezone)) === band),
+    [allRows, branch?.timezone, band],
+  );
   const resources = grid.data?.resources ?? [];
 
-  const handleCellClick = async (cell: GuestInventoryCell) => {
-    if (cell.type === 'member-blocked' || cell.type === 'elapsed') return;
+  const handleCellClick = (cell: GuestInventoryCell) => {
+    // F-273: a member-blocked tap gives real feedback instead of a silent no-op — not tied to
+    // the (not-yet-built) Member module, just surfacing the reason this already-computed state
+    // gives no explanation today.
+    if (cell.type === 'member-blocked') {
+      toast.push('This slot is reserved for club members.', 'info');
+      return;
+    }
+    if (cell.type === 'elapsed') return;
     if (cell.type === 'guest-booked' || cell.type === 'completed' || cell.type === 'cancelled') {
       setDetail({ bookingId: cell.bookingId, cellType: cell.type });
       return;
@@ -135,25 +149,18 @@ export function GuestSlotInventory() {
       setBookingFlowSelection({ poolId, date, resourceId: cell.resourceId, windowId: cell.windowId });
       return;
     }
-    // 'empty' — create the one-off window first, then continue straight into the booking flow.
+    // F-272: 'empty' — no window is created here any more. Nothing touches the database until
+    // the admin actually confirms a booking; WalkInBookingFlow's submit() creates the one-off
+    // window itself, atomically with the booking, from this pending selection.
     if (!pool) return;
-    const key = `${cell.resourceId}|${cell.startTime}`;
-    setCreatingKey(key);
-    try {
-      const duration = pool.minBookingDurationMinutes || 60;
-      const endTime = new Date(new Date(cell.startTime).getTime() + duration * 60 * 1000).toISOString();
-      const window = await createWindow.mutateAsync({
-        resourceId: cell.resourceId,
-        startTime: cell.startTime,
-        endTime,
-      });
-      await grid.refetch();
-      setBookingFlowSelection({ poolId, date, resourceId: cell.resourceId, windowId: window.id });
-    } catch (err) {
-      toast.push(friendlyError(err, 'Couldn’t open that slot. Try again.'), 'error');
-    } finally {
-      setCreatingKey(null);
-    }
+    const duration = pool.minBookingDurationMinutes || 60;
+    const endTime = new Date(new Date(cell.startTime).getTime() + duration * 60 * 1000).toISOString();
+    setBookingFlowSelection({
+      poolId,
+      date,
+      resourceId: cell.resourceId,
+      pendingWindow: { resourceId: cell.resourceId, startTime: cell.startTime, endTime },
+    });
   };
 
   const closeBookingFlow = () => setBookingFlowSelection(null);
@@ -216,6 +223,16 @@ export function GuestSlotInventory() {
         </label>
       </div>
 
+      {/* Segmented Morning/Afternoon/Evening time-of-day picker — reuses WalkInBookingFlow's own
+          BANDS/segStrip/segBtn pattern rather than a second segmented-tab visual style. */}
+      <div role="tablist" style={segStrip}>
+        {BANDS.map((b) => (
+          <button key={b.key} type="button" onClick={() => setBand(b.key)} style={segBtn(b.key === band)}>
+            {b.label}
+          </button>
+        ))}
+      </div>
+
       {!branchId || !poolId ? (
         <Banner tone="info">Select a branch and court pool to see the inventory grid.</Banner>
       ) : grid.isLoading ? (
@@ -261,7 +278,6 @@ export function GuestSlotInventory() {
                   resources={resources}
                   cellByKey={cellByKey}
                   timezone={branch?.timezone}
-                  creatingKey={creatingKey}
                   onCellClick={handleCellClick}
                 />
               ))}
@@ -297,14 +313,12 @@ function FragmentRow({
   resources,
   cellByKey,
   timezone,
-  creatingKey,
   onCellClick,
 }: {
   rowStart: string;
   resources: { id: string; name: string }[];
   cellByKey: Map<string, GuestInventoryCell>;
   timezone: string | undefined;
-  creatingKey: string | null;
   onCellClick: (cell: GuestInventoryCell) => void;
 }) {
   return (
@@ -316,17 +330,18 @@ function FragmentRow({
         const key = `${resource.id}|${rowStart}`;
         const cell = cellByKey.get(key);
         if (!cell) return <div key={resource.id} />;
-        const busy = creatingKey === key;
-        const disabled = cell.type === 'member-blocked' || cell.type === 'elapsed' || busy;
+        // F-272: 'empty'/'guest-vacant' taps are now synchronous (no DB write on tap) — no
+        // per-cell busy state needed any more. F-273: member-blocked is clickable again (shows a
+        // toast), so only 'elapsed' stays disabled.
         return (
           <button
             key={resource.id}
             type="button"
-            disabled={disabled}
+            disabled={cell.type === 'elapsed'}
             onClick={() => onCellClick(cell)}
-            style={{ ...cellBase, ...CELL_STYLE[cell.type], opacity: busy ? 0.6 : 1 }}
+            style={{ ...cellBase, ...CELL_STYLE[cell.type] }}
           >
-            {busy ? '…' : CELL_LABEL[cell.type]}
+            {CELL_LABEL[cell.type]}
           </button>
         );
       })}
