@@ -1700,3 +1700,32 @@ actually applies. Reproduced live on a real pool with two real overlapping patte
 (`06:00-09:00` and `06:00-22:00`).
 Confirmed-ID: F-268
 Confirmed: 20 Sep 2026
+
+### guest-inventory-grid-pooled-all-columns-booked-structural
+Batch: F-263 implementation, surfaced during investigation and independently confirmed by Chief
+Surfaced: 20 Sep 2026
+Description: The Guest Slot Inventory grid's "booked across all columns" rendering for a POOLED
+pool is structural, not caused by F-263's cosmetic-fallback path: `buildCandidatesFromDefinition`
+(`services/slot-engine/src/availabilityGeneration.ts:146-148`) generates exactly one shared
+`AvailabilityWindow` per time-slot with `resourceId: null` for every POOLED pool, regardless of
+allocation mode or whether F-205's real per-court assignment succeeds. `guest-inventory-grid`'s
+cell logic (`services/slot-engine/src/index.ts:1381-1445`) matches that one shared window against
+every resource column and marks a cell booked purely from `window.guestBookings.length > 0`, never
+inspecting the individual booking's own `resourceId`. Confirmed this renders every POOLED booking
+across all of a pool's columns, capacity-matched or not — independent of F-263's fix.
+Confirmed-ID: F-269
+Confirmed: 20 Sep 2026
+
+### admin-v2-resolve-guest-rate-client-side-drift
+Batch: F-266 implementation, surfaced during investigation and independently confirmed by Chief
+Surfaced: 20 Sep 2026
+Description: admin-v2's `resolveGuestRate`
+(`apps/admin-v2/src/screens/guestManagement/reservationHelpers.ts`) is a pure client-side
+re-derivation of `resolveGuestBlanketRate`'s exact precedence (window override → peak → standard →
+default), reading `branch.guestStandardRate/guestPeakRate/guestPeakWindows` and `pool.defaultRate`
+independently rather than consuming the server's already-resolved value. F-266 gave the server-side
+source of truth a real `rateSource` field on `GET /resource-pools/:id/availability` that admin-v2
+could consume instead, but admin-v2 was left untouched (out of scope for that fix) — it still
+recomputes the same precedence a second, independently-drifting time.
+Confirmed-ID: F-270
+Confirmed: 20 Sep 2026

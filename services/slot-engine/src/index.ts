@@ -146,6 +146,27 @@ function assignPooledCourt(
   return { resourceId: null, courtSlotIndex: null };
 }
 
+/**
+ * F-263: a human-facing court label, honest about whether `courtSlotIndex` ties to a real
+ * `Resource` or is F-186's cosmetic fallback index. Both paths set a non-null `courtSlotIndex`
+ * (see `assignPooledCourt` above), so `courtSlotIndex != null` alone can't distinguish them --
+ * `resourceId` is the real signal. Replaces the identical `resource?.name ?? (courtSlotIndex !=
+ * null ? \`Court ${courtSlotIndex}\` : null)` ternary duplicated at 3 response sites, which all
+ * silently displayed a specific court number even when the fallback fired.
+ */
+function describeCourtAssignment(
+  resourceName: string | null | undefined,
+  resourceId: string | null,
+  courtSlotIndex: number | null,
+): string | null {
+  if (resourceName) return resourceName;
+  // Real assignment, but the joined Resource's name wasn't available (e.g. deleted) -- keep the
+  // numbered label rather than inventing a new, rarer-still fallback state for this edge case.
+  if (resourceId != null && courtSlotIndex != null) return `Court ${courtSlotIndex}`;
+  if (courtSlotIndex != null) return 'General allocation';
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------
@@ -1228,7 +1249,7 @@ async function computeBranchMonthTotals(branchId: string, month: string): Promis
     windowEnd: b.window.endTime.toISOString(),
     guestName: userById.get(b.userId)?.name ?? null,
     guestPhone: userById.get(b.userId)?.phone ?? null,
-    court: b.resource?.name ?? (b.courtSlotIndex != null ? `Court ${b.courtSlotIndex}` : null),
+    court: describeCourtAssignment(b.resource?.name, b.resourceId, b.courtSlotIndex),
     price: b.price != null ? Number(b.price) : 0,
     method: deriveLedgerMethod(intentByBooking.get(b.id)?.gatewayRef),
   }));
@@ -1510,44 +1531,63 @@ const hhmmToMinutes = (hhmm: string): number => {
   return h * 60 + m;
 };
 
+// F-266: matches admin-v2's own `RateSource` (`apps/admin-v2/src/screens/guestManagement/
+// reservationHelpers.ts`) exactly, so a value threaded from here to a frontend can share that
+// screen's existing label copy/convention rather than inventing a second one.
+type RateSource = 'window' | 'peak' | 'standard' | 'default';
+
 // F-224 resolution: peak when the window's branch-local start falls inside ANY configured peak
 // window (half-open [start, end)). peakRate only applies when it's actually set — a branch with
 // windows but no peak rate falls through to standard, and a branch with neither falls through
 // to pool.defaultRate exactly as before F-224.
-const resolveGuestBlanketRate = (pool: any, ctx: GuestPricingCtx): Prisma.Decimal => {
+//
+// F-266: also returns which branch was taken. Previously computed and discarded, leaving the
+// frontend no way to show a guest which rate was actually applied.
+const resolveGuestBlanketRate = (
+  pool: any,
+  ctx: GuestPricingCtx,
+): { rate: Prisma.Decimal; source: 'peak' | 'standard' | 'default' } => {
   const startMin = branchMinutesOfDay(ctx.windowStartInstant, ctx.timeZone);
   const inPeak = ctx.peakWindows.some((w) => {
     const s = hhmmToMinutes(w.start);
     const e = hhmmToMinutes(w.end);
     return startMin >= s && startMin < e;
   });
-  if (inPeak && ctx.peakRate != null) return ctx.peakRate;
-  if (ctx.standardRate != null) return ctx.standardRate;
-  return new Prisma.Decimal(pool.defaultRate);
+  if (inPeak && ctx.peakRate != null) return { rate: ctx.peakRate, source: 'peak' };
+  if (ctx.standardRate != null) return { rate: ctx.standardRate, source: 'standard' };
+  return { rate: new Prisma.Decimal(pool.defaultRate), source: 'default' };
 };
 
 // WHY: Server-side price is ALWAYS resolved here; callers have no influence over it.
 // Resolution chain: window override → guest blanket rate (F-224, guest path only) → pool default.
 // Both pricingMode and price on the window must be set together (both-or-neither).
 // groupSize = 1 (booker) + coPlayers.length.
+//
+// F-266: returns `{ price, source }` rather than a bare Decimal, for the same reason as
+// `resolveGuestBlanketRate` above — every caller that only needs the number reads `.price`.
 const resolvePrice = (
   pool: any,
   window: any,
   groupSize: number,
   guestCtx?: GuestPricingCtx,
-): Prisma.Decimal => {
+): { price: Prisma.Decimal; source: RateSource } => {
   const activePricingMode: string = window.pricingMode ?? pool.pricingMode ?? PricingMode.FLAT;
-  const activeRate: Prisma.Decimal = window.price != null
-    ? new Prisma.Decimal(window.price)
-    : guestCtx
-      ? resolveGuestBlanketRate(pool, guestCtx)
-      : new Prisma.Decimal(pool.defaultRate);
-
-  if (activePricingMode === PricingMode.PER_PERSON) {
-    return activeRate.mul(groupSize);
+  let activeRate: Prisma.Decimal;
+  let source: RateSource;
+  if (window.price != null) {
+    activeRate = new Prisma.Decimal(window.price);
+    source = 'window';
+  } else if (guestCtx) {
+    const resolved = resolveGuestBlanketRate(pool, guestCtx);
+    activeRate = resolved.rate;
+    source = resolved.source;
+  } else {
+    activeRate = new Prisma.Decimal(pool.defaultRate);
+    source = 'default';
   }
-  // FLAT — rate applies once regardless of group size
-  return activeRate;
+
+  const price = activePricingMode === PricingMode.PER_PERSON ? activeRate.mul(groupSize) : activeRate;
+  return { price, source };
 };
 
 type TodayAssignmentResolution =
@@ -1739,7 +1779,7 @@ async function ensureTodayMemberBooking({
       if (existing) return { booking: existing, created: false };
 
       const pool = assignment.resourcePool;
-      const resolvedPrice = resolvePrice(pool, matchingWindow, 1);
+      const resolvedPrice = resolvePrice(pool, matchingWindow, 1).price;
       const booking = await tx.booking.create({
         data: {
           tenantId: pool.tenantId,
@@ -2233,7 +2273,7 @@ server.get('/resource-pools/:id/guest-ledger', async (request, reply) => {
       windowStart: b.window.startTime,
       windowEnd: b.window.endTime,
       guest: userById.get(b.userId) ?? { id: b.userId, name: null, phone: null },
-      court: b.resource?.name ?? (b.courtSlotIndex != null ? `Court ${b.courtSlotIndex}` : null),
+      court: describeCourtAssignment(b.resource?.name, b.resourceId, b.courtSlotIndex),
       courtSlotIndex: b.courtSlotIndex,
       resourceId: b.resourceId,
       price: b.price,
@@ -2318,7 +2358,7 @@ server.get('/bookings/:id/guest-detail', async (request, reply) => {
   ]);
   const method = deriveLedgerMethod(intent?.gatewayRef);
   const channel = deriveBookingChannel(intent?.gatewayRef);
-  const courtLabel = booking.resource?.name ?? (booking.courtSlotIndex != null ? `Court ${booking.courtSlotIndex}` : null);
+  const courtLabel = describeCourtAssignment(booking.resource?.name, booking.resourceId, booking.courtSlotIndex);
 
   const base = {
     bookingId: booking.id,
@@ -3346,14 +3386,16 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
       // so the real server-side groupSize at booking time is always 1 + 0 in practice. A sibling
       // field, not nested under `window`, matching remainingCapacity's own precedent as a
       // computed-not-stored value -- `window` stays a faithful mirror of the DB row.
-      const guestPrice = resolvePrice(pool, window, 1, {
+      // F-266: rateSource lets the guest-facing UI show which rate was actually applied
+      // (window override / peak / standard / pool default) — previously resolved and discarded.
+      const { price: guestPrice, source: rateSource } = resolvePrice(pool, window, 1, {
         standardRate: branchGuestPricing?.guestStandardRate ?? null,
         peakRate: branchGuestPricing?.guestPeakRate ?? null,
         peakWindows: guestPeakWindows,
         windowStartInstant: window.startTime,
         timeZone: horizonTimeZone,
       });
-      availableSlots.push({ window, remainingCapacity, guestPrice });
+      availableSlots.push({ window, remainingCapacity, guestPrice, rateSource });
     }
   }
 
@@ -3806,7 +3848,7 @@ server.post('/bookings', async (request, reply) => {
           peakWindows: guestPeakWindows,
           windowStartInstant: w.startTime,
           timeZone: horizonTimeZone,
-        })),
+        }).price),
         new Prisma.Decimal(0),
       );
 

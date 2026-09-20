@@ -3260,6 +3260,77 @@ convention. `docs/plans/pending-findings.md` gained matching Promoted entries fo
 ≥ F-179, `scripts/check-register.mjs` enforces this). `pnpm register:check` and `pnpm
 diagram:verify` run clean before commit.
 
+## Batch 66 — F-263 (honest pooled-court fallback label) + F-266 (guest rate-source transparency)
+
+Chief handed off F-263 and F-266 (of Batch 65's 9) as their own dedicated plan-mode session — both
+real, currently-misleading behavior on screens in active use, prioritized ahead of the rest of the
+functional-testing batch. Plan investigated both root causes fresh against current code (nothing
+had drifted since Batch 65), and surfaced two refinements to Chief's own framing before
+implementation, both independently confirmed by Chief afterward:
+
+1. **F-263's fix shape.** Chief's own lean was that hard validation (`capacity` must equal real
+   `Resource` count) was probably the wrong default, suspecting an overflow/queue design intent
+   might exist somewhere. No evidence anywhere supports that — but hard validation still doesn't
+   work, for a different, concrete reason: `Resource.resourcePoolId` is a required FK, so every
+   pool is born with 0 courts and they're added via a separate route afterward, making a transient
+   capacity/court-count mismatch a normal setup state; `validateResourcePoolFields`'s cross-field
+   check also runs on every PATCH regardless of which field changed, so a hard rule would have
+   permanently blocked all future edits to JBC's real mismatched pool. Confirmed the honest-label
+   direction instead.
+2. **The admin grid's "booked across all columns" behavior isn't caused by F-263's fallback at
+   all** — confirmed structural: POOLED pools always generate one shared `resourceId: null`
+   `AvailabilityWindow` per slot (`availabilityGeneration.ts:146-148`), and the grid marks every
+   column booked purely from `window.guestBookings.length > 0`, never inspecting the individual
+   booking's own `resourceId`. True for every POOLED booking, matched-capacity or not — not
+   something this fix touches.
+
+**F-263 fix**: a small `describeCourtAssignment` helper (duplicated server-side in
+`services/slot-engine/src/index.ts` and client-side in a new
+`apps/guest-member-pwa/src/lib/courtLabel.ts` — no shared package exists between them) branches on
+`resourceId` (the real signal) instead of `courtSlotIndex` (set on both the real and fallback
+paths), rendering `"General allocation"` instead of a fake numbered court whenever the fallback
+fires. Applied at all 3 backend response sites (`guest-ledger`, `guest-detail`,
+`guest-month-summary`) and all 3 guest-member-pwa render sites (`BookingConfirmation.tsx`,
+`BookingHistory.tsx`, `receipt.ts`).
+
+**F-266 fix**: `resolveGuestBlanketRate`/`resolvePrice` now return `{ rate/price, source }` instead
+of a bare `Decimal` (previously resolved and discarded internally), threaded through all 3 real
+callers. `GET /resource-pools/:id/availability` surfaces the real per-window `rateSource`;
+`BranchBooking.tsx` labels it using admin-v2's existing `RateSource`/`RATE_SOURCE_LABEL` convention
+rather than inventing new copy.
+
+**Live-fire evidence, both real**: F-263 verified via a real scratch pool (capacity 2, 1 real
+Resource) under JBC's real Coimbatore branch — a real booking correctly recorded
+`resourceId: null, courtSlotIndex: 1`, and all three backend surfaces showed `"General allocation"`
+while every other real JBC booking that month kept its correct real court number (no regression to
+F-205's working path). F-266 verified against JBC Coimbatore's real `guestStandardRate`/
+`guestPeakRate`/`guestPeakWindows` config — the real availability response returned
+`rateSource: "peak"`/`guestPrice: 600` inside configured peak windows and `"standard"`/`400`
+outside them, exact match. Frontend rendering not pixel-verified live in-browser for either fix —
+guest-member-pwa is Gmail-only sign-in with real Google ID token verification since F-228 Step 1
+(no mock fallback any more; **root `CLAUDE.md`'s note that `/auth/google/verify` accepts a
+`mock-google-token-<email>` is stale**, confirmed by both Claude Code and Chief independently
+against the current route), which this sandbox can't drive — same disclosed limitation as prior
+Razorpay/Google findings this project has hit before.
+
+One real regression-suite fallout caught and fixed in the same pass:
+`guest-ledger.regression.ts` asserted the pre-fix buggy `'Court 1'` label against a fixture pool
+that (correctly) never had real Resource rows — updated to expect `'General allocation'`, the
+intended corrected behavior.
+
+**Register**: F-263 and F-266 moved Open → Resolved. Two new findings surfaced during
+investigation, confirmed independently by Chief before being logged (not self-assigned in the
+moment): **F-269** (the grid's structural all-columns-booked rendering, parked — a materially
+bigger, separate change) and **F-270** (admin-v2's `resolveGuestRate` remains a second,
+independently-drifting client-side re-derivation of the same precedence F-266 just gave a real
+server-side source of truth — should eventually consume it instead). `docs/plans/pending-findings.md`
+gained matching Promoted entries for both (≥ F-179). Full regression suite 5/5 (slot-engine 75/75),
+rebuilt from `dist`, run against `badminton_db_test` after clearing a real port collision from the
+already-running local dev stack (documented trap — stopped the 5 backend containers, rebuilt, ran
+clean, restarted them). `pnpm register:check`/`diagram:verify` both clean. Branch
+`f263-f266-court-label-rate-source`, stacked on Batch 65's still-open PR #54
+(`register-f260-f268-functest-disposition`) since F-263/F-266's Open rows only exist there.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
