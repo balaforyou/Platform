@@ -3331,6 +3331,59 @@ clean, restarted them). `pnpm register:check`/`diagram:verify` both clean. Branc
 `f263-f266-court-label-rate-source`, stacked on Batch 65's still-open PR #54
 (`register-f260-f268-functest-disposition`) since F-263/F-266's Open rows only exist there.
 
+## Batch 67 — F-261 (pattern edit/delete window reconciliation) + F-268 (overlap validation)
+
+Batch B of the post-F-088 functional-testing findings, both real gaps in how `AvailabilityPattern`
+writes interact with already-generated `AvailabilityWindow` rows — grouped as the same subsystem
+(pattern-driven, lazy window generation), not a shared root cause. Investigated both real code
+paths fresh against `main`@`4bdc7ff` before proposing a fix; nothing had drifted from the
+handover's description. Two refinements surfaced during investigation and reported back rather
+than assumed: **admin-v2 has no real pattern-edit UI at all** (its own code comment confirms this
+is deliberate — delete and recreate, matching the approved mockup), but **`apps/admin-web` (legacy)
+has a full, live PATCH-based edit form**, so the fix needed to be correct regardless of which real
+UI (or an internal-key caller) triggers the write — which pointed toward a pure backend fix on the
+write routes themselves, confirmed zero-blast-radius since neither app reads any field off the
+pattern-mutation response body.
+
+**F-261 fix**: a new `reconcilePatternWindows` helper
+(`services/slot-engine/src/availabilityGeneration.ts`), called transactionally from both the
+`PATCH` and `DELETE` pattern routes. Removes future (`startTime > now`) windows generated from the
+pattern with zero `Booking` rows of any status — deliberately more conservative than "no active
+booking," since `Booking.windowId` is a required cascading FK and even a `CANCELLED` booking on a
+future window carries real audit/refund history a cascade-delete would destroy. Applied
+unconditionally on every `PATCH` (not just day/time changes) since a capacity/price-only edit has
+the identical silent-non-propagation problem today. No diffing of old-vs-new pattern definition
+needed — any date the pattern still legitimately covers regenerates identically, correctly, next
+time it's queried, since the existing lazy/additive model already guarantees that.
+
+**F-268 fix**: a new `validateNoOverlappingActivePatterns` check
+(`services/slot-engine/src/index.ts`), called from both `POST` and `PATCH` immediately after the
+existing `validatePatternAgainstBranchHours` (F-211), reusing its same `HH:mm` string-comparison
+convention. Confirmed no legitimate overlap use case exists anywhere (no priority/precedence field
+on the model, neither admin UI surfaces a "which pattern wins" choice, no prior register/decision
+history treats it as intentional) — reject-at-write-time is the right default, unlike F-263's
+capacity-vs-court-count case last batch, since an admin can always avoid this by editing the one
+pattern instead of stacking a second.
+
+**Live-fire evidence, both real, on a scratch pool under JBC's real Coimbatore branch**: F-261's
+exact stale-window symptom reproduced fresh on `main` before the fix (pattern deleted, windows kept
+serving), then confirmed gone after; a live `HELD` booking's window and a `CANCELLED`-only
+booking's window both survived a pattern delete untouched (`windowReconciliation` counts confirmed
+by direct DB read-back); a genuinely past window from a deleted pattern was left alone entirely.
+F-268's exact original repro (`06:00-09:00` + `06:00-22:00`, same day) now rejected
+`400 PATTERN_OVERLAP`; a different day, an adjacent non-overlapping time, and a `PATCH` re-saving a
+pattern's own unchanged fields all still succeed with no false positive; a `PATCH` introducing a
+genuine overlap is correctly rejected. Regression-fixture sweep (per Chief's explicit ask): only
+one existing fixture reference to the pattern write-by-id routes anywhere in the suite
+(`admin-operations.regression.ts`, a cross-branch-auth 403 check that fails before reaching either
+new check) — no fixture update needed this round.
+
+**Register**: F-261 and F-268 moved Open → Resolved, no new findings surfaced. Full regression
+suite 5/5 (slot-engine's own suite green on the first run touching the changed code; the other
+three suites hit the same cross-suite-timing flake as Batch 66, confirmed environmental by passing
+clean in isolation, then green together on a clean re-run). `pnpm register:check`/`diagram:verify`
+both clean. Branch `f261-f268-pattern-reconcile-overlap-validation`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
