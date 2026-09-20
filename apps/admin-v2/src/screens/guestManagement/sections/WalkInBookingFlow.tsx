@@ -5,6 +5,7 @@ import { friendlyError } from '../../../lib/errorMessage';
 import {
   useAvailability,
   useBranches,
+  useCreateAvailabilityWindow,
   useCreateManualBooking,
   useCreateWalkIn,
   useGuestLookup,
@@ -39,12 +40,55 @@ const fieldStyle: React.CSSProperties = {
   color: 'var(--av2-text)',
 };
 
+/**
+ * F-272: sentinel `window.id` for a slot that doesn't exist yet server-side — a tapped
+ * genuinely-`empty` Inventory cell. Stands in for a real windowId everywhere this component
+ * matches on one (band-snap, slot-select, submit) until `submit()` materializes a real
+ * `AvailabilityWindow` for it via `useCreateAvailabilityWindow`, exactly at confirm-time.
+ */
+const PENDING_WINDOW_ID = '__pending__';
+
+/**
+ * The segmented-tab strip/button visual (Morning/Afternoon/Evening here; reused by
+ * GuestSlotInventory's own time-of-day picker) — exported so both screens render the exact same
+ * look instead of a second, drifting copy of the same control (rule: reuse proven patterns).
+ */
+export const segStrip: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 4,
+  padding: 4,
+  background: 'var(--av2-surface-alt)',
+  borderRadius: 'var(--av2-radius-sm)',
+  width: 'fit-content',
+  maxWidth: '100%',
+};
+export const segBtn = (active: boolean): React.CSSProperties => ({
+  appearance: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  padding: '6px 14px',
+  borderRadius: 'var(--av2-radius-sm)',
+  fontSize: 'var(--av2-text-sm)',
+  fontWeight: active ? 700 : 600,
+  background: active ? 'var(--av2-accent-soft)' : 'transparent',
+  color: active ? 'var(--av2-accent)' : 'var(--av2-muted)',
+});
+
 /** A tapped Inventory-grid cell's court/date/time, prefilled straight into the flow below. */
 export type WalkInInitialSelection = {
   poolId: string;
   date: string;
   resourceId?: string | null;
-  windowId: string;
+  /** An already-existing window (a `guest-vacant` tap) — mutually exclusive with `pendingWindow`. */
+  windowId?: string;
+  /**
+   * F-272: a genuinely `empty` cell — no `AvailabilityWindow` row exists yet (and never will via
+   * pattern generation, since `empty` means no pattern covers this resource/hour either). Kept
+   * as plain start/end/resource rather than a real windowId so nothing is written to the database
+   * until the admin actually confirms a booking.
+   */
+  pendingWindow?: { resourceId: string; startTime: string; endTime: string };
 };
 
 /**
@@ -85,6 +129,13 @@ export function WalkInBookingFlow({
   const createWalkIn = useCreateWalkIn();
   const createBooking = useCreateManualBooking();
 
+  // F-272: the resolved "initial window id" this flow was opened with — a real windowId
+  // (guest-vacant tap) or the PENDING_WINDOW_ID sentinel (empty-cell tap, nothing created yet).
+  // Computed once here and reused everywhere a match is needed, instead of re-deriving the
+  // sentinel logic separately in the windowId state init and the band-snap effect below, which
+  // is exactly the kind of three-copies-that-can-drift risk this codebase has been bitten by.
+  const initialWindowId = initialSelection?.windowId ?? (initialSelection?.pendingWindow ? PENDING_WINDOW_ID : undefined);
+
   const branch = useMemo(() => (branches.data ?? []).find((b) => b.id === branchId), [branches.data, branchId]);
   const tz = branch?.timezone;
   const branchPools = pools.data ?? [];
@@ -95,6 +146,9 @@ export function WalkInBookingFlow({
   }, [branchPools, poolId]);
   const pool = branchPools.find((p) => p.id === poolId);
   const isPooled = (pool?.allocationMode ?? 'POOLED') !== 'FIXED_INSTANCE';
+  // F-272: creates the one-off AvailabilityWindow for a pending (empty-cell) slot, at
+  // confirm-time only — see submit() below. Same hook GuestSlotInventory used to call eagerly.
+  const createWindow = useCreateAvailabilityWindow(poolId);
 
   // --- guest ---
   const [phone, setPhone] = useState('');
@@ -127,11 +181,32 @@ export function WalkInBookingFlow({
   // --- date / band / slot ---
   const [date, setDate] = useState(initialSelection?.date ?? todayIsoDate());
   const availability = useAvailability(poolId, date);
-  const slots: AvailabilitySlot[] = availability.data ?? [];
+  // F-272: a genuinely-empty tapped cell has no AvailabilityWindow row (and never will via
+  // pattern generation — `empty` means no pattern covers this resource/hour either), so it can
+  // never appear in `availability`'s real server-side slot list. Splice in one synthetic slot,
+  // keyed on PENDING_WINDOW_ID, so every existing mechanism below (band grouping, slot select,
+  // price resolution) picks it up unmodified instead of needing a second, parallel UI path.
+  const pendingSlot: AvailabilitySlot | null = initialSelection?.pendingWindow
+    ? {
+        window: {
+          id: PENDING_WINDOW_ID,
+          startTime: initialSelection.pendingWindow.startTime,
+          endTime: initialSelection.pendingWindow.endTime,
+          resourceId: initialSelection.pendingWindow.resourceId,
+          capacity: 1,
+          price: null,
+        },
+        remainingCapacity: 1,
+      }
+    : null;
+  const slots: AvailabilitySlot[] = useMemo(
+    () => (pendingSlot ? [...(availability.data ?? []), pendingSlot] : availability.data ?? []),
+    [availability.data, initialSelection?.pendingWindow],
+  );
   const bandSet = useMemo(() => bandsWithSlots(slots, tz), [slots, tz]);
 
   const [band, setBand] = useState<Band>('evening');
-  const [windowId, setWindowId] = useState(initialSelection?.windowId ?? '');
+  const [windowId, setWindowId] = useState(initialWindowId ?? '');
 
   // F-250: only reset windowId when poolId/date actually CHANGE from their last-observed
   // values — never on "is this the first effect run" (a plain once-only ref guard looked
@@ -150,15 +225,18 @@ export function WalkInBookingFlow({
 
   // Once the prefilled slot's own data has loaded, snap `band` to the band that actually
   // contains it — otherwise band defaults to 'evening' regardless of the tapped cell's time.
-  const initialBandAppliedRef = useRef(!initialSelection?.windowId);
+  // F-272: keyed on `initialWindowId` (real windowId OR the PENDING_WINDOW_ID sentinel) rather
+  // than `initialSelection?.windowId` alone, so a pending (empty-cell) tap snaps its band too —
+  // the pending slot is present in `slots` from the first render, so this fires immediately.
+  const initialBandAppliedRef = useRef(!initialWindowId);
   useEffect(() => {
     if (initialBandAppliedRef.current) return;
-    const slot = slots.find((s) => s.window.id === initialSelection?.windowId);
+    const slot = slots.find((s) => s.window.id === initialWindowId);
     if (slot) {
       setBand(bandOf(branchHour(slot.window.startTime, tz)));
       initialBandAppliedRef.current = true;
     }
-  }, [slots, initialSelection?.windowId, tz]);
+  }, [slots, initialWindowId, tz]);
 
   // When the slot list changes, keep `band` on something that has slots, and drop a stale windowId.
   useEffect(() => {
@@ -208,7 +286,7 @@ export function WalkInBookingFlow({
   const priceValid = Number(price) > 0;
   const upiReady = method !== 'upi_qr' || upiTxnId.trim().length > 0;
   const canSubmit = !!pool && guestReady && !!windowId && priceValid && upiReady;
-  const submitting = createWalkIn.isPending || createBooking.isPending;
+  const submitting = createWalkIn.isPending || createBooking.isPending || createWindow.isPending;
 
   const resetAfterSuccess = () => {
     setPhone('');
@@ -231,11 +309,24 @@ export function WalkInBookingFlow({
           ? foundUser.id
           : (await createWalkIn.mutateAsync({ phone, name: newName.trim() })).id;
 
+      // F-272: a pending (empty-cell) slot has no real AvailabilityWindow yet — materialize it
+      // now, atomically with the booking that's about to follow, only because the admin actually
+      // confirmed. If this throws, nothing has been booked and no window is left behind.
+      let resolvedWindowId = windowId;
+      if (windowId === PENDING_WINDOW_ID && selectedSlot) {
+        const window = await createWindow.mutateAsync({
+          resourceId: selectedSlot.window.resourceId ?? undefined,
+          startTime: selectedSlot.window.startTime,
+          endTime: selectedSlot.window.endTime,
+        });
+        resolvedWindowId = window.id;
+      }
+
       const res = await createBooking.mutateAsync({
         branchId,
         resourcePoolId: pool.id,
         resourceId: resourceId || undefined,
-        windowId,
+        windowId: resolvedWindowId,
         userId,
         negotiatedPrice: Number(price),
         paymentMethod: method,
@@ -255,27 +346,6 @@ export function WalkInBookingFlow({
     }
   };
 
-  const segStrip: React.CSSProperties = {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 4,
-    padding: 4,
-    background: 'var(--av2-surface-alt)',
-    borderRadius: 'var(--av2-radius-sm)',
-    width: 'fit-content',
-    maxWidth: '100%',
-  };
-  const segBtn = (active: boolean): React.CSSProperties => ({
-    appearance: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '6px 14px',
-    borderRadius: 'var(--av2-radius-sm)',
-    fontSize: 'var(--av2-text-sm)',
-    fontWeight: active ? 700 : 600,
-    background: active ? 'var(--av2-accent-soft)' : 'transparent',
-    color: active ? 'var(--av2-accent)' : 'var(--av2-muted)',
-  });
   const hint: React.CSSProperties = { fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' };
   const label: React.CSSProperties = { fontSize: 'var(--av2-text-sm)', fontWeight: 600, color: 'var(--av2-text)' };
 

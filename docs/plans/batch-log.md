@@ -3467,6 +3467,85 @@ Chief-confirmed before being assigned, not folded into F-264's own fix. Full reg
 none of these three touch a backend route, zero fixture impact confirmed by the run itself.
 `pnpm register:check`/`diagram:verify` both clean. Branch `batch-d-f264-f265-f267-cosmetic-fixes`.
 
+## Batch 70 — F-272 (empty-cell eager window creation) + F-273 (member-blocked no-op) + segments + cell-state grouping
+
+Guest Slot Inventory screen, Chief Architect handover: two real findings (F-272 data-integrity,
+F-273 UX gap) plus two approved non-ID UI changes (segmented Morning/Afternoon/Evening time-of-day
+picker, four-family cell-state visual grouping), all riding one PR because they're all small and on
+one screen — kept as four distinct changes per rule 9, no scope bleed between them.
+
+**F-272**: root cause confirmed exactly as handed over — `GuestSlotInventory.tsx`'s `'empty'`
+branch called `POST /resource-pools/:id/availability-windows` eagerly on tap, before any booking
+existed; closing the modal without booking left the window orphaned, permanently flipping the cell
+to "Open". Fixed via Option B (defer window creation to submit-time, not a new `DELETE` endpoint):
+`WalkInBookingFlow.tsx` synthesizes a local `AvailabilitySlot` keyed on a new `PENDING_WINDOW_ID`
+sentinel so the existing slot-select/band-snap/price-resolution machinery picks it up unmodified;
+`submit()` only calls `useCreateAvailabilityWindow` atomically, immediately before `createBooking`,
+when the admin actually confirms. One real design snag worked through by reading the server route,
+not assumed: `GET /resource-pools/:id/availability` (the flow's own slot source) only materializes
+pattern-covered windows, and an `empty` cell is by definition uncovered by any pattern — so the
+tapped slot could never appear in the normal dropdown once eager creation was removed, which is
+exactly why the synthetic-slot injection (not a bypass UI) was needed. One real correction caught
+during independent plan verification, not by the implementing thread: the band-auto-snap effect
+matched only on `initialSelection?.windowId`, which the `pendingWindow` case leaves undefined — would
+have silently defaulted to Evening regardless of the tapped cell's real time. Fixed by resolving one
+shared `initialWindowId` (real id or the sentinel) used consistently across the ref-init, the
+effect's match, and the `windowId` state-init, instead of duplicating the sentinel logic three times.
+`ReservationsPanel` (the flow's only other caller) never sets `pendingWindow` — confirmed live,
+unaffected.
+
+**F-273**: `handleCellClick`'s silent `member-blocked` no-op split from the still-silent `elapsed`
+one; added `toast.push('This slot is reserved for club members.', 'info')`, matching this file's
+existing toast tone. Not tied to the Member module (F-207+, not yet built) — copy/toast only.
+
+**Segments**: Morning/Afternoon/Evening picker reuses `WalkInBookingFlow`'s own `BANDS`/`bandOf`
+grouping and its `segStrip`/`segBtn` styles (newly exported, not duplicated) rather than a second
+segmented-tab visual style. Live-checked against real multi-court pools on both branches, all three
+bands, in all three bands, no vertical scroll needed in any of them (Morning 6 rows, Afternoon 5,
+Evening 5) — `.inventory-grid-sticky-header`'s vertical pin (F-264) looks genuinely dead for this
+screen now; left in place pending Chief's call on removing it, not deleted blindly.
+`.inventory-grid-sticky-col` (horizontal pin) stays regardless — still reachable on a wide pool.
+
+**Cell-state grouping**: `CELL_STYLE` regrouped into four visual families (inert: elapsed+empty;
+blocked: member-blocked; booked: completed+cancelled+guest-booked, unified to the same solid-accent
+look; open: guest-vacant) with zero change to `GuestInventoryCell['type']` or `handleCellClick`'s
+branching. Checked live in both light and dark theme with real "Cancelled" and "Open" cells (F-265
+precedent) — the four families read clearly distinct in both.
+
+**Live-fire evidence, F-272 end-to-end (rule 2):** JBC's demo data has full 7-day/06:00-22:00
+pattern coverage on both configured pools, so no `empty` cell existed anywhere to click-test against.
+Closed the gap with a real, sanctioned, fully-reverted app action (not a raw DB write — that was
+attempted first and correctly refused by the sandbox's shared-resource guard) — temporarily deleted
+and re-added JBC Coimbatore's Guest Scheduler pattern one hour shorter (`06:00–21:00` instead of
+`06:00–22:00`) via the real `POST`/`DELETE /availability-patterns` routes, producing a genuine
+`empty` "+" cell at 9 PM on a future date. Tapped it: band correctly snapped to Evening, slot showed
+"9:00 – 10:00 PM", price pre-filled ₹400 — all resolved through the synthetic pending slot. Closed
+without booking, hard-reloaded: cell correctly reverted to `+`, zero orphan row (F-272's core
+claim, proven). Tapped again, completed a real booking (existing guest, cash): booking confirmed,
+cell showed "Booked", `BookingDetailModal` tap-through displayed the real detail correctly,
+adjacent cells unaffected. Cancelled the booking: correctly reverted to `guest-vacant` per F-252's
+existing cancelled-is-elapsed-only rule. Pattern restored to its original `06:00–22:00`/Daily/
+capacity 4 immediately after — confirmed via a fresh grid fetch that full coverage returned.
+**F-273's live-fire gap disclosed, not silently claimed**: no `member-blocked` window exists
+anywhere in current demo data (the Member module has no UI path to create one yet) — verified by
+direct code read instead (`toast.push` reached with confirmed-correct args/tone).
+
+**Real bug noticed in passing, not investigated or fixed here (rule 9):** deleting a temporary
+Special Hours override through Branch Settings appeared to leave a real bookable window behind at
+the "reverted" hours on a later fetch — possibly a stale slot-engine `AvailabilityOverride` not
+cleaned up on delete. Flagged as a background task for a dedicated investigation
+(`task_6a486687`), not folded into this batch, not self-numbered.
+
+**Register**: F-272/F-273 logged directly to Resolved (Chief-named in the handover itself, relayed
+into `docs/plans/pending-findings.md` under the same "assigned in the handover before this entry
+existed" pattern as F-195/F-203/F-196/F-197/F-204/F-228/F-229). Segments and cell-state grouping
+carry no finding ID (new UI / visual-only, as scoped in the handover). Full regression suite: first
+run showed identity-auth and tenant-management FAIL, both PASS in isolation (11/11 and 15/15), full
+suite re-run clean 5/5 — real port-collision-with-the-standing-dev-stack cause identified and fixed
+(the containers on 3001-3005 were stopped for the run, restarted after), not the suites interacting
+with each other. `pnpm register:check`/`diagram:verify` both clean. Whole-repo typecheck clean.
+Branch `batch-e-f272-f273-segments-cellgrouping`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

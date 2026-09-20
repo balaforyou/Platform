@@ -1743,3 +1743,29 @@ position never engages. Confirmed via real DOM inspection: `.av2-topbar`'s bound
 `top: -370px` after scrolling, proving it doesn't stick.
 Confirmed-ID: F-271
 Confirmed: 20 Sep 2026
+
+### guest-inventory-empty-cell-eager-window-creation
+Batch: F-272/F-273/segments/cell-grouping (Guest Slot Inventory), 20 Sep 2026
+Surfaced: 20 Sep 2026, live-reported by Bala; Chief Architect thread handover named F-272/F-273
+directly alongside two non-ID UI changes (segmented time picker, cell-state grouping) on the same
+screen.
+Honest note: F-272 was named directly in the Chief handover itself, before this pending-findings
+entry existed — same pattern as F-195/F-203/F-196/F-197/F-204/F-228/F-229 above. This entry and
+the accompanying register row are the relay, written at implementation close-out, not a silent
+backfill.
+Description: `GuestSlotInventory.tsx`'s `handleCellClick` `'empty'` branch eagerly created a real
+`AvailabilityWindow` row via `POST /resource-pools/:id/availability-windows` on tap, before any
+booking existed. Closing `WalkInBookingFlow` without completing a booking only cleared local React
+state, leaving the window orphaned — the slot permanently read `guest-vacant` ("Open") instead of
+reverting to `empty` ("+"), with no `DELETE` route to clean it up.
+Confirmed-ID: F-272
+Confirmed: 20 Sep 2026
+
+### guest-inventory-member-blocked-silent-no-op
+Batch: F-272/F-273/segments/cell-grouping (Guest Slot Inventory), 20 Sep 2026
+Surfaced: 20 Sep 2026, same Chief Architect handover as F-272.
+Honest note: same as F-272 above — named directly in the Chief handover before this entry existed.
+Description: tapping a `member-blocked` Inventory cell was a silent no-op with no feedback to the
+admin. Copy/toast addition only, not tied to the Member module (F-207+, not yet built).
+Confirmed-ID: F-273
+Confirmed: 20 Sep 2026
