@@ -410,7 +410,7 @@ function FragmentRow({
             onClick={() => onCellClick(cell)}
             aria-label={CELL_LABEL[cell.type]}
             title={CELL_LABEL[cell.type]}
-            style={cellBase}
+            style={{ ...cellBase, cursor: cell.type === 'elapsed' ? 'default' : 'pointer' }}
           >
             <span style={{ ...badgeBase, ...CELL_BADGE_STYLE[cell.type] }}>
               <Icon size={16} {...(family === 'booked' ? { fill: 'currentColor' } : {})} />
