@@ -112,6 +112,16 @@ export function formatHourLabel(iso: string, timezone: string | undefined): stri
   }).format(safeDate(iso));
 }
 
+/**
+ * Display-only: strips a literal "Court " prefix ("Court 1" -> "1") for the Inventory grid's
+ * column headers and WalkInBookingFlow's court-selection buttons. `resource.name` itself is
+ * never touched — a name that doesn't start with the exact prefix falls back unchanged, never
+ * blank, never guessed at.
+ */
+export function stripCourtPrefix(name: string): string {
+  return name.startsWith('Court ') ? name.slice('Court '.length) : name;
+}
+
 const hhmmToMinutes = (hhmm: unknown): number => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm ?? '').trim());
   return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
