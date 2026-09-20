@@ -3,7 +3,7 @@ import fastifyJwt from '@fastify/jwt';
 import { responseEnvelopePlugin } from '@badminton/shared-middleware';
 import { PrismaClient, BookingStatus, AllocationMode, PricingMode, Prisma, AvailabilityOverrideType, TenantModule } from '@badminton/database';
 import { resolveEntitlementState, entitlementAllows } from '@badminton/shared-types';
-import { ensureAvailabilityWindowsForDate } from './availabilityGeneration.js';
+import { ensureAvailabilityWindowsForDate, reconcilePatternWindows } from './availabilityGeneration.js';
 import {
   DEFAULT_TIME_ZONE,
   addBranchDays,
@@ -705,6 +705,55 @@ async function validatePatternAgainstBranchHours(branchId: string, data: {
     (err as any).statusCode = 400;
     (err as any).code = 'PATTERN_OUTSIDE_OPERATING_HOURS';
     throw err;
+  }
+}
+
+// F-268: rejects a pattern write that would overlap another already-ACTIVE pattern on the same
+// pool. Confirmed no legitimate overlap use case exists anywhere in this codebase (no priority/
+// precedence field on the model, neither admin UI surfaces a "which pattern wins" choice) --
+// reject-at-write-time is the right default, unlike F-263's capacity-vs-court-count case, since an
+// admin can always avoid this by editing the one pattern instead of stacking a second.
+//
+// A write resolving to SUSPENDED produces no candidates in ensureAvailabilityWindowsForDate, so
+// there's nothing to overlap -- checked via the resultant status, not the request body's raw
+// field, since `patternDataFromBody` only sets `data.status` when the body supplies it explicitly
+// (POST with no status omits it, relying on the schema's own ACTIVE default).
+async function validateNoOverlappingActivePatterns(
+  resourcePoolId: string,
+  data: { daysOfWeek?: string; startTime?: string; endTime?: string; status?: string },
+  excludePatternId: string | null,
+  reply: any,
+) {
+  const resultantStatus = data.status ?? 'ACTIVE';
+  if (resultantStatus !== 'ACTIVE') return;
+  if (!data.daysOfWeek || !data.startTime || !data.endTime) return;
+
+  const others = await prisma.availabilityPattern.findMany({
+    where: {
+      resourcePoolId,
+      status: 'ACTIVE',
+      ...(excludePatternId ? { id: { not: excludePatternId } } : {}),
+    },
+  });
+
+  const newDays = new Set(data.daysOfWeek.split(',').map((day) => day.trim()));
+  for (const other of others) {
+    const otherDays = new Set(String(other.daysOfWeek).split(',').map((day: string) => day.trim()));
+    const commonDays = [...newDays].filter((day) => otherDays.has(day));
+    if (commonDays.length === 0) continue;
+
+    // Same half-open-interval, string-comparable HH:mm convention validatePatternAgainstBranchHours
+    // already uses above -- not a new comparison shape.
+    const overlaps = data.startTime! < other.endTime && data.endTime! > other.startTime;
+    if (overlaps) {
+      reply.status(400);
+      const err = new Error(
+        `Pattern overlaps an existing active pattern (${other.id}) on day(s) [${commonDays.join(',')}]: ${other.startTime}-${other.endTime}`,
+      );
+      (err as any).statusCode = 400;
+      (err as any).code = 'PATTERN_OVERLAP';
+      throw err;
+    }
   }
 }
 
@@ -2430,6 +2479,7 @@ server.post('/resource-pools/:id/availability-patterns', async (request, reply) 
   const pool = await requirePoolScope(auth, id, reply);
   const data = patternDataFromBody(request.body as any, reply);
   await validatePatternAgainstBranchHours(pool.branchId, data, reply); // F-211
+  await validateNoOverlappingActivePatterns(id, data, null, reply); // F-268
 
   const pattern = await prisma.availabilityPattern.create({
     data: {
@@ -2465,11 +2515,23 @@ server.patch('/resource-pools/:id/availability-patterns/:patternId', async (requ
   };
   const data = patternDataFromBody(merged, reply, false);
   await validatePatternAgainstBranchHours(pool.branchId, data, reply); // F-211
+  await validateNoOverlappingActivePatterns(id, data, patternId, reply); // F-268
 
-  return prisma.availabilityPattern.update({
-    where: { id: patternId },
-    data,
+  // F-261: reconcile in the same transaction as the update -- a PATCH can change any field
+  // (day/time/status/capacity/price), and an already-generated future window never picks up any
+  // of those changes on its own (ensureAvailabilityWindowsForDate only ever adds). No diffing of
+  // old vs. new definition: any date this pattern still legitimately covers regenerates
+  // identically, correctly, next time it's queried.
+  const [updated, windowReconciliation] = await prisma.$transaction(async (tx: any) => {
+    const reconciliation = await reconcilePatternWindows(tx, id, patternId, new Date());
+    const pattern = await tx.availabilityPattern.update({
+      where: { id: patternId },
+      data,
+    });
+    return [pattern, reconciliation];
   });
+
+  return { ...updated, windowReconciliation };
 });
 
 server.delete('/resource-pools/:id/availability-patterns/:patternId', async (request, reply) => {
@@ -2488,7 +2550,15 @@ server.delete('/resource-pools/:id/availability-patterns/:patternId', async (req
     throw err;
   }
 
-  return prisma.availabilityPattern.delete({ where: { id: patternId } });
+  // F-261: reconcile in the same transaction as the delete -- see the PATCH route's identical
+  // comment above for the full reasoning (bounds, cascade-hazard avoidance).
+  const [deleted, windowReconciliation] = await prisma.$transaction(async (tx: any) => {
+    const reconciliation = await reconcilePatternWindows(tx, id, patternId, new Date());
+    const pattern = await tx.availabilityPattern.delete({ where: { id: patternId } });
+    return [pattern, reconciliation];
+  });
+
+  return { ...deleted, windowReconciliation };
 });
 
 // ---------------------------------------------------------------------------

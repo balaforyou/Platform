@@ -329,6 +329,64 @@ export async function ensureAvailabilityWindowsForDate(
   });
 }
 
+export type PatternWindowReconciliation = {
+  removed: number;
+  preservedWithBookings: number;
+};
+
+/**
+ * F-261: `ensureAvailabilityWindowsForDate` above is purely additive -- editing or deleting a
+ * pattern never touches windows it already generated, since `generatedFromPatternId` is a bare
+ * `String?` with no relation. Called from the pattern DELETE/PATCH routes (never from generation
+ * itself, which stays side-effect-light) to retract the future slots this exact pattern produced,
+ * except any that already carry a real booking.
+ *
+ * Bounds, both deliberately conservative:
+ * - `startTime > now` only -- never touches a window that has already started, a stricter bound
+ *   than the display-only "elapsed" convention used elsewhere, since deletion is a much
+ *   higher-stakes action than a display label.
+ * - Excludes a window with a `Booking` of ANY status, not just an active one. `Booking.windowId`
+ *   is `onDelete: Cascade` -- a window with even a CANCELLED booking on it carries real
+ *   audit/refund history that a cascade-delete would destroy, so it's left alone entirely rather
+ *   than risk that history for a window that isn't bookable again anyway.
+ *
+ * No diffing of the pattern's old vs. new definition is needed: any date the pattern still
+ * legitimately covers regenerates identically, correctly, the next time it's queried -- the
+ * existing lazy/additive model already guarantees that. Reconciliation just clears the slate.
+ */
+export async function reconcilePatternWindows(
+  tx: any,
+  resourcePoolId: string,
+  patternId: string,
+  now: Date,
+): Promise<PatternWindowReconciliation> {
+  const removable = await tx.availabilityWindow.findMany({
+    where: {
+      resourcePoolId,
+      generatedFromPatternId: patternId,
+      startTime: { gt: now },
+      bookings: { none: {} },
+    },
+    select: { id: true },
+  });
+
+  const totalFuture = await tx.availabilityWindow.count({
+    where: {
+      resourcePoolId,
+      generatedFromPatternId: patternId,
+      startTime: { gt: now },
+    },
+  });
+
+  if (removable.length > 0) {
+    await tx.availabilityWindow.deleteMany({
+      where: { id: { in: removable.map((w: any) => w.id) } },
+    });
+  }
+
+  return { removed: removable.length, preservedWithBookings: totalFuture - removable.length };
+}
+
 export async function disconnectAvailabilityGenerationPrisma() {
   await prisma.$disconnect();
 }
