@@ -3,7 +3,7 @@ import { Clock, IndianRupee, Plus, Trash2 } from 'lucide-react';
 import { Badge, Banner, Button, Card, IconButton, LoadingState, TextField, TimeField } from '../../../components';
 import { useAdminAuth } from '../../../auth/AdminAuthContext';
 import { errorMessage } from '../../../lib/errorMessage';
-import { useBranches, useSaveGuestPricing } from '../queries';
+import { useBranches, useSaveGuestPricing, useSaveMemberRates, useTenantRates } from '../queries';
 import { nonNegativeAmount, validateTimeWindows, type TimeWindow } from '../schemas';
 
 /**
@@ -256,6 +256,114 @@ export function PricingRates({ branchId }: { branchId: string }) {
       {branch && !branch.guestStandardRate && (
         <Badge tone="neutral">Not configured — guest bookings use each court's default rate</Badge>
       )}
+    </Card>
+  );
+}
+
+/**
+ * F-133 §5 — the two tenant-wide member batch pricing defaults. Deliberately NOT branch-scoped
+ * (Bala: "irrespective of court/branch") -- unlike `PricingRates` above, this section ignores
+ * the branch selector entirely and shows the same one value regardless of which branch tab is
+ * active, the same "tenant-level, not per-branch" posture `MemberProvisioningPanel` already has
+ * on this same screen. A batch's own `customRate`, when set, always wins over these; a batch
+ * with neither is rejected at creation time server-side.
+ */
+export function MemberRates() {
+  const { user } = useAdminAuth();
+  const isOwner = !!user?.roles?.includes('owner');
+  const rates = useTenantRates();
+  const save = useSaveMemberRates();
+
+  const srvPeak = asField(rates.data?.memberPeakDefaultRate);
+  const srvNonPeak = asField(rates.data?.memberNonPeakDefaultRate);
+
+  const [peak, setPeak] = useState(srvPeak);
+  const [nonPeak, setNonPeak] = useState(srvNonPeak);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setPeak(srvPeak);
+    setNonPeak(srvNonPeak);
+  }, [srvPeak, srvNonPeak]);
+
+  const parseAmount = (label: string, value: string) => nonNegativeAmount(label).safeParse(value);
+  const peakProvided = peak.trim() !== '';
+  const nonPeakProvided = nonPeak.trim() !== '';
+  const peakParsed = peakProvided ? parseAmount('Peak Rate', peak) : null;
+  const nonPeakParsed = nonPeakProvided ? parseAmount('Non-Peak Rate', nonPeak) : null;
+  const peakError = peakParsed && !peakParsed.success ? (peakParsed.error.issues[0]?.message ?? 'Enter a valid amount.') : '';
+  const nonPeakError = nonPeakParsed && !nonPeakParsed.success ? (nonPeakParsed.error.issues[0]?.message ?? 'Enter a valid amount.') : '';
+
+  const dirty = peak !== srvPeak || nonPeak !== srvNonPeak;
+  const saveDisabled = !isOwner || !dirty || !!peakError || !!nonPeakError || save.isPending;
+
+  const doSave = () => {
+    setSaved(false);
+    save.mutate(
+      {
+        memberPeakDefaultRate: peakProvided ? (peakParsed?.success ? peakParsed.data : undefined) : null,
+        memberNonPeakDefaultRate: nonPeakProvided ? (nonPeakParsed?.success ? nonPeakParsed.data : undefined) : null,
+      },
+      { onSuccess: () => setSaved(true) },
+    );
+  };
+
+  if (rates.isLoading) return <LoadingState label="Loading member rates…" />;
+  if (rates.error) return <Banner tone="error">{errorMessage(rates.error)}</Banner>;
+
+  return (
+    <Card as="section">
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--av2-space-2)' }}>
+        <IndianRupee size={18} style={{ color: 'var(--av2-accent-hover)', flex: 'none', marginTop: 2 }} />
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 'var(--av2-text-base)' }}>Member Rates</h3>
+          <p style={{ margin: '3px 0 0', fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' }}>
+            Tenant-wide defaults for member batches — the same rate applies across every branch and
+            court. A batch's own custom rate, when set, overrides this.
+          </p>
+        </div>
+      </div>
+
+      {!isOwner && (
+        <Banner tone="info">Only an owner can change member rates. You can review it here.</Banner>
+      )}
+
+      <div style={{ marginTop: 'var(--av2-space-4)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--av2-space-3)' }}>
+        <TextField
+          label="Peak Rate"
+          hint="₹ per member per month"
+          inputMode="decimal"
+          value={peak}
+          onChange={(e) => setPeak(e.target.value)}
+          disabled={!isOwner}
+          error={peakError || undefined}
+        />
+        <TextField
+          label="Non-Peak Rate"
+          hint="₹ per member per month"
+          inputMode="decimal"
+          value={nonPeak}
+          onChange={(e) => setNonPeak(e.target.value)}
+          disabled={!isOwner}
+          error={nonPeakError || undefined}
+        />
+      </div>
+
+      {isOwner && (
+        <div style={{ marginTop: 'var(--av2-space-3)' }}>
+          <Button onClick={doSave} disabled={saveDisabled} loading={save.isPending}>
+            Save member rates
+          </Button>
+        </div>
+      )}
+      {saved && !dirty && <Banner tone="success">Member rates saved.</Banner>}
+      {save.error && <Banner tone="error">{errorMessage(save.error)}</Banner>}
+
+      <p style={{ marginTop: 'var(--av2-space-4)', fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)', lineHeight: 1.5 }}>
+        Every batch is manually tagged Peak or Non-Peak at creation — never derived from clock
+        time. A batch created without its own custom rate must resolve to one of these; creation
+        is blocked if neither is set.
+      </p>
     </Card>
   );
 }

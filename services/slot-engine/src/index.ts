@@ -15,6 +15,7 @@ import {
   parseBranchLocalDateTime,
   branchMinutesOfDay,
   daysInMonth,
+  endOfNextCalendarMonthUtc,
   safeTimeZone,
 } from './branchTime.js';
 
@@ -5175,6 +5176,91 @@ server.get('/resource-pools/:id/member-collision-preview', async (request, reply
   return { scanned };
 });
 
+// F-133 Slice A: create a batch (Group). A generic, vertical-agnostic entity whose only real
+// consumer today is this badminton batch-creation flow -- see docs/discovery/f133_group_hierarchy.md.
+// Auth/scoping mirrors POST /member-group-assignments below (its own established precedent for
+// this same admin surface): getInternalOrAdminAuth + requirePoolScope, MEMBER_MANAGEMENT write
+// entitlement.
+server.post('/groups', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
+
+  const { name, resourcePoolId, daysOfWeek, startTime, isPeak = false, customRate } = request.body as any;
+
+  if (!name || !resourcePoolId || !daysOfWeek || !startTime) {
+    reply.status(400);
+    const err = new Error('name, resourcePoolId, daysOfWeek, and startTime are required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  if (typeof isPeak !== 'boolean') {
+    reply.status(400);
+    const err = new Error('isPeak must be a boolean');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+  if (customRate !== undefined && customRate !== null && (typeof customRate !== 'number' || !Number.isFinite(customRate) || customRate < 0)) {
+    reply.status(400);
+    const err = new Error('customRate must be a non-negative number when provided');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const pool = await requirePoolScope(auth, resourcePoolId, reply);
+
+  // F-169 precedent, reused as-is: reject a schedule that no generated window could ever match.
+  await validateAssignmentSchedule(resourcePoolId, daysOfWeek, startTime);
+
+  // F-133 §5: block creation unless a rate genuinely resolves -- own customRate, else whichever
+  // tenant-wide default matches isPeak. Validation only; the resolved value is never persisted
+  // here (customRate stays exactly what the admin entered, possibly null) so a later tenant
+  // default change is reflected for every batch that relies on it, not frozen at creation time.
+  if (customRate === undefined || customRate === null) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: pool.tenantId } });
+    const tenantDefault = isPeak ? tenant?.memberPeakDefaultRate : tenant?.memberNonPeakDefaultRate;
+    if (tenantDefault === null || tenantDefault === undefined) {
+      reply.status(400);
+      const err = new Error(
+        `No rate resolves for this batch: no customRate was given and Tenant.${isPeak ? 'memberPeakDefaultRate' : 'memberNonPeakDefaultRate'} is not set`,
+      );
+      (err as any).statusCode = 400;
+      (err as any).code = 'NO_RESOLVABLE_RATE';
+      throw err;
+    }
+  }
+
+  // F-133 §4: calendar-month-aligned term. Created on the 1st -> starts today; otherwise queued
+  // to the 1st of next month (no partial/prorated first cycle -- deliberate, ahead of F-209).
+  // endDate is always the real last day of the starting month, via endOfNextCalendarMonthUtc
+  // fed an anchor in the PRIOR month so its own "next calendar month" resolves to startDate's
+  // month -- the same helper Slice E's renewal will reuse directly on an assignment's endDate.
+  const now = new Date();
+  const startDate = now.getUTCDate() === 1
+    ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const priorMonthAnchor = new Date(startDate.getTime() - 24 * 60 * 60 * 1000);
+  const endDate = endOfNextCalendarMonthUtc(priorMonthAnchor);
+
+  const group = await prisma.group.create({
+    data: {
+      tenantId: pool.tenantId,
+      name,
+      resourcePoolId,
+      daysOfWeek,
+      startTime,
+      isPeak,
+      customRate: customRate ?? null,
+      startDate,
+      endDate,
+    },
+  });
+  reply.status(201);
+  return group;
+});
+
 server.post('/member-group-assignments', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
@@ -5237,9 +5323,9 @@ server.post('/member-group-assignments', async (request, reply) => {
     return { ...assignment, collisionSweep };
   } catch (err: any) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      // WHY: P2002 from the partial index = this member already has an active assignment
-      // somewhere (possibly a different pool). From the @@unique constraint = same-pool
-      // double assignment. Both are surfaced as the same 409.
+      // WHY: F-133 dropped the partial "one ACTIVE assignment per member" index -- P2002 here
+      // can now only come from @@unique([userId, resourcePoolId]), i.e. a same-pool double
+      // assignment. A member may hold concurrent ACTIVE assignments across different pools.
       reply.status(409);
       const e = new Error('Member already has an active slot assignment');
       (e as any).statusCode = 409;

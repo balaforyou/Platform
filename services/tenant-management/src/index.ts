@@ -137,7 +137,24 @@ server.patch('/tenants/:id', async (request, reply) => {
   await verifyTenantOwnerOrInternal(request, reply, id);
 
   const { name, logo, themeColor, appName, plan, status, contactInfo, billingInfo,
-          aboutDescription, facilities, photos } = request.body as any;
+          aboutDescription, facilities, photos,
+          memberPeakDefaultRate, memberNonPeakDefaultRate } = request.body as any;
+
+  // F-133 §5: tenant-wide member batch pricing defaults -- same shape/validation posture as
+  // the existing nullable-Decimal fields above, own array skipped-when-undefined pattern so an
+  // unrelated PATCH (e.g. branding only) never clobbers a value it didn't send.
+  for (const [field, value] of [
+    ['memberPeakDefaultRate', memberPeakDefaultRate],
+    ['memberNonPeakDefaultRate', memberNonPeakDefaultRate],
+  ] as const) {
+    if (value !== undefined && value !== null && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+      reply.status(400);
+      const err = new Error(`${field} must be a non-negative number when provided`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'BAD_REQUEST';
+      throw err;
+    }
+  }
 
   const tenant = await prisma.tenant.update({
     where: { id },
@@ -153,6 +170,8 @@ server.patch('/tenants/:id', async (request, reply) => {
       ...(aboutDescription !== undefined ? { aboutDescription } : {}),
       ...(facilities !== undefined ? { facilities } : {}),
       ...(photos !== undefined ? { photos } : {}),
+      ...(memberPeakDefaultRate !== undefined ? { memberPeakDefaultRate } : {}),
+      ...(memberNonPeakDefaultRate !== undefined ? { memberNonPeakDefaultRate } : {}),
     },
   });
 

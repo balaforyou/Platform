@@ -6,6 +6,28 @@
 /** F-220 §3.2 / F-224: a branch-wide guest peak-pricing window, branch-local HH:mm. */
 export type GuestPeakWindow = { start: string; end: string };
 
+/** F-133 §5: tenant-wide member batch pricing defaults. Decimals serialise as strings. */
+export type Tenant = {
+  id: string;
+  memberPeakDefaultRate?: string | null;
+  memberNonPeakDefaultRate?: string | null;
+};
+
+/** F-133 §2: a batch (Group). `GET /slot-engine/resource-pools` (unrelated) is not this --
+ *  this is the row `POST /slot-engine/groups` creates and returns. */
+export type Group = {
+  id: string;
+  tenantId: string;
+  name: string;
+  resourcePoolId: string;
+  daysOfWeek: string;
+  startTime: string;
+  isPeak: boolean;
+  customRate?: string | null;
+  startDate: string;
+  endDate: string;
+};
+
 export type Branch = {
   id: string;
   name: string;

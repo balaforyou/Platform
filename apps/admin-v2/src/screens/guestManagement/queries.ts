@@ -17,10 +17,12 @@ import type {
   GuestLedgerRow,
   GuestLookupResult,
   GuestMonthSummary,
+  Group,
   GuestOccupancyDashboard,
   ManualBookingResult,
   ManualPaymentMethod,
   ResourcePool,
+  Tenant,
   WalkInResult,
 } from './types';
 
@@ -202,6 +204,47 @@ export function useSaveGuestPricing(branchId?: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: courtGroupsKeys.branches(tenant?.id) });
     },
+  });
+}
+
+const tenantRatesKey = (tenantId?: string) => ['court-groups', 'tenant-rates', tenantId] as const;
+
+/** F-133 §5: the two tenant-wide member batch pricing defaults. Tenant-scoped, not branch-scoped
+ *  -- unlike `useSaveGuestPricing` above, no branchId. */
+export function useTenantRates() {
+  const api = useAdminApi();
+  const { tenant } = useAdminTenant();
+  return useQuery({
+    queryKey: tenantRatesKey(tenant?.id),
+    enabled: !!tenant?.id,
+    queryFn: () => api.get<Tenant>(`/tenant/tenants/${tenant?.id}`),
+  });
+}
+
+export function useSaveMemberRates() {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  const { tenant } = useAdminTenant();
+  return useMutation({
+    mutationFn: (body: { memberPeakDefaultRate?: number | null; memberNonPeakDefaultRate?: number | null }) =>
+      api.patch<Tenant>(`/tenant/tenants/${tenant?.id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: tenantRatesKey(tenant?.id) }),
+  });
+}
+
+/** F-133 §2: create a batch (Group). Owner/branch_manager-in-scope + MEMBER_MANAGEMENT write,
+ *  enforced server-side by `requirePoolScope` -- same posture as member-group-assignments. */
+export function useCreateGroup() {
+  const api = useAdminApi();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      resourcePoolId: string;
+      daysOfWeek: string;
+      startTime: string;
+      isPeak: boolean;
+      customRate?: number;
+    }) => api.post<Group>('/slot-engine/groups', body),
   });
 }
 

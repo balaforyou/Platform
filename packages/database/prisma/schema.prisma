@@ -67,6 +67,12 @@ model Tenant {
   aboutDescription String?
   facilities       String[]         @default([])
   photos           String[]         @default([])
+  // F-133: member batch pricing defaults, tenant-wide -- "irrespective of court/branch" (Bala).
+  // Same tenant-level-default-no-branch-override shape as aboutDescription/facilities/photos
+  // above. A batch's resolved fee is its own Group.customRate if set, else whichever of these
+  // matches its isPeak flag -- batch creation is blocked server-side if neither resolves.
+  memberPeakDefaultRate    Decimal? @db.Decimal(10, 2)
+  memberNonPeakDefaultRate Decimal? @db.Decimal(10, 2)
   branches         Branch[]
   roleAssignments  RoleAssignment[]
   moduleEntitlements ModuleEntitlement[]
@@ -182,6 +188,7 @@ model ResourcePool {
   blockedWindows            BlockedWindow[]
   bookings                  Booking[]
   memberGroupAssignments    MemberGroupAssignment[]
+  groups                    Group[]
   createdAt                 DateTime                @default(now())
   updatedAt                 DateTime                @updatedAt
 }
@@ -373,17 +380,23 @@ model BlockedWindow {
 }
 
 // WHY: Represents a member's recurring slot assignment for a specific court/pool.
-// Enforces Basic-tier "one recurring slot per member" rule via:
-//   1. Standard @@unique([userId, resourcePoolId]) — prevents same-court double-assignment.
-//   2. A Postgres partial unique index on (userId) WHERE status = 'ACTIVE' (added as raw SQL
-//      in the migration file — Prisma schema syntax cannot express WHERE-clause indexes).
-//      This enforces the one-active-slot-per-member rule at DB level, making concurrent
-//      assignment requests fail with P2002 rather than relying on app-level pre-checks.
+// @@unique([userId, resourcePoolId]) below prevents same-court double-assignment.
+// F-133: the platform-wide "one ACTIVE assignment per member" rule this table used to enforce
+// (a Postgres partial unique index on (userId) WHERE status = 'ACTIVE', added as raw SQL) is
+// gone as of the F-133 migration -- a member may now hold one ACTIVE row per batch (see
+// groupId below). Concurrent same-pool double-assignment still fails with P2002 via the
+// @@unique below; there is no longer any DB-level cap on concurrent batches for one member.
 model MemberGroupAssignment {
   id             String       @id @default(uuid())
   userId         String
   resourcePoolId String
   resourcePool   ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  // F-133: a batch (Group) a member belongs to. Nullable -- assignments created before F-133
+  // (and any future non-batch use of this table) keep working with groupId: null. The former
+  // "one ACTIVE assignment per member" platform-wide constraint (member_assignment_one_active_
+  // per_user) is dropped as part of F-133: a member may hold one ACTIVE row per batch now.
+  groupId        String?
+  group          Group?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
   // Schedule fields — explicit days+time rather than a full cron expression.
   // WHY: The requirement is weekdays + one fixed start time; cron syntax adds parser complexity
   // for no benefit when the constraint is this narrow.
@@ -393,12 +406,47 @@ model MemberGroupAssignment {
   // F-207.1: startDate/endDate bound the term. endDate is server-computed from a termPreset
   // (MONTHLY/QUARTERLY/YEARLY) at create/renew time -- the preset itself is not persisted, only
   // the computed dates, so a renewal can use a different preset than the original term.
+  // F-133: for a batch-carrying assignment, endDate is instead calendar-month-aligned (see
+  // endOfNextCalendarMonthUtc) and is also the real boundary used to bound per-batch history --
+  // §7's remove/relocate actions must set it to the true suspension/relocation moment, not leave
+  // it at the original month-end.
   startDate      DateTime
   endDate        DateTime
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
   @@unique([userId, resourcePoolId])
+}
+
+// F-133: a generic, vertical-agnostic grouping entity (matching packages/job-scheduler's bar --
+// no court/booking vocabulary in the entity itself). Its real consumers today are badminton
+// batches (via MemberGroupAssignment.groupId) and, in future, notification targeting and
+// analytics drill-down -- neither built in this kickoff.
+model Group {
+  id             String                  @id @default(uuid())
+  tenantId       String
+  name           String
+  resourcePoolId String
+  resourcePool   ResourcePool            @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  daysOfWeek     String
+  startTime      String
+  // Admin's manual tag at creation -- never derived from clock time the way Branch.guestPeakWindows
+  // is for guests (F-224). Member pricing is explicitly blind to that field.
+  isPeak         Boolean                 @default(false)
+  // Per-batch fee override. When null, resolves to Tenant.memberPeakDefaultRate /
+  // memberNonPeakDefaultRate matching isPeak -- validated server-side at create/save time so a
+  // batch can never save with no resolvable rate.
+  customRate     Decimal?                @db.Decimal(10, 2)
+  // Calendar-month-aligned term -- always the 1st of a month through that same month's real last
+  // day. See endOfNextCalendarMonthUtc in branchTime.ts.
+  startDate      DateTime
+  endDate        DateTime
+  parentId       String?
+  parent         Group?                  @relation("GroupHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Group[]                 @relation("GroupHierarchy")
+  assignments    MemberGroupAssignment[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
 }
 
 model Booking {
@@ -425,6 +473,11 @@ model Booking {
   // WHY: Member booking existence and attendance confirmation are distinct states.
   // The grace sweep releases only member bookings where this is still null.
   memberAttendanceConfirmedAt DateTime?
+  // F-133: a member's explicit pre-cutoff "not attending" action, distinct from
+  // memberAttendanceConfirmedAt and from a sweep-triggered RELEASED_NO_SHOW -- both an explicit
+  // decline and a sweep release land on status RELEASED_NO_SHOW (same downstream capacity/
+  // occupancy handling); this field distinguishes them for display only.
+  memberAttendanceDeclinedAt  DateTime?
   // F-235 Phase 0 (F-129 folded in): T&C acceptance is per-booking, not per-user, since terms
   // can change over time -- termsVersion lets a future content change be distinguished from
   // what a given booking actually accepted. Same nullable-timestamp shape as
