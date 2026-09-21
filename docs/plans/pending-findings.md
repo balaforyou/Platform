@@ -1769,3 +1769,58 @@ Description: tapping a `member-blocked` Inventory cell was a silent no-op with n
 admin. Copy/toast addition only, not tied to the Member module (F-207+, not yet built).
 Confirmed-ID: F-273
 Confirmed: 20 Sep 2026
+
+### f207-guest-member-contract-unification
+Batch: F-207.1 / F-207.2 / F-207.3, one session, 21 Sep 2026
+Surfaced: this session, Chief Architect handover kickoff for F-207.1 ("F-207.1 implementation —
+schema date-bounding + renewal"), continued directly into F-207.2 and F-207.3 handovers.
+Honest note: named directly in the Chief handover before this pending-findings entry existed, same
+pattern as F-195/F-203/F-196/F-197/F-204/F-228/F-229/F-272/F-273 above — this entry and the
+register row are the relay, written at close-out, not a silent backfill.
+Description: three sub-slices, all merged this session. **7.1** — `AvailabilityPattern`/
+`MemberGroupAssignment` gain `startDate`/`endDate` (server-computed, never a direct write target)
+and a `/renew` endpoint each, asymmetric auth confirmed correct (pattern renewal owner-only,
+assignment renewal not). **7.2** — the highest-risk sub-slice: an active `MemberGroupAssignment`
+now excludes its exact resourcePoolId/day/time from guest bookability, in both `windowBookable`
+(display) and `POST /bookings` (write, new `409 MEMBER_SLOT_RESERVED`), gated on
+`MEMBER_MANAGEMENT` actually being ACTIVE; `ensureTodayMemberBooking` gained a defensive capacity
+guard; a one-time relocate/cancel sweep runs synchronously on `POST /member-group-assignments`,
+relocating a single-window CONFIRMED booking to a sibling POOLED pool via a row UPDATE (price and
+`PaymentIntent` linkage untouched) or cancelling with a forced 100% refund when no target exists.
+**7.3** — admin-web's "Assign Member to Recurring Slot" panel (the only real caller of
+`POST /member-group-assignments`) gained a cheap pre-hoc collision count and a post-hoc results
+display, surfacing `collisionSweep.failed` — previously returned by the API and silently discarded
+by every caller — distinctly rather than absorbed into a generic success message.
+Confirmed-ID: F-207
+Confirmed: 21 Sep 2026
+
+### refunds-override-and-refunds-missing-branch-scope
+Batch: F-274, surfaced during F-207.2's design investigation, 21 Sep 2026
+Surfaced: this session, Chief Architect handover "F-274 (implement) + F-275 (investigate + plan)".
+Honest note: named directly in the Chief handover before this pending-findings entry existed, same
+pattern as the entries above.
+Description: `POST /refunds/override` and `POST /refunds` (`services/payment/src/index.ts`) both
+checked only for any `owner`/`branch_manager:*` role claim, with no comparison against the target
+booking's real `branchId` — one root defect in two places, the same IDOR class F-071 fixed for
+slot-engine's booking-scoped routes. `/refunds/override`'s only real caller (admin-web's
+`RefundsPage`) already goes through the branch-filtered `GET /bookings/admin`, so nothing relied on
+the missing check; `/refunds` has no real production caller today, only its own regression test.
+Confirmed-ID: F-274
+Confirmed: 21 Sep 2026
+
+### system-forced-full-refund-cancel-path
+Batch: F-275, same session as F-274, 21 Sep 2026
+Surfaced: this session, same Chief Architect handover as F-274.
+Honest note: named directly in the Chief handover before this pending-findings entry existed, same
+pattern as the entries above.
+Description: neither `POST /refunds` (refunds whatever `booking.refundAmount` the cancellation
+tiering computed) nor `POST /refunds/override` (human-only: JWT-derived `adminId`, requires a
+typed `reason`, discretionary amount) gave F-207.2's relocate/cancel sweep what it needed — an
+automated, system-callable cancel-and-refund forcing 100% regardless of the pool's
+`cancellationPolicyJson`, with no human in the loop. `POST /bookings/:id/cancel` gained a
+`forceFullRefund` flag (internal-key-only, rejected outright for a JWT caller) that skips tiering
+and sets `refundAmount` to the full `booking.price` — confirmed via live query that `booking.price`
+always equals what the captured `PaymentIntent` actually charged, across every booking-creation
+path.
+Confirmed-ID: F-275
+Confirmed: 21 Sep 2026
