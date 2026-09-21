@@ -99,6 +99,9 @@ services:
       <<: *common_env
       PORT: 3001
       NOTIFICATION_SERVICE_URL: http://notification:3005
+      # F-207.2: the relocate/cancel sweep calls payment's POST /refunds directly -- the first
+      # time slot-engine has ever needed to call payment (previously always the other direction).
+      PAYMENT_URL: http://payment:3004
     command: [sh, -c, "corepack enable && pnpm --filter @badminton/slot-engine run dev"]
 
   identity-auth:

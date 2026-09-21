@@ -18,6 +18,7 @@ import { courtSlotIndexSections } from './court-slot-index.regression';
 import { nextAvailableDateSections } from './next-available-date.regression';
 import { moduleEntitlementSections } from './module-entitlement.regression';
 import { guestLedgerSections } from './guest-ledger.regression';
+import { memberCollisionSweepSections } from './member-collision-sweep.regression';
 
 async function main() {
   console.log('Starting local Slot Engine server...');
@@ -55,6 +56,7 @@ async function main() {
         ...nextAvailableDateSections,
         ...moduleEntitlementSections,
         ...guestLedgerSections,
+        ...memberCollisionSweepSections,
       ],
       context,
     );
