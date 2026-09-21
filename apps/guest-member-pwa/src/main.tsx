@@ -441,7 +441,7 @@ function MainDashboard() {
         style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)', fontFamily: 'var(--font-body-organic)' }}
         id="book-court-dashboard-btn"
       >
-        <span>+ New Booking</span>
+        <span>{user?.userType === 'MEMBER' ? '+ Book as Guest' : '+ New Booking'}</span>
       </button>
 
       {/* F-235 Slice E: "My Bookings" -- the mockup's real bookings-list body. Reuses upcomingSlots'
@@ -468,7 +468,7 @@ function MainDashboard() {
           <p className="text-xs" style={{ color: 'var(--color-destructive)' }} id="upcoming-slots-error">{upcomingError}</p>
         ) : upcomingSlots.length === 0 ? (
           <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }} id="upcoming-slots-empty">
-            No pre-scheduled matches today. Tap "+ New Booking" to search for court times.
+            No pre-scheduled matches today. Tap {user?.userType === 'MEMBER' ? '"+ Book as Guest"' : '"+ New Booking"'} to search for court times.
           </p>
         ) : (
           <div className="space-y-2" id="upcoming-slots-list">
