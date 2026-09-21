@@ -3686,6 +3686,61 @@ progress inline — its own register row and full close-out stay deferred to Sli
 original kickoff). Slice B (multi-batch member experience — `resolveTodayMemberAssignment`
 rework, decline route, attendance tabs, reminders) is next.
 
+## Batch 73 — F-133 Slice B (multi-batch member attendance: array resolution, decline, the real RELEASED_NO_SHOW bug fix, reminders)
+
+**Findings:** F-133 — **Open / In progress** (Slice C still ahead; own register row + full close-out
+stay deferred to Slice E, same treatment as Batch 72). No new IDs surfaced this batch.
+**Handed off:** 21 Sep 2026 (Chief Architect thread — F-133 Slice B handover)
+**Status:** landed, independently re-verified against the real remote, and merged.
+**Branch/PR:** `f133-slice-b-multi-batch-attendance` (off `main`@`fdf7d85`, deleted on merge) →
+PR #73, squash-merged as `1f579aa`.
+
+**Real drift note, caught while kicking off Slice C, not at the time**: this batch-log entry
+should have landed in the same close-out pass as the merge, per this project's own standing rule
+(CLAUDE.md item 6) and the F-195/F-220 in-progress-track precedent Batch 72 itself followed --
+it did not, and sat undocumented until Slice C's kickoff flagged the gap against the real file.
+Recorded here, not silently backfilled without a note, matching the F-156-class correction
+precedent.
+
+`resolveTodayMemberAssignment` (`findFirst`) reworked into `resolveAssignmentToday` (shared
+per-assignment logic) + `resolveTodayMemberAssignments` (plural, one entry per ACTIVE assignment
+with a session today) + `resolveOneTodayMemberAssignment` (single, ownership-checked -- 404s
+rather than leaking a foreign `assignmentId`'s existence). `GET /member/today-assignment` now
+returns an array; `POST .../confirm` and the new `POST .../decline` both take `{ assignmentId }`.
+Real bug fix: `/confirm`'s unconditional `RELEASED_NO_SHOW -> 409` removed -- reaching that branch
+already proves `now < cutoffTime`, so a `RELEASED_NO_SHOW` there can now only be a pre-cutoff
+explicit decline, and a member changing their mind back to "coming" before cutoff must be allowed.
+New `POST /member/today-assignment/decline` mirrors confirm's shape, reuses `RELEASED_NO_SHOW`
+with a new `memberAttendanceDeclinedAt` timestamp (zero enum growth), cutoff-gated like confirm
+but deliberately not subscription-gated. Two `slot_release_reminder` dispatches (T-2h, T-1h15m
+before cutoff) added to the sweep, reusing the exact insert-first `ScheduledJobDispatch` dedup
+pattern `low_occupancy_alert` already proved, keyed per assignment+window+offset.
+`guest-member-pwa`: a tab per batch (shown only once a member holds more than one, so the common
+single-batch case renders unchanged), independent `canConfirm`/`canDecline` buttons.
+
+Re-grepped all 13 real call sites in `index.ts` against Slice A's shifted line numbers rather than
+trusting the handover's. Found and fixed a 4th stale comment (the CREATE-assignment route's own
+header still cited the dropped partial index) and three regression files that called
+`POST /confirm` with no body at all -- real additional blast radius not in the original 13, caught
+by re-grepping rather than assuming.
+
+**Evidence:** new `member-multi-batch-attendance.regression.ts` (4 sections): two real concurrent
+batches proven independent via direct DB reads on each window; a foreign `assignmentId` 404s; the
+`RELEASED_NO_SHOW` bug fix demonstrated directly both directions; decline cutoff-gated with zero
+subscription row; both reminder dedup keys present after one sweep, identical count after a second
+back-to-back sweep (real dedup). `slot-engine` 86/86, full cross-service suite 5/5. Live-fire
+against real JBC dev-stack data: two genuine concurrent `ACTIVE` assignments via the live API, a
+real OTP login, a real 2-entry array with distinct `assignmentId`s and independent state -- all
+test data reverted after. **A real CI-only failure, not reproducible locally**, surfaced on this
+PR: a genuine pre-existing time-of-day bug in `member-collision-sweep.regression.ts`'s
+`alignedHourWithinToday` helper (late enough in the UTC day, an 8h+ test offset rounds to exactly
+hour 23, outside the fixture pool's own `00:00`-`23:00` pattern range) -- confirmed via Slice A's
+own clean CI run on this exact unmodified file that it predated this batch, fixed by clamping the
+helper to hour 22, re-verified clean in CI afterward.
+
+**Close-out:** `pnpm register:check` — **255 rows, Open 116 / Resolved 139, no change** (F-133
+stays Open, Plan/Next pointer updated to this entry). Slice C (roster + monthly calendar) is next.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
