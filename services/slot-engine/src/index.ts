@@ -5013,20 +5013,25 @@ async function tryRelocateBooking(
 // a sweep failure -- it's a valid entitled action on its own merits; the sweep is best-effort
 // cleanup layered on top ("member contracts always win" applies to the assignment succeeding,
 // not to every existing collision being auto-resolved).
-async function runMemberCollisionSweep(
-  assignment: { id: string; userId: string; resourcePoolId: string; daysOfWeek: string; startTime: string },
-  pool: { id: string; branchId: string; allocationMode: AllocationMode },
-  logger: { info: (obj: any, msg: string) => void; warn: (obj: any, msg: string) => void },
-): Promise<{ scanned: number; relocated: number; cancelled: number; failed: { bookingId: string; error: string }[] }> {
-  const summary = { scanned: 0, relocated: 0, cancelled: 0, failed: [] as { bookingId: string; error: string }[] };
-
+// F-207.3: the pure-read half of the collision sweep -- extracted verbatim (same iteration,
+// same guards, zero behaviour change) so a preview caller can reuse the exact "which bookings
+// collide" logic without duplicating it (the F-212 windowBookable precedent for this kind of
+// extraction). Deliberately stops here: it never decides relocate-vs-cancel and never probes a
+// sibling pool's real-time availability, both of which are genuinely racy/side-effecting and out
+// of scope for a preview per this session's investigation -- threading a dryRun flag through
+// tryRelocateBooking/cancelBookingCore to simulate those would risk the just-verified F-207.2
+// decision logic for a UI-only feature.
+async function scanCollidingBookings(
+  pool: { id: string; branchId: string },
+  daysOfWeek: string,
+  startTime: string,
+): Promise<{ windowId: string; startTime: Date; activeBookings: any[] }[]> {
   const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: pool.id }, orderBy: { createdAt: 'asc' } });
   const guestOpenWindowDays = rule?.guestOpenWindowDays ?? 7;
   const timeZone = await getBranchTimeZone(pool.branchId);
-  const days = assignment.daysOfWeek.split(',').map((d) => d.trim());
+  const days = daysOfWeek.split(',').map((d) => d.trim());
 
-  const paymentUrl = process.env.PAYMENT_URL || 'http://localhost:3004';
-  const internalKeyHeader = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+  const results: { windowId: string; startTime: Date; activeBookings: any[] }[] = [];
 
   for (let i = 0; i <= guestOpenWindowDays; i++) {
     const candidateInstant = addBranchDays(new Date(), i, timeZone);
@@ -5034,7 +5039,7 @@ async function runMemberCollisionSweep(
 
     let windowStart: Date;
     try {
-      windowStart = branchLocalToUtc(dateString, assignment.startTime, timeZone);
+      windowStart = branchLocalToUtc(dateString, startTime, timeZone);
     } catch {
       continue; // unparseable startTime -- validateAssignmentSchedule already guards this at create time
     }
@@ -5051,6 +5056,30 @@ async function runMemberCollisionSweep(
       where: { windowId: window.id, status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] } },
     });
 
+    results.push({ windowId: window.id, startTime: window.startTime, activeBookings });
+  }
+
+  return results;
+}
+
+async function runMemberCollisionSweep(
+  assignment: { id: string; userId: string; resourcePoolId: string; daysOfWeek: string; startTime: string },
+  pool: { id: string; branchId: string; allocationMode: AllocationMode },
+  logger: { info: (obj: any, msg: string) => void; warn: (obj: any, msg: string) => void },
+): Promise<{ scanned: number; relocated: number; cancelled: number; failed: { bookingId: string; error: string }[] }> {
+  const summary = { scanned: 0, relocated: 0, cancelled: 0, failed: [] as { bookingId: string; error: string }[] };
+
+  const paymentUrl = process.env.PAYMENT_URL || 'http://localhost:3004';
+  const internalKeyHeader = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+  // Needed below for tryRelocateBooking's own sibling-window lookup. A second cheap call rather
+  // than threading it back out of scanCollidingBookings, which stays a plain "which bookings
+  // collide" array shared as-is with the preview route.
+  const timeZone = await getBranchTimeZone(pool.branchId);
+
+  const dateWindows = await scanCollidingBookings(pool, assignment.daysOfWeek, assignment.startTime);
+
+  for (const { windowId, startTime: windowStartTime, activeBookings } of dateWindows) {
+    const window = { id: windowId, startTime: windowStartTime };
     for (const occupant of activeBookings) {
       summary.scanned += 1;
       try {
@@ -5117,6 +5146,34 @@ async function runMemberCollisionSweep(
 
   return summary;
 }
+
+// F-207.3: cheap pre-hoc signal before an admin commits a new assignment -- "this will affect N
+// existing booking(s)" -- reusing scanCollidingBookings' exact "which bookings collide" logic
+// rather than predicting the sweep's relocate-vs-cancel decision, which is out of scope for a
+// preview (see scanCollidingBookings' own comment). Same dual-path auth + entitlement + pool
+// scope as the create route below, write:false since this makes no change.
+server.get('/resource-pools/:id/member-collision-preview', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: false }); // F-206
+
+  const { id } = request.params as any;
+  const { daysOfWeek, startTime } = request.query as any;
+
+  if (!daysOfWeek || !startTime) {
+    reply.status(400);
+    const err = new Error('daysOfWeek and startTime are required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const pool = await requirePoolScope(auth, id, reply);
+
+  const dateWindows = await scanCollidingBookings(pool, daysOfWeek, startTime);
+  const scanned = dateWindows.reduce((sum, dw) => sum + dw.activeBookings.length, 0);
+
+  return { scanned };
+});
 
 server.post('/member-group-assignments', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);

@@ -350,4 +350,54 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       console.log('F-207.2 cancel-path verified: booking cancelled with refundAmount forced to full price even though the cross-service /refunds call itself could not complete here.');
     },
   },
+
+  {
+    name: 'F-207.3: GET .../member-collision-preview reports the real scan count -- 0 with no collision, matches the real occupant count with one, unaffected by relocate/cancel decisions',
+    async run() {
+      const pool = await makePool('Preview Pool', 1);
+      const windowStart = alignedHourWithinToday(9 * 60);
+      const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
+      await db.availabilityWindow.create({ data: { resourcePoolId: pool.id, startTime: windowStart, endTime: windowEnd, capacity: 1 } });
+      const startTimeStr = windowStart.toISOString().slice(11, 16);
+      const days = todayIsoWeekday();
+
+      const beforeRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/member-collision-preview?daysOfWeek=${days}&startTime=${startTimeStr}`, {
+        headers: { Authorization: `Bearer ${internalKey}` },
+      });
+      const before = ((await beforeRes.json()) as any).data;
+      if (beforeRes.status !== 200 || before.scanned !== 0) {
+        throw new Error(`F-207.3 preview: expected 200 scanned:0 before any booking exists, got ${beforeRes.status} ${JSON.stringify(before)}`);
+      }
+
+      const guestBookRes = await fetch(`${baseUrl}/bookings`, {
+        method: 'POST',
+        headers: bookingHeaders('f207-3-preview-guest', 'f207-3-preview-key'),
+        body: JSON.stringify({ branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: (await db.availabilityWindow.findFirst({ where: { resourcePoolId: pool.id, startTime: windowStart } }))!.id }),
+      });
+      if (guestBookRes.status !== 201) {
+        throw new Error(`F-207.3 preview setup: expected guest booking 201, got ${guestBookRes.status}`);
+      }
+
+      const afterRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/member-collision-preview?daysOfWeek=${days}&startTime=${startTimeStr}`, {
+        headers: { Authorization: `Bearer ${internalKey}` },
+      });
+      const after = ((await afterRes.json()) as any).data;
+      if (afterRes.status !== 200 || after.scanned !== 1) {
+        throw new Error(`F-207.3 preview: expected 200 scanned:1 with one real occupant, got ${afterRes.status} ${JSON.stringify(after)}`);
+      }
+
+      // Real assignment creation must still report the SAME scanned count via the real sweep --
+      // the preview and the real sweep must agree, since both are built on scanCollidingBookings.
+      const assignRes = await fetch(`${baseUrl}/member-group-assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({ userId: 'f207-3-preview-member', resourcePoolId: pool.id, daysOfWeek: days, startTime: startTimeStr }),
+      });
+      const assignBody = ((await assignRes.json()) as any).data;
+      if (assignBody.collisionSweep?.scanned !== after.scanned) {
+        throw new Error(`F-207.3 preview: expected the real sweep's scanned count (${assignBody.collisionSweep?.scanned}) to match the preview's (${after.scanned})`);
+      }
+      console.log('F-207.3 preview verified: 0 before, matches real occupant count after, and agrees with the real sweep\'s own scanned count.');
+    },
+  },
 ];
