@@ -264,6 +264,7 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
         },
       });
 
+      const assignmentByUser: Record<string, { id: string }> = {};
       for (const userId of [CONFIRMED_USER, SILENT_USER]) {
         await db.user.create({
           data: {
@@ -275,7 +276,7 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
         await db.subscription.create({
           data: { userId, tenantId: TENANT_ID, mandateId: `f022-${userId}`, amount: 100000, frequency: 'monthly', status: 'active' },
         });
-        await db.memberGroupAssignment.create({
+        assignmentByUser[userId] = await db.memberGroupAssignment.create({
           data: { userId, resourcePoolId: POOL, daysOfWeek: isoWeekday, startTime, status: 'ACTIVE', ...defaultTermDates() },
         });
       }
@@ -291,11 +292,15 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
       });
 
       // --- The real confirm, through the real endpoint with a real member JWT.
-      //     No Content-Type header: this endpoint takes no body, and declaring JSON with an
-      //     empty body is rejected by Fastify before the handler is ever reached. ---
+      // F-133 Slice B: now takes { assignmentId } -- the caller may hold more than one
+      // concurrent ACTIVE assignment, so a body is required (unlike the pre-Slice-B route).
       const confirmRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${signJwt({ userId: CONFIRMED_USER, tenantId: TENANT_ID, userType: 'MEMBER', roles: [] })}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${signJwt({ userId: CONFIRMED_USER, tenantId: TENANT_ID, userType: 'MEMBER', roles: [] })}`,
+        },
+        body: JSON.stringify({ assignmentId: assignmentByUser[CONFIRMED_USER].id }),
       });
       if (confirmRes.status !== 200 && confirmRes.status !== 201) {
         throw new Error(`Member confirm must succeed before the cutoff, got ${confirmRes.status} ${await confirmRes.text()}`);

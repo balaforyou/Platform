@@ -75,7 +75,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           status: 'active',
         },
       });
-      await db.memberGroupAssignment.create({
+      const memberSelfAssignment = await db.memberGroupAssignment.create({
         data: {
           userId: memberSelfUserId,
           resourcePoolId: memberPool.id,
@@ -100,18 +100,21 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
       const guestToken = signJwt({ userId: 'guest-self-confirm-001', tenantId: memberTenant, userType: 'GUEST', roles: [] });
       const memberHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${memberToken}` };
 
+      // F-133 Slice B: GET now returns an array, one entry per ACTIVE assignment with a
+      // session today -- this member has exactly one, so it's the array's only entry.
       const todayRes = await fetch(`${baseUrl}/member/today-assignment`, { headers: memberHeaders });
-      const todayBody = ((await todayRes.json()) as any).data;
-      console.log('MEMBER_CONFIRM_EVIDENCE today_success', JSON.stringify({ status: todayRes.status, body: todayBody }));
-      if (todayRes.status !== 200 || todayBody.state !== 'HAS_SESSION' || !todayBody.canConfirm) {
-        throw new Error(`Expected HAS_SESSION/canConfirm, got ${todayRes.status} ${JSON.stringify(todayBody)}`);
+      const todayList = ((await todayRes.json()) as any).data;
+      const todayBody = Array.isArray(todayList) ? todayList.find((s: any) => s.assignmentId === memberSelfAssignment.id) : undefined;
+      console.log('MEMBER_CONFIRM_EVIDENCE today_success', JSON.stringify({ status: todayRes.status, body: todayList }));
+      if (todayRes.status !== 200 || !todayBody || todayBody.state !== 'HAS_SESSION' || !todayBody.canConfirm) {
+        throw new Error(`Expected HAS_SESSION/canConfirm, got ${todayRes.status} ${JSON.stringify(todayList)}`);
       }
 
       const guestConfirm = await inspect(
         await fetch(`${baseUrl}/member/today-assignment/confirm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${guestToken}` },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ assignmentId: memberSelfAssignment.id }),
         }),
       );
       console.log(
@@ -120,11 +123,13 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
       );
       await expectForbidden(guestConfirm, 'guest attempting member attendance confirm');
 
-      // TRUST BOUNDARY: body carries someone else's userId — it must be ignored.
+      // TRUST BOUNDARY: body carries someone else's userId — it must be ignored (only
+      // assignmentId, ownership-checked server-side against the caller's own JWT, decides
+      // which assignment is acted on).
       const confirmRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
         method: 'POST',
         headers: memberHeaders,
-        body: JSON.stringify({ userId: otherMemberUserId }),
+        body: JSON.stringify({ userId: otherMemberUserId, assignmentId: memberSelfAssignment.id }),
       });
       const confirmBody = ((await confirmRes.json()) as any).data;
       console.log(
@@ -181,7 +186,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
 
       // SUBSCRIPTION INACTIVE → 409.
       const inactiveUserId = 'member-self-confirm-inactive';
-      await db.memberGroupAssignment.create({
+      const inactiveAssignment = await db.memberGroupAssignment.create({
         data: {
           userId: inactiveUserId,
           resourcePoolId: memberPool.id,
@@ -204,7 +209,8 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
       const inactiveToken = signJwt({ userId: inactiveUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
       const inactiveRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${inactiveToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${inactiveToken}` },
+        body: JSON.stringify({ assignmentId: inactiveAssignment.id }),
       });
       console.log(
         'MEMBER_CONFIRM_EVIDENCE subscription_inactive',
@@ -257,7 +263,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           status: 'active',
         },
       });
-      await db.memberGroupAssignment.create({
+      const cutoffAssignment = await db.memberGroupAssignment.create({
         data: {
           userId: cutoffUserId,
           resourcePoolId: cutoffPool.id,
@@ -270,7 +276,8 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
       const cutoffToken = signJwt({ userId: cutoffUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
       const cutoffRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${cutoffToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cutoffToken}` },
+        body: JSON.stringify({ assignmentId: cutoffAssignment.id }),
       });
       console.log(
         'MEMBER_CONFIRM_EVIDENCE cutoff_passed',
@@ -293,7 +300,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           status: 'active',
         },
       });
-      await db.memberGroupAssignment.create({
+      const raceAssignment = await db.memberGroupAssignment.create({
         data: {
           userId: raceUserId,
           resourcePoolId: memberPool.id,
@@ -304,10 +311,11 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
         },
       });
       const raceToken = signJwt({ userId: raceUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
-      const raceHeaders = { Authorization: `Bearer ${raceToken}` };
+      const raceHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${raceToken}` };
+      const raceBody = JSON.stringify({ assignmentId: raceAssignment.id });
       const [memberRaceRes1, memberRaceRes2] = await Promise.all([
-        fetch(`${baseUrl}/member/today-assignment/confirm`, { method: 'POST', headers: raceHeaders }),
-        fetch(`${baseUrl}/member/today-assignment/confirm`, { method: 'POST', headers: raceHeaders }),
+        fetch(`${baseUrl}/member/today-assignment/confirm`, { method: 'POST', headers: raceHeaders, body: raceBody }),
+        fetch(`${baseUrl}/member/today-assignment/confirm`, { method: 'POST', headers: raceHeaders, body: raceBody }),
       ]);
       const memberRaceBody1 = ((await memberRaceRes1.json()) as any).data;
       const memberRaceBody2 = ((await memberRaceRes2.json()) as any).data;

@@ -1664,11 +1664,15 @@ const resolvePrice = (
   return { price, source };
 };
 
+// F-133 Slice B: per-assignment now, not platform-singular -- a member may hold more than one
+// ACTIVE MemberGroupAssignment concurrently since Slice A dropped the one-active-per-member
+// index. NO_ACTIVE_ASSIGNMENT is no longer a resolution state here: "no assignments at all" is
+// an empty array from resolveTodayMemberAssignments, and "this specific assignmentId isn't the
+// caller's active one" is resolveOneTodayMemberAssignment returning null (404 at the route).
 type TodayAssignmentResolution =
-  | { state: 'NO_ACTIVE_ASSIGNMENT'; weekday: string }
-  | { state: 'NO_SESSION_TODAY'; weekday: string; assignment: any }
-  | { state: 'WINDOW_NOT_FOUND'; weekday: string; assignment: any }
-  | { state: 'HAS_SESSION'; weekday: string; assignment: any; window: any; existingBooking: any | null; rule: any | null; cutoffTime: Date };
+  | { state: 'NO_SESSION_TODAY'; assignmentId: string; weekday: string; assignment: any }
+  | { state: 'WINDOW_NOT_FOUND'; assignmentId: string; weekday: string; assignment: any }
+  | { state: 'HAS_SESSION'; assignmentId: string; weekday: string; assignment: any; window: any; existingBooking: any | null; rule: any | null; cutoffTime: Date };
 
 // F-066: "today" and "this weekday" are properties of the BRANCH, not of the server.
 // These previously disagreed with each other — the date came from UTC and the weekday from
@@ -1740,31 +1744,17 @@ async function getActiveSubscription(userId: string, tenantId: string) {
   });
 }
 
-async function resolveTodayMemberAssignment(userId: string, tenantId: string, now: Date): Promise<TodayAssignmentResolution> {
-  // F-066: the assignment lookup is not date-dependent, so it runs FIRST — the weekday
-  // cannot be computed until we know which branch's clock to read. Only the
-  // NO_ACTIVE_ASSIGNMENT case has no branch to consult, and it reports UTC.
-  const assignment = await prisma.memberGroupAssignment.findFirst({
-    where: {
-      userId,
-      status: 'ACTIVE',
-      resourcePool: { tenantId },
-    },
-    include: {
-      resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } },
-    },
-  });
-
-  if (!assignment) {
-    return { state: 'NO_ACTIVE_ASSIGNMENT', weekday: branchIsoWeekday(now, DEFAULT_TIME_ZONE) };
-  }
-
+// F-133 Slice B: the real per-assignment resolution logic, unchanged from the pre-Slice-B
+// single-assignment version below it -- factored out so both the "list everything for today"
+// path (GET) and the "resolve exactly one, ownership-checked" path (confirm/decline) share one
+// implementation rather than two copies that could drift.
+async function resolveAssignmentToday(assignment: any, now: Date): Promise<TodayAssignmentResolution> {
   const timeZone = await getBranchTimeZone(assignment.resourcePool.branchId);
   const weekday = isoWeekday(now, timeZone);
 
   const days = assignment.daysOfWeek.split(',').map((d: string) => d.trim());
   if (!days.includes(weekday)) {
-    return { state: 'NO_SESSION_TODAY', weekday, assignment };
+    return { state: 'NO_SESSION_TODAY', assignmentId: assignment.id, weekday, assignment };
   }
 
   // F-066: `startTime` is documented as branch local time in the schema, and is now read
@@ -1780,7 +1770,7 @@ async function resolveTodayMemberAssignment(userId: string, tenantId: string, no
       `[memberView] assignment ${assignment.id}: unusable startTime ` +
         `${JSON.stringify(assignment.startTime)} — ${err.message}`,
     );
-    return { state: 'WINDOW_NOT_FOUND', weekday, assignment };
+    return { state: 'WINDOW_NOT_FOUND', assignmentId: assignment.id, weekday, assignment };
   }
   // F-170: exact match, no tolerance — see the note on the admin attendance path.
   const matchingWindow = await prisma.availabilityWindow.findFirst({
@@ -1789,7 +1779,7 @@ async function resolveTodayMemberAssignment(userId: string, tenantId: string, no
       startTime: windowStart,
     },
   });
-  if (!matchingWindow) return { state: 'WINDOW_NOT_FOUND', weekday, assignment };
+  if (!matchingWindow) return { state: 'WINDOW_NOT_FOUND', assignmentId: assignment.id, weekday, assignment };
 
   const existingBooking = await prisma.booking.findFirst({
     where: {
@@ -1804,6 +1794,7 @@ async function resolveTodayMemberAssignment(userId: string, tenantId: string, no
 
   return {
     state: 'HAS_SESSION',
+    assignmentId: assignment.id,
     weekday,
     assignment,
     window: matchingWindow,
@@ -1813,12 +1804,52 @@ async function resolveTodayMemberAssignment(userId: string, tenantId: string, no
   };
 }
 
+const MEMBER_ASSIGNMENT_INCLUDE = {
+  resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' as const } } } },
+};
+
+// F-133 Slice B: one resolution per active assignment with a session today -- a member with two
+// concurrent batches gets two entries, each independently confirmable/declinable. Replaces the
+// old findFirst-based singular resolveTodayMemberAssignment.
+async function resolveTodayMemberAssignments(userId: string, tenantId: string, now: Date): Promise<TodayAssignmentResolution[]> {
+  const assignments = await prisma.memberGroupAssignment.findMany({
+    where: { userId, status: 'ACTIVE', resourcePool: { tenantId } },
+    include: MEMBER_ASSIGNMENT_INCLUDE,
+    orderBy: { createdAt: 'asc' },
+  });
+  const results: TodayAssignmentResolution[] = [];
+  for (const assignment of assignments) {
+    results.push(await resolveAssignmentToday(assignment, now));
+  }
+  return results;
+}
+
+// F-133 Slice B: resolves exactly one assignment by id, scoped to the caller (userId + tenantId)
+// so confirm/decline can never act on someone else's assignment -- the same real-ownership check
+// as requireBookingAccess elsewhere in this file, not a client-trusted id alone. Returns null
+// when the id doesn't exist, isn't ACTIVE, or doesn't belong to this caller -- the route turns
+// that into a 404, never a 403, to avoid confirming another user's assignment id even exists.
+async function resolveOneTodayMemberAssignment(
+  userId: string,
+  tenantId: string,
+  assignmentId: string,
+  now: Date,
+): Promise<TodayAssignmentResolution | null> {
+  const assignment = await prisma.memberGroupAssignment.findFirst({
+    where: { id: assignmentId, userId, status: 'ACTIVE', resourcePool: { tenantId } },
+    include: MEMBER_ASSIGNMENT_INCLUDE,
+  });
+  if (!assignment) return null;
+  return resolveAssignmentToday(assignment, now);
+}
+
 async function ensureTodayMemberBooking({
   assignment,
   matchingWindow,
   now,
   status,
   attendanceConfirmedAt,
+  attendanceDeclinedAt = null,
   timeZone,
 }: {
   assignment: any;
@@ -1826,6 +1857,9 @@ async function ensureTodayMemberBooking({
   now: Date;
   status: BookingStatus;
   attendanceConfirmedAt: Date | null;
+  // F-133 Slice B: the explicit-decline counterpart to attendanceConfirmedAt. Optional/defaults
+  // null so every pre-existing caller (member confirm, the sweep's release) is unaffected.
+  attendanceDeclinedAt?: Date | null;
   timeZone: string;
 }) {
   // F-066: the key embeds the calendar date, which is now the BRANCH's date. Under a UTC
@@ -1889,6 +1923,7 @@ async function ensureTodayMemberBooking({
           idempotencyKey: key,
           isMemberBooking: true,
           memberAttendanceConfirmedAt: attendanceConfirmedAt,
+          memberAttendanceDeclinedAt: attendanceDeclinedAt,
           refundAmount: null,
           price: resolvedPrice,
         },
@@ -4811,51 +4846,71 @@ async function requireMemberJwt(request: any, reply: any) {
   return { userId: claims.userId, tenantId: claims.tenantId };
 }
 
+// F-133 Slice B: canConfirm/canDecline now account for a RELEASED_NO_SHOW booking that came from
+// an explicit pre-cutoff decline (previously the only way to reach RELEASED_NO_SHOW was the
+// sweep, always post-cutoff, so `!booking` was a sufficient canConfirm gate). A declined-but-
+// still-before-cutoff booking must still show canConfirm: true (the real bug fix's UI half) and
+// canDecline: false (already declined); a confirmed one is the mirror -- canConfirm: false,
+// canDecline: true (still changeable before cutoff).
 function shapeTodayAssignment(resolution: TodayAssignmentResolution, subscriptionStatus?: string) {
   if (resolution.state !== 'HAS_SESSION') return resolution;
   const booking = resolution.existingBooking;
+  const notYetCutoff = new Date() < resolution.cutoffTime;
+  const isConfirmed = !!booking && booking.status === BookingStatus.CONFIRMED && !!booking.memberAttendanceConfirmedAt;
+  const isDeclined = !!booking && booking.status === BookingStatus.RELEASED_NO_SHOW;
   return {
     state: subscriptionStatus && subscriptionStatus !== 'active' ? 'SUBSCRIPTION_INACTIVE' : 'HAS_SESSION',
+    assignmentId: resolution.assignmentId,
     weekday: resolution.weekday,
     assignment: resolution.assignment,
     window: resolution.window,
     booking,
     cutoffTime: resolution.cutoffTime,
-    canConfirm: !booking && !subscriptionStatus && new Date() < resolution.cutoffTime,
+    canConfirm: !subscriptionStatus && notYetCutoff && !isConfirmed,
+    canDecline: notYetCutoff && !isDeclined,
     reason: booking ? booking.status : undefined,
   };
 }
 
-// GET /member/today-assignment — member dashboard state for today's recurring slot.
+// GET /member/today-assignment — member dashboard state for EVERY active batch's today's
+// recurring slot (F-133 Slice B: array, one entry per ACTIVE assignment with a session today;
+// an assignment with none today is still included, in its NO_SESSION_TODAY/WINDOW_NOT_FOUND
+// shape -- the frontend's tab bar needs to know about every batch, not just ones with a session).
+// A member with zero ACTIVE assignments gets an empty array.
 // WHY: The dashboard needs deliberate states for no-session, inactive subscription,
 // and missing-window cases instead of silently hiding the member attendance card.
 server.get('/member/today-assignment', async (request, reply) => {
   const { userId, tenantId } = await requireMemberJwt(request, reply);
   const now = new Date();
-  const resolution = await resolveTodayMemberAssignment(userId, tenantId, now);
-  if (resolution.state !== 'HAS_SESSION') return resolution;
-
+  const resolutions = await resolveTodayMemberAssignments(userId, tenantId, now);
   const activeSubscription = await getActiveSubscription(userId, tenantId);
-  if (!activeSubscription) {
-    return shapeTodayAssignment(resolution, 'inactive');
-  }
 
-  return {
-    ...shapeTodayAssignment(resolution),
-    subscriptionStatus: activeSubscription.status,
-  };
+  return resolutions.map((resolution) => {
+    if (resolution.state !== 'HAS_SESSION') return resolution;
+    if (!activeSubscription) return shapeTodayAssignment(resolution, 'inactive');
+    return {
+      ...shapeTodayAssignment(resolution),
+      subscriptionStatus: activeSubscription.status,
+    };
+  });
 });
 
-// POST /member/today-assignment/confirm — creates today's member booking via the
-// same atomic lazy-generation helper used by the grace-period sweep.
-server.post('/member/today-assignment/confirm', async (request, reply) => {
-  const { userId, tenantId } = await requireMemberJwt(request, reply);
-  const now = new Date();
-  const resolution = await resolveTodayMemberAssignment(userId, tenantId, now);
+// Shared body/lookup for confirm+decline: both act on one caller-owned assignmentId, both 404 on
+// an unknown/foreign/inactive one, both share the NO_SESSION_TODAY/WINDOW_NOT_FOUND handling.
+async function requireOwnedTodayAssignment(request: any, reply: any, userId: string, tenantId: string, now: Date) {
+  const { assignmentId } = (request.body as any) ?? {};
+  if (!assignmentId) {
+    reply.status(400);
+    const err = new Error('assignmentId is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
 
-  if (resolution.state === 'NO_ACTIVE_ASSIGNMENT') {
+  const resolution = await resolveOneTodayMemberAssignment(userId, tenantId, assignmentId, now);
+  if (!resolution) {
     reply.status(404);
-    const err = new Error('No active member assignment');
+    const err = new Error('No active member assignment with that id');
     (err as any).statusCode = 404;
     (err as any).code = 'NO_ACTIVE_ASSIGNMENT';
     throw err;
@@ -4874,6 +4929,17 @@ server.post('/member/today-assignment/confirm', async (request, reply) => {
     (err as any).code = 'WINDOW_NOT_FOUND';
     throw err;
   }
+  return resolution;
+}
+
+// POST /member/today-assignment/confirm — creates today's member booking via the
+// same atomic lazy-generation helper used by the grace-period sweep.
+// F-133 Slice B: now takes { assignmentId } in the body -- one of possibly several concurrent
+// ACTIVE assignments, resolved and ownership-checked by requireOwnedTodayAssignment.
+server.post('/member/today-assignment/confirm', async (request, reply) => {
+  const { userId, tenantId } = await requireMemberJwt(request, reply);
+  const now = new Date();
+  const resolution = await requireOwnedTodayAssignment(request, reply, userId, tenantId, now);
 
   const activeSubscription = await getActiveSubscription(userId, tenantId);
   if (!activeSubscription) {
@@ -4893,20 +4959,20 @@ server.post('/member/today-assignment/confirm', async (request, reply) => {
   }
 
   if (resolution.existingBooking) {
-    if (resolution.existingBooking.status === BookingStatus.RELEASED_NO_SHOW) {
-      reply.status(409);
-      const err = new Error('Confirmation cutoff has passed');
-      (err as any).statusCode = 409;
-      (err as any).code = 'CONFIRMATION_CUTOFF_PASSED';
-      throw err;
-    }
-    if (!resolution.existingBooking.memberAttendanceConfirmedAt) {
-      return prisma.booking.update({
-        where: { id: resolution.existingBooking.id },
-        data: { memberAttendanceConfirmedAt: now },
-      });
-    }
-    return resolution.existingBooking;
+    // F-133 Slice B real bug fix: a RELEASED_NO_SHOW booking used to 409 here unconditionally,
+    // which was correct ONLY because nothing but the post-cutoff sweep could ever produce that
+    // status -- reaching this line already proves now < cutoffTime, so a RELEASED_NO_SHOW here
+    // can now ONLY be a pre-cutoff explicit decline (the new /decline route below), and a member
+    // changing their mind back to "coming" before cutoff must be allowed, not blocked.
+    const alreadyConfirmed =
+      resolution.existingBooking.status === BookingStatus.CONFIRMED &&
+      !!resolution.existingBooking.memberAttendanceConfirmedAt;
+    if (alreadyConfirmed) return resolution.existingBooking;
+
+    return prisma.booking.update({
+      where: { id: resolution.existingBooking.id },
+      data: { status: BookingStatus.CONFIRMED, memberAttendanceConfirmedAt: now, memberAttendanceDeclinedAt: null },
+    });
   }
 
   const ensured = await ensureTodayMemberBooking({
@@ -4921,14 +4987,68 @@ server.post('/member/today-assignment/confirm', async (request, reply) => {
   return ensured.booking;
 });
 
+// POST /member/today-assignment/decline — F-133 Slice B: the real explicit "not attending"
+// action, confirmed absent anywhere in this file before this (zero matches for decline/
+// not-attending/opt-out). A new route rather than a flag on /confirm, matching this file's own
+// convention of one route per real state transition (/confirm, /check-in, /cancel are all
+// separate siblings, not one polymorphic route) -- and /confirm's body is empty today, so a flag
+// would be new surface on an established route rather than a natural extension of it.
+//
+// Reuses RELEASED_NO_SHOW (zero BookingStatus enum growth, all existing downstream capacity/
+// occupancy handling already treats it as "seat free") with the new memberAttendanceDeclinedAt
+// timestamp distinguishing an explicit decline from a sweep-triggered no-show for display only --
+// same shape as memberAttendanceConfirmedAt.
+//
+// Deliberately NOT subscription-gated (unlike /confirm): a member with a lapsed subscription
+// can't get a CONFIRMED booking either way, but "I'm not coming" carries no billing implication
+// and is exactly the signal admin/roster needs from a lapsed member -- gating it would silently
+// suppress real attendance data for no real reason.
+server.post('/member/today-assignment/decline', async (request, reply) => {
+  const { userId, tenantId } = await requireMemberJwt(request, reply);
+  const now = new Date();
+  const resolution = await requireOwnedTodayAssignment(request, reply, userId, tenantId, now);
+
+  if (now >= resolution.cutoffTime) {
+    reply.status(409);
+    const err = new Error('Cutoff has passed');
+    (err as any).statusCode = 409;
+    (err as any).code = 'CONFIRMATION_CUTOFF_PASSED';
+    throw err;
+  }
+
+  if (resolution.existingBooking) {
+    const alreadyDeclined = resolution.existingBooking.status === BookingStatus.RELEASED_NO_SHOW;
+    if (alreadyDeclined) return resolution.existingBooking;
+
+    return prisma.booking.update({
+      where: { id: resolution.existingBooking.id },
+      data: { status: BookingStatus.RELEASED_NO_SHOW, memberAttendanceDeclinedAt: now, memberAttendanceConfirmedAt: null },
+    });
+  }
+
+  const ensured = await ensureTodayMemberBooking({
+    assignment: resolution.assignment,
+    matchingWindow: resolution.window,
+    now,
+    timeZone: await getBranchTimeZone(resolution.assignment.resourcePool.branchId),
+    status: BookingStatus.RELEASED_NO_SHOW,
+    attendanceConfirmedAt: null,
+    attendanceDeclinedAt: now,
+  });
+  reply.status(ensured.created ? 201 : 200);
+  return ensured.booking;
+});
+
 // ---------------------------------------------------------------------------
 // Member Group Assignments
 // ---------------------------------------------------------------------------
 
 // Create a member group assignment (admin-only).
 // WHY: Dual-path auth — internal key OR owner/branch-manager JWT.
-// The partial unique index on (userId) WHERE status = 'ACTIVE' enforces the
-// one-active-slot-per-member Basic-tier rule at DB level; P2002 is the enforcement signal.
+// F-133: the partial unique index on (userId) WHERE status = 'ACTIVE' that used to enforce
+// one-active-slot-per-member platform-wide is gone -- a member may hold one ACTIVE row per
+// batch now (F-133 Slice A). P2002 here is only the surviving @@unique([userId, resourcePoolId])
+// firing on a same-pool double assignment.
 // F-207.1: months added per term preset. termPreset itself is never persisted -- only the
 // computed startDate/endDate -- so a later renewal can use a different preset than the
 // original term without reconciling a stored "original preset" value.
@@ -5506,10 +5626,12 @@ server.post('/bookings/sweep', async (request, reply) => {
   // F-065: the former step 2 — a scan for member bookings CONFIRMED with attendance still
   // null, released at gracePeriodMinutes — was UNREACHABLE and has been removed.
   // ensureTodayMemberBooking is the only producer of isMemberBooking: true (every other
-  // write sets it false explicitly), and its two call sites are member confirm, which
+  // write sets it false explicitly). F-133 Slice B added a third call site (member decline,
+  // POST /member/today-assignment/decline) alongside the original two -- member confirm, which
   // always sets memberAttendanceConfirmedAt, and the sweep below, which always writes
-  // RELEASED_NO_SHOW. Member bookings are never created HELD, so the HELD -> CONFIRMED
-  // route cannot reach them either. No row could satisfy all three conditions.
+  // RELEASED_NO_SHOW with no attendanceDeclinedAt (decline is the only caller that sets it).
+  // Member bookings are never created HELD, so the HELD -> CONFIRMED route cannot reach them
+  // either. No row could satisfy all three original conditions.
   // Member release is now step 2 below, driven by the SAME gracePeriodMinutes the member
   // is shown and confirm enforces — which is the whole point of F-065.
 
@@ -5587,9 +5709,67 @@ server.post('/bookings/sweep', async (request, reply) => {
       },
     });
     const rule = assignment.resourcePool.bookingRules[0];
+    const graceMinutesForCutoff = rule?.gracePeriodMinutes ?? 30;
+    const cutoffTime = new Date(matchingWindow.startTime.getTime() - graceMinutesForCutoff * 60 * 1000);
 
-    // 2. MEMBER RELEASE — gracePeriodMinutes.
-    // F-065: this is the exact value the member is shown (resolveTodayMemberAssignment) and
+    // 2. ATTENDANCE REMINDERS — F-133 Slice B: T-2h and T-1h15m before the cutoff, reusing
+    // slot_release_reminder (services/notification/src/index.ts, already dual-channel push+SMS,
+    // already regression-covered, never dispatched until now). Only fires while no action has
+    // been taken yet (!existingBooking) -- a member who already confirmed or declined doesn't
+    // need reminding. Same insert-first dedup pattern as the low-occupancy alert below (step 4),
+    // against the same @@unique([jobName, dedupKey]) on ScheduledJobDispatch -- but keyed per
+    // assignment+window+offset (`${assignmentId}:${windowId}:2h`/`:75m`), not per pool, since
+    // this targets one member, not the whole pool.
+    if (!existingBooking) {
+      const reminderOffsets: { label: '2h' | '75m'; minutesBefore: number }[] = [
+        { label: '2h', minutesBefore: 120 },
+        { label: '75m', minutesBefore: 75 },
+      ];
+      for (const { label, minutesBefore } of reminderOffsets) {
+        const reminderTime = new Date(cutoffTime.getTime() - minutesBefore * 60 * 1000);
+        if (now < reminderTime || now >= cutoffTime) continue;
+
+        try {
+          await prisma.scheduledJobDispatch.create({
+            data: {
+              jobName: 'slot_release_reminder',
+              tenantId: assignment.resourcePool.tenantId,
+              subjectId: assignment.userId,
+              dedupKey: `${assignment.id}:${matchingWindow.id}:${label}`,
+              status: 'SENT',
+              occurrenceAt: matchingWindow.startTime,
+              dispatchedAt: new Date(),
+            },
+          });
+        } catch (err: any) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+            continue; // already reminded for this assignment + window + offset
+          }
+          throw err;
+        }
+        try {
+          await fetch(`${notificationUrl}/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+            body: JSON.stringify({
+              tenantId: assignment.resourcePool.tenantId,
+              recipient: assignment.userId,
+              event_type: 'slot_release_reminder',
+              variables: {
+                poolName: assignment.resourcePool.name,
+                cutoffTime: cutoffTime.toISOString(),
+                windowStart: matchingWindow.startTime.toISOString(),
+              },
+            }),
+          });
+        } catch (e) {
+          // Non-blocking, same posture as low_occupancy_alert below.
+        }
+      }
+    }
+
+    // 3. MEMBER RELEASE — gracePeriodMinutes.
+    // F-065: this is the exact value the member is shown (their own today-assignment view) and
     // that confirm enforces. It previously read guestAccessCutoffMinutes, so a member was
     // locked out 90 minutes before the deadline still on their screen, and confirm then
     // rejected them with CONFIRMATION_CUTOFF_PASSED. The moment a member can no longer
@@ -5638,7 +5818,7 @@ server.post('/bookings/sweep', async (request, reply) => {
       }
     }
 
-    // 3. LOW-OCCUPANCY ALERT — guestAccessCutoffMinutes, unchanged.
+    // 4. LOW-OCCUPANCY ALERT — guestAccessCutoffMinutes, unchanged.
     // F-065: this is why guestAccessCutoffMinutes is NOT vestigial. It governs how much
     // lead time an admin gets to sell a freed slot to guests, which is a different question
     // from when a member loses their seat. Collapsing the two onto gracePeriodMinutes would

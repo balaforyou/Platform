@@ -175,29 +175,43 @@ function MainDashboard() {
   const { tenant } = useTenant();
   const { user, accessToken } = useAuth();
   const navigate = useNavigate();
-  const [memberSession, setMemberSession] = useState<any | null>(null);
+  // F-133 Slice B: a member may hold more than one ACTIVE batch concurrently (Slice A dropped
+  // the one-active-assignment constraint) -- today-assignment now returns one entry per batch.
+  // activeAssignmentId is the tab bar's selection; memberSession (derived below) is whichever
+  // entry it currently points at, so every existing render below reads the exact same shape as
+  // before the array rework.
+  const [memberSessions, setMemberSessions] = useState<any[]>([]);
+  const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(null);
   const [memberSessionLoading, setMemberSessionLoading] = useState(false);
   const [memberSessionError, setMemberSessionError] = useState<string | null>(null);
   const [confirmingAttendance, setConfirmingAttendance] = useState(false);
+  const [decliningAttendance, setDecliningAttendance] = useState(false);
   const [upcoming, setUpcoming] = useState<any[]>([]);
   const [upcomingLoading, setUpcomingLoading] = useState(false);
   const [upcomingError, setUpcomingError] = useState<string | null>(null);
   // F-234: the member-session card's branch (single-fetch shape, mirroring
-  // BookingConfirmation.tsx/BookingPay.tsx — a member has exactly one active assignment/branch).
+  // BookingConfirmation.tsx/BookingPay.tsx — one fetch per the CURRENTLY SELECTED batch/tab).
   const [memberSessionBranchAbout, setMemberSessionBranchAbout] = useState<any>(null);
   // F-234: the upcoming-slots card can span more than one branch, so this needs the dedup-map
   // shape (mirroring BookingHistory.tsx's branchAboutById exactly) rather than a single fetch.
   const [branchAboutById, setBranchAboutById] = useState<Record<string, any>>({});
+
+  const memberSession = memberSessions.find((s) => s?.assignmentId === activeAssignmentId) ?? null;
 
   const loadMemberSession = async () => {
     if (user?.userType !== 'MEMBER' || !accessToken) return;
     try {
       setMemberSessionLoading(true);
       setMemberSessionError(null);
-      const res = await apiRequest('/slot-engine/member/today-assignment', {
+      const res = await apiRequest<any[]>('/slot-engine/member/today-assignment', {
         token: accessToken,
       });
-      setMemberSession(res);
+      const sessions = Array.isArray(res) ? res : [];
+      setMemberSessions(sessions);
+      // Keep the current tab selected if it still exists; otherwise default to the first batch.
+      setActiveAssignmentId((prev) =>
+        prev && sessions.some((s) => s?.assignmentId === prev) ? prev : (sessions[0]?.assignmentId ?? null),
+      );
     } catch (err: any) {
       setMemberSessionError(err.message || 'Unable to load today\'s member session.');
     } finally {
@@ -313,12 +327,14 @@ function MainDashboard() {
   };
 
   const handleConfirmAttendance = async () => {
+    if (!activeAssignmentId) return;
     try {
       setConfirmingAttendance(true);
       setMemberSessionError(null);
       await apiRequest('/slot-engine/member/today-assignment/confirm', {
         method: 'POST',
         token: accessToken,
+        body: JSON.stringify({ assignmentId: activeAssignmentId }),
       });
       await loadMemberSession();
     } catch (err: any) {
@@ -329,6 +345,27 @@ function MainDashboard() {
     }
   };
 
+  // F-133 Slice B: the real explicit "not attending" action -- mirrors handleConfirmAttendance
+  // exactly, same assignmentId-scoped POST, same reload-on-settle behaviour either way.
+  const handleDeclineAttendance = async () => {
+    if (!activeAssignmentId) return;
+    try {
+      setDecliningAttendance(true);
+      setMemberSessionError(null);
+      await apiRequest('/slot-engine/member/today-assignment/decline', {
+        method: 'POST',
+        token: accessToken,
+        body: JSON.stringify({ assignmentId: activeAssignmentId }),
+      });
+      await loadMemberSession();
+    } catch (err: any) {
+      setMemberSessionError(err.message || 'Marking attendance as declined failed.');
+      await loadMemberSession();
+    } finally {
+      setDecliningAttendance(false);
+    }
+  };
+
   const renderMemberSessionCard = () => {
     if (user?.userType !== 'MEMBER') return null;
 
@@ -336,6 +373,14 @@ function MainDashboard() {
     const windowStartIso = memberSession?.window?.startTime ?? null;
     const poolName = memberSession?.assignment?.resourcePool?.name;
     const branchTimezone = memberSessionBranchAbout?.timezone;
+    const isConfirmed = booking?.status === 'CONFIRMED' && !!booking?.memberAttendanceConfirmedAt;
+    const isDeclined = booking?.status === 'RELEASED_NO_SHOW';
+    const canConfirm = !!memberSession?.canConfirm;
+    const canDecline = !!memberSession?.canDecline;
+    // F-133 Slice B: a tab per batch -- shown only once there's more than one, so a single-batch
+    // member (still the common case, and the real e2e fixture) sees exactly the same card as
+    // before this rework, no tab bar at all.
+    const showTabs = memberSessions.length > 1;
 
     return (
       <section className="p-6 rounded-2xl space-y-4" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }} id="member-session-card">
@@ -348,6 +393,31 @@ function MainDashboard() {
             <Clock className="h-5 w-5" />
           </div>
         </div>
+
+        {showTabs ? (
+          <div className="flex gap-2 overflow-x-auto" id="member-batch-tabs">
+            {memberSessions.map((session) => {
+              const isActive = session.assignmentId === activeAssignmentId;
+              const label = session.assignment?.resourcePool?.name || 'Batch';
+              return (
+                <button
+                  key={session.assignmentId}
+                  type="button"
+                  onClick={() => setActiveAssignmentId(session.assignmentId)}
+                  className="rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap"
+                  style={
+                    isActive
+                      ? { background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }
+                      : { background: 'var(--color-neutral-200)', color: 'var(--color-neutral-700)' }
+                  }
+                  data-assignment-id={session.assignmentId}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
         {memberSessionLoading ? (
           <LoadingState variant="compact" label="Loading today's session…" />
@@ -366,32 +436,52 @@ function MainDashboard() {
               <div className="flex justify-between gap-4"><span>Time</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{windowStartIso ? formatBranchTime(windowStartIso, branchTimezone, { hour: '2-digit', minute: '2-digit' }) : memberSession.assignment?.startTime}</span></div>
               {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{formatBranchTime(memberSession.cutoffTime, branchTimezone, { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
             </div>
-            {booking?.memberAttendanceConfirmedAt ? (
+            {isConfirmed ? (
               <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-accent-2-100)', border: '1px solid var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }}>
                 <CheckCircle className="h-4 w-4" />Attendance confirmed
               </div>
-            ) : booking?.status === 'RELEASED_NO_SHOW' ? (
+            ) : isDeclined ? (
               <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--slot-almostfull-surface)', border: '1px solid var(--slot-almostfull-border)', color: 'var(--slot-almostfull-text)' }}>
-                <AlertTriangle className="h-4 w-4" />Confirmation cutoff passed
+                {/* F-133 Slice B real bug fix: RELEASED_NO_SHOW no longer always means "cutoff
+                    passed" -- it's now also the real state of an explicit pre-cutoff decline,
+                    which canConfirm (still true before cutoff) distinguishes from the sweep's
+                    post-cutoff release. */}
+                <AlertTriangle className="h-4 w-4" />{canConfirm ? 'Marked as not attending' : 'Confirmation cutoff passed'}
               </div>
-            ) : (
-              <button
-                className="w-full rounded-2xl px-5 py-3 font-bold disabled:opacity-60"
-                style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
-                disabled={!memberSession.canConfirm || confirmingAttendance}
-                onClick={handleConfirmAttendance}
-                id="confirm-member-attendance-btn"
-              >
-                {confirmingAttendance ? 'Confirming...' : 'I am coming'}
-              </button>
-            )}
+            ) : null}
+            {(canConfirm || canDecline) ? (
+              <div className="flex gap-3">
+                {canConfirm ? (
+                  <button
+                    className="flex-1 rounded-2xl px-5 py-3 font-bold disabled:opacity-60"
+                    style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
+                    disabled={confirmingAttendance || decliningAttendance}
+                    onClick={handleConfirmAttendance}
+                    id="confirm-member-attendance-btn"
+                  >
+                    {confirmingAttendance ? 'Confirming...' : 'I am coming'}
+                  </button>
+                ) : null}
+                {canDecline ? (
+                  <button
+                    className="flex-1 rounded-2xl px-5 py-3 font-bold disabled:opacity-60"
+                    style={{ background: 'var(--color-neutral-200)', color: 'var(--color-neutral-700)' }}
+                    disabled={confirmingAttendance || decliningAttendance}
+                    onClick={handleDeclineAttendance}
+                    id="decline-member-attendance-btn"
+                  >
+                    {decliningAttendance ? 'Updating...' : 'Not attending'}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {memberSession?.state === 'NO_SESSION_TODAY' ? (
           <p className="text-sm" style={{ color: 'var(--color-neutral-600)' }}>No recurring member session is scheduled for you today.</p>
         ) : null}
-        {memberSession?.state === 'NO_ACTIVE_ASSIGNMENT' ? (
+        {!memberSessionLoading && !memberSessionError && memberSessions.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--color-neutral-600)' }}>No active recurring member assignment is linked to this account.</p>
         ) : null}
         {memberSession?.state === 'SUBSCRIPTION_INACTIVE' ? (
@@ -399,7 +489,7 @@ function MainDashboard() {
         ) : null}
         {memberSession?.state === 'WINDOW_NOT_FOUND' ? (
           // F-178: no longer a single cause (F-170/F-172 route two more into this state), and the
-          // server doesn't distinguish them at this state — see resolveTodayMemberAssignment in
+          // server doesn't distinguish them at this state — see resolveAssignmentToday in
           // slot-engine's index.ts. Neutral copy, matching the admin attendance view's identical
           // 'Window not found' answer to the same ambiguity (index.ts:797).
           <p className="text-sm" style={{ color: 'var(--slot-almostfull-text)' }}>No session found for today.</p>
