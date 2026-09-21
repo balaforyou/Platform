@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Banner, Badge, Button, Card, LoadingState, Select, TextField } from '../../components';
 import { errorMessage } from '../../lib/errorMessage';
-import { useBranches, usePools, useGroups, useGroupRoster, useAddGroupMember, useGuestLookup } from '../guestManagement/queries';
+import { useBranches, usePools, useGroups, useAllGroups, useGroupRoster, useAddGroupMember, useGuestLookup, useSuspendAssignment } from '../guestManagement/queries';
+import type { GroupRosterRow } from '../guestManagement/queries';
 import type { GuestLookupResult } from '../guestManagement/types';
 
 const STATE_LABEL: Record<string, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
@@ -34,6 +35,7 @@ export function RosterPanel() {
   const pools = usePools(branchId);
   const [poolId, setPoolId] = useState('');
   const groups = useGroups(poolId);
+  const allGroups = useAllGroups();
   const [groupId, setGroupId] = useState('');
   const [date, setDate] = useState(todayDateString());
 
@@ -43,6 +45,18 @@ export function RosterPanel() {
   const [found, setFound] = useState<GuestLookupResult | null>(null);
   const lookup = useGuestLookup();
   const addMember = useAddGroupMember();
+
+  // F-133 Slice D — Remove (suspend) and Relocate. Both reuse the existing ACTIVE/SUSPENDED
+  // toggle + the existing (groupId-aware) create route -- no new endpoint, this component
+  // composes them. relocatingId tracks which row's target-batch picker is open; pendingId
+  // disables that one row's buttons during a real in-flight request without freezing the rest
+  // of the roster.
+  const suspend = useSuspendAssignment();
+  const relocateCreate = useAddGroupMember();
+  const [relocatingId, setRelocatingId] = useState<string | null>(null);
+  const [targetGroupId, setTargetGroupId] = useState('');
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
@@ -80,6 +94,51 @@ export function RosterPanel() {
         setPhone('');
       },
     });
+  };
+
+  // "Remove": suspend only. The server sets endDate = now() -- this is exactly this slice's
+  // required fix, not a client-supplied value.
+  const doRemove = async (assignmentId: string) => {
+    setActionError(null);
+    setPendingId(assignmentId);
+    try {
+      await suspend.mutateAsync({ assignmentId, groupId });
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setPendingId(null);
+    }
+  };
+
+  // "Relocate": branches on whether the target batch has already started its own cycle.
+  // Already live (startDate <= now) -> suspend the old assignment right now (same endDate fix
+  // as Remove) + create the new one, both effective immediately. Not yet started -> the old
+  // assignment stays ACTIVE untouched, only the new one is created (queued for the target's own
+  // startDate, per Slice A's own create logic) -- no gap where the member has no batch at all.
+  const doRelocate = async (row: GroupRosterRow, userId: string) => {
+    if (!targetGroupId) return;
+    const target = (allGroups.data || []).find((g: any) => g.id === targetGroupId);
+    if (!target) return;
+    setActionError(null);
+    setPendingId(row.assignmentId);
+    try {
+      const targetIsLive = new Date(target.startDate).getTime() <= Date.now();
+      if (targetIsLive) {
+        await suspend.mutateAsync({ assignmentId: row.assignmentId, groupId });
+        await relocateCreate.mutateAsync({ groupId: targetGroupId, userId });
+      } else {
+        // Not yet live: old assignment stays ACTIVE untouched, new one queued for the target's
+        // own real startDate -- the create route defaults startDate to now(), it does not
+        // derive it from groupId, so it must be passed explicitly here.
+        await relocateCreate.mutateAsync({ groupId: targetGroupId, userId, startDate: target.startDate });
+      }
+      setRelocatingId(null);
+      setTargetGroupId('');
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setPendingId(null);
+    }
   };
 
   return (
@@ -130,22 +189,59 @@ export function RosterPanel() {
             <div style={{ display: 'grid', gap: 'var(--av2-space-2)' }}>
               {(roster.data || []).map((row) => {
                 const meta = STATE_LABEL[row.state] || STATE_LABEL.NO_DATA;
+                const isPending = pendingId === row.assignmentId;
+                const relocateTargets = (allGroups.data || []).filter((g: any) => g.id !== groupId);
                 return (
                   <div
                     key={row.assignmentId}
                     style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: 'var(--av2-space-3)', borderRadius: 'var(--av2-radius, 8px)',
                       border: '1px solid var(--av2-border)',
                     }}
                   >
-                    <span style={{ fontSize: 'var(--av2-text-sm)' }}>{row.memberPhone}</span>
-                    <Badge tone={meta.tone}>{meta.label}</Badge>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--av2-space-2)' }}>
+                      <span style={{ fontSize: 'var(--av2-text-sm)' }}>{row.memberPhone}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-2)' }}>
+                        <Badge tone={meta.tone}>{meta.label}</Badge>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={isPending}
+                          onClick={() => { setRelocatingId(relocatingId === row.assignmentId ? null : row.assignmentId); setTargetGroupId(''); setActionError(null); }}
+                        >
+                          Relocate
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={isPending}
+                          onClick={() => doRemove(row.assignmentId)}
+                        >
+                          {isPending ? 'Removing…' : 'Remove'}
+                        </Button>
+                      </div>
+                    </div>
+                    {relocatingId === row.assignmentId && (
+                      <div style={{ marginTop: 'var(--av2-space-3)', display: 'flex', gap: 'var(--av2-space-2)', alignItems: 'flex-end' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Select label="Move to batch" value={targetGroupId} onChange={(e) => setTargetGroupId(e.target.value)}>
+                            <option value="">{relocateTargets.length === 0 ? 'No other batches' : 'Select target batch'}</option>
+                            {relocateTargets.map((g: any) => (
+                              <option key={g.id} value={g.id}>{g.name}</option>
+                            ))}
+                          </Select>
+                        </div>
+                        <Button onClick={() => doRelocate(row, row.userId)} disabled={!targetGroupId || isPending}>
+                          {isPending ? 'Moving…' : 'Confirm move'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
+          {actionError && <Banner tone="error">{actionError}</Banner>}
         </div>
       )}
 

@@ -5659,6 +5659,17 @@ server.post('/member-group-assignments', async (request, reply) => {
   let resourcePoolId = bodyResourcePoolId;
   let daysOfWeek = bodyDaysOfWeek;
   let startTime = bodyStartTime;
+  // F-133 Slice D: the same reasoning extends to startDate -- a batch also has one real
+  // cycle-start by definition. This was found incomplete in review: the block above already
+  // derived the other three fields from the group, but startDate silently kept defaulting to
+  // now() regardless of the target's own cycle, making the server not actually authoritative
+  // for it (any caller other than the one admin-v2 flow this slice wired up -- a future admin
+  // screen, an internal script -- would have silently created a live ACTIVE row for a batch
+  // that hasn't started yet). groupStartDate is the later of "the group's own start" and "now":
+  // a not-yet-live target's own future startDate is used as-is (queued correctly); an
+  // already-live target's own (possibly long-past) startDate is clamped up to now (effective
+  // immediately, not backdated to the batch's original cycle start).
+  let groupStartDate: Date | undefined;
   if (groupId) {
     const group = await prisma.group.findUnique({ where: { id: groupId } });
     if (!group) {
@@ -5671,6 +5682,8 @@ server.post('/member-group-assignments', async (request, reply) => {
     resourcePoolId = group.resourcePoolId;
     daysOfWeek = group.daysOfWeek;
     startTime = group.startTime;
+    const now = new Date();
+    groupStartDate = group.startDate > now ? group.startDate : now;
   }
 
   if (!userId || !resourcePoolId || !daysOfWeek || !startTime) {
@@ -5689,7 +5702,7 @@ server.post('/member-group-assignments', async (request, reply) => {
     throw err;
   }
 
-  const startDate = rawStartDate !== undefined ? new Date(rawStartDate) : new Date();
+  const startDate = rawStartDate !== undefined ? new Date(rawStartDate) : (groupStartDate ?? new Date());
   if (Number.isNaN(startDate.getTime())) {
     reply.status(400);
     const err = new Error('startDate must be a valid datetime');
@@ -5809,7 +5822,16 @@ server.get('/member-group-assignments', async (request, reply) => {
   }));
 });
 
-// Update assignment status (ACTIVE ↔ SUSPENDED). Internal or owner only.
+// Update assignment status (ACTIVE ↔ SUSPENDED). Internal or owner/branch_manager (requirePoolScope).
+// F-133 Slice D: the real fix, deferred through Slices A-C -- transitioning to SUSPENDED now also
+// sets endDate to the real suspension moment (now()), never left at the original month-end.
+// Server-computed only, not client-suppliable: a "Remove" action's whole point is recording WHEN
+// a member actually left, which only the server's own clock can honestly answer. This is also
+// half of "Relocate" (Slice D §7) -- relocating into an already-live target batch is exactly
+// "suspend the old assignment right now" + a normal POST /member-group-assignments for the new
+// one; no new endpoint, the admin-v2 UI composes these two existing calls. Slice C's calendar/
+// roster derived join (by userId, date within [startDate, endDate]) now attributes correctly
+// across a relocation because endDate is finally real -- unchanged code, corrected input.
 server.patch('/member-group-assignments/:id', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
@@ -5835,7 +5857,7 @@ server.patch('/member-group-assignments/:id', async (request, reply) => {
   try {
     return await prisma.memberGroupAssignment.update({
       where: { id },
-      data: { status },
+      data: status === 'SUSPENDED' ? { status, endDate: new Date() } : { status },
     });
   } catch (err: any) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
