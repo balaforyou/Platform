@@ -215,7 +215,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
         throw new Error(`F-207.2 capacity guard setup: expected negotiated booking 201, got ${negotiatedRes.status}`);
       }
 
-      await db.memberGroupAssignment.create({
+      const capAssignment = await db.memberGroupAssignment.create({
         data: { userId: 'f207-2-cap-member', resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: startTimeStr, status: 'ACTIVE', ...defaultTermDates() },
       });
       // /member/today-assignment/confirm requires an active Subscription before it will even
@@ -227,7 +227,8 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const memberJwt = signJwt({ userId: 'f207-2-cap-member', tenantId: TENANT_ID, userType: 'MEMBER', roles: [] });
       const confirmRes = await fetch(`${baseUrl}/member/today-assignment/confirm`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${memberJwt}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${memberJwt}` },
+        body: JSON.stringify({ assignmentId: capAssignment.id }),
       });
       if (confirmRes.status !== 409) {
         throw new Error(`F-207.2 capacity guard: expected 409, got ${confirmRes.status}: ${JSON.stringify(await confirmRes.json())}`);
