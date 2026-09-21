@@ -3741,6 +3741,78 @@ helper to hour 22, re-verified clean in CI afterward.
 **Close-out:** `pnpm register:check` — **255 rows, Open 116 / Resolved 139, no change** (F-133
 stays Open, Plan/Next pointer updated to this entry). Slice C (roster + monthly calendar) is next.
 
+## Batch 74 — F-133 Slice C (batch roster, member calendar, the real Group-membership link)
+
+**Findings:** F-133 — **Open / In progress** (Slice D + E still ahead; own register row + full
+close-out stay deferred to Slice E, same treatment as Batches 72/73). No new IDs surfaced this
+batch.
+**Handed off:** 21 Sep 2026 (Chief Architect thread — F-133 Slice C handover)
+**Status:** implemented, real evidence gathered, this entry lands in the same PR per item 0's own
+instruction (not deferred to after merge, correcting Slice B's own miss).
+**Branch:** `f133-slice-c-roster-calendar` (off `main`@`1f579aa`).
+
+**Real gap found and fixed first, necessary before roster/calendar could show anything real**:
+nothing in Slices A or B ever set `MemberGroupAssignment.groupId` -- `POST /groups` (Slice A)
+created the batch shell, but no route ever linked a member INTO one, so roster/calendar would have
+had zero real data to show. `POST /member-group-assignments` now accepts an optional `groupId`;
+when given, the group's own `resourcePoolId`/`daysOfWeek`/`startTime` are authoritative (a batch
+has one schedule by definition -- a member joining it inherits that schedule rather than
+independently supplying one that could silently drift from the batch the roster/calendar attribute
+them to), overriding any conflicting values in the request body.
+
+Attendance derivation, decided this round (`chief-decision-f133-attendance-metric.md`):
+`memberAttendanceConfirmedAt`/`memberAttendanceDeclinedAt`, never `CHECKED_IN` -- members mark
+yes/no once and won't tap a second real-arrival check-in, so `CHECKED_IN` would undercount. Four
+states, purely derived from `Booking`'s existing fields, no new schema: `CONFIRMED` + confirmedAt
+→ ATTENDED; `RELEASED_NO_SHOW` + declinedAt → DECLINED (explicit, pre-cutoff); `RELEASED_NO_SHOW`
+with declinedAt null → NO_RESPONSE (sweep-released, distinct from an explicit decline, its own real
+state); no booking for that date → NO_DATA.
+
+New `GET /groups` (list, scoped identically to `GET /member-group-assignments`) and
+`GET /groups/:id/roster` (every ACTIVE member of a batch, each with their four-state status for a
+given date, defaulting to today) -- auth mirrors `POST /groups` exactly (`requirePoolScope`
+resolved from the group's own `resourcePoolId`), not a new pattern. A batch with zero members
+returns `[]`, the real empty state. New `GET /member/calendar` (member-facing, ownership-checked by
+`userId`+`tenantId`, deliberately not requiring `status: 'ACTIVE'` since this shows real history
+that must survive a future removal): a real month's per-day state for one of the caller's own
+batches (`assignmentId`, the same id Slice B's tabs carry), the per-batch attribution correctly
+implemented as a derived join against THAT assignment's own `startDate`/`endDate` bound (`Booking`
+has no FK back to `MemberGroupAssignment`, confirmed still true) -- correct now for when Slice D's
+relocate/remove lands, not assumed already handled. Returns `hasEnoughHistory: false` when no real
+session has occurred yet, the "not enough history" empty state.
+
+admin-v2: a Batch Roster panel added to `/members` (branch → pool → batch cascade, date picker,
+real state badges) plus a minimal "Add member" mini-form (phone lookup via the existing
+`useGuestLookup`, then `POST /member-group-assignments` with `groupId`) -- the necessary minimal
+path to produce real roster data, not a full member-management screen.
+`guest-member-pwa`: a real month calendar card added to the dashboard, scoped to whichever batch
+tab is active (Slice B's `activeAssignmentId`), four visually distinct states, prev/next month
+navigation, the real "not enough history yet" copy.
+
+**Evidence:** new `group-roster-calendar.regression.ts` (7 sections): the group-derives-schedule
+membership link proven directly (conflicting body values ignored, unknown `groupId` 404s); a real
+roster mix of all four states via live DB reads (`ATTENDED`/`DECLINED`/`NO_RESPONSE` seeded
+directly, `NO_DATA` from a member with genuinely no booking); the real empty-batch state; unknown
+group 404, and the exact `requirePoolScope` wrong-branch-manager 403 pattern
+`admin-operations.regression.ts` already established, reused not reinvented; a real past UTC
+calendar month (immune to time-of-day flakiness by construction) with all four states at four real
+seeded days plus one deliberately-absent day; a genuinely brand-new member's `hasEnoughHistory:
+false` with zero seeded data; a foreign `assignmentId` 404s on the calendar route too. `slot-engine`
+93/93 (up from 86), full cross-service suite 5/5, both clean on the first combined run. Real browser
+pass on admin-v2 against real JBC dev-stack data: a real batch created, three real members seeded
+into all three non-NO_DATA-requiring states plus one genuinely absent, the roster rendering all
+three real badges correctly; the Add-member flow exercised end-to-end against a real existing
+JBC guest (phone lookup → found → `POST .../member-group-assignments` → real 201 → roster
+re-fetch showing the new member's real `NO_DATA` row) -- all test data reverted after.
+`guest-member-pwa`'s calendar card verified via typecheck/build + the regression suite's own
+backend proof (its dev server's port was occupied by an unrelated project this session, so its own
+browser pass is not separately captured here).
+
+**Close-out:** `pnpm register:check` — **255 rows, Open 116 / Resolved 139, no change** (F-133
+stays Open, Plan/Next pointer updated to this entry). Slice D (relocate/remove, the
+`endDate`-on-suspend fix) is next -- its own verification plan re-runs this slice's per-batch join
+against a real relocation once it lands, per the slicing doc's own note.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

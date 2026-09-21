@@ -5039,6 +5039,107 @@ server.post('/member/today-assignment/decline', async (request, reply) => {
   return ensured.booking;
 });
 
+// GET /member/calendar — a real month's worth of day-status for one of the caller's own batches
+// (assignmentId, the same id Slice B's tabs already carry). F-133 Slice C: per-batch attribution
+// is a derived join, not a stored field (Booking has no FK back to MemberGroupAssignment) -- each
+// calendar day is matched against THIS assignment's own startDate/endDate bound, so a day outside
+// it (before the member joined, or -- once Slice D lands -- after they left) correctly reads as
+// no data rather than borrowing another assignment's session. Ownership check deliberately does
+// NOT require status: 'ACTIVE' (unlike the today-assignment routes) -- this shows real history,
+// which must stay visible after a future removal/relocation, not just while currently active.
+server.get('/member/calendar', async (request, reply) => {
+  const { userId, tenantId } = await requireMemberJwt(request, reply);
+  const { assignmentId, month } = request.query as any;
+  if (!assignmentId) {
+    reply.status(400);
+    const err = new Error('assignmentId is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const assignment = await prisma.memberGroupAssignment.findFirst({
+    where: { id: assignmentId, userId, resourcePool: { tenantId } },
+    include: { resourcePool: true },
+  });
+  if (!assignment) {
+    reply.status(404);
+    const err = new Error('No assignment with that id belongs to you');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NO_ACTIVE_ASSIGNMENT';
+    throw err;
+  }
+
+  const timeZone = await getBranchTimeZone(assignment.resourcePool.branchId);
+  const now = new Date();
+  const [yearStr, monthStr] = (month || todayDateString(now, timeZone).slice(0, 7)).split('-');
+  const year = Number(yearStr);
+  const mo = Number(monthStr);
+  if (!Number.isInteger(year) || !Number.isInteger(mo) || mo < 1 || mo > 12) {
+    reply.status(400);
+    const err = new Error('month must be "YYYY-MM"');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_MONTH';
+    throw err;
+  }
+
+  const days = assignment.daysOfWeek.split(',').map((d: string) => d.trim());
+  const totalDays = daysInMonth(year, mo);
+
+  // First pass: every real session date this specific assignment covers this month (within its
+  // own startDate/endDate bound AND a weekday it actually runs) -- the join logic, applied once
+  // per day rather than trusting a stored link that doesn't exist.
+  const sessionDates: { dateString: string; windowStart: Date }[] = [];
+  for (let d = 1; d <= totalDays; d++) {
+    const dateString = `${year}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    let dayInstant: Date;
+    let windowStart: Date;
+    try {
+      dayInstant = branchLocalToUtc(dateString, '12:00', timeZone);
+      windowStart = branchLocalToUtc(dateString, assignment.startTime, timeZone);
+    } catch {
+      continue;
+    }
+    if (dayInstant < assignment.startDate || dayInstant > assignment.endDate) continue;
+    if (!days.includes(branchIsoWeekday(dayInstant, timeZone))) continue;
+    sessionDates.push({ dateString, windowStart });
+  }
+
+  const windowStarts = sessionDates.map((s) => s.windowStart);
+  const windows = windowStarts.length
+    ? await prisma.availabilityWindow.findMany({
+        where: { resourcePoolId: assignment.resourcePoolId, startTime: { in: windowStarts } },
+        select: { id: true, startTime: true },
+      })
+    : [];
+  const windowByStart = new Map(windows.map((w: any) => [w.startTime.getTime(), w]));
+  const windowIds = windows.map((w: any) => w.id);
+  const bookings = windowIds.length
+    ? await prisma.booking.findMany({
+        where: { userId, windowId: { in: windowIds }, isMemberBooking: true, status: { not: BookingStatus.CANCELLED } },
+        select: { windowId: true, status: true, memberAttendanceConfirmedAt: true, memberAttendanceDeclinedAt: true },
+      })
+    : [];
+  const bookingByWindowId = new Map(bookings.map((b: any) => [b.windowId, b]));
+
+  const stateByDate = new Map<string, GroupRosterState>();
+  let hasEnoughHistory = false;
+  for (const { dateString, windowStart } of sessionDates) {
+    if (windowStart < now) hasEnoughHistory = true;
+    const window = windowByStart.get(windowStart.getTime());
+    const booking = window ? bookingByWindowId.get(window.id) : undefined;
+    stateByDate.set(dateString, deriveDayState(booking));
+  }
+
+  const results: { date: string; state: GroupRosterState }[] = [];
+  for (let d = 1; d <= totalDays; d++) {
+    const dateString = `${year}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    results.push({ date: dateString, state: stateByDate.get(dateString) ?? 'NO_DATA' });
+  }
+
+  return { days: results, hasEnoughHistory };
+});
+
 // ---------------------------------------------------------------------------
 // Member Group Assignments
 // ---------------------------------------------------------------------------
@@ -5381,11 +5482,196 @@ server.post('/groups', async (request, reply) => {
   return group;
 });
 
+// F-133 Slice C: list groups (internal only — admin tooling), mirroring GET
+// /member-group-assignments's exact scoping pattern just below (branch_manager sees only its
+// own branches' pools, owner/internal see everything, resourcePoolId narrows further).
+server.get('/groups', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: false }); // F-206
+  const { resourcePoolId } = request.query as any;
+  let scopedPoolIds: string[] | undefined;
+
+  if (!auth.isInternal && !auth.roles.includes('owner')) {
+    const branchIds = auth.roles
+      .filter((role) => role.startsWith('branch_manager:'))
+      .map((role) => role.split(':')[1])
+      .filter(Boolean);
+    if (branchIds.length === 0) {
+      reply.status(403);
+      const err = new Error('Forbidden: Branch scope required');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+    const pools = await prisma.resourcePool.findMany({
+      where: { branchId: { in: branchIds }, ...(resourcePoolId ? { id: resourcePoolId } : {}) },
+      select: { id: true },
+    });
+    scopedPoolIds = pools.map((pool: any) => pool.id);
+    if (resourcePoolId && scopedPoolIds.length === 0) {
+      reply.status(403);
+      const err = new Error('Forbidden: Not authorized for this resource pool');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  }
+
+  return prisma.group.findMany({
+    where: {
+      ...(scopedPoolIds ? { resourcePoolId: { in: scopedPoolIds } } : resourcePoolId ? { resourcePoolId } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+});
+
+// F-133 Slice C — the four-state day-status derivation, decided this round (real reasoning in
+// chief-decision-f133-attendance-metric.md): memberAttendanceConfirmedAt/DeclinedAt, never
+// CHECKED_IN -- members mark yes/no once and won't tap a second real-arrival check-in, so
+// requiring CHECKED_IN would undercount against real behaviour. No new schema: purely derived
+// from Booking's existing fields.
+type GroupRosterState = 'ATTENDED' | 'DECLINED' | 'NO_RESPONSE' | 'NO_DATA';
+
+type GroupRosterRow = {
+  userId: string;
+  memberPhone: string;
+  assignmentId: string;
+  state: GroupRosterState;
+  confirmedAt: string | null;
+  declinedAt: string | null;
+};
+
+function deriveDayState(booking: { status: BookingStatus; memberAttendanceConfirmedAt: Date | null; memberAttendanceDeclinedAt: Date | null } | undefined): GroupRosterState {
+  if (!booking) return 'NO_DATA';
+  if (booking.status === BookingStatus.CONFIRMED && booking.memberAttendanceConfirmedAt) return 'ATTENDED';
+  if (booking.status === BookingStatus.RELEASED_NO_SHOW && booking.memberAttendanceDeclinedAt) return 'DECLINED';
+  if (booking.status === BookingStatus.RELEASED_NO_SHOW) return 'NO_RESPONSE';
+  return 'NO_DATA';
+}
+
+// Real query shape reuses computeBranchMemberAttendance's own pattern above (assignment lookup
+// -> matching window -> booking join), scoped by groupId instead of branchId, and using the
+// four-state derivation instead of that function's live "now vs cutoff" states -- this view
+// answers "what happened on this date", not "what can still happen today".
+async function computeGroupRoster(group: any, date: string | undefined, now: Date): Promise<GroupRosterRow[]> {
+  const pool = await prisma.resourcePool.findUnique({ where: { id: group.resourcePoolId }, select: { branchId: true } });
+  const timeZone = await getBranchTimeZone(pool!.branchId);
+  const dateString = date || todayDateString(now, timeZone);
+
+  let weekday: string;
+  try {
+    weekday = branchIsoWeekday(branchLocalToUtc(dateString, '12:00', timeZone), timeZone);
+  } catch (err: any) {
+    const e = new Error(`Invalid date "${dateString}": ${err.message}`);
+    (e as any).statusCode = 400;
+    (e as any).code = 'INVALID_DATE';
+    throw e;
+  }
+
+  const assignments = await prisma.memberGroupAssignment.findMany({
+    where: { groupId: group.id, status: 'ACTIVE' },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (assignments.length === 0) return [];
+
+  const userIds = Array.from(new Set(assignments.map((assignment: any) => assignment.userId)));
+  const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, phone: true } });
+  const phoneById = new Map(users.map((user: any) => [user.id, user.phone || 'Phone not available']));
+
+  // Every ACTIVE member of a group shares the group's own schedule (POST /member-group-assignments
+  // derives resourcePoolId/daysOfWeek/startTime from the group when groupId is given) -- so there
+  // is exactly one matching window for the whole roster, not one per member.
+  const days = group.daysOfWeek.split(',').map((d: string) => d.trim());
+  let matchingWindow: any = null;
+  if (days.includes(weekday)) {
+    try {
+      const expectedStart = branchLocalToUtc(dateString, group.startTime, timeZone);
+      matchingWindow = await prisma.availabilityWindow.findFirst({
+        where: { resourcePoolId: group.resourcePoolId, startTime: expectedStart },
+      });
+    } catch {
+      matchingWindow = null;
+    }
+  }
+
+  const bookings = matchingWindow
+    ? await prisma.booking.findMany({
+        where: { userId: { in: userIds }, windowId: matchingWindow.id, isMemberBooking: true, status: { not: BookingStatus.CANCELLED } },
+        select: { userId: true, status: true, memberAttendanceConfirmedAt: true, memberAttendanceDeclinedAt: true },
+      })
+    : [];
+  const bookingByUser = new Map(bookings.map((booking: any) => [booking.userId, booking]));
+
+  return assignments.map((assignment: any) => ({
+    userId: assignment.userId,
+    memberPhone: phoneById.get(assignment.userId) || 'Phone not available',
+    assignmentId: assignment.id,
+    state: deriveDayState(bookingByUser.get(assignment.userId)),
+    confirmedAt: bookingByUser.get(assignment.userId)?.memberAttendanceConfirmedAt?.toISOString() ?? null,
+    declinedAt: bookingByUser.get(assignment.userId)?.memberAttendanceDeclinedAt?.toISOString() ?? null,
+  }));
+}
+
+// GET /groups/:id/roster — every ACTIVE member of a batch, each with their status on a given
+// date (defaults to today, branch-local). Auth mirrors POST /groups (requirePoolScope resolved
+// from the group's own resourcePoolId) -- the same scoping pattern as every other group/pool
+// admin route in this file, not a new one. A group with zero ACTIVE members returns [], the
+// real empty state (a member with an assignment whose groupId is still null never appears in
+// ANY group's roster -- a known, real gap this slice does not build a cross-group view for).
+server.get('/groups/:id/roster', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: false }); // F-206
+  const { id } = request.params as any;
+  const { date } = request.query as any;
+
+  const group = await prisma.group.findUnique({ where: { id } });
+  if (!group) {
+    reply.status(404);
+    const err = new Error('Group not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'GROUP_NOT_FOUND';
+    throw err;
+  }
+  await requirePoolScope(auth, group.resourcePoolId, reply);
+
+  return computeGroupRoster(group, date, new Date());
+});
+
 server.post('/member-group-assignments', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
 
-  const { userId, resourcePoolId, daysOfWeek, startTime, startDate: rawStartDate, termPreset = 'MONTHLY' } = request.body as any;
+  const {
+    userId,
+    resourcePoolId: bodyResourcePoolId,
+    daysOfWeek: bodyDaysOfWeek,
+    startTime: bodyStartTime,
+    startDate: rawStartDate,
+    termPreset = 'MONTHLY',
+    groupId,
+  } = request.body as any;
+
+  // F-133 Slice C: real membership link, previously missing entirely -- nothing set groupId
+  // anywhere, so no assignment could ever join a batch. When groupId is given, the group's own
+  // schedule (resourcePoolId/daysOfWeek/startTime) is authoritative -- a batch has one schedule
+  // by definition, so a member joining it inherits that schedule rather than independently
+  // supplying one that could silently drift from the batch the roster/calendar attribute them to.
+  let resourcePoolId = bodyResourcePoolId;
+  let daysOfWeek = bodyDaysOfWeek;
+  let startTime = bodyStartTime;
+  if (groupId) {
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) {
+      reply.status(404);
+      const err = new Error('Group not found');
+      (err as any).statusCode = 404;
+      (err as any).code = 'GROUP_NOT_FOUND';
+      throw err;
+    }
+    resourcePoolId = group.resourcePoolId;
+    daysOfWeek = group.daysOfWeek;
+    startTime = group.startTime;
+  }
 
   if (!userId || !resourcePoolId || !daysOfWeek || !startTime) {
     reply.status(400);
@@ -5421,7 +5707,7 @@ server.post('/member-group-assignments', async (request, reply) => {
 
   try {
     const assignment = await prisma.memberGroupAssignment.create({
-      data: { userId, resourcePoolId, daysOfWeek, startTime, status: 'ACTIVE', startDate, endDate },
+      data: { userId, resourcePoolId, daysOfWeek, startTime, groupId: groupId ?? null, status: 'ACTIVE', startDate, endDate },
     });
     // F-207.2: one-time relocate/cancel sweep for guest bookings that already existed on this
     // exact day/time before this assignment did. Never rolls back the assignment on failure --
