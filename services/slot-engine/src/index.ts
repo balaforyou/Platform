@@ -4515,6 +4515,23 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
 
   const { id } = request.params as any;
 
+  // F-275: system-initiated forced full refund, bypassing the pool's normal cancellationPolicyJson
+  // tiering entirely. internal-key-only -- this is the automated cancel-and-refund F-207.2's
+  // relocate/cancel sweep needs (a displaced guest gets an unconditional 100% refund, never a
+  // human's discretionary call), not something a guest/admin JWT caller can self-grant. Rejected
+  // outright rather than silently ignored: a caller should never think this partially applied.
+  // F-275: this route historically read no body at all, so most real callers (guest cancel,
+  // internal-key cancels throughout this suite) send none -- request.body is undefined, not {},
+  // and destructuring undefined throws. Default to {} rather than assume a body is present.
+  const { forceFullRefund, reason } = (request.body as any) ?? {};
+  if (forceFullRefund === true && !isInternal) {
+    reply.status(403);
+    const err = new Error('forceFullRefund is internal-only');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORCE_REFUND_INTERNAL_ONLY';
+    throw err;
+  }
+
   const booking = await prisma.booking.findUnique({
     where: { id },
     include: { window: true },
@@ -4571,18 +4588,32 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
   let refundAmount: Prisma.Decimal | null = null;
 
   if (booking.status === BookingStatus.CONFIRMED) {
-    const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId }, orderBy: { createdAt: 'asc' } });
-    const now = new Date();
-    const startTime = new Date(booking.window.startTime);
-    const hoursBeforeSlot = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (forceFullRefund === true) {
+      // F-275: skips the tier lookup entirely -- booking.price is the exact value every
+      // booking-creation path (self-service, negotiated, manual, member) also used to set the
+      // captured PaymentIntent's amount, and is never mutated after creation, so this always
+      // matches what was really paid.
+      if (booking.price) {
+        refundAmount = new Prisma.Decimal(booking.price);
+      }
+      request.log.info(
+        { bookingId: id, reason: reason ?? 'system_forced_full_refund' },
+        'Booking force-cancelled with full refund (system-initiated)',
+      );
+    } else {
+      const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId }, orderBy: { createdAt: 'asc' } });
+      const now = new Date();
+      const startTime = new Date(booking.window.startTime);
+      const hoursBeforeSlot = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-    if (hoursBeforeSlot > 0 && rule?.cancellationPolicyJson) {
-      const policy = rule.cancellationPolicyJson as any;
-      if (policy.type === 'tiered' && Array.isArray(policy.tiers)) {
-        const sortedTiers = [...policy.tiers].sort((a, b) => b.min_hours_before_slot - a.min_hours_before_slot);
-        const matchedTier = sortedTiers.find((tier) => hoursBeforeSlot >= tier.min_hours_before_slot);
-        if (matchedTier && booking.price) {
-          refundAmount = new Prisma.Decimal((Number(booking.price) * matchedTier.refund_percent) / 100);
+      if (hoursBeforeSlot > 0 && rule?.cancellationPolicyJson) {
+        const policy = rule.cancellationPolicyJson as any;
+        if (policy.type === 'tiered' && Array.isArray(policy.tiers)) {
+          const sortedTiers = [...policy.tiers].sort((a, b) => b.min_hours_before_slot - a.min_hours_before_slot);
+          const matchedTier = sortedTiers.find((tier) => hoursBeforeSlot >= tier.min_hours_before_slot);
+          if (matchedTier && booking.price) {
+            refundAmount = new Prisma.Decimal((Number(booking.price) * matchedTier.refund_percent) / 100);
+          }
         }
       }
     }
