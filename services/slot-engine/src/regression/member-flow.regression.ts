@@ -1,6 +1,6 @@
 import { Section, signJwt, inspect, expectForbidden, expectIdentityFromJwt } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
-import { db, baseUrl, nextAlignedHour, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID } from './_fixtures';
+import { db, baseUrl, nextAlignedHour, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID, defaultTermDates } from './_fixtures';
 
 /**
  * MEMBER SELF-CONFIRM ATTENDANCE (F-022).
@@ -82,6 +82,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           daysOfWeek: todayIsoWeekday,
           startTime: assignmentStartTime,
           status: 'ACTIVE',
+          ...defaultTermDates(),
         },
       });
       await db.memberGroupAssignment.create({
@@ -91,6 +92,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           daysOfWeek: notTodayIsoWeekday,
           startTime: assignmentStartTime,
           status: 'SUSPENDED',
+          ...defaultTermDates(),
         },
       });
 
@@ -165,6 +167,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           daysOfWeek: notTodayIsoWeekday,
           startTime: assignmentStartTime,
           status: 'ACTIVE',
+          ...defaultTermDates(),
         },
       });
       const noSessionToken = signJwt({ userId: noSessionUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
@@ -185,6 +188,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           daysOfWeek: todayIsoWeekday,
           startTime: assignmentStartTime,
           status: 'ACTIVE',
+          ...defaultTermDates(),
         },
       });
       await db.subscription.create({
@@ -260,6 +264,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           daysOfWeek: todayIsoWeekday,
           startTime: soonWindowStart.toISOString().slice(11, 16),
           status: 'ACTIVE',
+          ...defaultTermDates(),
         },
       });
       const cutoffToken = signJwt({ userId: cutoffUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });
@@ -295,6 +300,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           daysOfWeek: todayIsoWeekday,
           startTime: assignmentStartTime,
           status: 'ACTIVE',
+          ...defaultTermDates(),
         },
       });
       const raceToken = signJwt({ userId: raceUserId, tenantId: memberTenant, userType: 'MEMBER', roles: [] });

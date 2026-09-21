@@ -1,6 +1,7 @@
 import { Section, signJwt, expectForbidden } from '@badminton/test-harness';
 import { AllocationMode, Prisma, PricingMode } from '@badminton/database';
-import { db, baseUrl, internalKey, SlotEngineContext, TENANT_ID, BRANCH_ID } from './_fixtures';
+import { db, baseUrl, internalKey, SlotEngineContext, TENANT_ID, BRANCH_ID, defaultTermDates } from './_fixtures';
+import { addMonthsUtc } from '../branchTime.js';
 
 /**
  * ADMIN OPERATIONS — config endpoints and their trust boundaries.
@@ -96,6 +97,7 @@ export const adminOperationsSections: Section<SlotEngineContext>[] = [
           slotDurationMinutes: 60,
           capacity: 3,
           status: 'ACTIVE',
+          ...defaultTermDates(),
         },
       });
 
@@ -200,6 +202,7 @@ export const adminOperationsSections: Section<SlotEngineContext>[] = [
           endTime: '09:00',
           slotDurationMinutes: 60,
           capacity: 1,
+          ...defaultTermDates(),
         },
       });
       const existingOtherBranchOverride = await db.availabilityOverride.create({
@@ -259,6 +262,146 @@ export const adminOperationsSections: Section<SlotEngineContext>[] = [
         overrideCreateStatus: unauthorizedOverride.status,
         patternEditStatus: unauthorizedPatternEdit.status,
         overrideEditStatus: unauthorizedOverrideEdit.status,
+      });
+    },
+  },
+
+  {
+    name: 'F-207.1: pattern/assignment date-bounding (startDate defaults, endDate recompute, renew) + asymmetric renew auth',
+    async run() {
+      const ownerJwt = signJwt({ userId: 'f207-owner', tenantId: TENANT_ID, roles: ['owner'] });
+      const branchManagerJwt = signJwt({ userId: 'f207-manager', tenantId: TENANT_ID, roles: [`branch_manager:${BRANCH_ID}`] });
+
+      const poolRes = await fetch(`${baseUrl}/resource-pools`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({
+          tenantId: TENANT_ID,
+          branchId: BRANCH_ID,
+          name: 'F-207.1 Date Bounding Pool',
+          allocationMode: 'POOLED',
+          capacity: 5,
+        }),
+      });
+      const pool = ((await poolRes.json()) as any).data;
+
+      // CREATE without startDate defaults to now(); endDate = startDate + 1 month.
+      const beforeCreate = new Date();
+      const createRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/availability-patterns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ownerJwt}` },
+        body: JSON.stringify({ daysOfWeek: '1,2,3,4,5', startTime: '06:00', endTime: '08:00', slotDurationMinutes: 60, capacity: 2 }),
+      });
+      if (createRes.status !== 201) throw new Error(`F-207.1 pattern CREATE: expected 201, got ${createRes.status}`);
+      const created = ((await createRes.json()) as any).data;
+      const createdStart = new Date(created.startDate);
+      const createdEnd = new Date(created.endDate);
+      if (createdStart.getTime() < beforeCreate.getTime() - 5000 || createdStart.getTime() > Date.now() + 5000) {
+        throw new Error(`F-207.1 pattern CREATE: startDate ${created.startDate} not close to now()`);
+      }
+      if (createdEnd.getTime() !== addMonthsUtc(createdStart, 1).getTime()) {
+        throw new Error(`F-207.1 pattern CREATE: endDate ${created.endDate} is not startDate + 1 month`);
+      }
+
+      // PATCH that changes startDate recomputes endDate; PATCH that doesn't is idempotent.
+      const explicitStart = '2026-01-31T00:00:00.000Z';
+      const patchChangeRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/availability-patterns/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ownerJwt}` },
+        body: JSON.stringify({ startDate: explicitStart }),
+      });
+      if (patchChangeRes.status !== 200) throw new Error(`F-207.1 pattern PATCH (change startDate): expected 200, got ${patchChangeRes.status}`);
+      const patchedChanged = ((await patchChangeRes.json()) as any).data;
+      const expectedClampedEnd = addMonthsUtc(new Date(explicitStart), 1); // Jan 31 + 1 month clamps to Feb 28 (2026 is not a leap year)
+      if (new Date(patchedChanged.endDate).getTime() !== expectedClampedEnd.getTime()) {
+        throw new Error(`F-207.1 pattern PATCH: expected clamped endDate ${expectedClampedEnd.toISOString()}, got ${patchedChanged.endDate}`);
+      }
+
+      const patchNoChangeRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/availability-patterns/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ownerJwt}` },
+        body: JSON.stringify({ capacity: 3 }), // no startDate in this PATCH
+      });
+      if (patchNoChangeRes.status !== 200) throw new Error(`F-207.1 pattern PATCH (no startDate change): expected 200, got ${patchNoChangeRes.status}`);
+      const patchedUnchanged = ((await patchNoChangeRes.json()) as any).data;
+      if (new Date(patchedUnchanged.startDate).toISOString() !== new Date(explicitStart).toISOString()
+        || new Date(patchedUnchanged.endDate).getTime() !== expectedClampedEnd.getTime()) {
+        throw new Error('F-207.1 pattern PATCH: startDate/endDate drifted on a PATCH that never sent startDate');
+      }
+
+      // /renew extends from the pattern's CURRENT endDate, not from now().
+      const beforeRenewEnd = new Date(patchedUnchanged.endDate);
+      const renewRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/availability-patterns/${created.id}/renew`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ownerJwt}` },
+      });
+      if (renewRes.status !== 200) throw new Error(`F-207.1 pattern /renew: expected 200, got ${renewRes.status}`);
+      const renewed = ((await renewRes.json()) as any).data;
+      if (new Date(renewed.endDate).getTime() !== addMonthsUtc(beforeRenewEnd, 1).getTime()) {
+        throw new Error('F-207.1 pattern /renew: endDate did not extend from the pattern\'s prior endDate');
+      }
+
+      // Pattern renewal is owner-only, matching its POST/PATCH/DELETE siblings (F-237) — a
+      // branch_manager (in-scope, same branch) gets 403.
+      const managerRenewRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/availability-patterns/${created.id}/renew`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${branchManagerJwt}` },
+      });
+      await expectForbidden(managerRenewRes, 'pattern /renew by an in-scope branch_manager (owner-only route family)');
+
+      // Member assignment CREATE: default termPreset MONTHLY when omitted.
+      await db.availabilityPattern.create({
+        data: {
+          resourcePoolId: pool.id, daysOfWeek: '1,2,3,4,5,6,7', startTime: '09:00', endTime: '10:00',
+          slotDurationMinutes: 60, capacity: 4, status: 'ACTIVE', ...defaultTermDates(),
+        },
+      });
+      const assignCreateRes = await fetch(`${baseUrl}/member-group-assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${branchManagerJwt}` },
+        body: JSON.stringify({ userId: 'f207-member-1', resourcePoolId: pool.id, daysOfWeek: '1,2,3,4,5,6,7', startTime: '09:00' }),
+      });
+      if (assignCreateRes.status !== 201) throw new Error(`F-207.1 assignment CREATE: expected 201, got ${assignCreateRes.status}`);
+      const assignment = ((await assignCreateRes.json()) as any).data;
+      if (new Date(assignment.endDate).getTime() !== addMonthsUtc(new Date(assignment.startDate), 1).getTime()) {
+        throw new Error('F-207.1 assignment CREATE: default termPreset did not produce a 1-month endDate');
+      }
+
+      // Member assignment /renew: required termPreset, extends from CURRENT endDate.
+      const beforeAssignRenewEnd = new Date(assignment.endDate);
+      const assignRenewRes = await fetch(`${baseUrl}/member-group-assignments/${assignment.id}/renew`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${branchManagerJwt}` },
+        body: JSON.stringify({ termPreset: 'QUARTERLY' }),
+      });
+      if (assignRenewRes.status !== 200) throw new Error(`F-207.1 assignment /renew: expected 200, got ${assignRenewRes.status}`);
+      const renewedAssignment = ((await assignRenewRes.json()) as any).data;
+      if (new Date(renewedAssignment.endDate).getTime() !== addMonthsUtc(beforeAssignRenewEnd, 3).getTime()) {
+        throw new Error('F-207.1 assignment /renew: QUARTERLY did not extend by 3 months from the prior endDate');
+      }
+
+      // Missing/invalid termPreset -> 400, never a silent default.
+      const missingPresetRes = await fetch(`${baseUrl}/member-group-assignments/${assignment.id}/renew`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${branchManagerJwt}` },
+        body: JSON.stringify({}),
+      });
+      if (missingPresetRes.status !== 400) throw new Error(`F-207.1 assignment /renew missing termPreset: expected 400, got ${missingPresetRes.status}`);
+      const invalidPresetRes = await fetch(`${baseUrl}/member-group-assignments/${assignment.id}/renew`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${branchManagerJwt}` },
+        body: JSON.stringify({ termPreset: 'WEEKLY' }),
+      });
+      if (invalidPresetRes.status !== 400) throw new Error(`F-207.1 assignment /renew invalid termPreset: expected 400, got ${invalidPresetRes.status}`);
+
+      // Asymmetric auth (the corrected design): unlike pattern /renew above, assignment /renew
+      // has NO owner-only guard -- an in-scope branch_manager succeeds (already proven by the
+      // 200 responses above). This is deliberate: member-group-assignments is a branch_manager-
+      // permitted route family (its POST/PATCH siblings never call requireOwnerOrInternal),
+      // unlike availability-patterns.
+      console.log('F207_1_RENEW_AUTH_ASYMMETRY', {
+        patternRenewByBranchManagerStatus: managerRenewRes.status, // 403 -- owner-only
+        assignmentRenewByBranchManagerStatus: assignRenewRes.status, // 200 -- branch_manager permitted
       });
     },
   },

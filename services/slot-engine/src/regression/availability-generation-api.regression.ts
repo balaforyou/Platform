@@ -1,6 +1,6 @@
 import { Section, signJwt } from '@badminton/test-harness';
 import { AllocationMode, Prisma, PricingMode } from '@badminton/database';
-import { db, baseUrl, SlotEngineContext, TENANT_ID } from './_fixtures';
+import { db, baseUrl, SlotEngineContext, TENANT_ID, defaultTermDates } from './_fixtures';
 
 /**
  * F-043 PHASE B — availability generation through the REAL HTTP API (lazy
@@ -124,6 +124,7 @@ async function addPattern(
       capacity,
       pricingMode: PricingMode.FLAT,
       price: new Prisma.Decimal(125),
+      ...defaultTermDates(),
     },
   });
 }

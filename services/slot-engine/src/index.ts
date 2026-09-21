@@ -7,6 +7,7 @@ import { ensureAvailabilityWindowsForDate, reconcilePatternWindows } from './ava
 import {
   DEFAULT_TIME_ZONE,
   addBranchDays,
+  addMonthsUtc,
   branchDateString,
   branchHHMM,
   branchIsoWeekday,
@@ -850,6 +851,25 @@ function patternDataFromBody(body: any, reply: any, partial = false) {
       throw err;
     }
     data.status = body.status;
+  }
+
+  // F-207.1: startDate is optional at the API layer -- CREATE defaults to now() when absent
+  // (no `existing` row to fall back on); PATCH always has a value to fall back on because the
+  // route pre-merges `{...existing, ...body}` before calling this function, so `body.startDate`
+  // here is really "merged.startDate" and is always defined on that path. endDate is never a
+  // direct write target -- always server-computed as exactly one month out, guest patterns are
+  // capped at one month by design.
+  const rawStartDate = body.startDate !== undefined ? new Date(body.startDate) : (!partial ? new Date() : undefined);
+  if (rawStartDate !== undefined) {
+    if (Number.isNaN(rawStartDate.getTime())) {
+      reply.status(400);
+      const err = new Error('startDate must be a valid datetime');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_START_DATE';
+      throw err;
+    }
+    data.startDate = rawStartDate;
+    data.endDate = addMonthsUtc(rawStartDate, 1);
   }
   return data;
 }
@@ -2563,6 +2583,36 @@ server.delete('/resource-pools/:id/availability-patterns/:patternId', async (req
   });
 
   return { ...deleted, windowReconciliation };
+});
+
+// F-207.1: extends a pattern's endDate by exactly one month from its CURRENT endDate (not from
+// now()) -- a renewal that runs a week late still lands the new endDate one month past the old
+// one, not one month past today. No body. Same owner-only auth as this pattern's siblings
+// (POST/PATCH/DELETE above), since patterns are an owner-only route family (F-237). Deliberately
+// skips F-211's branch-hours check and F-268's overlap check -- both only ever read
+// daysOfWeek/startTime/endTime/status, none of which a renewal touches -- and skips F-261's
+// window-reconciliation transaction, since nothing about the pattern's bookable definition
+// changes.
+server.post('/resource-pools/:id/availability-patterns/:patternId/renew', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  requireOwnerOrInternal(auth, reply);
+  await requireModuleEntitlement(auth, TenantModule.GUEST_BOOKING, reply, { write: true }); // F-206
+  const { id, patternId } = request.params as any;
+  await requirePoolScope(auth, id, reply);
+
+  const existing = await prisma.availabilityPattern.findFirst({ where: { id: patternId, resourcePoolId: id } });
+  if (!existing) {
+    reply.status(404);
+    const err = new Error('Availability pattern not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+
+  return prisma.availabilityPattern.update({
+    where: { id: patternId },
+    data: { endDate: addMonthsUtc(existing.endDate, 1) },
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -4728,11 +4778,16 @@ server.post('/member/today-assignment/confirm', async (request, reply) => {
 // WHY: Dual-path auth — internal key OR owner/branch-manager JWT.
 // The partial unique index on (userId) WHERE status = 'ACTIVE' enforces the
 // one-active-slot-per-member Basic-tier rule at DB level; P2002 is the enforcement signal.
+// F-207.1: months added per term preset. termPreset itself is never persisted -- only the
+// computed startDate/endDate -- so a later renewal can use a different preset than the
+// original term without reconciling a stored "original preset" value.
+const TERM_PRESET_MONTHS: Record<string, number> = { MONTHLY: 1, QUARTERLY: 3, YEARLY: 12 };
+
 server.post('/member-group-assignments', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
 
-  const { userId, resourcePoolId, daysOfWeek, startTime } = request.body as any;
+  const { userId, resourcePoolId, daysOfWeek, startTime, startDate: rawStartDate, termPreset = 'MONTHLY' } = request.body as any;
 
   if (!userId || !resourcePoolId || !daysOfWeek || !startTime) {
     reply.status(400);
@@ -4742,6 +4797,24 @@ server.post('/member-group-assignments', async (request, reply) => {
     throw err;
   }
 
+  if (!Object.prototype.hasOwnProperty.call(TERM_PRESET_MONTHS, termPreset)) {
+    reply.status(400);
+    const err = new Error('termPreset must be MONTHLY, QUARTERLY, or YEARLY');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_TERM_PRESET';
+    throw err;
+  }
+
+  const startDate = rawStartDate !== undefined ? new Date(rawStartDate) : new Date();
+  if (Number.isNaN(startDate.getTime())) {
+    reply.status(400);
+    const err = new Error('startDate must be a valid datetime');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_START_DATE';
+    throw err;
+  }
+  const endDate = addMonthsUtc(startDate, TERM_PRESET_MONTHS[termPreset]);
+
   await requirePoolScope(auth, resourcePoolId, reply);
 
   // F-169: reject a schedule that no generated window could ever match, instead of
@@ -4750,7 +4823,7 @@ server.post('/member-group-assignments', async (request, reply) => {
 
   try {
     const assignment = await prisma.memberGroupAssignment.create({
-      data: { userId, resourcePoolId, daysOfWeek, startTime, status: 'ACTIVE' },
+      data: { userId, resourcePoolId, daysOfWeek, startTime, status: 'ACTIVE', startDate, endDate },
     });
     reply.status(201);
     return assignment;
@@ -4874,6 +4947,44 @@ server.patch('/member-group-assignments/:id', async (request, reply) => {
     }
     throw err;
   }
+});
+
+// F-207.1: extends an assignment's endDate by termPreset's duration from its CURRENT endDate
+// (not from now()). termPreset is required -- unlike CREATE it has no persisted prior value to
+// default from, since termPreset itself is never stored. Auth deliberately mirrors this table's
+// own siblings above (getInternalOrAdminAuth + requirePoolScope, no requireOwnerOrInternal) --
+// member-group-assignments is a branch_manager-permitted route family, unlike availability-
+// patterns, so this renewal does not gain an owner-only guard just because the pattern renewal
+// above has one.
+server.post('/member-group-assignments/:id/renew', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
+
+  const { id } = request.params as any;
+  const { termPreset } = request.body as any;
+
+  if (!termPreset || !Object.prototype.hasOwnProperty.call(TERM_PRESET_MONTHS, termPreset)) {
+    reply.status(400);
+    const err = new Error('termPreset is required and must be MONTHLY, QUARTERLY, or YEARLY');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_TERM_PRESET';
+    throw err;
+  }
+
+  const existing = await prisma.memberGroupAssignment.findUnique({ where: { id } });
+  if (!existing) {
+    reply.status(404);
+    const err = new Error('Assignment not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+  await requirePoolScope(auth, existing.resourcePoolId, reply);
+
+  return prisma.memberGroupAssignment.update({
+    where: { id },
+    data: { endDate: addMonthsUtc(existing.endDate, TERM_PRESET_MONTHS[termPreset]) },
+  });
 });
 
 // ---------------------------------------------------------------------------

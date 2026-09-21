@@ -1,7 +1,7 @@
 import { Section } from '@badminton/test-harness';
 import { AllocationMode, BookingStatus, Prisma, PricingMode } from '@badminton/database';
 import { ensureAvailabilityWindowsForDate } from '../availabilityGeneration.js';
-import { db, SlotEngineContext } from './_fixtures';
+import { db, SlotEngineContext, defaultTermDates } from './_fixtures';
 
 /**
  * F-043 PHASE A — availability generation at the FUNCTION level (no HTTP).
@@ -99,6 +99,7 @@ export const availabilityGenerationSections: Section<SlotEngineContext>[] = [
           capacity: 4,
           pricingMode: PricingMode.PER_PERSON,
           price: new Prisma.Decimal(150),
+          ...defaultTermDates(),
         },
       });
 
@@ -144,6 +145,7 @@ export const availabilityGenerationSections: Section<SlotEngineContext>[] = [
           endTime: '12:00',
           slotDurationMinutes: 60,
           capacity: 2,
+          ...defaultTermDates(),
         },
       });
       await db.availabilityOverride.create({
@@ -176,6 +178,7 @@ export const availabilityGenerationSections: Section<SlotEngineContext>[] = [
           capacity: 2,
           pricingMode: PricingMode.FLAT,
           price: new Prisma.Decimal(90),
+          ...defaultTermDates(),
         },
       });
       await db.availabilityOverride.create({
@@ -231,6 +234,7 @@ export const availabilityGenerationSections: Section<SlotEngineContext>[] = [
           endTime: '11:00',
           slotDurationMinutes: 60,
           capacity: 3,
+          ...defaultTermDates(),
         },
       });
       const raceBefore = await countWindows(racePool.id, raceDate);
@@ -272,6 +276,7 @@ export const availabilityGenerationSections: Section<SlotEngineContext>[] = [
           capacity: 6,
           pricingMode: PricingMode.FLAT,
           price: new Prisma.Decimal(220),
+          ...defaultTermDates(),
         },
       });
       await ensureAvailabilityWindowsForDate(stablePool.id, stableDate);
