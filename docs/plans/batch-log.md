@@ -3624,6 +3624,68 @@ throughout. Branches `f207.1-contract-schema-renewal`, `f274-refund-branch-scopi
 `f275-force-full-refund-cancel`, `f207.2-member-collision-relocate-cancel`,
 `f207.3-admin-collision-preview-results` — all merged to `main`.
 
+## Batch 72 — F-133 Slice A (Group entity, migration, batch creation, peak/non-peak tenant defaults)
+
+**Findings:** F-133 — **Open / In progress** (one dedicated track; Slices B–E still ahead — same
+"track stays Open while its slices land" treatment as F-195/F-220). No new IDs surfaced this batch.
+**Handed off:** 21 Sep 2026 (Chief Architect thread — `claude-code-handover-f133-slice-a-group-batch-creation.md`,
+itself sliced from `claude-code-handover-f133-member-module-consolidated.md`)
+**Status:** Slice A landed, independently re-verified against the real remote, and merged.
+**Branch/PR:** `f133-group-entity-schema` (off `main`@`c8615ea`, deleted on merge) → PR #72,
+squash-merged as `fdf7d85`.
+
+A generic, vertical-agnostic `Group` entity — `id, tenantId, name, resourcePoolId` (real FK,
+matching `Booking`/`MemberGroupAssignment`'s existing pool-reference convention), `daysOfWeek`,
+`startTime`, `isPeak`, `customRate`, calendar-month-aligned `startDate`/`endDate`, self-referencing
+`parentId` (`onDelete: SetNull`, real precedent: `Booking.parentBookingId`) — plus
+`MemberGroupAssignment.groupId` (nullable FK) replacing the dropped
+`member_assignment_one_active_per_user` partial index as real batch membership, and
+`Tenant.memberPeakDefaultRate`/`memberNonPeakDefaultRate` as the tenant-wide fallback rate
+(same no-branch-override shape as `aboutDescription`/`facilities`/`photos`). New
+`POST /groups` (slot-engine) validates a rate genuinely resolves — own `customRate` or the
+matching tenant default — rejecting with `400 NO_RESOLVABLE_RATE` otherwise; reuses
+`requirePoolScope` and F-169's `validateAssignmentSchedule` rather than inventing new guards. New
+`endOfNextCalendarMonthUtc` helper (`branchTime.ts`) computes the real last day of a batch's
+starting month, deliberately not `addMonthsUtc` — that helper clamps to the *original* day-of-month
+(30 Sept + 1 month → 30 Oct, not the 31st), confirmed a real bug by reading the function directly,
+not assumed. `PATCH /tenants/:id` (tenant-management) extended for the two new rate fields, same
+`!== undefined` partial-update convention already used there. admin-v2: `/members` (previously a
+plain stub) now hosts a real Create Batch form (branch→pool cascade, day picker, `TimeField`,
+Peak/Non-Peak toggle, optional custom rate); a new Member Rates section added to the existing
+`PricingRates.tsx` (tenant-scoped, deliberately ignoring the branch selector — "irrespective of
+court/branch," Bala's own words).
+
+Independently re-verified before authorization
+(`chief-verification-f133-planmode-authorization.md`): every cited line number checked out exactly
+against `main`@`c8615ea` except one off-by-one (immaterial) and one real regression-citation
+correction (`:340` → `:366`, a different route's test); one real correctness gap caught and fixed
+before implementation — the renewal endpoint's frontend caller doesn't exist yet, so Slice E's
+renewal UI is genuinely new work, not a reuse, now on record.
+
+**Evidence:** migration applied to `badminton_db` and `badminton_db_test`, the dropped index's
+absence confirmed via a real `\d MemberGroupAssignment`, not assumed from the migration file.
+Live-fire via direct API calls: a real batch with an explicit `customRate` (201), a real batch with
+none and no tenant default (400 `NO_RESOLVABLE_RATE`), the same request succeeding once a real
+tenant default was set via the new `PATCH` (201, `customRate: null` persisted — validation only,
+never silently backfilled) — all confirmed via DB read-back, then reverted. Calendar-month dates
+confirmed live for the current (31-day) month, plus direct execution of
+`endOfNextCalendarMonthUtc` inside the running container for a 30-day month, a leap-year February,
+and a year rollover — the exact edge cases the server's real clock couldn't be forced into. Full
+regression suite: an initial run showed 3 suites failing; each passed cleanly in isolation
+(tenant-management 11/11, identity-auth 15/15, payment 24/24), then the full set re-run clean
+together (5/5) — confirmed the documented cross-suite-interaction trap, not a real regression from
+this change. Real browser pass on admin-v2: the Create Batch form's day picker and `TimeField`
+correctly surfaced a real server-side schedule-validation error on submit; the Member Rates section
+round-tripped a real save through UI → API → DB (confirmed `1200.00`/`900.00` via direct read-back),
+then reverted. Typecheck + build clean across `packages/database`, `slot-engine`,
+`tenant-management`, `admin-v2`.
+
+**Close-out:** `pnpm register:check` — **255 rows, Open 116 / Resolved 139, no change** (F-133 stays
+Open; no new IDs this batch, its row gets a Plan/Next pointer to this entry rather than restating
+progress inline — its own register row and full close-out stay deferred to Slice E, per the
+original kickoff). Slice B (multi-batch member experience — `resolveTodayMemberAssignment`
+rework, decline route, attendance tabs, reminders) is next.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
