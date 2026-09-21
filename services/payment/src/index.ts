@@ -618,7 +618,7 @@ server.post('/webhooks/razorpay/autopay', async (request, reply) => {
 // The helper is declared further down the module; that is fine at request time, since module
 // evaluation has completed long before any handler runs.
 server.post('/refunds', async (request, reply) => {
-  await requirePaymentLinkAdmin(request, reply);
+  const decoded = await requirePaymentLinkAdmin(request, reply);
 
   const { bookingId } = request.body as any;
   if (!bookingId) {
@@ -653,6 +653,23 @@ server.post('/refunds', async (request, reply) => {
     if (e.statusCode) throw e;
     reply.status(500);
     throw new Error('Slot Engine communication failure: ' + e.message);
+  }
+
+  // F-274: requirePaymentLinkAdmin's own role check has the same branch-scoping gap
+  // POST /refunds/override had — any owner/branch_manager claim passes with no comparison
+  // against this booking's real branch. decoded === null is the internal-key/platform caller
+  // (requirePaymentLinkAdmin's own bypass, unaffected); a JWT caller is checked against
+  // booking.branchId, same shape as the override route's fix above.
+  if (decoded) {
+    const roles: string[] = decoded.roles ?? [];
+    const isOwner = roles.includes('owner');
+    if (!(isOwner || roles.includes(`branch_manager:${booking.branchId}`))) {
+      reply.status(403);
+      const err = new Error('Forbidden: Not authorized for this branch');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
   }
 
   if (booking.status !== 'CANCELLED') {
@@ -1305,12 +1322,13 @@ server.post('/bookings/manual', async (request, reply) => {
 server.post('/refunds/override', async (request, reply) => {
   // 1. Verify JWT and extract adminId from token — never from body.
   let adminId: string;
+  let roles: string[] = [];
   try {
     const decoded = await request.jwtVerify() as any;
     adminId = decoded.sub || decoded.userId || decoded.id;
     if (!adminId) throw new Error('No user identity in token');
 
-    const roles: string[] = decoded.roles ?? [];
+    roles = decoded.roles ?? [];
     const isAdmin = roles.some((r: string) =>
       r === 'owner' || r.startsWith('branch_manager:')
     );
@@ -1361,6 +1379,20 @@ server.post('/refunds/override', async (request, reply) => {
     if (e.statusCode) throw e;
     reply.status(500);
     throw new Error('Slot Engine communication failure: ' + e.message);
+  }
+
+  // F-274: same branch-scoping gap F-071 fixed elsewhere -- roles were checked for ANY
+  // owner/branch_manager claim with no comparison against this booking's real branch, so a
+  // branch_manager scoped to a different branch could override-refund a booking outside their
+  // branch. `roles` and `isOwner` come from step 1's own token; `booking.branchId` is the
+  // resource's real value, never client-supplied.
+  const isOwner = roles.includes('owner');
+  if (!(isOwner || roles.includes(`branch_manager:${booking.branchId}`))) {
+    reply.status(403);
+    const err = new Error('Forbidden: Not authorized for this branch');
+    (err as any).statusCode = 403;
+    (err as any).code = 'FORBIDDEN';
+    throw err;
   }
 
   if (booking.status !== 'CANCELLED') {
