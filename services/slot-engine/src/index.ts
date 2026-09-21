@@ -1852,6 +1852,27 @@ async function ensureTodayMemberBooking({
       if (existing) return { booking: existing, created: false };
 
       const pool = assignment.resourcePool;
+
+      // F-207.2: defensive capacity guard, not the enforcement mechanism -- that's the
+      // ongoing exclusion in windowBookable/POST /bookings, which should mean a window this
+      // function reaches is never actually full. This is the safety net for whatever gets past
+      // it anyway (a pre-existing occupying booking placed via the admin-discretionary
+      // /bookings/negotiated path, which is deliberately NOT collision-checked, or any other
+      // gap): fail loudly rather than silently insert a booking past real capacity.
+      const activeOccupants = await tx.booking.findMany({
+        where: { windowId: matchingWindow.id, status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] } },
+        select: { resourceId: true },
+      });
+      const atCapacity = pool.allocationMode === AllocationMode.FIXED_INSTANCE
+        ? activeOccupants.some((b: any) => b.resourceId === matchingWindow.resourceId)
+        : activeOccupants.length >= matchingWindow.capacity;
+      if (atCapacity) {
+        const err = new Error('This window is already at capacity');
+        (err as any).statusCode = 409;
+        (err as any).code = 'MEMBER_SLOT_AT_CAPACITY';
+        throw err;
+      }
+
       const resolvedPrice = resolvePrice(pool, matchingWindow, 1).price;
       const booking = await tx.booking.create({
         data: {
@@ -3342,6 +3363,59 @@ server.post('/blocked-windows', async (request, reply) => {
 // Availability check
 // ---------------------------------------------------------------------------
 
+// F-207.2: the member-collision exclusion context for one resource pool -- prefetched ONCE per
+// request/pool by every caller of windowBookable below (never per-window; a pool has at most a
+// handful of ACTIVE assignments thanks to the Basic-tier one-active-slot-per-member unique
+// index, so this is a small, bounded read). `assignments` is empty whenever MEMBER_MANAGEMENT
+// isn't currently ACTIVE for the tenant -- resolveEntitlementState is reused (not
+// entitlementAllows, whose read/write semantics don't apply here); disabling the module
+// (`disabledAt` set -> READ_ONLY) or letting it lapse (HIDDEN) immediately stops excluding
+// anything, with no manual assignment cleanup required, per this session's explicit decision.
+export type MemberExclusionContext = {
+  assignments: { daysOfWeek: string; startTime: string }[];
+  timeZone: string;
+};
+
+async function fetchMemberExclusionContext(
+  pool: { id: string; tenantId: string; branchId: string },
+  timeZone?: string,
+  // F-183-style client param: POST /bookings calls this from inside its own $transaction, and
+  // must read through `tx` for the same consistency reasons every other read in that route does
+  // (Prisma's interactive-transaction client is API-compatible with the plain client for the
+  // model methods used here). Every caller outside a transaction omits this, defaulting to `prisma`.
+  client: any = prisma,
+): Promise<MemberExclusionContext> {
+  const row = await client.moduleEntitlement.findUnique({
+    where: { tenantId_module: { tenantId: pool.tenantId, module: TenantModule.MEMBER_MANAGEMENT } },
+  });
+  const active = resolveEntitlementState(row, new Date()) === 'ACTIVE';
+  const assignments = active
+    ? await client.memberGroupAssignment.findMany({
+        where: { resourcePoolId: pool.id, status: 'ACTIVE' },
+        select: { daysOfWeek: true, startTime: true },
+      })
+    : [];
+  return { assignments, timeZone: timeZone ?? (await getBranchTimeZone(pool.branchId)) };
+}
+
+// F-207.2: does this window fall on a day/time an ACTIVE MemberGroupAssignment covers for this
+// EXACT pool? Both branchIsoWeekday and branchHHMM are derived from the window's own real
+// instant (never reconstructed from the assignment's stored strings), matching
+// resolveTodayMemberAssignment's own two-part day+time test. The day check is not redundant
+// with the time check -- two assignments sharing a startTime string on different weekdays would
+// otherwise be indistinguishable if only time were compared.
+function collidesWithMemberAssignment(
+  window: { startTime: Date },
+  exclusion: MemberExclusionContext,
+): boolean {
+  if (exclusion.assignments.length === 0) return false;
+  const weekday = branchIsoWeekday(window.startTime, exclusion.timeZone);
+  const hhmm = branchHHMM(window.startTime, exclusion.timeZone);
+  return exclusion.assignments.some(
+    (a) => a.startTime === hhmm && a.daysOfWeek.split(',').map((d) => d.trim()).includes(weekday),
+  );
+}
+
 // F-212: the per-window bookability check, factored out of GET /availability's loop so the
 // next-available-date search below reuses the exact same rules (F-155 started-window filter,
 // blocked-window overlap, HELD/CONFIRMED capacity) rather than carrying a second copy that can
@@ -3351,8 +3425,16 @@ async function windowBookable(
   pool: { allocationMode: AllocationMode },
   window: { id: string; resourcePoolId: string; resourceId: string | null; capacity: number; startTime: Date; endTime: Date },
   nowInstant: Date,
+  memberExclusion: MemberExclusionContext,
 ): Promise<{ bookable: boolean; remainingCapacity: number }> {
   if (window.startTime <= nowInstant) return { bookable: false, remainingCapacity: 0 };
+
+  // F-207.2: cheapest check first, no DB call -- an active Member contract's slot is never
+  // guest-bookable, mirroring F-155's display/write duality (POST /bookings steps 6-7 below is
+  // the authoritative write-side half of this same rule).
+  if (collidesWithMemberAssignment(window, memberExclusion)) {
+    return { bookable: false, remainingCapacity: 0 };
+  }
 
   const isBlocked = await prisma.blockedWindow.findFirst({
     where: {
@@ -3391,6 +3473,7 @@ async function poolHasAvailabilityOnDate(
   pool: { id: string; allocationMode: AllocationMode },
   dateString: string,
   nowInstant: Date,
+  memberExclusion: MemberExclusionContext,
 ): Promise<boolean> {
   const { startOfDay, endOfDay } = dayBounds(dateString);
   const windows = await prisma.availabilityWindow.findMany({
@@ -3402,7 +3485,7 @@ async function poolHasAvailabilityOnDate(
     orderBy: { startTime: 'asc' },
   });
   for (const window of windows) {
-    const { bookable } = await windowBookable(pool, window, nowInstant);
+    const { bookable } = await windowBookable(pool, window, nowInstant, memberExclusion);
     if (bookable) return true;
   }
   return false;
@@ -3499,12 +3582,13 @@ server.get('/resource-pools/:id/availability', async (request, reply) => {
   // judged speculative scope on an urgent fix. F-162 tracks whether admins actually need that
   // visibility for reconciliation, to be settled with real evidence if it turns out to matter.
   const nowInstant = new Date();
+  const memberExclusion = await fetchMemberExclusionContext(pool, horizonTimeZone);
 
   for (const window of windows) {
     // F-212: the per-window rules (started-window skip, blocked-window overlap, HELD/CONFIRMED
     // capacity) now live in windowBookable so the next-available-date search can't drift from
     // them. Behaviour here is unchanged — every window still scored, full breakdown returned.
-    const { bookable, remainingCapacity } = await windowBookable(pool, window, nowInstant);
+    const { bookable, remainingCapacity } = await windowBookable(pool, window, nowInstant, memberExclusion);
     if (bookable) {
       // F-239: groupSize is always 1 here -- co-player collection has no UI path today (F-114),
       // so the real server-side groupSize at booking time is always 1 + 0 in practice. A sibling
@@ -3582,9 +3666,10 @@ server.get('/resource-pools/:id/next-available-date', async (request, reply) => 
   await ensureGenerationForPoolDates(id, candidates);
 
   const nowInstant = new Date();
+  const memberExclusion = await fetchMemberExclusionContext(pool);
   for (const candidate of candidates) {
     const candidateStr = dateOnlyString(candidate);
-    if (await poolHasAvailabilityOnDate(pool, candidateStr, nowInstant)) {
+    if (await poolHasAvailabilityOnDate(pool, candidateStr, nowInstant, memberExclusion)) {
       return { date: candidateStr };
     }
   }
@@ -3900,6 +3985,21 @@ server.post('/bookings', async (request, reply) => {
           const err = new Error('This slot has already started and can no longer be booked');
           (err as any).statusCode = 400;
           (err as any).code = 'SLOT_ALREADY_STARTED';
+          throw err;
+        }
+      }
+
+      // F-207.2: the write-side authoritative half of the member-collision exclusion --
+      // GET /availability's windowBookable check above is the display half (F-155-shaped
+      // duality). Computed once per request (not per-window), reused across every locked window
+      // in an F-183 multi-window booking. Only applies while MEMBER_MANAGEMENT is ACTIVE for
+      // this tenant (fetchMemberExclusionContext's own contract).
+      const memberExclusion = await fetchMemberExclusionContext(pool, undefined, tx);
+      for (const w of lockedWindows) {
+        if (collidesWithMemberAssignment(w, memberExclusion)) {
+          const err = new Error('This slot is reserved for a Member contract');
+          (err as any).statusCode = 409;
+          (err as any).code = 'MEMBER_SLOT_RESERVED';
           throw err;
         }
       }
@@ -4497,6 +4597,111 @@ server.post('/bookings/:id/terms', async (request, reply) => {
 });
 
 // Cancel (HELD | CONFIRMED → CANCELLED) with tiered refund calculation and IDOR check.
+// F-207.2: extracted from the route below (behaviour byte-identical) so the relocate/cancel
+// sweep can call this in-process rather than looping the request back through HTTP to itself --
+// no precedent anywhere in this file for a service calling its own HTTP port, and
+// ensureTodayMemberBooking already established the pattern this follows: factor shared logic
+// into a function, call it from every real call site. Takes the already-fetched `booking`
+// (every caller needs to read it first anyway -- the route for its IDOR check, the sweep for its
+// own status/eligibility decisions) rather than re-querying. Throws plain Errors with
+// `.statusCode`/`.code` set -- the global error handler (responseEnvelopePlugin) reads those
+// directly, no `reply` needed, so this works identically whether the caller is an HTTP request
+// or the sweep's own try/catch.
+async function cancelBookingCore(
+  booking: any,
+  opts: { forceFullRefund?: boolean; reason?: string },
+  logger: { info: (obj: any, msg: string) => void },
+): Promise<any> {
+  const { forceFullRefund, reason } = opts;
+  const id = booking.id;
+
+  // F-183: a guest's child booking carries the same userId as its parent, so the IDOR guard at
+  // the route level legitimately passes for a guest calling this route directly on their own
+  // child booking's id. Without this guard, that cancelled the child (whose price is always
+  // null, so no refund is computed) while leaving the parent CONFIRMED with the full paid price
+  // and freeing that window in every availability/capacity query — a real billing-integrity and
+  // double-booking bug, confirmed during the F-183 investigation, not a theoretical one. Callers
+  // act on the parent id, which cascades to every child in the same transaction below.
+  if (booking.parentBookingId) {
+    const err = new Error('Cannot cancel a child booking directly — act on the parent booking id');
+    (err as any).statusCode = 400;
+    (err as any).code = 'CHILD_BOOKING_NOT_MUTABLE';
+    throw err;
+  }
+
+  if (booking.status === BookingStatus.CANCELLED) return booking; // idempotent
+
+  if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD) {
+    const err = new Error('Only held or confirmed bookings can be cancelled');
+    (err as any).statusCode = 400;
+    throw err;
+  }
+
+  // F-245: neither branch below rejected a booking whose slot has already started or ended --
+  // hoursBeforeSlot was only ever used to pick a refund tier, so a past-slot cancel silently
+  // succeeded with no tier matching (refundAmount stays null) rather than surfacing that
+  // anything unusual happened. Confirmed no real caller relies on cancelling a past-slot
+  // booking: neither admin-web nor admin-v2 call this route at all (grepped directly), and the
+  // only real caller anywhere is the guest-facing CancelBookingModal.tsx -- safe to reject
+  // outright rather than allow a silent no-op-refund "cancellation" of a match that already
+  // happened.
+  if (new Date() >= new Date(booking.window.startTime)) {
+    const err = new Error('This slot has already started or ended and can no longer be cancelled');
+    (err as any).statusCode = 400;
+    (err as any).code = 'SLOT_ALREADY_ENDED';
+    throw err;
+  }
+
+  let refundAmount: Prisma.Decimal | null = null;
+
+  if (booking.status === BookingStatus.CONFIRMED) {
+    if (forceFullRefund === true) {
+      // F-275: skips the tier lookup entirely -- booking.price is the exact value every
+      // booking-creation path (self-service, negotiated, manual, member) also used to set the
+      // captured PaymentIntent's amount, and is never mutated after creation, so this always
+      // matches what was really paid.
+      if (booking.price) {
+        refundAmount = new Prisma.Decimal(booking.price);
+      }
+      logger.info(
+        { bookingId: id, reason: reason ?? 'system_forced_full_refund' },
+        'Booking force-cancelled with full refund (system-initiated)',
+      );
+    } else {
+      const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId }, orderBy: { createdAt: 'asc' } });
+      const now = new Date();
+      const startTime = new Date(booking.window.startTime);
+      const hoursBeforeSlot = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      if (hoursBeforeSlot > 0 && rule?.cancellationPolicyJson) {
+        const policy = rule.cancellationPolicyJson as any;
+        if (policy.type === 'tiered' && Array.isArray(policy.tiers)) {
+          const sortedTiers = [...policy.tiers].sort((a, b) => b.min_hours_before_slot - a.min_hours_before_slot);
+          const matchedTier = sortedTiers.find((tier) => hoursBeforeSlot >= tier.min_hours_before_slot);
+          if (matchedTier && booking.price) {
+            refundAmount = new Prisma.Decimal((Number(booking.price) * matchedTier.refund_percent) / 100);
+          }
+        }
+      }
+    }
+  }
+
+  // F-183: parent update and child cascade commit together — no reachable state where
+  // the parent is CANCELLED but a child booking still holds its window, or vice versa.
+  // Children never had a price, so they never get a refund of their own.
+  return await prisma.$transaction(async (tx: any) => {
+    const updated = await tx.booking.update({
+      where: { id },
+      data: { status: BookingStatus.CANCELLED, refundAmount },
+    });
+    await tx.booking.updateMany({
+      where: { parentBookingId: id },
+      data: { status: BookingStatus.CANCELLED, refundAmount: null },
+    });
+    return updated;
+  });
+}
+
 server.post('/bookings/:id/cancel', async (request, reply) => {
   let isInternal = false;
   let decodedUser: any = null;
@@ -4546,93 +4751,7 @@ server.post('/bookings/:id/cancel', async (request, reply) => {
     requireBookingAccess(booking, decodedUser, reply);
   }
 
-  // F-183: a guest's child booking carries the same userId as its parent, so the IDOR
-  // guard above legitimately passes for a guest calling this route directly on their own
-  // child booking's id. Without this guard, that cancelled the child (whose price is
-  // always null, so no refund is computed) while leaving the parent CONFIRMED with the
-  // full paid price and freeing that window in every availability/capacity query — a
-  // real billing-integrity and double-booking bug, confirmed during the F-183
-  // investigation, not a theoretical one. Callers act on the parent id, which cascades
-  // to every child in the same transaction below.
-  if (booking.parentBookingId) {
-    reply.status(400);
-    const err = new Error('Cannot cancel a child booking directly — act on the parent booking id');
-    (err as any).statusCode = 400;
-    (err as any).code = 'CHILD_BOOKING_NOT_MUTABLE';
-    throw err;
-  }
-
-  if (booking.status === BookingStatus.CANCELLED) return booking; // idempotent
-
-  if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.HELD) {
-    reply.status(400);
-    throw new Error('Only held or confirmed bookings can be cancelled');
-  }
-
-  // F-245: neither branch below rejected a booking whose slot has already started or ended --
-  // hoursBeforeSlot was only ever used to pick a refund tier, so a past-slot cancel silently
-  // succeeded with no tier matching (refundAmount stays null) rather than surfacing that
-  // anything unusual happened. Confirmed no real caller relies on cancelling a past-slot
-  // booking: neither admin-web nor admin-v2 call this route at all (grepped directly), and the
-  // only real caller anywhere is the guest-facing CancelBookingModal.tsx -- safe to reject
-  // outright rather than allow a silent no-op-refund "cancellation" of a match that already
-  // happened.
-  if (new Date() >= new Date(booking.window.startTime)) {
-    reply.status(400);
-    const err = new Error('This slot has already started or ended and can no longer be cancelled');
-    (err as any).statusCode = 400;
-    (err as any).code = 'SLOT_ALREADY_ENDED';
-    throw err;
-  }
-
-  let refundAmount: Prisma.Decimal | null = null;
-
-  if (booking.status === BookingStatus.CONFIRMED) {
-    if (forceFullRefund === true) {
-      // F-275: skips the tier lookup entirely -- booking.price is the exact value every
-      // booking-creation path (self-service, negotiated, manual, member) also used to set the
-      // captured PaymentIntent's amount, and is never mutated after creation, so this always
-      // matches what was really paid.
-      if (booking.price) {
-        refundAmount = new Prisma.Decimal(booking.price);
-      }
-      request.log.info(
-        { bookingId: id, reason: reason ?? 'system_forced_full_refund' },
-        'Booking force-cancelled with full refund (system-initiated)',
-      );
-    } else {
-      const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: booking.resourcePoolId }, orderBy: { createdAt: 'asc' } });
-      const now = new Date();
-      const startTime = new Date(booking.window.startTime);
-      const hoursBeforeSlot = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-      if (hoursBeforeSlot > 0 && rule?.cancellationPolicyJson) {
-        const policy = rule.cancellationPolicyJson as any;
-        if (policy.type === 'tiered' && Array.isArray(policy.tiers)) {
-          const sortedTiers = [...policy.tiers].sort((a, b) => b.min_hours_before_slot - a.min_hours_before_slot);
-          const matchedTier = sortedTiers.find((tier) => hoursBeforeSlot >= tier.min_hours_before_slot);
-          if (matchedTier && booking.price) {
-            refundAmount = new Prisma.Decimal((Number(booking.price) * matchedTier.refund_percent) / 100);
-          }
-        }
-      }
-    }
-  }
-
-  // F-183: parent update and child cascade commit together — no reachable state where
-  // the parent is CANCELLED but a child booking still holds its window, or vice versa.
-  // Children never had a price, so they never get a refund of their own.
-  return await prisma.$transaction(async (tx: any) => {
-    const updated = await tx.booking.update({
-      where: { id },
-      data: { status: BookingStatus.CANCELLED, refundAmount },
-    });
-    await tx.booking.updateMany({
-      where: { parentBookingId: id },
-      data: { status: BookingStatus.CANCELLED, refundAmount: null },
-    });
-    return updated;
-  });
+  return cancelBookingCore(booking, { forceFullRefund, reason }, request.log);
 });
 
 // ---------------------------------------------------------------------------
@@ -4814,6 +4933,191 @@ server.post('/member/today-assignment/confirm', async (request, reply) => {
 // original term without reconciling a stored "original preset" value.
 const TERM_PRESET_MONTHS: Record<string, number> = { MONTHLY: 1, QUARTERLY: 3, YEARLY: 12 };
 
+// F-207.2: attempts to move `booking` to a sibling POOLED pool in the same branch at the exact
+// same `startTime`, in `createdAt asc` order (assignPooledCourt's own tiebreak precedent -- no
+// priority/precedence concept exists on ResourcePool today). A relocation target's window is
+// force-generated (ensureAvailabilityWindowsForDate) since a legitimate alternative pool may
+// simply never have been browsed yet; the original collision scan deliberately does NOT do this
+// (nothing to collide with on an ungenerated window). Mutates the existing Booking row in place
+// (resourcePoolId/windowId/resourceId/courtSlotIndex) rather than cancel+recreate: `price` stays
+// exactly what the guest already paid, and `PaymentIntent.referenceId` (which points at this
+// booking's id, never at its pool/window) never needs to change -- zero payment-side risk.
+// Capacity is re-checked inside a FOR UPDATE transaction immediately before the move (not just
+// trusted from the earlier windowBookable check) to close the race between that check and the
+// actual write; a sibling that fills in between is skipped, not fatal -- the next sibling is tried.
+async function tryRelocateBooking(
+  booking: { id: string },
+  originalWindow: { startTime: Date },
+  originalPool: { id: string; branchId: string },
+  timeZone: string,
+): Promise<boolean> {
+  const siblings = await prisma.resourcePool.findMany({
+    where: { branchId: originalPool.branchId, id: { not: originalPool.id }, allocationMode: AllocationMode.POOLED },
+    orderBy: { createdAt: 'asc' },
+    include: { resources: { orderBy: { createdAt: 'asc' } } },
+  });
+  if (siblings.length === 0) return false;
+
+  const dateString = branchDateString(originalWindow.startTime, timeZone);
+  const nowInstant = new Date();
+
+  for (const sibling of siblings) {
+    await ensureAvailabilityWindowsForDate(sibling.id, dateString);
+    const siblingWindow = await prisma.availabilityWindow.findFirst({
+      where: { resourcePoolId: sibling.id, startTime: originalWindow.startTime },
+    });
+    if (!siblingWindow) continue;
+
+    // The sibling's OWN active assignments matter too -- a relocation must never land a guest
+    // on another member's slot.
+    const siblingExclusion = await fetchMemberExclusionContext(sibling, timeZone);
+    const { bookable } = await windowBookable(sibling, siblingWindow, nowInstant, siblingExclusion);
+    if (!bookable) continue;
+
+    try {
+      await prisma.$transaction(async (tx: any) => {
+        await tx.$queryRaw`SELECT id FROM "AvailabilityWindow" WHERE id = ${siblingWindow.id} FOR UPDATE`;
+        const active = await tx.booking.findMany({
+          where: { windowId: siblingWindow.id, status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] } },
+          select: { courtSlotIndex: true, resourceId: true },
+        });
+        if (active.length >= siblingWindow.capacity) {
+          throw new Error('sibling window filled before relocation could complete');
+        }
+        const { resourceId, courtSlotIndex } = assignPooledCourt(sibling, active);
+        await tx.booking.update({
+          where: { id: booking.id },
+          data: { resourcePoolId: sibling.id, windowId: siblingWindow.id, resourceId, courtSlotIndex },
+        });
+      });
+      return true;
+    } catch {
+      // This sibling filled in the race between the check above and the write -- try the next
+      // one rather than treating this as fatal for the whole relocation attempt.
+      continue;
+    }
+  }
+  return false;
+}
+
+// F-207.2: one-time relocate/cancel sweep, run synchronously when a new MemberGroupAssignment is
+// created. Scans EXISTING guest bookings on the exact resourcePoolId/day/time the assignment
+// covers, bounded by guestOpenWindowDays (a guest cannot hold a booking further out -- already
+// server-enforced at POST /bookings, so scanning further finds nothing). Never force-generates a
+// window for the SCAN itself (unlike relocation targets above) -- an ungenerated window has
+// nothing a guest could have booked against it.
+//
+// Best-effort, never all-or-nothing: cross-service atomicity is impossible here (this calls
+// payment's POST /refunds over HTTP mid-operation), so each colliding booking is processed
+// independently with its own try/catch. The MemberGroupAssignment itself is never rolled back by
+// a sweep failure -- it's a valid entitled action on its own merits; the sweep is best-effort
+// cleanup layered on top ("member contracts always win" applies to the assignment succeeding,
+// not to every existing collision being auto-resolved).
+async function runMemberCollisionSweep(
+  assignment: { id: string; userId: string; resourcePoolId: string; daysOfWeek: string; startTime: string },
+  pool: { id: string; branchId: string; allocationMode: AllocationMode },
+  logger: { info: (obj: any, msg: string) => void; warn: (obj: any, msg: string) => void },
+): Promise<{ scanned: number; relocated: number; cancelled: number; failed: { bookingId: string; error: string }[] }> {
+  const summary = { scanned: 0, relocated: 0, cancelled: 0, failed: [] as { bookingId: string; error: string }[] };
+
+  const rule = await prisma.bookingRule.findFirst({ where: { resourcePoolId: pool.id }, orderBy: { createdAt: 'asc' } });
+  const guestOpenWindowDays = rule?.guestOpenWindowDays ?? 7;
+  const timeZone = await getBranchTimeZone(pool.branchId);
+  const days = assignment.daysOfWeek.split(',').map((d) => d.trim());
+
+  const paymentUrl = process.env.PAYMENT_URL || 'http://localhost:3004';
+  const internalKeyHeader = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+
+  for (let i = 0; i <= guestOpenWindowDays; i++) {
+    const candidateInstant = addBranchDays(new Date(), i, timeZone);
+    const dateString = branchDateString(candidateInstant, timeZone);
+
+    let windowStart: Date;
+    try {
+      windowStart = branchLocalToUtc(dateString, assignment.startTime, timeZone);
+    } catch {
+      continue; // unparseable startTime -- validateAssignmentSchedule already guards this at create time
+    }
+    // Weekday derived from the SAME resolved instant we're about to query with -- never
+    // independently re-derived from dateString, avoiding any UTC/branch-local boundary mismatch.
+    if (!days.includes(branchIsoWeekday(windowStart, timeZone))) continue;
+
+    const window = await prisma.availabilityWindow.findFirst({
+      where: { resourcePoolId: pool.id, startTime: windowStart },
+    });
+    if (!window) continue; // never generated -- nothing a guest could have booked against it
+
+    const activeBookings = await prisma.booking.findMany({
+      where: { windowId: window.id, status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] } },
+    });
+
+    for (const occupant of activeBookings) {
+      summary.scanned += 1;
+      try {
+        // F-183: act on the parent, never a child directly -- same rule cancelBookingCore itself
+        // enforces for a direct HTTP caller.
+        let booking = occupant;
+        if (booking.parentBookingId) {
+          const parent = await prisma.booking.findUnique({ where: { id: booking.parentBookingId } });
+          if (!parent) throw new Error(`parent booking ${booking.parentBookingId} not found`);
+          booking = parent;
+        }
+        const hasChildren = (await prisma.booking.count({ where: { parentBookingId: booking.id } })) > 0;
+
+        // HELD: mid-checkout, no captured payment, 5-minute TTL. Relocating risks silently
+        // invalidating a payment link/intent the guest's client already has open against the
+        // original pool/price -- cancel outright instead. Leaving it alone risks the payment
+        // webhook confirming it later (it never re-checks availability), recreating the exact
+        // collision this sweep exists to prevent.
+        if (booking.status === BookingStatus.HELD) {
+          const bookingWindow = booking.windowId === window.id ? window : await prisma.availabilityWindow.findUnique({ where: { id: booking.windowId } });
+          await cancelBookingCore({ ...booking, window: bookingWindow }, {}, logger);
+          summary.cancelled += 1;
+          continue;
+        }
+
+        // CONFIRMED from here. Multi-window (F-183 parent+children) bookings never relocate --
+        // relocating only the colliding window while sibling windows stayed on the original pool
+        // would break F-183's same-pool contiguity assumption. Straight to cancel+refund instead.
+        let relocated = false;
+        if (!hasChildren && pool.allocationMode === AllocationMode.POOLED) {
+          relocated = await tryRelocateBooking(booking, window, pool, timeZone);
+        }
+        if (relocated) {
+          summary.relocated += 1;
+          continue;
+        }
+
+        const cancelled = await cancelBookingCore(
+          { ...booking, window },
+          { forceFullRefund: true, reason: `displaced by Member contract assignment ${assignment.id}` },
+          logger,
+        );
+        if (cancelled.status === BookingStatus.CANCELLED && cancelled.refundAmount) {
+          const refundRes = await fetch(`${paymentUrl}/refunds`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKeyHeader}` },
+            body: JSON.stringify({ bookingId: booking.id }),
+          });
+          if (!refundRes.ok) {
+            const body = await refundRes.text().catch(() => '');
+            throw new Error(`POST /refunds failed with ${refundRes.status}: ${body}`);
+          }
+        }
+        summary.cancelled += 1;
+      } catch (err: any) {
+        logger.warn(
+          { bookingId: occupant.id, error: err?.message ?? String(err) },
+          '[F-207.2 sweep] failed to relocate or cancel a colliding booking',
+        );
+        summary.failed.push({ bookingId: occupant.id, error: err?.message ?? String(err) });
+      }
+    }
+  }
+
+  return summary;
+}
+
 server.post('/member-group-assignments', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
@@ -4846,7 +5150,7 @@ server.post('/member-group-assignments', async (request, reply) => {
   }
   const endDate = addMonthsUtc(startDate, TERM_PRESET_MONTHS[termPreset]);
 
-  await requirePoolScope(auth, resourcePoolId, reply);
+  const pool = await requirePoolScope(auth, resourcePoolId, reply);
 
   // F-169: reject a schedule that no generated window could ever match, instead of
   // persisting an assignment that is silently inert.
@@ -4856,8 +5160,24 @@ server.post('/member-group-assignments', async (request, reply) => {
     const assignment = await prisma.memberGroupAssignment.create({
       data: { userId, resourcePoolId, daysOfWeek, startTime, status: 'ACTIVE', startDate, endDate },
     });
+    // F-207.2: one-time relocate/cancel sweep for guest bookings that already existed on this
+    // exact day/time before this assignment did. Never rolls back the assignment on failure --
+    // see runMemberCollisionSweep's own comment. This outer try/catch is a further guard: the
+    // assignment has already been created successfully by this point, so a bug in the sweep's
+    // own control flow (outside any single booking's try/catch inside it) must never surface as
+    // a 500 that makes the caller think assignment creation itself failed.
+    let collisionSweep: any = { scanned: 0, relocated: 0, cancelled: 0, failed: [] };
+    try {
+      collisionSweep = await runMemberCollisionSweep(assignment, pool, request.log);
+    } catch (sweepErr: any) {
+      request.log.warn(
+        { assignmentId: assignment.id, error: sweepErr?.message ?? String(sweepErr) },
+        '[F-207.2 sweep] the sweep itself failed outside any single booking\'s handling -- assignment was still created',
+      );
+      collisionSweep = { scanned: 0, relocated: 0, cancelled: 0, failed: [{ bookingId: '(sweep-level failure)', error: sweepErr?.message ?? String(sweepErr) }] };
+    }
     reply.status(201);
-    return assignment;
+    return { ...assignment, collisionSweep };
   } catch (err: any) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       // WHY: P2002 from the partial index = this member already has an active assignment
@@ -5160,7 +5480,15 @@ server.post('/bookings/sweep', async (request, reply) => {
           }
         } catch (err: any) {
           // P2002 = concurrent sweep already created this booking — safe to skip.
-          if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+          // F-207.2: MEMBER_SLOT_AT_CAPACITY = ensureTodayMemberBooking's defensive guard fired
+          // for this one assignment. Rethrowing here would abort the ENTIRE sweep mid-loop,
+          // silently skipping held-booking expiry and low-occupancy alerts for every other pool
+          // still queued behind it -- log and continue, matching the "no window" skip above.
+          const isDuplicateRace = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+          const isCapacityGuard = err?.code === 'MEMBER_SLOT_AT_CAPACITY';
+          if (isCapacityGuard) {
+            console.warn(`[sweep] skipping assignment ${assignment.id}: window already at capacity (MEMBER_SLOT_AT_CAPACITY)`);
+          } else if (!isDuplicateRace) {
             throw err;
           }
         }

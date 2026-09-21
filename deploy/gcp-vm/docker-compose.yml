@@ -58,6 +58,15 @@ services:
     environment:
       PORT: 3001
       NOTIFICATION_SERVICE_URL: http://notification:3005
+      # F-207.2: the relocate/cancel sweep calls payment's POST /refunds directly -- the first
+      # time slot-engine has ever needed to call payment (previously always the other direction).
+      # No `depends_on: payment` here -- payment already depends_on slot-engine below, and
+      # docker compose refuses a circular dependency graph. The sweep only needs payment
+      # reachable at real request time (an admin creating a member assignment, long after both
+      # containers are up), not at container-start time, and every payment call in the sweep is
+      # already wrapped in its own try/catch (see runMemberCollisionSweep) -- a payment outage
+      # degrades to a logged, reportable failure per booking, never a hard startup dependency.
+      PAYMENT_URL: http://payment:3004
     depends_on:
       postgres:
         condition: service_healthy
