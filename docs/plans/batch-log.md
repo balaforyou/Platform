@@ -3546,6 +3546,84 @@ suite re-run clean 5/5 — real port-collision-with-the-standing-dev-stack cause
 with each other. `pnpm register:check`/`diagram:verify` both clean. Whole-repo typecheck clean.
 Branch `batch-e-f272-f273-segments-cellgrouping`.
 
+## Batch 71 — F-207 (Guest/Member Contract unification, sub-slices 7.1/7.2/7.3) + F-274 + F-275
+
+Three F-207 sub-slices plus two dependency findings, all in one session, each independently
+investigated, planned, implemented, and independently re-verified against the real remote before
+the next began — the standard review flow, not shortcut for this batch's size.
+
+**F-207.1 (schema date-bounding + renewal):** `AvailabilityPattern`/`MemberGroupAssignment` gain
+`startDate`/`endDate` (nullable → backfilled → `NOT NULL` migration; server-computed via a new
+`addMonthsUtc` helper in `branchTime.ts`, never a direct write target). New `.../renew` endpoints
+on both, extending from the row's current `endDate`, never `now()`. Renewal auth confirmed
+asymmetric against each table's real sibling routes rather than assumed uniform: pattern renewal
+owner-only (F-237 precedent), assignment renewal not (that family already permits
+`branch_manager`). Real backfill dry-run against production JBC rows before migrating for real.
+Full regression green, PR #65 merged, independently re-verified against `main`@`416ca6e`'s
+ancestor.
+
+**F-274 (branch-scoping, `/refunds/override` + `/refunds`):** surfaced during F-207.2's design
+investigation — both routes checked for any `owner`/`branch_manager:*` claim with no comparison
+against the target booking's real `branchId`, the same IDOR class F-071 already fixed elsewhere.
+Real-caller grep confirmed nothing relied on the missing check. New regression coverage proving
+wrong-branch 403 / correct-branch 200 / internal-key-path unaffected on both routes. PR #67 merged.
+
+**F-275 (system-initiated forced full refund):** F-207.2's sweep needs an automated
+cancel-and-refund forcing 100% regardless of the pool's tiered policy, with no human in the loop —
+neither existing refund route gave it that. `POST /bookings/:id/cancel` gained
+`forceFullRefund`/`reason`, internal-key-only, a JWT caller rejected outright. Confirmed via live
+DB query (not just code tracing) that `booking.price` always equals what the captured
+`PaymentIntent` charged, across every booking-creation path. **Real bug caught by the regression
+suite itself, not inspection**: the new body destructure threw on every caller sending no body at
+all (most real callers, including guest cancel) — fixed with `(request.body as any) ?? {}`. PR #68
+merged.
+
+**F-207.2 (the highest-risk sub-slice — ongoing exclusion, capacity guard, relocate/cancel
+sweep):** an `ACTIVE` `MemberGroupAssignment` now excludes its exact pool/day/time from guest
+bookability in both `windowBookable` (display) and `POST /bookings` (write, new `409
+MEMBER_SLOT_RESERVED`) — F-155's display/write duality reused, not reinvented — gated on
+`MEMBER_MANAGEMENT` actually resolving `ACTIVE` so disabling the module immediately frees every
+slot it held, confirmed live. `ensureTodayMemberBooking` gained a defensive `409
+MEMBER_SLOT_AT_CAPACITY` guard, confirmed firing against an occupant placed via the
+deliberately-uncollision-checked `POST /bookings/negotiated` admin path per this session's Option
+A, not just self-service. `POST /member-group-assignments` triggers a one-time relocate/cancel
+sweep synchronously on create, bounded by `guestOpenWindowDays`: single-window `CONFIRMED`
+bookings relocate to a sibling `POOLED` pool via a row `UPDATE` (price/`PaymentIntent` linkage
+untouched, not cancel+recreate); multi-window and `HELD` bookings go straight to cancel; no target
+found → `forceFullRefund` (F-275) then the unmodified `POST /refunds` (F-274-fixed). Best-effort
+throughout — the assignment itself is never rolled back by a sweep failure. Live-fire proof against
+real JBC data: a real guest booking taken through the full hold→confirm chain, a real
+`MemberGroupAssignment` created via the live API, the cross-service `/refunds` call actually
+succeeding (real `Refund` row, forcing full price despite the real policy's lower tier at that
+notice window), `GET /availability` hiding the slot, a fresh booking attempt rejected, module-disable
+freeing the slot live — all reverted afterward. PR #69 merged, independently re-verified against
+`main`@`416ca6e`, then promoted to production via `promote.sh` (all 8 components confirmed on-SHA
+over real HTTPS).
+
+**F-207.3 (admin preview + results):** two real gaps closed — no preview before the sweep acts, and
+`collisionSweep.failed` returned by the API but surfaced nowhere. `scanCollidingBookings` extracted
+from the sweep's pure-read portion (byte-identical, zero behaviour change, provable by the existing
+suite passing unchanged) backs a new cheap pre-hoc count endpoint. Threading a `dryRun` flag through
+`tryRelocateBooking`/`cancelBookingCore` to simulate relocate-vs-cancel was deliberately not built —
+flagged back as unjustified risk to F-207.2's just-verified decision logic for a UI-only feature,
+per the signed-off plan. admin-web's "Assign Member to Recurring Slot" panel (confirmed via
+real-caller grep the *only* caller — admin-v2 has no member-management UI at all) now shows the
+pre-hoc count and the real post-hoc `collisionSweep`, `failed` rendered distinctly rather than
+absorbed into the generic success message. **Live-fire proof of the exact risk this finding exists
+for**: a second real booking, payment deliberately stopped, the post-hoc summary correctly rendering
+"1 FAILED — needs manual follow-up" with the exact booking ID — confirmed via DB read-back as a real
+`CANCELLED`-with-`refundAmount`-but-zero-`Refund`-rows state, then the missed refund processed for
+real and all test data cleaned up. PR #70 merged, independently re-verified against `main`@`c5a068c`.
+
+**Register**: F-207/F-274/F-275 all logged directly to Resolved (Chief-named in each handover
+before this session's `pending-findings.md` entries existed, same relay pattern as
+F-195/F-203/F-196/F-197/F-204/F-228/F-229/F-272/F-273). `pnpm register:check` (255 rows, Open 116 /
+Resolved 139, no drift) and `pnpm diagram:verify` (67 tags, all agree) both clean. Full regression
+green at every stage (slot-engine 82/82 by 7.3's close). Whole-repo typecheck/build clean
+throughout. Branches `f207.1-contract-schema-renewal`, `f274-refund-branch-scoping`,
+`f275-force-full-refund-cancel`, `f207.2-member-collision-relocate-cancel`,
+`f207.3-admin-collision-preview-results` — all merged to `main`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
