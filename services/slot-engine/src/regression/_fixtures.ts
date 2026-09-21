@@ -1,5 +1,6 @@
 import { PrismaClient } from '@badminton/database';
 import { SERVICE_URLS, signJwt, assertDisposableDatabase } from '@badminton/test-harness';
+import { addMonthsUtc } from '../branchTime.js';
 
 export const db = new PrismaClient();
 export const baseUrl = SERVICE_URLS.slotEngine;
@@ -49,6 +50,18 @@ export function bookingHeaders(userId: string, idempotencyKey: string) {
 // zeroes LOCAL minutes, which on a half-hour-offset zone such as IST leaves the instant at
 // :30 UTC — an "aligned hour" that is not aligned, and which drifts away from the weekday
 // derived elsewhere in the same fixture.
+/**
+ * F-207.1: startDate/endDate are NOT NULL on AvailabilityPattern/MemberGroupAssignment now, and
+ * fixtures across these regression sections write those tables directly via prisma rather than
+ * through the route layer (which computes these itself). Centralized here rather than duplicated
+ * at each of the ~15 call sites -- none of those sections are testing date-bounding, they just
+ * need a real, valid startDate/endDate to satisfy the schema.
+ */
+export function defaultTermDates(months = 1): { startDate: Date; endDate: Date } {
+  const startDate = new Date();
+  return { startDate, endDate: addMonthsUtc(startDate, months) };
+}
+
 export function nextAlignedHour(hoursFromNow: number): Date {
   const date = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
   date.setUTCMinutes(0, 0, 0);

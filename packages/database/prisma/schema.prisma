@@ -233,6 +233,9 @@ model AvailabilityWindow {
   @@index([startTime, endTime])
 }
 
+// F-207.1: startDate/endDate bound how long this pattern is in force. No enforcement yet
+// (ensureAvailabilityWindowsForDate doesn't consult endDate) -- that's F-207.2. endDate is
+// always server-computed (startDate + 1 month via addMonthsUtc), never a direct write target.
 model AvailabilityPattern {
   id                  String       @id @default(uuid())
   resourcePoolId      String
@@ -245,6 +248,8 @@ model AvailabilityPattern {
   pricingMode         PricingMode?
   price               Decimal?     @db.Decimal(10, 2)
   status              String       @default("ACTIVE")
+  startDate           DateTime
+  endDate             DateTime
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -385,6 +390,11 @@ model MemberGroupAssignment {
   daysOfWeek     String       // e.g. "1,2,3,4,5,6" (1=Mon … 7=Sun, ISO weekday)
   startTime      String       // e.g. "10:00" (HH:mm, branch local time)
   status         String       // ACTIVE | SUSPENDED
+  // F-207.1: startDate/endDate bound the term. endDate is server-computed from a termPreset
+  // (MONTHLY/QUARTERLY/YEARLY) at create/renew time -- the preset itself is not persisted, only
+  // the computed dates, so a renewal can use a different preset than the original term.
+  startDate      DateTime
+  endDate        DateTime
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 

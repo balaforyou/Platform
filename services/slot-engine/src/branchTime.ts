@@ -205,6 +205,29 @@ export function addBranchDays(instant: Date, days: number, timeZone: string): Da
 }
 
 /**
+ * F-207.1: advances a UTC instant by whole calendar months, clamping an overflowing day to the
+ * target month's real last day (Jan 31 + 1 month = Feb 28/29, not a rollover into March).
+ * Operates on the UTC calendar directly rather than a branch-local wall date, since a pattern's
+ * or assignment's startDate/endDate is a term boundary, not a wall-clock moment the way a
+ * pattern's startTime/endTime are -- there's no branch-local "time of day" to preserve.
+ */
+export function addMonthsUtc(instant: Date, months: number): Date {
+  const y = instant.getUTCFullYear();
+  const mo = instant.getUTCMonth() + 1;
+  const d = instant.getUTCDate();
+
+  const totalMonths = (y * 12 + (mo - 1)) + months;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonth = (totalMonths % 12) + 1;
+  const targetDay = Math.min(d, daysInMonth(targetYear, targetMonth));
+
+  return new Date(Date.UTC(
+    targetYear, targetMonth - 1, targetDay,
+    instant.getUTCHours(), instant.getUTCMinutes(), instant.getUTCSeconds(), instant.getUTCMilliseconds(),
+  ));
+}
+
+/**
  * F-087: resolve a caller-supplied datetime, interpreting a naive one on the BRANCH's clock.
  *
  * `new Date("2026-07-31T22:16:00")` — no offset, no `Z` — is parsed by Node as process-local

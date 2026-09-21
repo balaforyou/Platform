@@ -1,6 +1,6 @@
 import { Section, signJwt } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
-import { db, baseUrl, internalKey, SlotEngineContext, TENANT_ID, BRANCH_ID, USER_ID_1, USER_ID_2 } from './_fixtures';
+import { db, baseUrl, internalKey, SlotEngineContext, TENANT_ID, BRANCH_ID, USER_ID_1, USER_ID_2, defaultTermDates } from './_fixtures';
 
 /**
  * SWEEP / RELEASE MECHANICS.
@@ -122,7 +122,7 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
           data: { userId: USER, tenantId: TENANT_ID, mandateId: `f065-${Date.now()}`, amount: 100000, frequency: 'monthly', status: 'active' },
         });
         await db.memberGroupAssignment.create({
-          data: { userId: USER, resourcePoolId: POOL, daysOfWeek: String(day === 0 ? 7 : day), startTime, status: 'ACTIVE' },
+          data: { userId: USER, resourcePoolId: POOL, daysOfWeek: String(day === 0 ? 7 : day), startTime, status: 'ACTIVE', ...defaultTermDates() },
         });
       };
 
@@ -276,7 +276,7 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
           data: { userId, tenantId: TENANT_ID, mandateId: `f022-${userId}`, amount: 100000, frequency: 'monthly', status: 'active' },
         });
         await db.memberGroupAssignment.create({
-          data: { userId, resourcePoolId: POOL, daysOfWeek: isoWeekday, startTime, status: 'ACTIVE' },
+          data: { userId, resourcePoolId: POOL, daysOfWeek: isoWeekday, startTime, status: 'ACTIVE', ...defaultTermDates() },
         });
       }
 
