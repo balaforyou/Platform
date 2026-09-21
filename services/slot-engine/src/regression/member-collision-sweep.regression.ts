@@ -2,11 +2,24 @@ import { Section, signJwt } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
 import { db, baseUrl, internalKey, guestToken, bookingHeaders, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID, defaultTermDates } from './_fixtures';
 
-/** withinTodayUtc, rounded down to the top of the hour -- stays within today (margin already
- *  built into withinTodayUtc) while landing on a 60-minute pattern slot boundary. */
+/**
+ * withinTodayUtc, rounded down to the top of the hour -- stays within today (margin already
+ * built into withinTodayUtc) while landing on a 60-minute pattern slot boundary.
+ *
+ * Real bug, found while diagnosing a CI-only failure (passed locally, failed in CI, both
+ * against the identical code -- the only variable was wall-clock time): makePool()'s pattern is
+ * `startTime: '00:00', endTime: '23:00'`, so its last valid slot boundary is 22:00 -- 23:00
+ * itself is NOT a valid start (the pattern's own end). Late enough in the UTC day, an 8h+
+ * offset rounds down to exactly hour 23 (e.g. 15:08 UTC + 8h = 23:08 -> rounds to 23:00),
+ * landing outside the pattern's real range and failing POST /member-group-assignments with
+ * 400 START_TIME_NOT_ALIGNED -- a genuine test-fixture defect, not a product bug, and not
+ * something any of these sections were asserting on. Clamped to hour 22 so this can never
+ * happen regardless of what time the suite runs.
+ */
 function alignedHourWithinToday(minutesAhead: number): Date {
   const date = withinTodayUtc(minutesAhead);
   date.setUTCMinutes(0, 0, 0);
+  if (date.getUTCHours() >= 23) date.setUTCHours(22);
   return date;
 }
 
