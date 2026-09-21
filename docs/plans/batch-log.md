@@ -3813,6 +3813,65 @@ stays Open, Plan/Next pointer updated to this entry). Slice D (relocate/remove, 
 `endDate`-on-suspend fix) is next -- its own verification plan re-runs this slice's per-batch join
 against a real relocation once it lands, per the slicing doc's own note.
 
+## Batch 75 — F-133 Slice D (relocate or remove a member)
+
+**Findings:** F-133 — **Open / In progress** (Slice E still ahead; own register row + full
+close-out stay deferred to Slice E's close-out, same treatment as Batches 72-74). No new IDs
+surfaced this batch.
+**Handed off:** 21 Sep 2026 (Chief Architect thread — F-133 Slice D handover)
+**Status:** implemented, real evidence gathered, this entry lands in the same PR per the
+established convention (and Slice C's own corrected miss).
+**Branch:** `f133-slice-d-relocate-remove` (off `main`@`fd8cf8c`).
+
+Real gap confirmed still true through Slices A-C: `PATCH /member-group-assignments/:id` only ever
+toggled `status`, never touching `endDate` -- a "removed" member's row kept reading the original
+month-end forever, which matters now that Slice C's calendar/roster derive per-batch attribution
+from that exact field. Fixed: transitioning to `SUSPENDED` now also sets `endDate = new Date()`,
+server-computed only, never client-suppliable (the whole point is recording WHEN a member actually
+left, which only the server's own clock can honestly answer).
+
+"Relocate" is not a new endpoint -- confirmed the reasoning still holds (in-place mutation would
+make historical attendance ambiguous against a row whose schedule silently changed underneath it)
+-- it's the admin-v2 UI composing the same two existing routes: already-live target (`startDate <=
+now`) → suspend old (same `endDate` fix) + create new, both effective immediately; not-yet-live
+target → old stays `ACTIVE` untouched, new is created queued for the target's real `startDate`
+("queued" confirmed to still mean exactly what Slice A's own create logic already uses: a future
+`startDate` on an otherwise-`ACTIVE` row, no new status invented). **Real gap found while wiring
+this up**: `POST /member-group-assignments` derives `resourcePoolId`/`daysOfWeek`/`startTime` from
+`groupId` (Slice C) but never derived `startDate` -- it defaults to `now()` regardless of the
+group's own cycle, so relocating into a not-yet-live target needed the client to pass the target's
+real `startDate` explicitly; `useAddGroupMember` extended to accept it.
+
+**Real gap found and fixed during live-fire UI testing, not assumed correct**: the roster panel's
+first cut scoped relocation targets to the *same pool* only (the only data already loaded there),
+which would have made cross-court relocation -- the realistic common case -- impossible through
+the UI even though the backend never had that restriction. New `useAllGroups()` (tenant-wide `GET
+/groups`, no `resourcePoolId`) replaces the pool-scoped list for the target picker; confirmed live
+against two real batches on two different real JBC courts.
+
+**Evidence:** `slot-engine` **96/96** (up from 93), full cross-service suite 5/5, both clean on the
+first combined run after one real fixture fix (a missing `AvailabilityPattern` on the new regression
+file's own pools, same `validateAssignmentSchedule` precedent every other regression file's pool
+helper already follows). Three new sections in `group-relocate-remove.regression.ts`: a real removal
+with `endDate` confirmed via direct DB read to land within the exact `[before, after]` window of the
+real PATCH call; a real relocation into an already-live target with old `endDate` truncated and new
+assignment immediately active confirmed via DB read, **then Slice C's own `GET /member/calendar`
+route re-run live against this real relocation** -- a real session seeded the day before (still
+`ATTENDED` on the old assignment's calendar, correctly excluded from the new one) and the day after
+(the mirror, `ATTENDED` on the new assignment, `NO_DATA` on the old, past its truncated `endDate`) --
+unchanged Slice C code, proven correct against corrected input, not assumed; a real relocation into a
+not-yet-live target with the old assignment confirmed still `ACTIVE` and unchanged, the new one
+confirmed queued for the target's exact real `startDate`, and the old assignment's `endDate`
+confirmed to still cover that date (no coverage gap). Real browser pass on admin-v2 against real JBC
+dev-stack data: a real cross-court relocation into a not-yet-started target (DB read-back confirmed
+the old assignment untouched and the new one queued for the real 1st-of-next-month `startDate`) and
+a real Remove (DB read-back confirmed `endDate` landed within 15 seconds of the real click) -- both
+through the live UI, not just the API directly; all test data reverted after.
+
+**Close-out:** `pnpm register:check` — **255 rows, Open 116 / Resolved 139, no change** (F-133 stays
+Open, Plan/Next pointer updated to this entry). Slice E (monthly renewal cycle) is next -- the last
+slice, independent of B/C/D beyond needing `Group.endDate`, already true since Slice A.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

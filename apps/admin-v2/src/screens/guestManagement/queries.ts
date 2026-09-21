@@ -258,6 +258,20 @@ export function useGroups(resourcePoolId?: string) {
   });
 }
 
+/** F-133 Slice D: every batch the caller can see (GET /groups with no resourcePoolId -- the
+ *  server already scopes this by role, owner sees every branch, branch_manager only its own).
+ *  Relocation targets are real tenant-wide, not limited to the source batch's own court -- a
+ *  real relocation will often move a member to a different court's batch entirely. */
+export function useAllGroups() {
+  const api = useAdminApi();
+  const { tenant } = useAdminTenant();
+  return useQuery({
+    queryKey: ['court-groups', 'groups', 'all', tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: () => api.get<Group[]>(`/slot-engine/groups`),
+  });
+}
+
 export type GroupRosterRow = {
   userId: string;
   memberPhone: string;
@@ -279,15 +293,35 @@ export function useGroupRoster(groupId?: string, date?: string) {
 }
 
 /** F-133 Slice C: the real missing link Slices A/B never built -- nothing previously set
- *  MemberGroupAssignment.groupId, so no assignment could ever join a batch. Schedule fields are
- *  intentionally NOT sent -- the server derives them from the group itself. */
+ *  MemberGroupAssignment.groupId, so no assignment could ever join a batch. resourcePoolId/
+ *  daysOfWeek/startTime are intentionally NOT sent -- the server derives them from the group
+ *  itself. startDate IS sometimes sent (F-133 Slice D): the create route defaults it to now(),
+ *  it does NOT derive it from the group -- relocating into a batch that hasn't started its own
+ *  cycle yet needs the new assignment queued for the target's real startDate, not made ACTIVE
+ *  today, so the caller passes it explicitly for that case only. */
 export function useAddGroupMember() {
   const api = useAdminApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
-      api.post(`/slot-engine/member-group-assignments`, { groupId, userId }),
+    mutationFn: ({ groupId, userId, startDate }: { groupId: string; userId: string; startDate?: string }) =>
+      api.post(`/slot-engine/member-group-assignments`, { groupId, userId, ...(startDate ? { startDate } : {}) }),
     onSuccess: (_data, { groupId }) => qc.invalidateQueries({ queryKey: ['court-groups', 'roster', groupId] }),
+  });
+}
+
+/** F-133 Slice D — "Remove": suspends the assignment. The server now also sets endDate to the
+ *  real suspension moment (the required fix this slice exists for) -- this hook just triggers it,
+ *  no client-supplied endDate. Also the first half of "Relocate" into an already-live target
+ *  batch (suspend old + useAddGroupMember for new), composed in the calling component. */
+export function useSuspendAssignment() {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ assignmentId }: { assignmentId: string; groupId?: string }) =>
+      api.patch(`/slot-engine/member-group-assignments/${assignmentId}`, { status: 'SUSPENDED' }),
+    onSuccess: (_data, vars) => {
+      if (vars.groupId) qc.invalidateQueries({ queryKey: ['court-groups', 'roster', vars.groupId] });
+    },
   });
 }
 

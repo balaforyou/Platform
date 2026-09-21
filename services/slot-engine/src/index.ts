@@ -5809,7 +5809,16 @@ server.get('/member-group-assignments', async (request, reply) => {
   }));
 });
 
-// Update assignment status (ACTIVE ↔ SUSPENDED). Internal or owner only.
+// Update assignment status (ACTIVE ↔ SUSPENDED). Internal or owner/branch_manager (requirePoolScope).
+// F-133 Slice D: the real fix, deferred through Slices A-C -- transitioning to SUSPENDED now also
+// sets endDate to the real suspension moment (now()), never left at the original month-end.
+// Server-computed only, not client-suppliable: a "Remove" action's whole point is recording WHEN
+// a member actually left, which only the server's own clock can honestly answer. This is also
+// half of "Relocate" (Slice D §7) -- relocating into an already-live target batch is exactly
+// "suspend the old assignment right now" + a normal POST /member-group-assignments for the new
+// one; no new endpoint, the admin-v2 UI composes these two existing calls. Slice C's calendar/
+// roster derived join (by userId, date within [startDate, endDate]) now attributes correctly
+// across a relocation because endDate is finally real -- unchanged code, corrected input.
 server.patch('/member-group-assignments/:id', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
@@ -5835,7 +5844,7 @@ server.patch('/member-group-assignments/:id', async (request, reply) => {
   try {
     return await prisma.memberGroupAssignment.update({
       where: { id },
-      data: { status },
+      data: status === 'SUSPENDED' ? { status, endDate: new Date() } : { status },
     });
   } catch (err: any) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
