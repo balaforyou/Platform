@@ -228,6 +228,25 @@ export function addMonthsUtc(instant: Date, months: number): Date {
 }
 
 /**
+ * F-133: the real last instant of the calendar month AFTER the one `instant` falls in, on the
+ * UTC calendar. Deliberately NOT `addMonthsUtc` -- that helper preserves `instant`'s
+ * day-of-month, clamped to the target month (30 Sept + 1 month -> 30 Oct, not the 31st, because
+ * `min(30, 31) === 30`). A batch's endDate must be the true end of its starting month
+ * regardless of which day it started or renewed on, so this ignores `instant`'s day entirely
+ * and always resolves to `daysInMonth(targetYear, targetMonth)`.
+ */
+export function endOfNextCalendarMonthUtc(instant: Date): Date {
+  const y = instant.getUTCFullYear();
+  const mo = instant.getUTCMonth() + 1;
+
+  const totalMonths = (y * 12 + (mo - 1)) + 1;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonth = (totalMonths % 12) + 1;
+
+  return new Date(Date.UTC(targetYear, targetMonth - 1, daysInMonth(targetYear, targetMonth), 23, 59, 59, 999));
+}
+
+/**
  * F-087: resolve a caller-supplied datetime, interpreting a naive one on the BRANCH's clock.
  *
  * `new Date("2026-07-31T22:16:00")` — no offset, no `Z` — is parsed by Node as process-local

@@ -14,6 +14,7 @@ import { StubScreen } from './screens/StubScreen';
 import { BranchSettingsScreen } from './screens/BranchSettingsScreen';
 import { GuestManagementScreen } from './screens/GuestManagementScreen';
 import { LedgerScreen } from './screens/LedgerScreen';
+import { MembersScreen } from './screens/MembersScreen';
 
 /**
  * Auth gate → navigated app.
@@ -64,15 +65,7 @@ export default function App() {
           />
           <Route path="/ledger" element={<LedgerScreen />} />
           <Route path="/inventory" element={<GuestSlotInventory />} />
-          <Route
-            path="/members"
-            element={
-              <StubScreen
-                title="Manage Members"
-                description="Member records, plans, and status."
-              />
-            }
-          />
+          <Route path="/members" element={<MembersScreen />} />
           <Route
             path="/court-groups"
             element={

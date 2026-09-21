@@ -1,5 +1,5 @@
 import { AuthorizedCourts } from './sections/AuthorizedCourts';
-import { PricingRates } from './sections/PricingRates';
+import { PricingRates, MemberRates } from './sections/PricingRates';
 import { CancellationPolicy } from './sections/CancellationPolicy';
 import { GuestScheduler } from './sections/GuestScheduler';
 
@@ -23,6 +23,8 @@ export function SetupRulesPanel({ branchId }: { branchId: string }) {
     <div style={{ display: 'grid', gap: 'var(--av2-space-4)', minWidth: 0 }}>
       <AuthorizedCourts branchId={branchId} />
       <PricingRates branchId={branchId} />
+      {/* F-133 §5: tenant-wide, not branch-scoped -- deliberately ignores branchId. */}
+      <MemberRates />
       <CancellationPolicy branchId={branchId} />
       <GuestScheduler branchId={branchId} />
     </div>
