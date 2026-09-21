@@ -90,6 +90,65 @@ export function futureAlignedHour(hoursFromNow: number): Date {
   return date;
 }
 
+/**
+ * Creates and confirms a fresh booking on ctx.pool/ctx.window via the real hold -> terms ->
+ * intent -> webhook-capture -> confirm chain (not a seeded db row) -- shared by any section that
+ * needs its own independent CONFIRMED booking with a real captured PaymentIntent behind it, e.g.
+ * to cancel-and-refund without colliding with another section's use of the same booking.
+ */
+export async function createConfirmedBooking(
+  ctx: { pool: any; window: any },
+  idempotencyKey: string,
+  userId: string = USER_ID,
+): Promise<any> {
+  const holdRes = await fetch(`${slotEngineUrl}/bookings`, {
+    method: 'POST',
+    headers: bookingHeaders(userId, idempotencyKey),
+    body: JSON.stringify({
+      branchId: BRANCH_ID,
+      resourcePoolId: ctx.pool.id,
+      windowId: ctx.window.id,
+    }),
+  });
+  const holdBooking = ((await holdRes.json()) as any).data;
+  if (holdBooking.status !== 'HELD') {
+    throw new Error(`createConfirmedBooking setup: expected HELD booking, got ${holdBooking.status}`);
+  }
+  await acceptTerms(holdBooking.id, userId);
+
+  const intentRes = await fetch(`${paymentUrl}/payments/intents`, {
+    method: 'POST',
+    headers: paymentHeaders(userId),
+    body: JSON.stringify({ bookingId: holdBooking.id }),
+  });
+  const intent = ((await intentRes.json()) as any).data;
+
+  const capturePayload = {
+    id: 'evt_conf_' + crypto.randomBytes(4).toString('hex'),
+    event: 'payment.captured',
+    payload: { payment: { entity: { id: intent.gatewayRef, amount: intent.amount, status: 'captured' } } },
+  };
+  const capturePayloadStr = JSON.stringify(capturePayload);
+  const captureSig = generateRazorpaySignature(capturePayloadStr, webhookSecret);
+  const webhookRes = await fetch(`${paymentUrl}/webhooks/razorpay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Razorpay-Signature': captureSig },
+    body: capturePayloadStr,
+  });
+  if (webhookRes.status !== 200) {
+    throw new Error(`createConfirmedBooking setup: webhook capture failed with ${webhookRes.status}`);
+  }
+
+  const confirmedRes = await fetch(`${slotEngineUrl}/bookings/${holdBooking.id}`, {
+    headers: { Authorization: `Bearer ${internalKey}` },
+  });
+  const confirmed = ((await confirmedRes.json()) as any).data;
+  if (confirmed.status !== 'CONFIRMED') {
+    throw new Error(`createConfirmedBooking setup: expected CONFIRMED, got ${confirmed.status}`);
+  }
+  return confirmed;
+}
+
 export async function cleanDatabase() {
   // F-101: fail closed before any unscoped delete. Everything below runs without a WHERE
   // clause, so pointing DATABASE_URL at a database holding real data destroys it.

@@ -1,19 +1,13 @@
-import crypto from 'crypto';
 import { Section, signJwt } from '@badminton/test-harness';
 import {
   db,
   slotEngineUrl,
   paymentUrl,
   internalKey,
-  webhookSecret,
-  generateRazorpaySignature,
-  bookingHeaders,
-  paymentHeaders,
-  acceptTerms,
+  createConfirmedBooking,
   PaymentContext,
   TENANT_ID,
   BRANCH_ID,
-  USER_ID,
 } from './_fixtures';
 
 /**
@@ -28,55 +22,6 @@ import {
  */
 
 const OTHER_BRANCH_ID = 'f274-other-branch';
-
-async function createConfirmedBooking(ctx: PaymentContext, idempotencyKey: string) {
-  const holdRes = await fetch(`${slotEngineUrl}/bookings`, {
-    method: 'POST',
-    headers: bookingHeaders(USER_ID, idempotencyKey),
-    body: JSON.stringify({
-      branchId: BRANCH_ID,
-      resourcePoolId: ctx.pool.id,
-      windowId: ctx.window.id,
-    }),
-  });
-  const holdBooking = ((await holdRes.json()) as any).data;
-  if (holdBooking.status !== 'HELD') {
-    throw new Error(`F-274 setup: expected HELD booking, got ${holdBooking.status}`);
-  }
-  await acceptTerms(holdBooking.id, USER_ID);
-
-  const intentRes = await fetch(`${paymentUrl}/payments/intents`, {
-    method: 'POST',
-    headers: paymentHeaders(USER_ID),
-    body: JSON.stringify({ bookingId: holdBooking.id }),
-  });
-  const intent = ((await intentRes.json()) as any).data;
-
-  const capturePayload = {
-    id: 'evt_f274_' + crypto.randomBytes(4).toString('hex'),
-    event: 'payment.captured',
-    payload: { payment: { entity: { id: intent.gatewayRef, amount: intent.amount, status: 'captured' } } },
-  };
-  const capturePayloadStr = JSON.stringify(capturePayload);
-  const captureSig = generateRazorpaySignature(capturePayloadStr, webhookSecret);
-  const webhookRes = await fetch(`${paymentUrl}/webhooks/razorpay`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Razorpay-Signature': captureSig },
-    body: capturePayloadStr,
-  });
-  if (webhookRes.status !== 200) {
-    throw new Error(`F-274 setup: webhook capture failed with ${webhookRes.status}`);
-  }
-
-  const confirmedRes = await fetch(`${slotEngineUrl}/bookings/${holdBooking.id}`, {
-    headers: { Authorization: `Bearer ${internalKey}` },
-  });
-  const confirmed = ((await confirmedRes.json()) as any).data;
-  if (confirmed.status !== 'CONFIRMED') {
-    throw new Error(`F-274 setup: expected CONFIRMED, got ${confirmed.status}`);
-  }
-  return confirmed;
-}
 
 async function cancelBooking(bookingId: string) {
   const cancelRes = await fetch(`${slotEngineUrl}/bookings/${bookingId}/cancel`, {
