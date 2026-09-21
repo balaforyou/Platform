@@ -5659,6 +5659,17 @@ server.post('/member-group-assignments', async (request, reply) => {
   let resourcePoolId = bodyResourcePoolId;
   let daysOfWeek = bodyDaysOfWeek;
   let startTime = bodyStartTime;
+  // F-133 Slice D: the same reasoning extends to startDate -- a batch also has one real
+  // cycle-start by definition. This was found incomplete in review: the block above already
+  // derived the other three fields from the group, but startDate silently kept defaulting to
+  // now() regardless of the target's own cycle, making the server not actually authoritative
+  // for it (any caller other than the one admin-v2 flow this slice wired up -- a future admin
+  // screen, an internal script -- would have silently created a live ACTIVE row for a batch
+  // that hasn't started yet). groupStartDate is the later of "the group's own start" and "now":
+  // a not-yet-live target's own future startDate is used as-is (queued correctly); an
+  // already-live target's own (possibly long-past) startDate is clamped up to now (effective
+  // immediately, not backdated to the batch's original cycle start).
+  let groupStartDate: Date | undefined;
   if (groupId) {
     const group = await prisma.group.findUnique({ where: { id: groupId } });
     if (!group) {
@@ -5671,6 +5682,8 @@ server.post('/member-group-assignments', async (request, reply) => {
     resourcePoolId = group.resourcePoolId;
     daysOfWeek = group.daysOfWeek;
     startTime = group.startTime;
+    const now = new Date();
+    groupStartDate = group.startDate > now ? group.startDate : now;
   }
 
   if (!userId || !resourcePoolId || !daysOfWeek || !startTime) {
@@ -5689,7 +5702,7 @@ server.post('/member-group-assignments', async (request, reply) => {
     throw err;
   }
 
-  const startDate = rawStartDate !== undefined ? new Date(rawStartDate) : new Date();
+  const startDate = rawStartDate !== undefined ? new Date(rawStartDate) : (groupStartDate ?? new Date());
   if (Number.isNaN(startDate.getTime())) {
     reply.status(400);
     const err = new Error('startDate must be a valid datetime');

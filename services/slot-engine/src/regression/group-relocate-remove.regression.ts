@@ -15,8 +15,19 @@ import { db, baseUrl, internalKey, TENANT_ID, BRANCH_ID, SlotEngineContext } fro
  *   - target already live (startDate <= now): suspend old (endDate = now) + create new, both
  *     effective immediately.
  *   - target not yet live: old stays ACTIVE untouched, new is created queued for the target's
- *     own real startDate (passed explicitly -- the create route defaults startDate to now(), it
- *     does not derive it from groupId).
+ *     own real startDate.
+ *
+ * Real gap caught in review, fixed in this same PR: the create route already derived
+ * resourcePoolId/daysOfWeek/startTime from groupId (Slice C) but silently kept defaulting
+ * startDate to now() regardless of the target's own cycle -- not actually authoritative for any
+ * caller besides the one admin-v2 flow this slice happened to wire up explicitly. Fixed
+ * server-side: groupStartDate = max(group.startDate, now()) is now the real default whenever no
+ * explicit startDate is given -- a not-yet-live target's own future startDate is used as-is
+ * (queued correctly); an already-live target's own startDate is clamped up to now (effective
+ * immediately, never backdated to the batch's original cycle start). admin-v2's own explicit
+ * startDate pass-through for the not-yet-live case stays (it still needs to decide whether to
+ * suspend the old assignment, a real client decision) but is now redundant-safe rather than
+ * load-bearing -- section 4 below proves the server gets it right with no client hint at all.
  *
  * Section 2 below is the real point of this slice: it doesn't just check the PATCH/POST calls in
  * isolation, it re-runs Slice C's own derived-join calendar logic against a genuine relocation,
@@ -245,7 +256,8 @@ export const groupRelocateRemoveSections: Section<SlotEngineContext>[] = [
       });
 
       // Real relocation logic for a not-yet-live target: no suspend call at all, only create --
-      // with startDate passed explicitly (the create route does not derive it from groupId).
+      // startDate passed explicitly here (admin-v2's own real call shape); section 4 below
+      // proves the server derives the identical value even without this client hint.
       const createRes = await fetch(`${baseUrl}/member-group-assignments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({ userId, groupId: newGroup.id, startDate: targetStartDate.toISOString() }),
@@ -273,6 +285,55 @@ export const groupRelocateRemoveSections: Section<SlotEngineContext>[] = [
       // target's startDate -- real proof there is no day the member has no batch at all.
       if (oldRow.endDate < targetStartDate) {
         throw new Error(`Expected the old assignment to still cover the target's startDate (no coverage gap), old endDate ${oldRow.endDate} < target startDate ${targetStartDate}`);
+      }
+    },
+  },
+
+  {
+    name: 'F-133D: POST /member-group-assignments derives startDate from the group itself when none is given -- queued for a not-yet-live target, clamped to now for an already-live one',
+    async run() {
+      const futurePool = await makePool('startdate-derive-future');
+      const futureStart = new Date(Date.now() + 15 * DAY);
+      const futureGroup = await db.group.create({
+        data: {
+          tenantId: TENANT_ID, name: 'F-133D startDate-derive future batch', resourcePoolId: futurePool.id,
+          daysOfWeek: '1,2,3,4,5,6,7', startTime: '10:00',
+          startDate: futureStart, endDate: new Date(futureStart.getTime() + 30 * DAY),
+        },
+      });
+      // No startDate in the body at all -- the real point: the server must get this right with
+      // zero client hint, not just when admin-v2's own UI happens to pass one.
+      const futureRes = await fetch(`${baseUrl}/member-group-assignments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({ userId: 'f133d-startdate-derive-future-member', groupId: futureGroup.id }),
+      });
+      if (futureRes.status !== 201) throw new Error(`F-133D startDate derive (future): expected 201, got ${futureRes.status}: ${JSON.stringify(await futureRes.json())}`);
+      const futureAssignment = ((await futureRes.json()) as any).data;
+      console.log('F133D_EVIDENCE startdate_derive_future', JSON.stringify({ startDate: futureAssignment.startDate, targetStartDate: futureStart }));
+      if (Math.abs(new Date(futureAssignment.startDate).getTime() - futureStart.getTime()) > 1000) {
+        throw new Error(`Expected startDate derived from the not-yet-live group's own startDate ${futureStart.toISOString()}, got ${futureAssignment.startDate}`);
+      }
+
+      const livePool = await makePool('startdate-derive-live');
+      const liveGroup = await db.group.create({
+        data: {
+          tenantId: TENANT_ID, name: 'F-133D startDate-derive live batch', resourcePoolId: livePool.id,
+          daysOfWeek: '1,2,3,4,5,6,7', startTime: '10:00',
+          startDate: new Date(Date.now() - 20 * DAY), endDate: new Date(Date.now() + 40 * DAY), // already live
+        },
+      });
+      const before = new Date();
+      const liveRes = await fetch(`${baseUrl}/member-group-assignments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({ userId: 'f133d-startdate-derive-live-member', groupId: liveGroup.id }),
+      });
+      const after = new Date();
+      if (liveRes.status !== 201) throw new Error(`F-133D startDate derive (live): expected 201, got ${liveRes.status}: ${JSON.stringify(await liveRes.json())}`);
+      const liveAssignment = ((await liveRes.json()) as any).data;
+      console.log('F133D_EVIDENCE startdate_derive_live', JSON.stringify({ startDate: liveAssignment.startDate, before, after }));
+      const liveStartDate = new Date(liveAssignment.startDate);
+      if (liveStartDate < before || liveStartDate > after) {
+        throw new Error(`Expected startDate clamped to ~now (not backdated to the live group's original ${liveGroup.startDate}), got ${liveAssignment.startDate}`);
       }
     },
   },
