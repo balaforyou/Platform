@@ -15,7 +15,7 @@ import BookingHistory from './components/BookingHistory';
 import BookingConfirmation from './components/BookingConfirmation';
 import Shell from './components/Shell';
 import LoadingState from './components/ui/LoadingState';
-import { AlertTriangle, CheckCircle, Clock, MapPin, Navigation } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Clock, MapPin, Navigation } from 'lucide-react';
 import './index.css';
 
 // Capture beforeinstallprompt event globally to avoid React component mounting race conditions
@@ -521,6 +521,10 @@ function MainDashboard() {
 
       {renderMemberSessionCard()}
 
+      {user?.userType === 'MEMBER' && activeAssignmentId ? (
+        <MemberCalendarCard assignmentId={activeAssignmentId} accessToken={accessToken} />
+      ) : null}
+
       {/* F-235 Slice E: primary new-booking action -- real mockup structure confirmed via the
           canvas's own code inspector: a Button sits directly below the session card, ahead of the
           bookings list. handleBookNow/navigate('/book') unchanged, same id Playwright specs
@@ -637,6 +641,126 @@ function MainDashboard() {
         )}
       </section>
     </div>
+  );
+}
+
+// F-133 Slice C — a real month's worth of day-status for the currently active batch tab (Slice
+// B's activeAssignmentId, same id). Scoped to one assignment at a time, matching "tabs scope the
+// calendar to whichever batch tab is active, same as landing". Four visually distinct states per
+// the decided derivation (memberAttendanceConfirmedAt/DeclinedAt, never CHECKED_IN); a real "not
+// enough history yet" empty state when the server reports no session has occurred yet.
+const CALENDAR_STATE_STYLE: Record<string, React.CSSProperties> = {
+  ATTENDED: { background: 'var(--color-accent-2-500, #16a34a)', color: '#fff' },
+  DECLINED: { background: 'var(--slot-almostfull-surface)', color: 'var(--slot-almostfull-text)', border: '1px solid var(--slot-almostfull-border)' },
+  NO_RESPONSE: { background: 'var(--color-destructive, #dc2626)', color: '#fff' },
+  NO_DATA: { background: 'var(--color-neutral-200)', color: 'var(--color-neutral-400)' },
+};
+
+function MemberCalendarCard({ assignmentId, accessToken }: { assignmentId: string; accessToken: string | null }) {
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [days, setDays] = useState<{ date: string; state: string }[]>([]);
+  const [hasEnoughHistory, setHasEnoughHistory] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const monthDate = new Date();
+  monthDate.setUTCMonth(monthDate.getUTCMonth() + monthOffset, 1);
+  const monthStr = `${monthDate.getUTCFullYear()}-${String(monthDate.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  useEffect(() => {
+    if (!assignmentId || !accessToken) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    apiRequest<{ days: { date: string; state: string }[]; hasEnoughHistory: boolean }>(
+      `/slot-engine/member/calendar?assignmentId=${assignmentId}&month=${monthStr}`,
+      { token: accessToken },
+    )
+      .then((res) => {
+        if (cancelled) return;
+        setDays(res?.days ?? []);
+        setHasEnoughHistory(!!res?.hasEnoughHistory);
+      })
+      .catch((err: any) => {
+        if (!cancelled) setError(err.message || 'Unable to load calendar.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId, accessToken, monthStr]);
+
+  // Reset to the current month whenever the active batch tab changes -- a stale month offset
+  // from a previously-viewed batch should not carry over.
+  useEffect(() => {
+    setMonthOffset(0);
+  }, [assignmentId]);
+
+  const leadingBlanks = days[0] ? new Date(`${days[0].date}T00:00:00Z`).getUTCDay() : 0;
+  const monthLabel = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  return (
+    <section className="p-6 rounded-2xl space-y-4" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }} id="member-calendar-card">
+      <div className="flex items-center justify-between">
+        <button type="button" aria-label="Previous month" onClick={() => setMonthOffset((m) => m - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-neutral-600)' }}>
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <p className="font-semibold" style={{ color: 'var(--color-text)' }}>{monthLabel}</p>
+        <button type="button" aria-label="Next month" onClick={() => setMonthOffset((m) => m + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-neutral-600)' }}>
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      </div>
+
+      {loading ? <LoadingState variant="compact" label="Loading calendar…" /> : null}
+      {error ? (
+        <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', color: 'var(--color-destructive)' }}>
+          <AlertTriangle className="h-4 w-4" />{error}
+        </div>
+      ) : null}
+
+      {!loading && !error && !hasEnoughHistory ? (
+        <p className="text-sm" id="calendar-not-enough-history" style={{ color: 'var(--color-neutral-600)' }}>
+          Not enough history yet — check back after your first session.
+        </p>
+      ) : null}
+
+      {!loading && !error && hasEnoughHistory ? (
+        <div className="grid grid-cols-7 gap-1" id="calendar-grid">
+          {Array.from({ length: leadingBlanks }).map((_, i) => (
+            <div key={`blank-${i}`} />
+          ))}
+          {days.map((d) => (
+            <div
+              key={d.date}
+              title={`${d.date}: ${d.state}`}
+              data-date={d.date}
+              data-state={d.state}
+              style={{
+                ...CALENDAR_STATE_STYLE[d.state],
+                borderRadius: 8,
+                aspectRatio: '1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {Number(d.date.slice(8, 10))}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="flex gap-3 flex-wrap text-xs" style={{ color: 'var(--color-neutral-600)' }}>
+        <span className="flex items-center gap-1"><span style={{ ...CALENDAR_STATE_STYLE.ATTENDED, width: 10, height: 10, borderRadius: 3, display: 'inline-block' }} />Attended</span>
+        <span className="flex items-center gap-1"><span style={{ ...CALENDAR_STATE_STYLE.DECLINED, width: 10, height: 10, borderRadius: 3, display: 'inline-block' }} />Declined</span>
+        <span className="flex items-center gap-1"><span style={{ ...CALENDAR_STATE_STYLE.NO_RESPONSE, width: 10, height: 10, borderRadius: 3, display: 'inline-block' }} />No response</span>
+        <span className="flex items-center gap-1"><span style={{ ...CALENDAR_STATE_STYLE.NO_DATA, width: 10, height: 10, borderRadius: 3, display: 'inline-block' }} />No data</span>
+      </div>
+    </section>
   );
 }
 

@@ -248,6 +248,49 @@ export function useCreateGroup() {
   });
 }
 
+/** F-133 Slice C: list batches, scoped to a pool (mirrors usePools' own shape). */
+export function useGroups(resourcePoolId?: string) {
+  const api = useAdminApi();
+  return useQuery({
+    queryKey: ['court-groups', 'groups', resourcePoolId],
+    enabled: !!resourcePoolId,
+    queryFn: () => api.get<Group[]>(`/slot-engine/groups?resourcePoolId=${resourcePoolId}`),
+  });
+}
+
+export type GroupRosterRow = {
+  userId: string;
+  memberPhone: string;
+  assignmentId: string;
+  state: 'ATTENDED' | 'DECLINED' | 'NO_RESPONSE' | 'NO_DATA';
+  confirmedAt: string | null;
+  declinedAt: string | null;
+};
+
+/** F-133 Slice C: a batch's real ACTIVE roster for a given date (defaults server-side to today,
+ *  branch-local). Empty array is the real "no members yet" state -- rendered as such, not hidden. */
+export function useGroupRoster(groupId?: string, date?: string) {
+  const api = useAdminApi();
+  return useQuery({
+    queryKey: ['court-groups', 'roster', groupId, date],
+    enabled: !!groupId,
+    queryFn: () => api.get<GroupRosterRow[]>(`/slot-engine/groups/${groupId}/roster${date ? `?date=${date}` : ''}`),
+  });
+}
+
+/** F-133 Slice C: the real missing link Slices A/B never built -- nothing previously set
+ *  MemberGroupAssignment.groupId, so no assignment could ever join a batch. Schedule fields are
+ *  intentionally NOT sent -- the server derives them from the group itself. */
+export function useAddGroupMember() {
+  const api = useAdminApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
+      api.post(`/slot-engine/member-group-assignments`, { groupId, userId }),
+    onSuccess: (_data, { groupId }) => qc.invalidateQueries({ queryKey: ['court-groups', 'roster', groupId] }),
+  });
+}
+
 /**
  * F-220 §3.1 / F-225 — save which courts guests may book, per pool. `authorizedByPool` maps a
  * pool id to its authorised resource ids; each entry is a whole-pool replace on the server

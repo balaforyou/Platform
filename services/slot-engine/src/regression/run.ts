@@ -20,6 +20,7 @@ import { moduleEntitlementSections } from './module-entitlement.regression';
 import { guestLedgerSections } from './guest-ledger.regression';
 import { memberCollisionSweepSections } from './member-collision-sweep.regression';
 import { memberMultiBatchAttendanceSections } from './member-multi-batch-attendance.regression';
+import { groupRosterCalendarSections } from './group-roster-calendar.regression';
 
 async function main() {
   console.log('Starting local Slot Engine server...');
@@ -59,6 +60,7 @@ async function main() {
         ...guestLedgerSections,
         ...memberCollisionSweepSections,
         ...memberMultiBatchAttendanceSections,
+        ...groupRosterCalendarSections,
       ],
       context,
     );
