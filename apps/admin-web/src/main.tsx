@@ -106,6 +106,14 @@ type UserLookupResult = {
   userType: string;
 };
 
+// F-207.2's create response only; PATCH/list never carry this.
+type CollisionSweepSummary = {
+  scanned: number;
+  relocated: number;
+  cancelled: number;
+  failed: { bookingId: string; error: string }[];
+};
+
 type MemberAssignment = {
   id: string;
   userId: string;
@@ -115,6 +123,7 @@ type MemberAssignment = {
   status: string;
   resourcePool?: ResourcePool;
   member?: UserLookupResult | null;
+  collisionSweep?: CollisionSweepSummary;
 };
 
 type AdminBooking = {
@@ -1563,6 +1572,17 @@ function AssignmentsPage() {
     enabled: !!resourcePoolId,
     queryFn: () => api.get<MemberAssignment[]>(`/slot-engine/member-group-assignments${resourcePoolId ? `?resourcePoolId=${resourcePoolId}` : ''}`),
   });
+  // F-207.3: cheap pre-hoc signal, not a full preview -- reuses the sweep's own "which bookings
+  // collide" scan (GET .../member-collision-preview) without predicting relocate-vs-cancel per
+  // booking, which stays out of scope for a preview (see the slot-engine route's own comment).
+  const daysOfWeekParam = form.daysOfWeek.join(',');
+  const collisionPreview = useQuery({
+    queryKey: ['member-collision-preview', resourcePoolId, daysOfWeekParam, form.startTime],
+    enabled: !!resourcePoolId && form.daysOfWeek.length > 0 && !!form.startTime && !noSharedStartTime,
+    queryFn: () => api.get<{ scanned: number }>(
+      `/slot-engine/resource-pools/${resourcePoolId}/member-collision-preview?daysOfWeek=${encodeURIComponent(daysOfWeekParam)}&startTime=${encodeURIComponent(form.startTime)}`,
+    ),
+  });
   const create = useMutation({
     mutationFn: () => {
       if (!selectedUser) throw new Error('Lookup a member phone first');
@@ -1574,7 +1594,10 @@ function AssignmentsPage() {
         startTime: form.startTime,
       });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['assignments'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['assignments'] });
+      qc.invalidateQueries({ queryKey: ['member-collision-preview'] });
+    },
   });
   const update = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => api.patch<MemberAssignment>(`/slot-engine/member-group-assignments/${id}`, { status }),
@@ -1629,12 +1652,38 @@ function AssignmentsPage() {
             {noSharedStartTime && (
               <MutationFeedback error={{ message: "No shared start time for these days — check each day's availability pattern." }} />
             )}
+            {/* F-207.3: cheap pre-hoc signal (count only, not a full preview -- see
+                collisionPreview's own comment above) that this slot already has guest bookings
+                on it that assigning a member here will automatically relocate or cancel+refund. */}
+            {!!collisionPreview.data?.scanned && (
+              <div className="warning-box">
+                This slot currently has {collisionPreview.data.scanned} existing guest booking{collisionPreview.data.scanned === 1 ? '' : 's'}.
+                Assigning a member here will automatically relocate {collisionPreview.data.scanned === 1 ? 'it' : 'them'} to another court if one is free, or cancel with a full refund.
+              </div>
+            )}
           </div>
           <button className="primary-btn" disabled={create.isPending || !selectedUser || !resourcePoolId || form.daysOfWeek.length === 0 || noSharedStartTime} onClick={() => create.mutate()}>
             {create.isPending ? <RefreshCw className="spin" size={16} /> : <Users size={16} />}
             {create.isPending ? 'Assigning...' : 'Assign member'}
           </button>
-          <MutationFeedback error={create.error || assignments.error} successMessage={create.isSuccess ? 'Member assignment created.' : undefined} />
+          <MutationFeedback error={create.error || assignments.error} successMessage={create.isSuccess && !create.data?.collisionSweep?.scanned ? 'Member assignment created.' : undefined} />
+          {/* F-207.3: post-hoc — the create response's real collisionSweep, surfaced here rather
+              than silently discarded. `failed` rendered distinctly: a cancelled-but-unrefunded
+              booking is a real money/trust problem an admin must see, not a generic success. */}
+          {create.isSuccess && !!create.data?.collisionSweep?.scanned && (
+            <div className={`warning-box${create.data.collisionSweep.failed.length > 0 ? ' failed' : ''}`}>
+              <strong>Member assigned.</strong> {create.data.collisionSweep.scanned} existing booking{create.data.collisionSweep.scanned === 1 ? '' : 's'} affected:{' '}
+              {create.data.collisionSweep.relocated} relocated, {create.data.collisionSweep.cancelled} cancelled with full refund
+              {create.data.collisionSweep.failed.length > 0 && <>, <strong>{create.data.collisionSweep.failed.length} FAILED — needs manual follow-up</strong></>}.
+              {create.data.collisionSweep.failed.length > 0 && (
+                <ul>
+                  {create.data.collisionSweep.failed.map((f) => (
+                    <li key={f.bookingId}>Booking {f.bookingId}: {f.error}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       </section>
       <section className="panel">
