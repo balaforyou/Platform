@@ -3872,6 +3872,90 @@ through the live UI, not just the API directly; all test data reverted after.
 Open, Plan/Next pointer updated to this entry). Slice E (monthly renewal cycle) is next -- the last
 slice, independent of B/C/D beyond needing `Group.endDate`, already true since Slice A.
 
+## Batch 76 — F-133 Slice E (monthly renewal cycle, final slice) + F-277
+
+**Findings:** F-133 — **Resolved** (own register row written this batch, Open → Resolved, summarizing
+all five slices). F-277 — **Resolved**, Chief-assigned 22 Sep 2026, delivered in the same PR.
+**Handed off:** 21 Sep 2026 (Chief Architect thread — F-133 Slice E handover).
+**Status:** implemented, real evidence gathered, signed off, merged. This entry and the register
+close-out land in the same pass, per this project's own close-out discipline.
+**Branch:** `f133-slice-e-monthly-renewal-cycle` (off `main`@`1ba6638`). PR #76.
+
+`Group.endDate` re-confirmed write-only by direct grep before design began -- nothing in
+slot-engine's runtime reads it, so "renewing a batch" means renewing every `ACTIVE` assignment's own
+`endDate`, never a "renew the Group" operation that doesn't exist. The shared
+`POST /member-group-assignments/:id/renew` (pre-dates F-133, F-207.1) now branches on
+`existing.groupId` rather than being replaced: a batch assignment rejects any `termPreset` in the
+body (`400 TERM_PRESET_NOT_APPLICABLE` -- told no, not silently ignored, since batches renew monthly
+by definition) and renews to `endOfNextCalendarMonthUtc(existing.endDate)`, fed the row's *current*
+`endDate` directly with no day-before anchor adjustment (the helper only reads year+month from its
+input, and `existing.endDate` is already the true end of its own current month); a non-batch
+assignment is completely unchanged -- F-207.1's original `termPreset`/`addMonthsUtc` path,
+re-proven, not just left alone.
+
+Sweep-trigger investigation done first, not assumed: `ScheduledJob`/`job-scheduler` confirmed by grep
+NOT wired into slot-engine's runtime at all (F-044 Phase B is an unbuilt intention, not shipped
+reality) -- production's real `/bookings/sweep` cadence is external to this repo and not directly
+inspectable. Reused Slice B's own already-shipped, already-signed-off T-2h/T-1h15m reminders as real
+accepted evidence that sweep fires frequently enough in practice (rule 3: reuse a proven pattern
+rather than invent a new trigger on a guess) -- extended the existing sweep with a new Step 5 rather
+than building a separate route. New `batch_renewal_reminder` dispatches once per branch per month on
+the branch-local 20th, deduped via the proven `ScheduledJobDispatch` insert-first pattern (key
+`${branchId}:${YYYY-MM}`) -- reused verbatim from `low_occupancy_alert`/the T-2h/T-1h15m reminders,
+not reinvented. The "is it the 20th" gate was split into its own pure, directly-testable predicate
+(`isRenewalReminderDay` in `branchTime.ts`) specifically because nothing in this suite can move real
+wall-clock time to the 20th on demand, unlike every other reminder in this file, which gates on a
+real near-term offset from "now" a test *can* construct. New `GET /groups/expiring-renewals` (same
+query shape shared with the sweep via `computeExpiringBatchesByBranch`, no 20th gate -- an admin can
+browse any day) backs a new admin-v2 `RenewalPanel.tsx`: lists real batches with any `ACTIVE` member
+expiring this month, one real `/renew` call per member on "Renew" (no new bulk backend route), real
+per-item failures reported rather than assumed away. `batch_renewal_reminder` added to notification's
+`CHANNEL_POLICY`, dual-channel (push+sms), same rationale as `low_occupancy_alert`.
+
+**A real, live cross-tenant data leak found during this slice's own dev-stack verification, not by
+inspection ([[F-277]])**: logged into JBC's real admin-v2 session, `RenewalPanel.tsx` showed a batch
+that belonged to courtowner1 -- confirmed via the network response's own `tenantId`. Root cause:
+`computeExpiringBatchesByBranch` had no tenant filter at all for an owner caller. Fixed within this
+slice (required before the slice's own new route could be called correct): an optional `tenantId`
+param, passed as `auth.tenantId` for a non-internal owner from `GET /groups/expiring-renewals`.
+**Not silently folded in**: `GET /groups` (Slice C, already merged PR #74) had the *identical* gap --
+described with evidence to Chief rather than fixed inline, per rule 9. Chief assigned F-277 same
+session and routed it into this same PR (same fix shape already proven, rather than a standalone
+emergency fix) with its own required regression section. Delivered: `GET /groups` now filters an
+owner caller to `auth.tenantId` the same way; new dedicated file
+`group-tenant-scoping.regression.ts` (not folded into `group-renewal.regression.ts`'s existing
+assertions) proves isolation across two real, independent tenants in both directions plus the
+internal-key path staying unaffected.
+
+**Explicitly deferred, not built**: the missed-renewal fallback for a batch that lapses unrenewed
+past the 20th reminder -- per the original handover, "let's see how we can handle," flagged back as
+a real follow-up rather than resolved here.
+
+**Evidence:** `slot-engine` **106/106**, full cross-service suite **5/5**, both run twice (once
+before the F-277 fix, once after) against `badminton_db_test` with manually-started dev containers
+stopped first and restarted after each run; whole-repo typecheck/build clean throughout. Two new
+regression files: `group-renewal.regression.ts` (8 sections -- the batch branch's real 30→31-day
+rollover and year rollover math via direct API calls with DB read-back, the batch branch's real
+`termPreset` rejection, the non-batch branch's real QUARTERLY renewal proven unregressed, a real
+3-member batch bulk-renewed one assignment at a time with DB read-back and an unrelated assignment
+confirmed untouched, `GET /groups/expiring-renewals`'s real query + branch scoping + the F-277
+tenant-isolation case, `isRenewalReminderDay`'s real execution across 8 boundary dates including a
+leap day, and the dedup mechanism's real P2002 collision proof) and `group-tenant-scoping.regression.ts`
+(F-277's own section, described above). Live-fire against real JBC/courtowner1 dev-stack data
+throughout: the real rollover math re-proven live via direct API calls against a real JBC batch; a
+real 3-member courtowner1 batch renewed via the actual admin-v2 UI's "Renew" button (DB read-back
+confirmed all three `endDate`s advanced); the real F-277 cross-tenant repro with real signed owner
+JWTs for both tenants (JBC-authenticated `GET /groups` returned only the real JBC batch,
+courtowner1-authenticated returned only its own) -- courtowner1 carried no `MEMBER_MANAGEMENT`
+entitlement in the demo DB at all, so a temporary one was granted purely to run this repro and
+deleted afterward, confirmed back to empty. All seeded test data (JBC and courtowner1) reverted
+after every run; a final DB sweep confirmed zero test rows remain.
+
+**Close-out:** `pnpm register:check` — **256 rows, Open 115 / Resolved 141** (was 255/116/139: F-133
+moved Open → Resolved with its own five-slice summary row; F-277 added as a new Resolved row, found
+and resolved same session). `pnpm diagram:verify` — clean, all 67 finding tags agree with the
+register (advisory-only notes, no failures). **F-133 is now fully closed -- this is the last slice.**
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

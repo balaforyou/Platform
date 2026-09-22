@@ -1824,3 +1824,19 @@ always equals what the captured `PaymentIntent` actually charged, across every b
 path.
 Confirmed-ID: F-275
 Confirmed: 21 Sep 2026
+
+### groups-list-owner-cross-tenant-leak
+Batch: F-133 Slice E, surfaced during its own dev-stack verification, 22 Sep 2026
+Surfaced: this session, in Claude Code's Slice E evidence report to Chief, described (not numbered)
+pending confirmation.
+Honest note: named directly in the Chief Architect thread's own reply assigning the ID before this
+pending-findings entry existed, same pattern as the F-274/F-275 entries above.
+Description: `GET /groups` (`services/slot-engine/src/index.ts`, ~line 5489) had no tenant scoping
+for an `owner`-role caller — `scopedPoolIds` stayed `undefined` on that path, so the query fell
+through to an unfiltered `prisma.group.findMany({})`, returning every tenant's batches to any
+tenant's owner. Live on `main` since PR #74 (F-133 Slice C). Confirmed live via a real
+JBC-authenticated request returning a courtowner1 batch, found while building the structurally
+identical `GET /groups/expiring-renewals`, which had the same gap and was fixed within the same
+slice first.
+Confirmed-ID: F-277
+Confirmed: 22 Sep 2026
