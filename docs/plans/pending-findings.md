@@ -1896,3 +1896,31 @@ than the common Mon-Sat case, requiring the admin to tap all seven days individu
 typical batch.
 Confirmed-ID: F-283
 Confirmed: 22 Sep 2026
+
+### accountsheet-type-mislabeled-roles-fallback
+Batch: post-deploy observation round following the F-133/F-277 GCP promotion, 22 Sep 2026
+Surfaced: this session, Claude Code's real production investigation of a user-reported "Account
+type" display, reported to Chief.
+Honest note: named directly in the Chief Architect thread's own reply assigning the ID (as
+"F-278 — assigned, Open") before this pending-findings entry existed, same pattern as the
+F-274/F-275/F-277/F-280-283 entries above.
+Description: `apps/guest-member-pwa/src/components/ui/AccountSheet.tsx`'s "Account type" row
+rendered `{user?.roles?.[0] || 'member'}` -- `roles` is the admin-role array
+(`owner`/`branch_manager:*`), always empty for a consumer-facing guest or member, since that's
+not where their real `userType` lives. Every ordinary guest therefore saw the literal fallback
+string "member" regardless of their actual type. Confirmed against real production data:
+`sviji3584@gmail.com` was genuinely `userType: "GUEST"`, UI showed "member" anyway.
+Confirmed-ID: F-278
+Confirmed: 22 Sep 2026
+
+### welcome-heading-no-user-personalization
+Batch: "Slice 2: guest-member-pwa quick display fixes" handover, 22 Sep 2026
+Surfaced: this session, Claude Code's real mobile-UX observation round, reported to Chief.
+Honest note: named directly in the Chief Architect thread's "Slice 2" handover before this
+pending-findings entry existed, same pattern as the entries above.
+Description: `apps/guest-member-pwa/src/main.tsx`'s "Welcome back to {tenant}" heading never read
+anything about the signed-in user, despite `user.displayName` already being on the decoded token
+(carried through every session-issuing path in `identity-auth`) and `AccountSheet.tsx` already
+establishing the real fallback-chain precedent for handling it being unset.
+Confirmed-ID: F-285
+Confirmed: 22 Sep 2026
