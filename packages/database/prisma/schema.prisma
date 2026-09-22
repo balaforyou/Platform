@@ -53,31 +53,31 @@ enum UserRole {
 }
 
 model Tenant {
-  id               String           @id @default(uuid())
-  name             String
-  subdomain        String           @unique
-  logo             String?
-  themeColor       String           @default("#000000")
-  appName          String?
-  plan             String           @default("basic")
-  status           String           @default("active")
-  contactInfo      String?
-  billingInfo      String?
+  id                       String              @id @default(uuid())
+  name                     String
+  subdomain                String              @unique
+  logo                     String?
+  themeColor               String              @default("#000000")
+  appName                  String?
+  plan                     String              @default("basic")
+  status                   String              @default("active")
+  contactInfo              String?
+  billingInfo              String?
   // Facilities / About — tenant-level defaults; branches may override
-  aboutDescription String?
-  facilities       String[]         @default([])
-  photos           String[]         @default([])
+  aboutDescription         String?
+  facilities               String[]            @default([])
+  photos                   String[]            @default([])
   // F-133: member batch pricing defaults, tenant-wide -- "irrespective of court/branch" (Bala).
   // Same tenant-level-default-no-branch-override shape as aboutDescription/facilities/photos
   // above. A batch's resolved fee is its own Group.customRate if set, else whichever of these
   // matches its isPeak flag -- batch creation is blocked server-side if neither resolves.
-  memberPeakDefaultRate    Decimal? @db.Decimal(10, 2)
-  memberNonPeakDefaultRate Decimal? @db.Decimal(10, 2)
-  branches         Branch[]
-  roleAssignments  RoleAssignment[]
-  moduleEntitlements ModuleEntitlement[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  memberPeakDefaultRate    Decimal?            @db.Decimal(10, 2)
+  memberNonPeakDefaultRate Decimal?            @db.Decimal(10, 2)
+  branches                 Branch[]
+  roleAssignments          RoleAssignment[]
+  moduleEntitlements       ModuleEntitlement[]
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
 }
 
 // F-206: one row per (tenant, module). Renewal extends this row's endDate — no new row per
@@ -93,8 +93,8 @@ model ModuleEntitlement {
   module     TenantModule
   startDate  DateTime
   endDate    DateTime
-  disabledAt DateTime?    // set when an Owner confirms early wind-down; endDate is left untouched
-  disabledBy String?      // userId of the Owner who disabled it
+  disabledAt DateTime? // set when an Owner confirms early wind-down; endDate is left untouched
+  disabledBy String? // userId of the Owner who disabled it
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
@@ -114,22 +114,22 @@ model Branch {
   // price/refundAmount fields already behave that way — which would force client-side parsing
   // before a coordinate could go into a maps URL. Float maps to DOUBLE PRECISION and is exact
   // far beyond the ~1cm these values carry.
-  latitude          Float?                          // decimal degrees, e.g. 11.0375013
-  longitude         Float?                          // decimal degrees, e.g. 76.9330389
-  googlePlaceId     String?                         // e.g. ChIJDeozArlYqDsRUA0SRJPRn1E
+  latitude          Float? // decimal degrees, e.g. 11.0375013
+  longitude         Float? // decimal degrees, e.g. 76.9330389
+  googlePlaceId     String? // e.g. ChIJDeozArlYqDsRUA0SRJPRn1E
   timezone          String           @default("UTC")
   status            BranchStatus     @default(DRAFT)
   // Operating schedule
-  workingDays       String[]         @default([])  // e.g. ["Monday", "Tuesday", ...]
-  workingHoursStart String?                        // e.g. "06:00" (HH:mm, branch local time)
-  workingHoursEnd   String?                        // e.g. "22:00"
+  workingDays       String[]         @default([]) // e.g. ["Monday", "Tuesday", ...]
+  workingHoursStart String? // e.g. "06:00" (HH:mm, branch local time)
+  workingHoursEnd   String? // e.g. "22:00"
   // F-224: guest-only court pricing. Branch-wide (not per-pool). All three nullable — a branch
   // with none configured prices guest bookings at pool.defaultRate exactly as before. Member
   // pricing is a separate concern (F-209) and never reads these. A per-window/pattern
   // AvailabilityWindow.price override still wins ahead of these in resolvePrice().
-  guestStandardRate Decimal?         @db.Decimal(10, 2)  // guest rate outside every peak window
-  guestPeakRate     Decimal?         @db.Decimal(10, 2)  // guest rate inside any peak window
-  guestPeakWindows  Json?                                // [{ start: "HH:mm", end: "HH:mm" }, ...] — non-overlapping, non-duplicate, branch-local
+  guestStandardRate Decimal?         @db.Decimal(10, 2) // guest rate outside every peak window
+  guestPeakRate     Decimal?         @db.Decimal(10, 2) // guest rate inside any peak window
+  guestPeakWindows  Json? // [{ start: "HH:mm", end: "HH:mm" }, ...] — non-overlapping, non-duplicate, branch-local
   // Facilities / About — overrides tenant-level defaults when non-empty
   aboutDescription  String?
   facilities        String[]         @default([])
@@ -167,15 +167,15 @@ model RoleAssignment {
 
 model ResourcePool {
   id                        String                  @id @default(uuid())
-  tenantId                  String                  // Scalar UUID, no DB relation yet
-  branchId                  String                  // Scalar UUID, no DB relation yet
+  tenantId                  String // Scalar UUID, no DB relation yet
+  branchId                  String // Scalar UUID, no DB relation yet
   name                      String
   allocationMode            AllocationMode
-  capacity                  Int                     @default(1)         // Total capacity for POOLED mode
+  capacity                  Int                     @default(1) // Total capacity for POOLED mode
   basePrice                 Decimal                 @default(100.00) @db.Decimal(10, 2) // Legacy; kept for compatibility
   // Occupancy / duration constraints
-  minOccupancy              Int                     @default(1)         // Minimum players required to book
-  minBookingDurationMinutes Int                     @default(60)        // Minimum slot duration in minutes
+  minOccupancy              Int                     @default(1) // Minimum players required to book
+  minBookingDurationMinutes Int                     @default(60) // Minimum slot duration in minutes
   // Pricing mode and rate (used when AvailabilityWindow has no override)
   pricingMode               PricingMode             @default(FLAT)
   defaultRate               Decimal                 @default(100.00) @db.Decimal(10, 2)
@@ -219,23 +219,23 @@ model Resource {
 }
 
 model AvailabilityWindow {
-  id             String       @id @default(uuid())
-  resourcePoolId String
-  resourcePool   ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
-  resourceId     String?
-  resource       Resource?    @relation(fields: [resourceId], references: [id], onDelete: SetNull)
-  startTime      DateTime
-  endTime        DateTime
-  capacity       Int          @default(1)  // Capacity count for POOLED mode (always 1 for FIXED_INSTANCE)
+  id                     String       @id @default(uuid())
+  resourcePoolId         String
+  resourcePool           ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  resourceId             String?
+  resource               Resource?    @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  startTime              DateTime
+  endTime                DateTime
+  capacity               Int          @default(1) // Capacity count for POOLED mode (always 1 for FIXED_INSTANCE)
   generatedFromPatternId String?
-  generationDate DateTime?
+  generationDate         DateTime?
   // Per-release pricing override; null means "use pool default".
   // WHY: Both fields are always set together (both-or-neither rule enforced at API layer).
-  pricingMode    PricingMode?
-  price          Decimal?     @db.Decimal(10, 2)
-  bookings       Booking[]
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  pricingMode            PricingMode?
+  price                  Decimal?     @db.Decimal(10, 2)
+  bookings               Booking[]
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
   @@index([startTime, endTime])
 }
@@ -347,7 +347,7 @@ model BookingRule {
   // lowOccupancyThresholdPct: admin-configurable percentage below which low-occupancy alert fires.
   lowOccupancyThresholdPct Int          @default(50)
   prepaymentRequired       Boolean      @default(true)
-  cancellationPolicyJson   Json         // Tiered policy mapping: { type: "tiered", tiers: [{ min_hours_before_slot, refund_percent }] }
+  cancellationPolicyJson   Json // Tiered policy mapping: { type: "tiered", tiers: [{ min_hours_before_slot, refund_percent }] }
   // F-183 Phase 1: cap on additional contiguous AvailabilityWindows a guest may add to a
   // single booking (0 = no extension allowed for this pool). Default of 1 changes no
   // existing behavior — additionalWindowIds is opt-in per request.
@@ -367,16 +367,16 @@ model BookingRule {
 }
 
 model BlockedWindow {
-  id             String        @id @default(uuid())
+  id             String       @id @default(uuid())
   resourcePoolId String
-  resourcePool   ResourcePool  @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  resourcePool   ResourcePool @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
   resourceId     String?
-  resource       Resource?     @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  resource       Resource?    @relation(fields: [resourceId], references: [id], onDelete: SetNull)
   startTime      DateTime
   endTime        DateTime
   reason         String
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }
 
 // WHY: Represents a member's recurring slot assignment for a specific court/pool.
@@ -400,9 +400,9 @@ model MemberGroupAssignment {
   // Schedule fields — explicit days+time rather than a full cron expression.
   // WHY: The requirement is weekdays + one fixed start time; cron syntax adds parser complexity
   // for no benefit when the constraint is this narrow.
-  daysOfWeek     String       // e.g. "1,2,3,4,5,6" (1=Mon … 7=Sun, ISO weekday)
-  startTime      String       // e.g. "10:00" (HH:mm, branch local time)
-  status         String       // ACTIVE | SUSPENDED
+  daysOfWeek     String // e.g. "1,2,3,4,5,6" (1=Mon … 7=Sun, ISO weekday)
+  startTime      String // e.g. "10:00" (HH:mm, branch local time)
+  status         String // ACTIVE | SUSPENDED
   // F-207.1: startDate/endDate bound the term. endDate is server-computed from a termPreset
   // (MONTHLY/QUARTERLY/YEARLY) at create/renew time -- the preset itself is not persisted, only
   // the computed dates, so a renewal can use a different preset than the original term.
@@ -450,26 +450,26 @@ model Group {
 }
 
 model Booking {
-  id             String         @id @default(uuid())
-  tenantId       String         // Scalar UUID, no DB relation yet
-  branchId       String         // Scalar UUID, no DB relation yet
-  resourcePoolId String
-  resourcePool   ResourcePool   @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
-  resourceId     String?
-  resource       Resource?      @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  id                          String             @id @default(uuid())
+  tenantId                    String // Scalar UUID, no DB relation yet
+  branchId                    String // Scalar UUID, no DB relation yet
+  resourcePoolId              String
+  resourcePool                ResourcePool       @relation(fields: [resourcePoolId], references: [id], onDelete: Cascade)
+  resourceId                  String?
+  resource                    Resource?          @relation(fields: [resourceId], references: [id], onDelete: SetNull)
   // F-186: display-only "Court N" number for POOLED pools with no real per-court resourceId
   // tracking. Assigned once per booking, identical on parent and every child. Null when no
   // common index is free across every window the booking touches — degrades to today's
   // no-court-shown state rather than rejecting the booking or showing an unstable number.
-  courtSlotIndex Int?
-  windowId       String
-  window         AvailabilityWindow @relation(fields: [windowId], references: [id], onDelete: Cascade)
-  userId         String
-  status         BookingStatus
-  heldAt         DateTime       @default(now())
-  heldUntil      DateTime
-  idempotencyKey String?        @unique // unique check for API requests
-  isMemberBooking Boolean       @default(false)
+  courtSlotIndex              Int?
+  windowId                    String
+  window                      AvailabilityWindow @relation(fields: [windowId], references: [id], onDelete: Cascade)
+  userId                      String
+  status                      BookingStatus
+  heldAt                      DateTime           @default(now())
+  heldUntil                   DateTime
+  idempotencyKey              String?            @unique // unique check for API requests
+  isMemberBooking             Boolean            @default(false)
   // WHY: Member booking existence and attendance confirmation are distinct states.
   // The grace sweep releases only member bookings where this is still null.
   memberAttendanceConfirmedAt DateTime?
@@ -482,21 +482,21 @@ model Booking {
   // can change over time -- termsVersion lets a future content change be distinguished from
   // what a given booking actually accepted. Same nullable-timestamp shape as
   // memberAttendanceConfirmedAt above.
-  termsAcceptedAt DateTime?
-  termsVersion    String?
-  price          Decimal?       @db.Decimal(10, 2)
-  refundAmount   Decimal?       @db.Decimal(10, 2)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  players        BookingPlayer[]
+  termsAcceptedAt             DateTime?
+  termsVersion                String?
+  price                       Decimal?           @db.Decimal(10, 2)
+  refundAmount                Decimal?           @db.Decimal(10, 2)
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
+  players                     BookingPlayer[]
   // F-183 Phase 1: a multi-window booking is one billable parent plus N-1 lightweight
   // child rows (one per additional contiguous hour), each occupying its own
   // AvailabilityWindow so every existing windowId-keyed query is untouched. Children
   // carry price: null, idempotencyKey: null (multiple NULLs are permitted under the
   // existing @unique above).
-  parentBookingId String?
-  parentBooking   Booking?        @relation("BookingChildren", fields: [parentBookingId], references: [id], onDelete: Cascade)
-  childBookings   Booking[]       @relation("BookingChildren")
+  parentBookingId             String?
+  parentBooking               Booking?           @relation("BookingChildren", fields: [parentBookingId], references: [id], onDelete: Cascade)
+  childBookings               Booking[]          @relation("BookingChildren")
 
   @@index([status, heldUntil])
   @@index([parentBookingId])
@@ -509,20 +509,20 @@ enum UserType {
 }
 
 model User {
-  id              String        @id @default(uuid())
-  tenantId        String        // Scalar UUID, namespaced per tenant
-  phone           String?
-  email           String?
-  googleId        String?
-  name            String?       // F-229: admin-entered display name for admin-assisted / walk-in bookings. Distinct from F-219's displayName/photoUrl below (Google-profile-sourced).
-  displayName     String?       // F-219: real name from Google's ID-token `name` claim, persisted on a successful admin Google login so it survives refresh and passkey logins.
-  photoUrl        String?       // F-219: Google profile photo URL from the ID-token `picture` claim, same persistence rationale as displayName.
-  isPhoneVerified Boolean       @default(false)
-  isEmailVerified Boolean       @default(false)
-  userType        UserType      @default(GUEST)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  sessions        AuthSession[]
+  id                  String               @id @default(uuid())
+  tenantId            String // Scalar UUID, namespaced per tenant
+  phone               String?
+  email               String?
+  googleId            String?
+  name                String? // F-229: admin-entered display name for admin-assisted / walk-in bookings. Distinct from F-219's displayName/photoUrl below (Google-profile-sourced).
+  displayName         String? // F-219: real name from Google's ID-token `name` claim, persisted on a successful admin Google login so it survives refresh and passkey logins.
+  photoUrl            String? // F-219: Google profile photo URL from the ID-token `picture` claim, same persistence rationale as displayName.
+  isPhoneVerified     Boolean              @default(false)
+  isEmailVerified     Boolean              @default(false)
+  userType            UserType             @default(GUEST)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  sessions            AuthSession[]
   webAuthnCredentials WebAuthnCredential[]
 
   @@unique([phone, tenantId])
@@ -531,14 +531,25 @@ model User {
 }
 
 model AuthSession {
-  id           String   @id @default(uuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshToken String   @unique
-  expiresAt    DateTime
-  revoked      Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                     String    @id @default(uuid())
+  userId                 String
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken           String    @unique
+  // F-287: refresh-token rotation grace window. Two tabs on the same origin share one
+  // refresh_token cookie but each run their own independent refresh timer -- when both land
+  // within milliseconds of each other, the loser's own single-use token gets rotated away before
+  // its request completes, and it hard-fails with no grace period. Nullable, additive, no
+  // backfill: an existing/not-yet-rotated session simply has both null, which is exactly today's
+  // behavior (fail-closed default). Set on every real rotation (services/identity-auth/src/
+  // index.ts POST /auth/refresh) to the value /auth/refresh just replaced, with a short expiry --
+  // a request racing against that exact rotation can still succeed via this column instead of
+  // 401ing, converging onto the same winning refreshToken rather than returning an orphaned one.
+  previousRefreshToken   String?   @unique
+  previousTokenExpiresAt DateTime?
+  expiresAt              DateTime
+  revoked                Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 }
 
 // F-196: WebAuthn / fingerprint step-up for admin-v2. A credential is only ever created
@@ -584,7 +595,7 @@ model BookingPlayer {
   id        String   @id @default(uuid())
   bookingId String
   booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  userId    String?  // Resolved once they register/login
+  userId    String? // Resolved once they register/login
   phone     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -597,10 +608,10 @@ model PaymentIntent {
   id          String   @id @default(uuid())
   tenantId    String
   userId      String
-  amount      Int      // in paise/cents
-  purpose     String   // guest_booking | tournament_entry | subscription_billing
-  referenceId String   // bookingId or subscriptionId
-  status      String   // pending | captured | failed | expired
+  amount      Int // in paise/cents
+  purpose     String // guest_booking | tournament_entry | subscription_billing
+  referenceId String // bookingId or subscriptionId
+  status      String // pending | captured | failed | expired
   gatewayRef  String   @unique
   refunds     Refund[]
   createdAt   DateTime @default(now())
@@ -612,9 +623,9 @@ model Subscription {
   userId    String
   tenantId  String
   mandateId String   @unique
-  amount    Int      // in paise/cents
-  frequency String   // monthly
-  status    String   // active | suspended | cancelled
+  amount    Int // in paise/cents
+  frequency String // monthly
+  status    String // active | suspended | cancelled
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -623,13 +634,13 @@ model Refund {
   id              String        @id @default(uuid())
   paymentIntentId String
   paymentIntent   PaymentIntent @relation(fields: [paymentIntentId], references: [id], onDelete: Cascade)
-  amount          Int           // in paise/cents
+  amount          Int // in paise/cents
   reason          String
-  status          String        // pending | processed | failed
+  status          String // pending | processed | failed
   // Override audit trail — populated only when isOverride = true.
   // WHY: overriddenBy is always derived from the verified JWT at the API layer, never from request body.
   isOverride      Boolean       @default(false)
-  overriddenBy    String?       // userId from JWT
+  overriddenBy    String? // userId from JWT
   overrideReason  String?
   overrideAt      DateTime?
   createdAt       DateTime      @default(now())
@@ -645,7 +656,7 @@ model WebhookEvent {
 model NotificationTemplate {
   id           String   @id @default(uuid())
   tenantId     String   @default("platform")
-  channel      String   // sms | push | email
+  channel      String // sms | push | email
   eventType    String
   templateBody String
   createdAt    DateTime @default(now())
@@ -657,11 +668,11 @@ model NotificationTemplate {
 model NotificationRequest {
   id           String    @id @default(uuid())
   tenantId     String
-  recipient    String    // userId, or raw mobile/email
-  channel      String    // sms | push | email
+  recipient    String // userId, or raw mobile/email
+  channel      String // sms | push | email
   eventType    String
   variables    Json
-  status       String    // queued | sent | failed | dead_letter
+  status       String // queued | sent | failed | dead_letter
   attempts     Int       @default(0)
   retryAfter   DateTime?
   providerRef  String?

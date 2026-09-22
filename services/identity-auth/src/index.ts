@@ -1216,6 +1216,20 @@ server.post('/auth/admin/webauthn/login/verify', async (request, reply) => {
 });
 
 // Endpoint to rotate session and issue new access tokens
+//
+// F-287: refresh-token rotation grace window. Two tabs on the same origin share one
+// refresh_token cookie but each run their own independent refresh timer -- when both land
+// within milliseconds of each other, a naive single-use rotation lets one tab's in-flight
+// request find its token already rotated away and hard-fail with no grace period. The fix is
+// a 20s grace window (previousRefreshToken/previousTokenExpiresAt) plus a compare-and-swap
+// (CAS) on the rotation write itself: two requests can both read the same pre-rotation value
+// via findUnique before either write commits (the real race -- not one request lagging behind
+// an already-committed write), so an unconditional update would let both writes "succeed" with
+// Postgres silently applying whichever lands last, orphaning the loser's freshly-issued token
+// in no DB row at all. The CAS (updateMany scoped to the exact pre-read refreshToken value,
+// checking count) makes Postgres's row-level locking serialize this correctly: exactly one
+// request's write can match, the other genuinely observes its own loss and converges onto the
+// winner's value via the grace-window lookup below instead of returning an orphaned cookie.
 server.post('/auth/refresh', async (request, reply) => {
   const refreshToken = request.cookies['refresh_token'];
   if (!refreshToken) {
@@ -1226,75 +1240,129 @@ server.post('/auth/refresh', async (request, reply) => {
     throw err;
   }
 
+  const invalidTokenError = () => {
+    reply.status(401);
+    const err = new Error('Invalid or expired refresh token');
+    (err as any).statusCode = 401;
+    (err as any).code = 'INVALID_REFRESH_TOKEN';
+    return err;
+  };
+
+  const issueAccessToken = async (session: { userId: string; user: any }) => {
+    // Call Tenant service for roles
+    let roles: string[] = [];
+    const tenantServiceUrl = process.env.TENANT_SERVICE_URL || 'http://localhost:3003';
+    try {
+      // F-140: internal-key-only, as above.
+      const roleKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+      const res = await fetch(`${tenantServiceUrl}/users/${session.userId}/roles`, {
+        headers: { Authorization: `Bearer ${roleKey}` },
+      });
+      if (res.ok) {
+        const body = await res.json() as any;
+        roles = body?.data?.roles || [];
+      }
+    } catch (e) {
+      roles = [];
+    }
+
+    return server.jwt.sign({
+      userId: session.userId,
+      tenantId: session.user.tenantId,
+      phone: session.user.phone,
+      // F-203: carried so admin-v2's landing page survives a reload (silent refresh
+      // returns only { accessToken }). Ignored by every other consumer.
+      email: session.user.email,
+      userType: session.user.userType,
+      // F-219: same as issueAdminSession — carried so a page reload doesn't revert a
+      // real Google-sourced name/photo back to initials. Null/ignored for non-admin
+      // consumers, same pattern as phone/email above.
+      displayName: session.user.displayName,
+      photoUrl: session.user.photoUrl,
+      // F-235 Slice C: same claim as the other 3 session-issuing sites.
+      isPhoneVerified: session.user.isPhoneVerified,
+      roles,
+    }, { expiresIn: '15m' });
+  };
+
+  const setRefreshCookie = (value: string) => {
+    reply.setCookie('refresh_token', value, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60,
+      sameSite: 'lax',
+    });
+  };
+
+  // F-287 step 3: grace-window lookup by previousRefreshToken. Reached either directly (the
+  // initial refreshToken lookup missed entirely -- this caller is the race's loser, arriving
+  // after the winner's rotation already landed) or via the count === 0 CAS fallthrough below
+  // (this caller lost the row-level race by microseconds). Does not rotate again -- rotating
+  // here would just move the race one step later. Converges the caller onto the row's *current*
+  // refreshToken (the value the winner actually persisted) rather than inventing a new one.
+  const tryGraceWindow = async (previousRefreshToken: string) => {
+    const graceSession = await prisma.authSession.findUnique({
+      where: { previousRefreshToken },
+      include: { user: true },
+    });
+
+    if (
+      !graceSession ||
+      graceSession.revoked ||
+      graceSession.expiresAt < new Date() ||
+      !graceSession.previousTokenExpiresAt ||
+      graceSession.previousTokenExpiresAt < new Date()
+    ) {
+      return null;
+    }
+
+    const accessToken = await issueAccessToken(graceSession);
+    setRefreshCookie(graceSession.refreshToken);
+    return { accessToken };
+  };
+
   const session = await prisma.authSession.findUnique({
     where: { refreshToken },
     include: { user: true },
   });
 
   if (!session || session.revoked || session.expiresAt < new Date()) {
-    reply.status(401);
-    const err = new Error('Invalid or expired refresh token');
-    (err as any).statusCode = 401;
-    (err as any).code = 'INVALID_REFRESH_TOKEN';
-    throw err;
+    // Not found (or revoked/expired) by current refreshToken -- try the grace window before
+    // giving up. A genuinely revoked/expired session's previousTokenExpiresAt check above/below
+    // still hard-fails it, so this doesn't resurrect a logged-out session.
+    const graceResult = session ? null : await tryGraceWindow(refreshToken);
+    if (graceResult) return graceResult;
+    throw invalidTokenError();
   }
 
-  // Rotate Refresh Token
+  // Rotate Refresh Token via compare-and-swap (see file-level comment above for why).
   const newRefreshToken = crypto.randomBytes(32).toString('hex');
   const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-  await prisma.authSession.update({
-    where: { id: session.id },
+  const rotation = await prisma.authSession.updateMany({
+    where: { id: session.id, refreshToken },
     data: {
       refreshToken: newRefreshToken,
       expiresAt: newExpiry,
+      previousRefreshToken: refreshToken,
+      previousTokenExpiresAt: new Date(Date.now() + 20_000),
     },
   });
 
-  // Call Tenant service for roles
-  let roles: string[] = [];
-  const tenantServiceUrl = process.env.TENANT_SERVICE_URL || 'http://localhost:3003';
-  try {
-    // F-140: internal-key-only, as above.
-    const roleKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
-    const res = await fetch(`${tenantServiceUrl}/users/${session.userId}/roles`, {
-      headers: { Authorization: `Bearer ${roleKey}` },
-    });
-    if (res.ok) {
-      const body = await res.json() as any;
-      roles = body?.data?.roles || [];
-    }
-  } catch (e) {
-    roles = [];
+  if (rotation.count === 0) {
+    // Lost the row-level race: another concurrent request's CAS write already landed between
+    // this request's read and its own write attempt. This request's own freshly-generated
+    // token was never persisted -- must not return it. Fall into the grace-window lookup using
+    // the *original* refreshToken this request read; the winner will have just stashed that
+    // exact value into previousRefreshToken with a fresh 20s window, so this is expected to hit.
+    const graceResult = await tryGraceWindow(refreshToken);
+    if (graceResult) return graceResult;
+    throw invalidTokenError();
   }
 
-  // Sign new JWT
-  const accessToken = server.jwt.sign({
-    userId: session.userId,
-    tenantId: session.user.tenantId,
-    phone: session.user.phone,
-    // F-203: carried so admin-v2's landing page survives a reload (silent refresh
-    // returns only { accessToken }). Ignored by every other consumer.
-    email: session.user.email,
-    userType: session.user.userType,
-    // F-219: same as issueAdminSession — carried so a page reload doesn't revert a
-    // real Google-sourced name/photo back to initials. Null/ignored for non-admin
-    // consumers, same pattern as phone/email above.
-    displayName: session.user.displayName,
-    photoUrl: session.user.photoUrl,
-    // F-235 Slice C: same claim as the other 3 session-issuing sites.
-    isPhoneVerified: session.user.isPhoneVerified,
-    roles,
-  }, { expiresIn: '15m' });
-
-  reply.setCookie('refresh_token', newRefreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 30 * 24 * 60 * 60,
-    sameSite: 'lax',
-  });
-
+  const accessToken = await issueAccessToken(session);
+  setRefreshCookie(newRefreshToken);
   return { accessToken };
 });
 
