@@ -4009,6 +4009,53 @@ actual pool names; F-280/F-283 confirmed via real 375px screenshots.
 diagram:verify` — clean, all 67 finding tags agree with the register (advisory-only notes, no
 failures).
 
+## Batch 78 — Slice 2: guest-member-pwa quick display fixes (F-278, F-285)
+
+**Findings:** F-278, F-285 — both **Resolved**. F-278 was Chief-assigned earlier ("F-278 —
+assigned, Open") during the post-deploy observation round; F-285 assigned in the same "Slice 2"
+handover as F-278. Each kept its own ID/evidence per rule 9 -- different files, no shared code
+path, shipped in one PR only because both were trivial.
+**Handed off:** 22 Sep 2026 (Chief Architect thread — "Slice 2: guest-member-pwa quick display
+fixes").
+**Status:** implemented, real evidence gathered, signed off, merged.
+**Branch:** `f278-285-guest-pwa-quick-fixes` (off `main`@`cd7b3ec`). PR #80.
+
+Both touch `apps/guest-member-pwa` only, surfaced during the same real mobile-UX observation
+round as Slice 1. No backend changes.
+
+**F-278**: `AccountSheet.tsx`'s "Account type" row read `user?.roles?.[0] || 'member'` -- `roles`
+is the admin-role array, always empty for a consumer-facing guest/member, so every ordinary user
+saw the literal fallback "member" regardless of real type. Confirmed against real production
+data during the earlier observation round: `sviji3584@gmail.com` was genuinely `GUEST`, UI showed
+"member" anyway. Fixed to read `user?.userType` instead -- the real field, already used in five
+places in `main.tsx` for the same gating purpose -- title-cased for display.
+
+**F-285**: `main.tsx`'s "Welcome back to {tenant}" heading never read anything about the signed-in
+user, despite `user.displayName` already being on the decoded token through every session-issuing
+path and `AccountSheet.tsx` already establishing the real fallback-chain precedent for handling it
+unset. Fixed by adding a first-name greeting as its own line above the existing heading --
+**deliberately not touching that heading's own text or structure**, since it's asserted verbatim
+by real Playwright specs (`guest-booking.spec.ts`, `pwa-install-dismissal.spec.ts`). Splits
+`displayName` client-side (no separate first-name field exists), reuses the exact
+`AccountSheet.tsx` fallback chain, omits cleanly when none of it is set.
+
+**Real constraint worked around, not skipped**: guest-member-pwa's real Google sign-in cannot be
+driven in this sandboxed environment (pre-existing, documented limitation -- confirmed again this
+session). Real evidence was still gathered via a real OTP-verified session on the local dev-stack
+(fixed dev OTP, real `AuthSession`/JWT issuance, real httpOnly refresh-cookie rotation -- not a
+fabricated token) with a real, reverted dev-stack-only DB write setting `userType`/`displayName`
+to exercise both real states: a real GUEST account with no `displayName` showed "Guest" and no
+greeting line (the fallback case, confirmed no crash, no "undefined"); the same account promoted
+to MEMBER with a real `displayName` ("Viji Subramaniam") showed "Member" and "Hi, Viji" above an
+untouched "Welcome back to JBC Courts" heading. Test user reverted to its original state
+afterward. Full backend regression 5/5 (a first-run 3/5 was confirmed environmental -- each
+failing suite passes in isolation, clean second full-set run; no backend files touched by this PR
+at all). guest-member-pwa typecheck/build clean.
+
+**Close-out:** `pnpm register:check` — **262 rows, Open 115 / Resolved 147** (was
+260/115/145: two new Resolved rows, F-278 and F-285, no Open-row changes). `pnpm diagram:verify`
+— clean, all 67 finding tags agree with the register (advisory-only notes, no failures).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
