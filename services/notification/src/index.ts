@@ -24,6 +24,10 @@ const CHANNEL_POLICY: Record<string, string[]> = {
   // WHY: Admin must not miss low occupancy — a missed alert means unreleased capacity and lost revenue.
   // Both push and sms are required (same rationale as subscription_charge_failed).
   low_occupancy_alert:           ['push', 'sms'],
+  // F-133 Slice E: admin must not miss a batch renewal window -- a missed one lapses every
+  // member's assignment in that batch unrenewed. Same dual-channel rationale as
+  // low_occupancy_alert/subscription_charge_failed.
+  batch_renewal_reminder:        ['push', 'sms'],
 };
 
 // ============================================================

@@ -22,6 +22,8 @@ import { memberCollisionSweepSections } from './member-collision-sweep.regressio
 import { memberMultiBatchAttendanceSections } from './member-multi-batch-attendance.regression';
 import { groupRosterCalendarSections } from './group-roster-calendar.regression';
 import { groupRelocateRemoveSections } from './group-relocate-remove.regression';
+import { groupRenewalSections } from './group-renewal.regression';
+import { groupTenantScopingSections } from './group-tenant-scoping.regression';
 
 async function main() {
   console.log('Starting local Slot Engine server...');
@@ -63,6 +65,8 @@ async function main() {
         ...memberMultiBatchAttendanceSections,
         ...groupRosterCalendarSections,
         ...groupRelocateRemoveSections,
+        ...groupRenewalSections,
+        ...groupTenantScopingSections,
       ],
       context,
     );

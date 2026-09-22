@@ -325,6 +325,34 @@ export function useSuspendAssignment() {
   });
 }
 
+export type ExpiringBatch = { groupId: string; groupName: string; resourcePoolId: string; assignmentIds: string[] };
+export type ExpiringBranch = { branchId: string; tenantId: string; batches: ExpiringBatch[] };
+
+/** F-133 Slice E: real batches with at least one ACTIVE member expiring this month, branch-scoped
+ *  the same way GET /groups already is. No "is it the 20th" gate here (unlike the sweep's own
+ *  reminder) -- an admin can browse this any day. */
+export function useExpiringRenewals() {
+  const api = useAdminApi();
+  const { tenant } = useAdminTenant();
+  return useQuery({
+    queryKey: ['court-groups', 'expiring-renewals', tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: () => api.get<ExpiringBranch[]>(`/slot-engine/groups/expiring-renewals`),
+  });
+}
+
+/** F-133 Slice E: "renew this batch" -- one real assignment at a time through the existing,
+ *  now-fixed /renew route (branches server-side on groupId, no termPreset for a batch). No bulk
+ *  backend endpoint; the caller loops assignmentIds and reports real per-item failures rather
+ *  than assuming all-or-nothing success. */
+export function useRenewAssignment() {
+  const api = useAdminApi();
+  return useMutation({
+    mutationFn: ({ assignmentId }: { assignmentId: string }) =>
+      api.post(`/slot-engine/member-group-assignments/${assignmentId}/renew`, {}),
+  });
+}
+
 /**
  * F-220 §3.1 / F-225 — save which courts guests may book, per pool. `authorizedByPool` maps a
  * pool id to its authorised resource ids; each entry is a whole-pool replace on the server
