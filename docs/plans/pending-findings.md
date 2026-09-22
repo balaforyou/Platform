@@ -1840,3 +1840,59 @@ identical `GET /groups/expiring-renewals`, which had the same gap and was fixed 
 slice first.
 Confirmed-ID: F-277
 Confirmed: 22 Sep 2026
+
+### createbatch-select-overflow-minwidth
+Batch: F-133 mobile-UX observation round, 22 Sep 2026
+Surfaced: this session, Claude Code's real mobile-viewport (375px) verification of admin-v2's
+Create Batch form, reported to Chief.
+Honest note: named directly in the Chief Architect thread's "Slice 1: Create Batch form fixes"
+handover before this pending-findings entry existed, same pattern as the F-274/F-275/F-277
+entries above.
+Description: `Select.tsx`'s wrapper `<div>` (`display:flex`) and the native `<select>`
+(`flex:1`) both lacked `minWidth: 0` -- a grid track's own `minmax(0, 1fr)` only bounds the cell,
+not a flex child's intrinsic content width, so a long pool name overflowed off the visible
+viewport on mobile instead of truncating. Confirmed live via a real 375px screenshot showing the
+Court/Pool field running off-screen.
+Confirmed-ID: F-280
+Confirmed: 22 Sep 2026
+
+### createbatch-no-rate-visibility-opaque-400
+Batch: F-133 mobile-UX observation round, 22 Sep 2026
+Surfaced: this session, Claude Code's real mobile-viewport verification of admin-v2's Create
+Batch form, reported to Chief.
+Honest note: named directly in the Chief Architect thread's "Slice 1: Create Batch form fixes"
+handover before this pending-findings entry existed, same pattern as the entries above.
+Description: `CreateBatchForm.tsx` had zero visibility into the tenant's actual
+`memberPeakDefaultRate`/`memberNonPeakDefaultRate` -- no fetch of them anywhere in the file.
+`rateError` only validated the shape of a typed `customRate`, never whether a rate was resolvable
+at all. On JBC's real production tenant both defaults are `null` (confirmed live during the
+observation round), so toggling Peak/Non-Peak with no Custom Rate silently passed `canSubmit` and
+failed only server-side with an opaque 400. The live blocker of the four.
+Confirmed-ID: F-281
+Confirmed: 22 Sep 2026
+
+### createbatch-pool-label-redundant-branch-name
+Batch: F-133 mobile-UX observation round, 22 Sep 2026
+Surfaced: this session, Claude Code's real mobile-viewport verification of admin-v2's Create
+Batch form, reported to Chief.
+Honest note: named directly in the Chief Architect thread's "Slice 1: Create Batch form fixes"
+handover before this pending-findings entry existed, same pattern as the entries above.
+Description: the Court/Pool `<option>` labels showed the pool's full name, redundantly repeating
+its own branch's name (e.g. "Japan Badminton Court, Coimbatore - Main Courts" under branch "Japan
+Badminton Court, Coimbatore"). Chief's decision, recorded: a batch is pool-scoped, not
+court-scoped (POOLED allocation model) -- shorten the displayed label, don't redesign what a
+batch attaches to.
+Confirmed-ID: F-282
+Confirmed: 22 Sep 2026
+
+### createbatch-days-default-none-selected
+Batch: F-133 mobile-UX observation round, 22 Sep 2026
+Surfaced: this session, Claude Code's real mobile-viewport verification of admin-v2's Create
+Batch form, reported to Chief.
+Honest note: named directly in the Chief Architect thread's "Slice 1: Create Batch form fixes"
+handover before this pending-findings entry existed, same pattern as the entries above.
+Description: `CreateBatchForm.tsx`'s `days` state defaulted to `[]` (nothing selected) rather
+than the common Mon-Sat case, requiring the admin to tap all seven days individually for a
+typical batch.
+Confirmed-ID: F-283
+Confirmed: 22 Sep 2026
