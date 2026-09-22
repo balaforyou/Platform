@@ -16,6 +16,7 @@ import {
   branchMinutesOfDay,
   daysInMonth,
   endOfNextCalendarMonthUtc,
+  isRenewalReminderDay,
   safeTimeZone,
 } from './branchTime.js';
 
@@ -5485,11 +5486,21 @@ server.post('/groups', async (request, reply) => {
 // F-133 Slice C: list groups (internal only — admin tooling), mirroring GET
 // /member-group-assignments's exact scoping pattern just below (branch_manager sees only its
 // own branches' pools, owner/internal see everything, resourcePoolId narrows further).
+//
+// F-277: an owner caller had NO tenant scoping at all -- scopedPoolIds stayed undefined for the
+// owner branch below, so the query fell through to an unfiltered prisma.group.findMany({}),
+// returning every tenant's batches to any tenant's owner. Confirmed live (a JBC-authenticated
+// request returned a courtowner1 batch) during F-133 Slice E's own dev-stack verification, while
+// building the structurally identical GET /groups/expiring-renewals, which had the same gap and
+// was fixed the same way there first. Fix: an owner caller (non-internal, no branch_manager
+// scoping) is now filtered to their own auth.tenantId -- branch_manager stays unchanged below,
+// already tenant-safe since a given branchId belongs to exactly one tenant.
 server.get('/groups', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: false }); // F-206
   const { resourcePoolId } = request.query as any;
   let scopedPoolIds: string[] | undefined;
+  let ownerTenantId: string | undefined;
 
   if (!auth.isInternal && !auth.roles.includes('owner')) {
     const branchIds = auth.roles
@@ -5515,14 +5526,58 @@ server.get('/groups', async (request, reply) => {
       (err as any).code = 'FORBIDDEN';
       throw err;
     }
+  } else if (!auth.isInternal && auth.roles.includes('owner')) {
+    ownerTenantId = auth.tenantId ?? undefined;
   }
 
   return prisma.group.findMany({
     where: {
       ...(scopedPoolIds ? { resourcePoolId: { in: scopedPoolIds } } : resourcePoolId ? { resourcePoolId } : {}),
+      ...(ownerTenantId ? { tenantId: ownerTenantId } : {}),
     },
     orderBy: { createdAt: 'desc' },
   });
+});
+
+// F-133 Slice E — real batches with at least one ACTIVE member expiring this month, for the
+// admin-v2 renewal UI. Reuses computeExpiringBatchesByBranch (defined further down, shared with
+// the sweep's own reminder dispatch) -- same real query shape, not duplicated. Unlike the sweep's
+// reminder, this has no "is it the 20th" gate -- an admin should be able to browse this any day
+// of the month, not just when the reminder fires. Branch-scoped the same way GET /groups already
+// is (branch_manager sees only its own branches).
+//
+// Real gap caught live in this slice's own dev-stack verification, fixed here: an owner caller
+// (scopedBranchIds stays undefined) must be scoped to their OWN tenant -- passing no tenantId to
+// computeExpiringBatchesByBranch returned every tenant's expiring batches, confirmed live as a
+// JBC owner session being served a courtowner1 batch. auth.tenantId is populated from the JWT for
+// every non-internal caller (see AdminAuthContext), so this is available with no new lookup.
+// GET /groups itself (Slice C, already merged) has this identical gap on its own owner path --
+// flagged separately as its own finding rather than silently fixed here, since that route's scope
+// belongs to Slice C's own PR, not this one.
+server.get('/groups/expiring-renewals', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: false }); // F-206
+
+  let scopedBranchIds: string[] | undefined;
+  if (!auth.isInternal && !auth.roles.includes('owner')) {
+    scopedBranchIds = auth.roles
+      .filter((role) => role.startsWith('branch_manager:'))
+      .map((role) => role.split(':')[1])
+      .filter(Boolean);
+    if (scopedBranchIds.length === 0) {
+      reply.status(403);
+      const err = new Error('Forbidden: Branch scope required');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  }
+
+  const ownerTenantId = !auth.isInternal && auth.roles.includes('owner') ? auth.tenantId ?? undefined : undefined;
+  const byBranch = await computeExpiringBatchesByBranch(new Date(), ownerTenantId);
+  return scopedBranchIds
+    ? byBranch.filter((branch) => scopedBranchIds!.includes(branch.branchId))
+    : byBranch;
 });
 
 // F-133 Slice C — the four-state day-status derivation, decided this round (real reasoning in
@@ -5878,20 +5933,27 @@ server.patch('/member-group-assignments/:id', async (request, reply) => {
 // member-group-assignments is a branch_manager-permitted route family, unlike availability-
 // patterns, so this renewal does not gain an owner-only guard just because the pattern renewal
 // above has one.
+//
+// F-133 Slice E: this route is shared by batch and non-batch assignments -- branches on
+// existing.groupId rather than replacing the non-batch path. A batch assignment (groupId set)
+// is always monthly by definition (no admin choice of cadence, per the original design), so a
+// termPreset in the body is rejected rather than silently ignored -- an admin who thinks they
+// can pick QUARTERLY for a batch should be told no, not have it silently do something else.
+// endDate = endOfNextCalendarMonthUtc(existing.endDate), fed DIRECTLY with no "day-before"
+// anchor adjustment (unlike POST /groups's own use of that helper for creation): the helper
+// only ever reads the input's year+month, and existing.endDate is already the real last instant
+// of ITS OWN current month (Slice A's creation logic, Slice D's suspend-correctness), so asking
+// "end of the month after THIS instant's month" directly gives "end of next month" with no
+// adjustment needed -- verified by hand across a 30->31-day rollover and a year rollover before
+// shipping (see the regression suite), same rigor as Slice A's own helper verification.
+// A non-batch assignment (groupId null) is completely unchanged below -- termPreset required,
+// addMonthsUtc as before F-133 -- this is F-207.1's real, currently-passing regression path.
 server.post('/member-group-assignments/:id/renew', async (request, reply) => {
   const auth = await getInternalOrAdminAuth(request, reply);
   await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: true }); // F-206
 
   const { id } = request.params as any;
   const { termPreset } = request.body as any;
-
-  if (!termPreset || !Object.prototype.hasOwnProperty.call(TERM_PRESET_MONTHS, termPreset)) {
-    reply.status(400);
-    const err = new Error('termPreset is required and must be MONTHLY, QUARTERLY, or YEARLY');
-    (err as any).statusCode = 400;
-    (err as any).code = 'INVALID_TERM_PRESET';
-    throw err;
-  }
 
   const existing = await prisma.memberGroupAssignment.findUnique({ where: { id } });
   if (!existing) {
@@ -5903,11 +5965,93 @@ server.post('/member-group-assignments/:id/renew', async (request, reply) => {
   }
   await requirePoolScope(auth, existing.resourcePoolId, reply);
 
+  if (existing.groupId) {
+    if (termPreset !== undefined) {
+      reply.status(400);
+      const err = new Error('termPreset is not accepted for a batch assignment -- batches renew monthly by definition');
+      (err as any).statusCode = 400;
+      (err as any).code = 'TERM_PRESET_NOT_APPLICABLE';
+      throw err;
+    }
+    return prisma.memberGroupAssignment.update({
+      where: { id },
+      data: { endDate: endOfNextCalendarMonthUtc(existing.endDate) },
+    });
+  }
+
+  if (!termPreset || !Object.prototype.hasOwnProperty.call(TERM_PRESET_MONTHS, termPreset)) {
+    reply.status(400);
+    const err = new Error('termPreset is required and must be MONTHLY, QUARTERLY, or YEARLY');
+    (err as any).statusCode = 400;
+    (err as any).code = 'INVALID_TERM_PRESET';
+    throw err;
+  }
+
   return prisma.memberGroupAssignment.update({
     where: { id },
     data: { endDate: addMonthsUtc(existing.endDate, TERM_PRESET_MONTHS[termPreset]) },
   });
 });
+
+// F-133 Slice E: real batches with at least one ACTIVE member assignment expiring THIS UTC
+// calendar month, grouped by branch. Shared by the sweep's own renewal-reminder dispatch below
+// and the admin-facing GET /groups/expiring-renewals listing route -- one real query shape, not
+// duplicated logic between "notify about this" and "let an admin browse this".
+//
+// UTC month, deliberately not branch-local: a batch's startDate/endDate are themselves UTC-
+// calendar-based (Slice A's own endOfNextCalendarMonthUtc design -- "there's no branch-local
+// time of day to preserve" for a term boundary), so "is this assignment expiring this month"
+// compares against the same UTC calendar its own endDate was computed on. Branch-local time
+// zone still matters separately for WHEN an admin gets pinged (the 20th check in the sweep step
+// below uses branch-local date), just not for what counts as "this month" here.
+type ExpiringBatch = { groupId: string; groupName: string; resourcePoolId: string; assignmentIds: string[] };
+type ExpiringBranch = { branchId: string; tenantId: string; batches: ExpiringBatch[] };
+
+// tenantId is optional and deliberately so: the sweep's own call (system job, dispatches
+// reminders branch-by-branch across every tenant) passes none, same system-wide scope as
+// low_occupancy_alert's own sweep step. GET /groups/expiring-renewals passes auth.tenantId for
+// an owner caller -- without it, an owner sees every OTHER tenant's expiring batches too, a real
+// cross-tenant leak caught live in this slice's own dev-stack verification (a JBC owner session
+// was served a courtowner1 batch). internal callers keep seeing everything, matching GET
+// /groups's own internal path.
+async function computeExpiringBatchesByBranch(now: Date, tenantId?: string): Promise<ExpiringBranch[]> {
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+  const assignments = await prisma.memberGroupAssignment.findMany({
+    where: {
+      status: 'ACTIVE',
+      groupId: { not: null },
+      endDate: { gte: monthStart, lt: monthEnd },
+      ...(tenantId ? { resourcePool: { tenantId } } : {}),
+    },
+    include: { group: true, resourcePool: { select: { branchId: true, tenantId: true } } },
+  });
+
+  const byBranch = new Map<string, ExpiringBranch>();
+  const batchByBranchAndGroup = new Map<string, ExpiringBatch>();
+
+  for (const assignment of assignments) {
+    if (!assignment.group) continue; // groupId set but the row is gone -- defensive, should not happen
+    const branchId = assignment.resourcePool.branchId;
+    const tenantId = assignment.resourcePool.tenantId;
+    let branch = byBranch.get(branchId);
+    if (!branch) {
+      branch = { branchId, tenantId, batches: [] };
+      byBranch.set(branchId, branch);
+    }
+    const batchKey = `${branchId}:${assignment.group.id}`;
+    let batch = batchByBranchAndGroup.get(batchKey);
+    if (!batch) {
+      batch = { groupId: assignment.group.id, groupName: assignment.group.name, resourcePoolId: assignment.resourcePoolId, assignmentIds: [] };
+      batchByBranchAndGroup.set(batchKey, batch);
+      branch.batches.push(batch);
+    }
+    batch.assignmentIds.push(assignment.id);
+  }
+
+  return Array.from(byBranch.values());
+}
 
 // ---------------------------------------------------------------------------
 // Sweep — lazy member booking generation + low-occupancy alert
@@ -6221,11 +6365,85 @@ server.post('/bookings/sweep', async (request, reply) => {
     }
   }
 
+  // 5. BATCH RENEWAL REMINDER — F-133 Slice E, admin-facing, once per branch per month.
+  // WHY reusing THIS sweep rather than a new trigger mechanism: /bookings/sweep's real
+  // production invocation frequency isn't directly inspectable from this repo (its own comment
+  // says "runs as a cron/background job" with the actual config external to the repo, and the
+  // in-repo job-scheduler package is not wired into slot-engine's runtime at all -- confirmed by
+  // grep, zero references). But F-133 Slice B's own T-2h/T-1h15m reminders already depend on
+  // sweep firing frequently enough to catch a 2-hour-wide window, and that shipped and was
+  // signed off -- real, already-accepted evidence sweep's true cadence is frequent in practice,
+  // which comfortably covers a once-a-day (the 20th) check too. Reusing the proven mechanism
+  // per rule 3, not inventing a new one on a guess.
+  //
+  // Branch-local "is it the 20th": admin-facing, so it's evaluated on the branch's own clock,
+  // same as every other branch-local check in this file -- unlike computeExpiringBatchesByBranch
+  // itself, which compares a batch's endDate against the UTC calendar month its own endDate was
+  // computed on (see that function's own comment for why those two are deliberately different).
+  //
+  // Dedup key ${branchId}:${YYYY-MM} (branch-local month) -- once per branch per month, not per
+  // sweep invocation, not combined across a multi-branch owner's branches. Real precedent:
+  // low_occupancy_alert dispatches per-pool, never combined across a tenant's pools, so one
+  // admin alert per real trigger unit (here, per branch) matches this project's own established
+  // pattern rather than inventing tenant-wide digesting.
+  const expiringByBranch = await computeExpiringBatchesByBranch(now);
+  const renewalRemindersDispatched: string[] = [];
+  if (expiringByBranch.length > 0) {
+    const renewalBranchTimeZones = await getBranchTimeZones(expiringByBranch.map((b) => b.branchId));
+    for (const branch of expiringByBranch) {
+      const timeZone = renewalBranchTimeZones.get(branch.branchId) ?? DEFAULT_TIME_ZONE;
+      const branchToday = branchDateString(now, timeZone); // 'YYYY-MM-DD'
+      if (!isRenewalReminderDay(branchToday)) continue;
+      const branchMonth = branchToday.slice(0, 7); // 'YYYY-MM'
+
+      try {
+        await prisma.scheduledJobDispatch.create({
+          data: {
+            jobName: 'batch_renewal_reminder',
+            tenantId: branch.tenantId,
+            subjectId: branch.branchId,
+            dedupKey: `${branch.branchId}:${branchMonth}`,
+            status: 'SENT',
+            occurrenceAt: now,
+            dispatchedAt: new Date(),
+          },
+        });
+      } catch (err: any) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          continue; // already reminded for this branch this month
+        }
+        throw err;
+      }
+      renewalRemindersDispatched.push(branch.branchId);
+      try {
+        await fetch(`${notificationUrl}/notifications/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+          body: JSON.stringify({
+            tenantId: branch.tenantId,
+            // WHY: batch_renewal_reminder targets the tenant admin, not a member -- same
+            // recipient-resolution convention as low_occupancy_alert above.
+            recipient: branch.tenantId,
+            event_type: 'batch_renewal_reminder',
+            variables: {
+              branchId: branch.branchId,
+              batchNames: branch.batches.map((b) => b.groupName),
+              batchCount: branch.batches.length,
+            },
+          }),
+        });
+      } catch (e) {
+        // Non-blocking, same posture as low_occupancy_alert above.
+      }
+    }
+  }
+
   return {
     expiredHoldsCount: expiredHolds.count,
     releasedMembersCount,
     lazyGeneratedCount,
     lowOccupancyAlertsDispatched: alertsDispatched.length,
+    renewalRemindersDispatched: renewalRemindersDispatched.length,
   };
 });
 

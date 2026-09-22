@@ -247,6 +247,19 @@ export function endOfNextCalendarMonthUtc(instant: Date): Date {
 }
 
 /**
+ * F-133 Slice E: is `branchDateString`'s output the 20th of its month? Split out as its own pure
+ * predicate (rather than an inline `.endsWith('-20')` at the call site) specifically so it can be
+ * exercised directly in the regression suite -- the sweep route that consumes it runs on real
+ * wall-clock time, which a live-fire HTTP regression test has no way to move to the 20th on
+ * demand, unlike every other reminder in this file (all of which gate on a real near-term offset
+ * from "now" a test CAN construct). This function is the one piece of that gate a test can prove
+ * directly by execution.
+ */
+export function isRenewalReminderDay(branchDateStr: string): boolean {
+  return branchDateStr.slice(8, 10) === '20';
+}
+
+/**
  * F-087: resolve a caller-supplied datetime, interpreting a naive one on the BRANCH's clock.
  *
  * `new Date("2026-07-31T22:16:00")` — no offset, no `Z` — is parsed by Node as process-local

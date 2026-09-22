@@ -4,6 +4,7 @@ import { moduleVisible, useAdminTenant } from '../auth/AdminTenantContext';
 import { EmptyState, LoadingState } from '../components';
 import { CreateBatchForm } from './membersManagement/CreateBatchForm';
 import { RosterPanel } from './membersManagement/RosterPanel';
+import { RenewalPanel } from './membersManagement/RenewalPanel';
 
 /**
  * F-133 Slice A — `/members`: batch (Group) creation. Replaces the plain `StubScreen` this route
@@ -54,6 +55,7 @@ export function MembersScreen() {
 
       <div style={{ display: 'grid', gap: 'var(--av2-space-4)', minWidth: 0 }}>
         <CreateBatchForm />
+        <RenewalPanel />
         <RosterPanel />
       </div>
     </div>
