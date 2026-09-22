@@ -675,7 +675,9 @@ export default function BranchBooking() {
                             className="text-[9.5px] font-mono leading-tight"
                             style={{ color: isSelected ? 'var(--slot-selected-meta)' : isAlmostFull ? 'var(--slot-almostfull-text)' : 'var(--slot-available-accent)' }}
                           >
-                            {isAlmostFull ? `${slot.remainingCapacity} left` : `${slot.remainingCapacity} seats`}
+                            {/* F-284: "seats" reads as player-count/shared-table, not remaining
+                                bookable courts in this hour's pool -- a court isn't a seat. */}
+                            {isAlmostFull ? `${slot.remainingCapacity} left` : `${slot.remainingCapacity} courts open`}
                           </span>
                         </div>
                       );

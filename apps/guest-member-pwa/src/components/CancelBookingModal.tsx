@@ -132,20 +132,29 @@ export default function CancelBookingModal({ bookingId, booking, branchAbout, on
                   : <>Your refund of ₹{preview?.refundAmount} will be processed under the venue&rsquo;s policy.</>}
               </p>
             </div>
-            <button
-              type="button"
-              id="download-cancellation-receipt-btn"
-              onClick={() => {
-                import('../lib/receipt').then(({ downloadCancellationReceipt }) => {
-                  downloadCancellationReceipt(booking, branchAbout, preview, tenant?.appName || tenant?.name);
-                });
-              }}
-              className="w-full py-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-2"
-              style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)' }}
-            >
-              <Download className="h-4 w-4" />
-              <span>Download Cancellation Receipt (PDF)</span>
-            </button>
+            {/* F-286: a HELD booking was never paid for, so there's genuinely nothing to
+                receipt -- no charge, no refund. The PDF (receipt.ts) renders Amount Paid/
+                Original Price/Refund Percent/Refund Amount unconditionally from `preview`,
+                the same known-nonsensical-for-HELD shape the on-screen copy above already
+                works around; gating the button here (rather than making the PDF itself
+                HELD-aware) removes the fabricated-figure risk entirely instead of patching
+                its content. The non-HELD path below is completely unchanged. */}
+            {!isHeld && (
+              <button
+                type="button"
+                id="download-cancellation-receipt-btn"
+                onClick={() => {
+                  import('../lib/receipt').then(({ downloadCancellationReceipt }) => {
+                    downloadCancellationReceipt(booking, branchAbout, preview, tenant?.appName || tenant?.name);
+                  });
+                }}
+                className="w-full py-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-2"
+                style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)' }}
+              >
+                <Download className="h-4 w-4" />
+                <span>Download Cancellation Receipt (PDF)</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               className="w-full py-3 rounded-xl font-semibold text-xs transition-colors"
