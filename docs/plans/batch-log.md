@@ -3956,6 +3956,59 @@ moved Open → Resolved with its own five-slice summary row; F-277 added as a ne
 and resolved same session). `pnpm diagram:verify` — clean, all 67 finding tags agree with the
 register (advisory-only notes, no failures). **F-133 is now fully closed -- this is the last slice.**
 
+## Batch 77 — Slice 1: Create Batch form fixes (F-280, F-281, F-282, F-283)
+
+**Findings:** F-280, F-281, F-282, F-283 — all **Resolved**, Chief-assigned 22 Sep 2026 in one
+handover, each kept its own ID/evidence per rule 9 (not scope-bundled).
+**Handed off:** 22 Sep 2026 (Chief Architect thread — "Slice 1: Create Batch form fixes").
+**Status:** implemented, real evidence gathered, signed off, merged.
+**Branch:** `f280-283-createbatch-form-fixes` (off `main`@`448f58d`). PR #77.
+
+All four surfaced during the F-133 mobile-UX observation round (real 375px-viewport testing of
+admin-v2's Create Batch form) and all four touch `CreateBatchForm.tsx` (plus `Select.tsx` for
+F-280) -- one PR, one branch, frontend-only, no backend changes.
+
+**F-281 (High, the live blocker)**: the form had zero visibility into the tenant's actual
+`memberPeakDefaultRate`/`memberNonPeakDefaultRate` -- confirmed on JBC's real production tenant,
+both `null` -- so toggling Peak/Non-Peak with no Custom Rate silently passed `canSubmit` and
+failed only server-side with an opaque 400. Fixed by reusing `useTenantRates()` (the same hook
+`PricingRates.tsx` already uses for this data, rule 3, not a new fetch): resolves the effective
+rate client-side, blocks submit with a clear message when nothing resolves, shows the resolved
+amount when it does. **Real refinement caught during plan review, before implementation began**:
+the first-pass logic conflated "the tenant genuinely has no default configured" with "the rates
+fetch itself failed" into one message -- distinguished via `rates.isError` so a real fetch
+failure doesn't tell the admin something false about their own tenant's configuration.
+
+**F-280 (Medium)**: `Select.tsx`'s wrapper and native `<select>` both lacked `minWidth: 0`, so a
+long pool name overflowed its grid cell instead of truncating. Fixed with `minWidth: 0` +
+ellipsis truncation. Blast radius checked before touching a shared component: `<Select` has 20
+real call sites across 13 files -- confirmed additive/safe, spot-checked live.
+
+**F-282 (Low)**: pool `<option>` labels shortened to strip the redundant branch-name prefix
+("Main Courts" instead of the full pool name). **Chief's own caution validated by real
+investigation**: JBC's two real branches use *different dash characters* for the same separator
+between branch and pool names (one uses a plain hyphen, the other an en dash) -- a literal-prefix
+strip would have silently failed for the en-dash branch. Fixed by normalizing dash characters
+before comparing, confirmed against both real branches.
+
+**F-283 (Low)**: `days` default changed from `[]` to `[1,2,3,4,5,6]` (Mon-Sat, Sunday off),
+applied to both the initial state and the post-submit reset.
+
+**Evidence:** full backend regression 5/5 suites (first run showed 3/5, confirmed environmental —
+each failing suite passes in isolation, second full-set run clean; no backend files touched by
+this PR at all, matching rule 7's rigor regardless). admin-v2 typecheck/build clean. Live-fire
+against the local dev-stack: F-281's block state confirmed via direct DOM inspection
+(`disabled: true` before any submit attempt), the custom-rate-resolves and
+tenant-default-resolves paths both confirmed (a temporary real `memberNonPeakDefaultRate` was set
+on the dev-stack's own JBC tenant via the existing Branch Settings UI, verified, then reverted --
+JBC's real production tenant was never touched); F-282 confirmed against both real JBC branches'
+actual pool names; F-280/F-283 confirmed via real 375px screenshots.
+
+**Close-out:** `pnpm register:check` — **260 rows, Open 115 / Resolved 145** (was
+256/115/141: four new Resolved rows, F-280 through F-283, no Open-row changes). `pnpm
+diagram:verify` — clean, all 67 finding tags agree with the register (advisory-only notes, no
+failures).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
