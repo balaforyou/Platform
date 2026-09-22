@@ -514,6 +514,17 @@ function MainDashboard() {
           <MapPin className="h-3.5 w-3.5" />
           <span>{tenant?.name}</span>
         </div>
+        {/* F-285: the "Welcome back to {tenant}" heading below is left completely untouched --
+            its exact text is asserted by real Playwright specs (see the comment above this
+            block). The first-name greeting is a separate line instead of being worked into that
+            sentence, so it adds real personalization with zero risk to those assertions. No
+            separate first-name field exists on the token -- split displayName client-side, same
+            fallback chain AccountSheet.tsx already establishes for when it's unset. */}
+        {(user?.displayName || user?.name || user?.email) && (
+          <p className="text-sm font-semibold" style={{ color: 'var(--color-accent-700)', fontFamily: 'var(--font-body-organic)' }}>
+            {`Hi, ${(user?.displayName || user?.name || user?.email || '').split(' ')[0]}`}
+          </p>
+        )}
         <h2 className="text-3xl md:text-4xl" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, lineHeight: 1.1, color: 'var(--color-text)' }}>
           Welcome back to <span style={{ color: 'var(--color-accent-700)' }}>{tenant?.appName}</span>
         </h2>

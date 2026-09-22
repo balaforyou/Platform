@@ -68,7 +68,14 @@ export default function AccountSheet({ open, onOpenChange }: AccountSheetProps) 
             <div className="gpwa-account-sheet__profile-row">
               <span>Account type</span>
               <span className="gpwa-account-sheet__profile-value gpwa-account-sheet__profile-value--accent">
-                {user?.roles?.[0] || 'member'}
+                {/* F-278: this used to read user?.roles?.[0] -- roles is the admin-role array
+                    (owner/branch_manager:*), always empty for a consumer-facing guest/member, so
+                    it silently fell back to the literal string 'member' for every ordinary user
+                    regardless of their real type. userType ('GUEST' | 'MEMBER') is the real
+                    consumer-facing field -- already read in five places in main.tsx for the same
+                    gating purpose. Title-cased for display, matching this screen's existing
+                    natural-case values (the name/phone rows above are never all-caps). */}
+                {user?.userType === 'MEMBER' ? 'Member' : 'Guest'}
               </span>
             </div>
           </div>
