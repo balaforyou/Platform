@@ -19,11 +19,11 @@ export function Select({ label, hint, error, id, style, children, ...rest }: Sel
   const describedBy = error ? `${fieldId}-err` : hint ? `${fieldId}-hint` : undefined;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-2)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-2)', minWidth: 0 }}>
       <label htmlFor={fieldId} style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 600, color: 'var(--av2-text)' }}>
         {label}
       </label>
-      <div style={{ position: 'relative', display: 'flex' }}>
+      <div style={{ position: 'relative', display: 'flex', minWidth: 0 }}>
         <select
           {...rest}
           id={fieldId}
@@ -31,6 +31,7 @@ export function Select({ label, hint, error, id, style, children, ...rest }: Sel
           aria-describedby={describedBy}
           style={{
             flex: 1,
+            minWidth: 0,
             appearance: 'none',
             padding: 'var(--av2-space-2) var(--av2-space-8) var(--av2-space-2) var(--av2-space-3)',
             fontSize: 'var(--av2-text-base)',
@@ -39,6 +40,9 @@ export function Select({ label, hint, error, id, style, children, ...rest }: Sel
             background: 'var(--av2-surface)',
             color: 'var(--av2-text)',
             cursor: 'pointer',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
             ...style,
           }}
         >
