@@ -24,7 +24,7 @@ export const autopayAndRefundSections: Section<PaymentContext>[] = [
 
       const subRes = await fetch(`${paymentUrl}/subscriptions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({ tenantId: TENANT_ID, userId: USER_ID, mandateId, amount: 15000 }),
       });
       const sub = ((await subRes.json()) as any).data;
@@ -104,6 +104,43 @@ export const autopayAndRefundSections: Section<PaymentContext>[] = [
         );
       }
       console.log('Refund executed successfully using the pre-calculated refundAmount from Slot Engine.');
+    },
+  },
+
+  {
+    name: 'F-293: POST /subscriptions requires the internal key (401 unauthenticated, 401 wrong key, 200 correct key)',
+    async run() {
+      const body = JSON.stringify({
+        tenantId: TENANT_ID,
+        userId: USER_ID,
+        mandateId: 'f293_guard_mandate',
+        amount: 15000,
+      });
+
+      const noAuth = await fetch(`${paymentUrl}/subscriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (noAuth.status !== 401) throw new Error(`Expected 401 with no auth, got ${noAuth.status}`);
+
+      const wrongKey = await fetch(`${paymentUrl}/subscriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer not-the-real-key' },
+        body,
+      });
+      if (wrongKey.status !== 401) throw new Error(`Expected 401 with a wrong key, got ${wrongKey.status}`);
+
+      const realKey = await fetch(`${paymentUrl}/subscriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body,
+      });
+      if (realKey.status !== 200) throw new Error(`Expected 200 with the real internal key, got ${realKey.status}`);
+      const created = ((await realKey.json()) as any).data;
+      if (created.mandateId !== 'f293_guard_mandate' || created.status !== 'active') {
+        throw new Error(`Expected the real subscription row back, got ${JSON.stringify(created)}`);
+      }
     },
   },
 ];
