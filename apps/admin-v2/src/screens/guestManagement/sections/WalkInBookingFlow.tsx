@@ -475,8 +475,16 @@ export function WalkInBookingFlow({
                 key={b.key}
                 type="button"
                 onClick={() => { setBand(b.key); setWindowId(''); }}
-                disabled={!bandSet.has(b.key)}
-                style={{ ...segBtn(b.key === band), opacity: bandSet.has(b.key) ? 1 : 0.4, cursor: bandSet.has(b.key) ? 'pointer' : 'not-allowed' }}
+                // F-288: bandSet is briefly [] while availability is still loading (fresh
+                // date/pool query), which otherwise reads identically to a genuine no-slots
+                // band. Same availability.isLoading flag the Slot dropdown below already uses
+                // for the same window — treat loading as available-looking here too.
+                disabled={!availability.isLoading && !bandSet.has(b.key)}
+                style={{
+                  ...segBtn(b.key === band),
+                  opacity: availability.isLoading || bandSet.has(b.key) ? 1 : 0.4,
+                  cursor: availability.isLoading || bandSet.has(b.key) ? 'pointer' : 'not-allowed',
+                }}
               >
                 {b.label}
               </button>
