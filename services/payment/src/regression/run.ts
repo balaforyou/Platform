@@ -11,6 +11,7 @@ import { negotiatedLinkSections } from './negotiated-link.regression';
 import { manualBookingSections } from './manual-booking.regression';
 import { refundBranchScopingSections } from './refund-branch-scoping.regression';
 import { forceFullRefundCancelSections } from './force-full-refund-cancel.regression';
+import { simulateCaptureGuardSections } from './simulate-capture-guard.regression';
 
 async function main() {
   console.log('Starting local servers (Slot Engine, Identity & Auth, Payment)...');
@@ -52,6 +53,7 @@ async function main() {
         ...forceFullRefundCancelSections,
         ...negotiatedLinkSections,
         ...manualBookingSections,
+        ...simulateCaptureGuardSections,
       ],
       context,
     );
