@@ -37,15 +37,148 @@ export const jwtSessionSections: Section<IdentityContext>[] = [
         throw new Error('Expected refresh token rotation to update token value.');
       }
 
-      // Replay defense: the rotated-away token must no longer work.
+      // Replay defense: F-287 introduced a 20s grace window on the just-rotated-away token, so
+      // an immediate replay (well within the window) now converges onto the winning refresh
+      // token and returns 200 rather than 401 — that convergence is the entire point of the
+      // fix (two tabs racing the same rotation must both stay logged in). Real replay defense
+      // *past* the grace window is proven by the dedicated grace-window-expiry section below,
+      // not by this immediate-replay check anymore.
       const refreshResOld = await fetch(`${identityUrl}/auth/refresh`, {
         method: 'POST',
         headers: { Cookie: `refresh_token=${refreshToken}` },
       });
-      if (refreshResOld.status !== 401) {
-        throw new Error(`Expected old refresh token to return 401, got ${refreshResOld.status}`);
+      if (refreshResOld.status !== 200) {
+        throw new Error(`Expected old refresh token within the grace window to return 200, got ${refreshResOld.status}`);
       }
-      console.log('Refresh token rotation completed and old token invalidated successfully.');
+      const oldCookieHeader = refreshResOld.headers.get('set-cookie');
+      const convergedRefreshToken = oldCookieHeader?.split(';')[0].split('=')[1];
+      if (convergedRefreshToken !== newRefreshToken) {
+        throw new Error(`Expected grace-window replay to converge onto the winning refresh token ${newRefreshToken}, got ${convergedRefreshToken}`);
+      }
+      console.log('Refresh token rotation completed; immediate replay within the F-287 grace window converged onto the winning token instead of 401ing.');
+    },
+  },
+
+  {
+    name: 'F-287: concurrent two-tab refresh race converges on one refresh token, grace window genuinely expires, revoked session hard-fails both lookup paths',
+    async run(ctx) {
+      if (!ctx.cookieHeader) throw new Error('Registration section must run before the F-287 race section.');
+
+      // Establish a fresh, known-good refresh token to race from (the previous section already
+      // rotated/converged ctx's original cookie, so re-derive a clean starting point via one
+      // more real refresh call rather than reusing a token whose state this section can't be
+      // sure of).
+      const baseline = await fetch(`${identityUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { Cookie: ctx.cookieHeader },
+      });
+      if (baseline.status !== 200) throw new Error(`Expected baseline refresh to return 200, got ${baseline.status}`);
+      const baselineCookie = baseline.headers.get('set-cookie');
+      const baselineRefreshToken = baselineCookie?.split(';')[0].split('=')[1];
+      if (!baselineRefreshToken) throw new Error('Missing baseline refresh token cookie.');
+
+      // --- Real two-tab race: two concurrent /auth/refresh calls with the identical cookie. ---
+      function callRefresh() {
+        return fetch(`${identityUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { Cookie: `refresh_token=${baselineRefreshToken}` },
+        });
+      }
+      const [raceResA, raceResB] = await Promise.all([callRefresh(), callRefresh()]);
+      if (raceResA.status !== 200 || raceResB.status !== 200) {
+        throw new Error(`Expected both racing refresh calls to return 200, got ${raceResA.status} and ${raceResB.status}`);
+      }
+      const raceCookieA = raceResA.headers.get('set-cookie')?.split(';')[0].split('=')[1];
+      const raceCookieB = raceResB.headers.get('set-cookie')?.split(';')[0].split('=')[1];
+      if (!raceCookieA || !raceCookieB) throw new Error('Missing racing refresh cookies.');
+      // "Both got 200" alone is not sufficient evidence — access tokens are self-contained JWTs
+      // that stay valid for their own 15-minute life regardless of refresh-token state, so that
+      // assertion alone would pass even with the orphaned-cookie gap the CAS fix exists to
+      // close. The real proof is convergence: both callers must land on the exact same winning
+      // refresh token, not two independently-issued values where the loser's could be orphaned.
+      if (raceCookieA !== raceCookieB) {
+        throw new Error(`Expected both racing callers to converge on one refresh token, got ${raceCookieA} vs ${raceCookieB}`);
+      }
+      const convergedToken = raceCookieA;
+
+      // Real DB read-back BEFORE the third call: exactly one real rotation happened out of the
+      // race — previousRefreshToken holds the pre-race baseline value, refreshToken holds the
+      // converged value. Must run before the third (sequential) call below, since that call
+      // performs its own real rotation and would overwrite previousRefreshToken again.
+      const raceSession = await db.authSession.findFirst({ where: { previousRefreshToken: baselineRefreshToken } });
+      if (!raceSession) {
+        throw new Error('Expected a DB row with previousRefreshToken equal to the pre-race baseline value.');
+      }
+      if (raceSession.refreshToken !== convergedToken) {
+        throw new Error(`Expected the raced row's refreshToken to still be the converged value ${convergedToken} at the moment of the race, got ${raceSession.refreshToken}`);
+      }
+      console.log('Concurrent two-tab refresh race: both calls returned 200 and converged on one refresh token; DB read-back confirms exactly one real rotation.');
+
+      // A third, real, sequential call using the converged value must also succeed — proving it
+      // is genuinely persisted and live, not merely echoed back by the loser's response.
+      const thirdCall = await fetch(`${identityUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { Cookie: `refresh_token=${convergedToken}` },
+      });
+      if (thirdCall.status !== 200) {
+        throw new Error(`Expected the converged refresh token to be genuinely live on a real third call, got ${thirdCall.status}`);
+      }
+      const thirdCookie = thirdCall.headers.get('set-cookie')?.split(';')[0].split('=')[1];
+      console.log('A real third sequential call using the converged refresh token also succeeded.');
+
+      // --- Grace window genuinely expires (tested deterministically, not via a real 20s sleep,
+      //     matching the F-065 time-fast-forward technique already used elsewhere in this repo). ---
+      const preExpiryRotate = await fetch(`${identityUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { Cookie: `refresh_token=${thirdCookie}` },
+      });
+      if (preExpiryRotate.status !== 200) throw new Error(`Expected setup rotation to return 200, got ${preExpiryRotate.status}`);
+      const rotatedAwayToken = thirdCookie;
+      await db.authSession.updateMany({
+        where: { previousRefreshToken: rotatedAwayToken },
+        data: { previousTokenExpiresAt: new Date(Date.now() - 1000) },
+      });
+      const expiredReplay = await fetch(`${identityUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { Cookie: `refresh_token=${rotatedAwayToken}` },
+      });
+      if (expiredReplay.status !== 401) {
+        throw new Error(`Expected replay past an expired grace window to return 401, got ${expiredReplay.status}`);
+      }
+      console.log('Grace window genuinely expires: a token whose previousTokenExpiresAt was moved into the past correctly 401s on replay.');
+
+      // --- Revoked session hard-fails on both lookup paths (current-token and previous-token). ---
+      const revokeCookie = preExpiryRotate.headers.get('set-cookie')?.split(';')[0].split('=')[1];
+      if (!revokeCookie) throw new Error('Missing cookie to set up the revoked-session check.');
+      const beforeRevokeSession = await db.authSession.findUnique({ where: { refreshToken: revokeCookie } });
+      if (!beforeRevokeSession) throw new Error('Expected a real session row for the revoked-session setup token.');
+      // Rotate once more so there is both a live refreshToken and a still-graced previousRefreshToken
+      // on the same row, then revoke it — a logged-out session must not be resurrectable via
+      // either lookup path.
+      const preRevokeRotate = await fetch(`${identityUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { Cookie: `refresh_token=${revokeCookie}` },
+      });
+      if (preRevokeRotate.status !== 200) throw new Error(`Expected pre-revoke rotation to return 200, got ${preRevokeRotate.status}`);
+      const liveTokenBeforeRevoke = preRevokeRotate.headers.get('set-cookie')?.split(';')[0].split('=')[1];
+      if (!liveTokenBeforeRevoke) throw new Error('Missing live token before revoke.');
+      await db.authSession.updateMany({ where: { refreshToken: liveTokenBeforeRevoke }, data: { revoked: true } });
+
+      const revokedCurrentReplay = await fetch(`${identityUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { Cookie: `refresh_token=${liveTokenBeforeRevoke}` },
+      });
+      if (revokedCurrentReplay.status !== 401) {
+        throw new Error(`Expected revoked session's current refresh token to 401, got ${revokedCurrentReplay.status}`);
+      }
+      const revokedPreviousReplay = await fetch(`${identityUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { Cookie: `refresh_token=${revokeCookie}` },
+      });
+      if (revokedPreviousReplay.status !== 401) {
+        throw new Error(`Expected revoked session's previous (grace-window) refresh token to 401, got ${revokedPreviousReplay.status}`);
+      }
+      console.log('Revoked session hard-fails on both the current-refreshToken and previousRefreshToken (grace-window) lookup paths.');
     },
   },
 
