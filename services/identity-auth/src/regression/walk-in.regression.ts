@@ -134,4 +134,45 @@ export const walkInSections: Section<IdentityContext>[] = [
       }
     },
   },
+
+  {
+    name: 'F-291: GET /users/:id now requires the internal service key (401 unauthenticated, 401 wrong key, 200 correct key, real user row)',
+    async run() {
+      const user = await db.user.create({
+        data: {
+          id: 'f291-detail-user',
+          phone: '+919888800291',
+          name: 'F291 Detail Target',
+          tenantId: OWNER_TENANT,
+          userType: 'GUEST',
+          isPhoneVerified: true,
+        },
+      });
+
+      const noAuthRes = await inspect(await fetch(`${identityUrl}/users/${user.id}`));
+      console.log('F291_EVIDENCE no_auth', JSON.stringify({ status: noAuthRes.status }));
+      if (noAuthRes.status !== 401) {
+        throw new Error(`Expected 401 with no auth header, got ${noAuthRes.status}: ${noAuthRes.raw}`);
+      }
+
+      const wrongKeyRes = await inspect(
+        await fetch(`${identityUrl}/users/${user.id}`, { headers: { Authorization: 'Bearer not-the-real-key' } }),
+      );
+      console.log('F291_EVIDENCE wrong_key', JSON.stringify({ status: wrongKeyRes.status }));
+      if (wrongKeyRes.status !== 401) {
+        throw new Error(`Expected 401 with a wrong key, got ${wrongKeyRes.status}: ${wrongKeyRes.raw}`);
+      }
+
+      const realRes = await inspect(
+        await fetch(`${identityUrl}/users/${user.id}`, { headers: { Authorization: `Bearer ${internalKey}` } }),
+      );
+      console.log('F291_EVIDENCE real_key', JSON.stringify({ status: realRes.status, id: realRes.json?.data?.id }));
+      if (realRes.status !== 200) {
+        throw new Error(`Expected 200 with the real internal key, got ${realRes.status}: ${realRes.raw}`);
+      }
+      if (realRes.json.data.id !== user.id || realRes.json.data.phone !== user.phone) {
+        throw new Error(`Expected the real user row back, got ${realRes.raw}`);
+      }
+    },
+  },
 ];
