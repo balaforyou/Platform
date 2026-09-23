@@ -1,5 +1,6 @@
 import fastify from 'fastify';
-import { responseEnvelopePlugin, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
+import fastifyJwt from '@fastify/jwt';
+import { responseEnvelopePlugin, assertInternalServiceKeyConfigured, requireInternalKey } from '@badminton/shared-middleware';
 import { processQueue, prisma } from './queue.js';
 
 const server = fastify({ logger: true });
@@ -7,6 +8,32 @@ const server = fastify({ logger: true });
 // WHY: Register the response envelope plugin globally so all success and error responses
 // are automatically wrapped to follow the API standards.
 server.register(responseEnvelopePlugin);
+
+// F-292: registered so POST /devices/register can accept a real admin/user session JWT
+// (its real caller, admin-v2's push opt-in, has no access to INTERNAL_SERVICE_KEY) -- same
+// registration shape identity-auth/payment/slot-engine/tenant-management already share.
+server.register(fastifyJwt, {
+  secret: process.env.JWT_SECRET || 'test-jwt-secret-key-123-abcdefg',
+});
+
+// F-292: dual-path guard for POST /devices/register -- a real backend-to-backend caller
+// using the internal key, OR a real end-user session JWT (admin-v2's push opt-in). Either
+// is sufficient; unlike requireInternalKey, this never throws until BOTH paths have failed.
+async function requireInternalOrUserJwt(request: any, reply: any): Promise<void> {
+  const authHeader = request.headers['authorization'];
+  if (authHeader === `Bearer ${process.env.INTERNAL_SERVICE_KEY}`) {
+    return;
+  }
+  try {
+    await request.jwtVerify();
+  } catch {
+    reply.status(401);
+    const err = new Error('Unauthorized');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+}
 
 // ============================================================
 // Channel policy matrix (per spec Section 5, resolved decisions)
@@ -147,7 +174,10 @@ server.get('/error-test', async () => {
 //      and the standard {event_type, recipient, variables} shape.
 //      Returns 202 immediately — delivery is async via queue worker.
 // ============================================================
+// F-292: was zero-auth -- confirmed via repo-wide grep, every real caller (slot-engine,
+// payment) already sends the internal-key header.
 server.post('/notifications/send', async (request, reply) => {
+  requireInternalKey(request, reply);
   const body = request.body as any;
   const eventType = body.event_type;
   const recipient = body.recipient;
@@ -170,7 +200,10 @@ server.post('/notifications/send', async (request, reply) => {
 // ============================================================
 // POST /notifications/templates — tenant template overrides
 // ============================================================
-server.post('/notifications/templates', async (request) => {
+// F-292: was zero-auth -- confirmed via repo-wide grep, no real caller anywhere yet
+// (admin template-override UI not built); internal-key guard closes the gap regardless.
+server.post('/notifications/templates', async (request, reply) => {
+  requireInternalKey(request, reply);
   const { tenantId, channel, eventType, templateBody } = request.body as any;
 
   const template = await prisma.notificationTemplate.upsert({
@@ -185,7 +218,11 @@ server.post('/notifications/templates', async (request) => {
 // ============================================================
 // POST /devices/register — register FCM/Web Push token
 // ============================================================
-server.post('/devices/register', async (request) => {
+// F-292: was zero-auth. Real caller: admin-v2's push opt-in
+// (apps/admin-v2/src/lib/firebase.ts:62) sends the admin's own session JWT, not the
+// internal key -- so this needs the dual-path guard, not plain requireInternalKey.
+server.post('/devices/register', async (request, reply) => {
+  await requireInternalOrUserJwt(request, reply);
   const { userId, token } = request.body as any;
 
   const device = await prisma.deviceToken.upsert({
@@ -200,7 +237,10 @@ server.post('/devices/register', async (request) => {
 // ============================================================
 // GET /notifications/:userId/history — support / debugging log
 // ============================================================
-server.get('/notifications/:userId/history', async (request) => {
+// F-292: was zero-auth -- confirmed via repo-wide grep, no real caller anywhere yet
+// (no admin UI built against this route today); internal-key guard closes the gap regardless.
+server.get('/notifications/:userId/history', async (request, reply) => {
+  requireInternalKey(request, reply);
   const { userId } = request.params as any;
 
   const history = await prisma.notificationRequest.findMany({

@@ -16,7 +16,7 @@ export const retryAndDeadLetterSections: Section<NotificationContext>[] = [
     async run(ctx) {
       await fetch(`${notificationUrl}/devices/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({ userId: ctx.userId, token: 'fcm-fail-token-xyz' }),
       });
 

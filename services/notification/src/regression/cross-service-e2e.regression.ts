@@ -5,6 +5,7 @@ import {
   paymentUrl,
   webhookSecret,
   generateRazorpaySignature,
+  internalKey,
   NotificationContext,
 } from './_fixtures';
 
@@ -38,7 +39,7 @@ export const crossServiceE2eSections: Section<NotificationContext>[] = [
       // token there would be no push destination and no row would be created.
       await fetch(`${notificationUrl}/devices/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({ userId: ctx.userId, token: 'fcm-sub-fail-test-token' }),
       });
       console.log('Device token registered for subscription failure test');

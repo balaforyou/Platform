@@ -15,6 +15,7 @@ import {
 import { dispatchAndRoutingSections } from './dispatch-and-routing.regression';
 import { retryAndDeadLetterSections } from './retry-and-dead-letter.regression';
 import { crossServiceE2eSections } from './cross-service-e2e.regression';
+import { internalKeyGuardSections } from './internal-key-guards.regression';
 
 async function main() {
   console.log('Starting local servers (Identity & Auth, Payment, Notification)...');
@@ -54,7 +55,7 @@ async function main() {
 
     const results = await runSections<NotificationContext>(
       'notification',
-      [...dispatchAndRoutingSections, ...retryAndDeadLetterSections, ...crossServiceE2eSections],
+      [...dispatchAndRoutingSections, ...retryAndDeadLetterSections, ...crossServiceE2eSections, ...internalKeyGuardSections],
       context,
     );
     passed = allPassed(results);
