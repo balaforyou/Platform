@@ -27,14 +27,20 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
       });
       console.log(`Expired HELD booking created with ID: ${expiredHold.id}`);
 
-      const sweepRes = await fetch(`${baseUrl}/bookings/sweep`, {
+      // F-044 Phase 2: /bookings/sweep is decommissioned (410) -- /bookings/sweep/tick is the
+      // sole live trigger now, running held_booking_expiry as one of three JobDefinitions.
+      // held_booking_expiry only actually runs once per its real 60s interval -- an earlier
+      // section this same process run may have already ticked it, so force it due first.
+      await db.scheduledJob.updateMany({ where: { name: 'held_booking_expiry' }, data: { nextRunAt: new Date(0) } });
+      const sweepRes = await fetch(`${baseUrl}/bookings/sweep/tick`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${internalKey}` },
       });
       const sweepData = ((await sweepRes.json()) as any).data;
       console.log('Sweep result:', sweepData);
 
-      if (sweepData.expiredHoldsCount === 0) {
+      const heldExpiryRun = sweepData.jobs.find((j: any) => j.jobName === 'held_booking_expiry');
+      if (!heldExpiryRun || heldExpiryRun.processed === 0) {
         throw new Error('Expected at least 1 expired hold to be swept.');
       }
 
@@ -126,8 +132,22 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
         });
       };
 
+      // F-044 Phase 2: /bookings/sweep is decommissioned (410) -- /bookings/sweep/tick is the
+      // sole live trigger now. member_assignment_sweep's JobRunSummary only carries a coarse
+      // processed/skipped count (not the old per-category releasedMembersCount/
+      // lowOccupancyAlertsDispatched breakdown), so this test reads the real DB state
+      // directly instead -- a real assertion, not a weaker one; this codebase's own stated
+      // preference is DB read-back over trusting a response shape.
+      // member_assignment_sweep only actually runs once per its real 60s interval -- an earlier
+      // section's own tick this same process run (or an earlier call within this very test) can
+      // leave it not-yet-due, which would make the "repeats"/"concurrency" checks below pass for
+      // the wrong reason (the job silently not running) rather than proving real dedup. Force it
+      // due immediately before every real execution, same fix as f044-phase2-scheduler.regression
+      // .ts's forceJobsDue.
+      const forceMemberSweepDue = () => db.scheduledJob.updateMany({ where: { name: 'member_assignment_sweep' }, data: { nextRunAt: new Date(0) } });
       const sweep = async () => {
-        const res = await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
+        await forceMemberSweepDue();
+        const res = await fetch(`${baseUrl}/bookings/sweep/tick`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
         if (!res.ok) throw new Error(`Sweep failed with ${res.status}`);
         return ((await res.json()) as any).data;
       };
@@ -147,11 +167,8 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
       if (await memberBooking()) {
         throw new Error('A member still inside their own confirmation deadline must not be released.');
       }
-      if (inside.releasedMembersCount !== 0) {
-        throw new Error(`Expected releasedMembersCount 0 inside the deadline, got ${inside.releasedMembersCount}`);
-      }
-      if (inside.lowOccupancyAlertsDispatched !== 1) {
-        throw new Error(`The alert must fire on its own guestAccessCutoffMinutes schedule, got ${inside.lowOccupancyAlertsDispatched}`);
+      if ((await alertCount()) !== 1) {
+        throw new Error(`The alert must fire on its own guestAccessCutoffMinutes schedule, got ${await alertCount()}`);
       }
 
       // --- The alert must not repeat across runs. Pre-dedupe this produced one per sweep. ---
@@ -167,11 +184,10 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
       // --- Nor duplicate under genuine concurrency: sequential re-runs prove persistence,
       //     only simultaneity proves atomicity. ---
       await seed(graceShort);
-      const concurrent = await Promise.all([sweep(), sweep(), sweep(), sweep()]);
-      const dispatchedTotal = concurrent.reduce((n, r) => n + r.lowOccupancyAlertsDispatched, 0);
+      await Promise.all([sweep(), sweep(), sweep(), sweep()]);
       const concurrentAlerts = await alertCount();
-      if (concurrentAlerts !== 1 || dispatchedTotal !== 1) {
-        throw new Error(`Concurrent sweeps must yield exactly one alert, got ${concurrentAlerts} rows / ${dispatchedTotal} dispatched`);
+      if (concurrentAlerts !== 1) {
+        throw new Error(`Concurrent sweeps must yield exactly one alert, got ${concurrentAlerts} rows`);
       }
 
       // --- Past the member's deadline: release fires, on the SAME value the UI shows. ---
@@ -181,16 +197,13 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
       if (released?.status !== BookingStatus.RELEASED_NO_SHOW) {
         throw new Error(`Expected RELEASED_NO_SHOW past the displayed deadline, got ${released?.status ?? 'no booking'}`);
       }
-      if (past.releasedMembersCount !== 1) {
-        throw new Error(`Expected releasedMembersCount 1 past the deadline, got ${past.releasedMembersCount}`);
-      }
 
       console.log('F065_EVIDENCE', {
         windowGapMinutes: gap,
-        insideDeadline: { grace: graceShort, released: inside.releasedMembersCount, alerts: inside.lowOccupancyAlertsDispatched },
+        insideDeadline: { grace: graceShort, jobs: inside.jobs },
         alertsAfter5Sweeps: afterRepeats,
         alertsAfter4ConcurrentSweeps: concurrentAlerts,
-        pastDeadline: { grace: graceLong, released: past.releasedMembersCount, status: released.status },
+        pastDeadline: { grace: graceLong, jobs: past.jobs, status: released.status },
       });
 
       await cleanup();
@@ -313,7 +326,11 @@ export const lowOccupancyReleaseSections: Section<SlotEngineContext>[] = [
       // --- Move the release trigger into the past so the sweep is demonstrably ACTIVE. ---
       await db.bookingRule.update({ where: { id: rule.id }, data: { gracePeriodMinutes: gap + 5 } });
 
-      const sweepRes = await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
+      // F-044 Phase 2: /bookings/sweep is decommissioned (410) -- /bookings/sweep/tick is the sole
+      // live trigger. Force member_assignment_sweep due -- an earlier section/test may have
+      // already ticked it this process run, leaving it not-yet-due for its real 60s interval.
+      await db.scheduledJob.updateMany({ where: { name: 'member_assignment_sweep' }, data: { nextRunAt: new Date(0) } });
+      const sweepRes = await fetch(`${baseUrl}/bookings/sweep/tick`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
       if (!sweepRes.ok) throw new Error(`Sweep failed with ${sweepRes.status}`);
       const sweepData = ((await sweepRes.json()) as any).data;
 

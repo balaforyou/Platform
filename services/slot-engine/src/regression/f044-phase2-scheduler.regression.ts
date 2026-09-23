@@ -3,17 +3,18 @@ import { BookingStatus } from '@badminton/database';
 import { db, baseUrl, internalKey, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID, defaultTermDates } from './_fixtures';
 
 /**
- * F-044 Phase 2 — job-scheduler-backed decomposition of /bookings/sweep.
+ * F-044 Phase 2 — job-scheduler-backed decomposition of /bookings/sweep, plus its cutover
+ * close-out: /bookings/sweep is now decommissioned (410) after a real observed production
+ * parallel-run window and a real Cloud Scheduler URI retarget (docs/plans/batch-log.md).
+ * member-multi-batch-attendance.regression.ts and low-occupancy-release.regression.ts, which
+ * used to exercise /bookings/sweep directly, were migrated onto /bookings/sweep/tick in the
+ * same change.
  *
- * /bookings/sweep itself is completely untouched (see member-multi-batch-attendance.regression.ts
- * and low-occupancy-release.regression.ts, which already cover it and continue to pass unmodified).
- * These sections cover the new, additive POST /bookings/sweep/tick route and the three real
- * JobDefinitions it drives: real ScheduledJob seed rows exist, a real HELD booking auto-releases
- * through the new route exactly as the old one does, and the F-057 migration to ctx.store.
- * claimDispatch/markDispatched preserves the exact same real dedup guarantee the old raw-Prisma
- * insert-first pattern gave -- proven by driving the SAME real dedup scenario
- * member-multi-batch-attendance.regression.ts already proves against the old route, through the
- * new route instead.
+ * These sections cover POST /bookings/sweep/tick and the three real JobDefinitions it drives:
+ * real ScheduledJob seed rows exist, a real HELD booking auto-releases through the route, the
+ * F-057 migration to ctx.store.claimDispatch/markDispatched preserves the exact same real dedup
+ * guarantee the old raw-Prisma insert-first pattern gave, and /bookings/sweep itself now
+ * genuinely 410s rather than running.
  */
 
 function todayIsoWeekday(): string {
@@ -181,16 +182,22 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
     },
   },
   {
-    name: 'F-044 Phase 2: /bookings/sweep and /bookings/sweep/tick both remain independently callable and correct -- the old route is genuinely untouched, not deprecated mid-build',
+    name: 'F-044 Phase 2 cutover: /bookings/sweep is genuinely decommissioned (410, auth-gated) and /bookings/sweep/tick is the sole live route',
     async run() {
-      const pool = await makePool('parallel-run', 30);
+      // Unauthenticated first -- decommissioning must not weaken the auth posture the live
+      // route had. An unauthenticated caller still learns nothing (401), not 410/404.
+      const unauthRes = await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST' });
+      if (unauthRes.status !== 401) throw new Error(`Expected unauthenticated /bookings/sweep to 401 (same posture as when it was live), got ${unauthRes.status}`);
+
       const oldRouteRes = await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
-      if (oldRouteRes.status !== 200) throw new Error(`Expected /bookings/sweep to still return 200 unmodified, got ${oldRouteRes.status}`);
-      const oldBody = ((await oldRouteRes.json()) as any).data;
-      if (typeof oldBody.expiredHoldsCount !== 'number') {
-        throw new Error(`Expected /bookings/sweep's original response shape unchanged, got ${JSON.stringify(oldBody)}`);
+      if (oldRouteRes.status !== 410) throw new Error(`Expected decommissioned /bookings/sweep to return 410 for an authenticated caller, got ${oldRouteRes.status}`);
+      const oldBody = ((await oldRouteRes.json()) as any);
+      if (!String(oldBody.message ?? '').includes('/bookings/sweep/tick')) {
+        throw new Error(`Expected the 410 body to point callers at /bookings/sweep/tick, got ${JSON.stringify(oldBody)}`);
       }
 
+      const pool = await makePool('cutover-proof', 30);
+      void pool; // real pool creation kept only to match this file's other sections' real-data posture; not asserted on here.
       await forceJobsDue(['held_booking_expiry', 'member_assignment_sweep', 'batch_renewal_reminder']);
       const newRouteRes = await tick();
       if (newRouteRes.status !== 200) throw new Error(`Expected /bookings/sweep/tick to return 200, got ${newRouteRes.status}`);
@@ -199,11 +206,11 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
       if (newBody.jobs.length !== 3) {
         throw new Error(`Expected all 3 jobs to run once forced due, got ${JSON.stringify(newBody.jobs.map((j: any) => j.jobName))}`);
       }
-      console.log('F044P2_EVIDENCE both_routes_live', JSON.stringify({ oldRoute: oldBody, newRouteJobs: newBody.jobs.map((j: any) => ({ name: j.jobName, status: j.status })) }));
+      console.log('F044P2_EVIDENCE cutover_complete', JSON.stringify({ oldRouteStatus: oldRouteRes.status, newRouteJobs: newBody.jobs.map((j: any) => ({ name: j.jobName, status: j.status })) }));
     },
   },
   {
-    name: 'F-044 Phase 2: requireInternalKey guards the new tick route exactly like the old sweep route -- no auth 401',
+    name: 'F-044 Phase 2: requireInternalKey guards the tick route -- no auth 401',
     async run() {
       const res = await fetch(`${baseUrl}/bookings/sweep/tick`, { method: 'POST' });
       if (res.status !== 401) throw new Error(`Expected unauthenticated /bookings/sweep/tick to 401, got ${res.status}`);

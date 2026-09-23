@@ -258,7 +258,8 @@ test.describe('F-023 cross-system integration', () => {
   });
 
   test('protects confirmed member attendance and releases unconfirmed capacity to guest booking and refund override', async ({ browser, baseURL }) => {
-    // F-053: /bookings/sweep now requires the internal service key. This context is
+    // F-053: the sweep trigger requires the internal service key (F-044 Phase 2:
+    // /bookings/sweep/tick now, /bookings/sweep is decommissioned). This context is
     // Node-side only — the key must never reach the PWA's browser-side apiRequest helper.
     const api = await playwrightRequest.newContext({
       baseURL,
@@ -326,7 +327,10 @@ test.describe('F-023 cross-system integration', () => {
       updatedRows: scenarioACutoffShift.count,
     }));
 
-    const sweepARes = await api.post('/api/slot-engine/bookings/sweep');
+    // F-044 Phase 2: member_assignment_sweep only actually runs once per its real 60s interval
+    // -- force it due so this tick is a genuine execution, not a silent skip.
+    await prisma.scheduledJob.updateMany({ where: { name: 'member_assignment_sweep' }, data: { nextRunAt: new Date(0) } });
+    const sweepARes = await api.post('/api/slot-engine/bookings/sweep/tick');
     console.log('F023_REQUEST_RESPONSE sweep_after_confirm', JSON.stringify({ status: sweepARes.status(), body: await sweepARes.json() }));
     const scenarioABookingAfterSweep = await prisma.booking.findFirstOrThrow({ where: { userId: memberAId, windowId: windowAId } });
     console.log('F023_DB scenario_a_after_sweep', JSON.stringify({
@@ -383,7 +387,8 @@ test.describe('F-023 cross-system integration', () => {
       updatedRows: scenarioBCutoffShift.count,
     }));
 
-    const sweepBRes = await api.post('/api/slot-engine/bookings/sweep');
+    await prisma.scheduledJob.updateMany({ where: { name: 'member_assignment_sweep' }, data: { nextRunAt: new Date(0) } });
+    const sweepBRes = await api.post('/api/slot-engine/bookings/sweep/tick');
     console.log('F023_REQUEST_RESPONSE sweep_unconfirmed_member', JSON.stringify({ status: sweepBRes.status(), body: await sweepBRes.json() }));
     const scenarioBMemberBooking = await prisma.booking.findFirstOrThrow({ where: { userId: memberBId, windowId: windowBId } });
     console.log('F023_DB scenario_b_after_sweep', JSON.stringify({
