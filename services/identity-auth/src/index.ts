@@ -2,7 +2,7 @@ import fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyJwt from '@fastify/jwt';
 import crypto from 'crypto';
-import { responseEnvelopePlugin } from '@badminton/shared-middleware';
+import { responseEnvelopePlugin, requireInternalKey, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
 import { PrismaClient, UserType } from '@badminton/database';
 import {
   verifyGoogleIdToken,
@@ -57,30 +57,8 @@ function normalizePhone(phone: string): string {
   return '+' + digits;
 }
 
-/**
- * Rejects anything that is not the platform-internal service key.
- *
- * WHY THIS IS A HELPER (F-119): this check was inlined in `PATCH /users/:id/type` and had to be
- * applied to a second route, so it is extracted rather than copied — mirroring slot-engine's
- * existing named `requireInternalKey` (`slot-engine/src/index.ts:105`) rather than introducing a
- * third shape. Behaviour is deliberately identical to the inline version it replaces, including
- * setting the reply status before throwing, so the 401 envelope callers already assert is unchanged.
- *
- * Call this BEFORE reading the body or normalizing input. F-090/F-045/F-071: authenticating after a
- * parse or an existence check leaves a pre-auth code path an unauthenticated caller can still reach.
- */
-function requireInternalKey(request: any, reply: any) {
-  const authHeader = request.headers['authorization'];
-  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
-
-  if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
-    reply.status(401);
-    const err = new Error('Unauthorized internal service access');
-    (err as any).statusCode = 401;
-    (err as any).code = 'UNAUTHORIZED';
-    throw err;
-  }
-}
+// F-290: requireInternalKey moved to @badminton/shared-middleware (imported above) -- was
+// hand-copied identically across identity-auth/tenant-management/slot-engine.
 
 /**
  * Dual-path admin auth for the walk-in identity route (F-229): a trusted internal service caller
@@ -1526,6 +1504,7 @@ server.patch('/users/:id/type', async (request, reply) => {
 
 const start = async () => {
   try {
+    assertInternalServiceKeyConfigured();
     const port = Number(process.env.PORT) || 3002;
     await server.listen({ port, host: '0.0.0.0' });
     console.log(`Identity Auth service running at http://localhost:${port}`);

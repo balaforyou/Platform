@@ -3,7 +3,7 @@ import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import crypto from 'crypto';
 import { Readable } from 'stream';
-import { responseEnvelopePlugin } from '@badminton/shared-middleware';
+import { responseEnvelopePlugin, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
 import { PrismaClient, Prisma } from '@badminton/database';
 import Razorpay from 'razorpay';
 
@@ -1564,6 +1564,7 @@ server.post('/payments/test/simulate-capture', async (request, reply) => {
 
 const start = async () => {
   try {
+    assertInternalServiceKeyConfigured();
     const port = Number(process.env.PORT) || 3004;
     await server.listen({ port, host: '0.0.0.0' });
     console.log(`Payment service running at http://localhost:${port}`);

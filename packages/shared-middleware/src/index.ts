@@ -56,3 +56,56 @@ export const responseEnvelopePlugin = fp<Record<string, never>>(async (fastify) 
     });
   });
 });
+
+/**
+ * F-290: extracted from three near-identical hand-copies (identity-auth, tenant-management,
+ * slot-engine). Rejects anything that is not the platform-internal service key.
+ *
+ * F-298: deliberately has NO `|| 'test-service-key'` fallback. Every prior copy of this
+ * function silently accepted a public, guessable credential whenever INTERNAL_SERVICE_KEY was
+ * unset -- a fail-OPEN gap. This function trusts that the key is real by the time any request
+ * reaches it; assertInternalServiceKeyConfigured() below is what makes that trust safe, by
+ * refusing to let the service boot at all if the key is unset.
+ *
+ * Call this BEFORE reading the body or normalizing input (F-090/F-045/F-071): authenticating
+ * after a parse or an existence check leaves a pre-auth code path an unauthenticated caller
+ * can still reach.
+ *
+ * Deliberately does NOT call `reply.status(401)` before throwing -- several slot-engine routes
+ * (e.g. `POST /bookings/:id/check-in`) call this inside a try/catch and fall back to a JWT
+ * check on failure. `reply.status()` mutates the reply object immediately, so an eager call
+ * here would leave a stuck 401 on the reply even when the JWT fallback later succeeds --
+ * confirmed as a real regression via the regression suite while extracting this function
+ * (identity-auth/tenant-management's original copies did call it eagerly, but never used this
+ * try/catch/fallback shape, so relying solely on the thrown error's statusCode + the shared
+ * error handler below is safe for all three, and the one correct choice for slot-engine).
+ */
+export function requireInternalKey(request: any, reply: any): void {
+  const authHeader = request.headers['authorization'];
+  const internalKey = process.env.INTERNAL_SERVICE_KEY;
+
+  if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
+    const err = new Error('Unauthorized internal service access');
+    (err as any).statusCode = 401;
+    (err as any).code = 'UNAUTHORIZED';
+    throw err;
+  }
+}
+
+/**
+ * F-298: the real fail-closed mechanism. Call once, as early as possible in a service's own
+ * start() -- before server.listen() -- so a deploy with INTERNAL_SERVICE_KEY unset refuses to
+ * boot instead of silently running with every requireInternalKey call (and every outbound
+ * service-to-service request using this same key) trusting a hardcoded, publicly-known value.
+ */
+export function assertInternalServiceKeyConfigured(): void {
+  if (!process.env.INTERNAL_SERVICE_KEY) {
+    // eslint-disable-next-line no-console
+    console.error(
+      'FATAL: INTERNAL_SERVICE_KEY is not set. Refusing to start -- ' +
+        'every internal-key-gated route and outbound service call depends on this being a real, ' +
+        'non-guessable secret, not the previous hardcoded fallback.',
+    );
+    process.exit(1);
+  }
+}
