@@ -1939,3 +1939,66 @@ app (confirmed via grep, only comment references remain). Not fixed here -- flag
 finding rather than deleted inline, since deleting a file wasn't in scope for F-284's own fix.
 Confirmed-ID: F-289
 Confirmed: 22 Sep 2026
+
+### refresh-token-rotation-two-tab-race
+Batch: Slice 4
+Surfaced: this session, real reported symptom relayed by Bala (two tabs, one bounced to
+"Authorization token expired" while the other stayed logged in), root-caused by Claude Code
+against real current `identity-auth` code before any plan was written.
+Honest note: named directly in the Chief Architect thread's own handover message assigning the ID
+before this pending-findings entry existed, same pattern as the entries above.
+Description: `POST /auth/refresh` rotated the refresh token strictly single-use with no grace
+period, while the `refresh_token` cookie is shared live across every tab on the origin and each
+tab runs its own independent 14-minute refresh timer -- two tabs' timers landing within
+milliseconds of each other raced, one rotating the token out from under the other's already-in-
+flight request.
+Confirmed-ID: F-287
+Confirmed: 23 Sep 2026
+
+### walkin-band-tabs-flash-unavailable-during-load
+Batch: post-deploy observation round
+Surfaced: this session, real Bala production report (a successful guest booking followed by the
+walk-in screen appearing to show no Morning/Afternoon slots for that same pool); a real data gap
+was ruled out first via a live, unbooked-window check before Claude Code root-caused it in code.
+Honest note: named directly in the Chief Architect thread's own handover message assigning the ID
+before this pending-findings entry existed, same pattern as the entries above.
+Description: `WalkInBookingFlow.tsx`'s Morning/Afternoon/Evening tab dim/disable state was derived
+purely from `bandSet` (real slot data) with zero awareness of `availability.isLoading` --
+switching to a not-yet-fetched date/pool briefly returns `data: undefined`, so every band tab
+flashed "unavailable" during the real network fetch window, indistinguishable from a genuine
+no-slots day.
+Confirmed-ID: F-288
+Confirmed: 23 Sep 2026
+
+### group-noshow-guest-release
+Batch: post-F-133 kickoff
+Surfaced: 21 Sep 2026, discovery-grounded (`claude/chief-discovery-f276-group-noshow-guest-
+release.md`), blocked on F-133 landing; F-133 confirmed merged and this session re-confirmed the
+dependency genuinely clear before kickoff.
+Honest note: named directly in the Chief Architect thread's own discovery doc/handover before this
+pending-findings entry existed, same pattern as the entries above.
+Description: once a member batch's real attendance cutoff passed with zero confirmed members,
+nothing let an admin place a guest into the freed court -- `collidesWithMemberAssignment` is
+schedule-only and blocks guest booking into a member-slot window regardless of real attendance,
+confirmed genuinely unbuilt via a direct exclusion-logic read before this session's plan was
+written.
+Confirmed-ID: F-276
+Confirmed: 23 Sep 2026
+
+### negotiated-booking-no-server-side-member-collision-check
+Batch: surfaced during F-276's Section C investigation
+Surfaced: 23 Sep 2026, Claude Code's real evidence-gathering while deciding how to reuse
+`POST /bookings/negotiated` for F-276's admin release action (confirmed via a full read of its
+transaction body -- zero calls to `collidesWithMemberAssignment` anywhere in it), reported to
+Chief.
+Honest note: named directly in the Chief Architect thread's own reply assigning the ID before this
+pending-findings entry existed, same pattern as the entries above.
+Description: `POST /bookings/negotiated` (INTERNAL_SERVICE_KEY-only, called by Payment's
+`POST /bookings/manual` for every admin-assisted/walk-in booking) never calls
+`collidesWithMemberAssignment` at all. Today this is masked entirely by the frontend --
+`WalkInBookingFlow`'s slot dropdown sources from `GET /resource-pools/:id/availability`, which
+does run `windowBookable` -> `collidesWithMemberAssignment`, so a member-blocked window never
+appears as pickable in the UI -- but the write path itself has no server-side reinforcement of
+that exclusion, a real defense-in-depth gap on an admin-only route, not a live guest-facing hole.
+Confirmed-ID: F-299
+Confirmed: 23 Sep 2026

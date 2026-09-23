@@ -4056,6 +4056,72 @@ at all). guest-member-pwa typecheck/build clean.
 260/115/145: two new Resolved rows, F-278 and F-285, no Open-row changes). `pnpm diagram:verify`
 — clean, all 67 finding tags agree with the register (advisory-only notes, no failures).
 
+## Batch — F-287, F-288, F-276 close-out + F-299
+
+Three independent PRs, each already merged and independently re-verified against real
+`origin/main` before this close-out pass, register/batch-log updated together per rule 6/9.
+
+**F-287**: two tabs on the same origin sharing one `refresh_token` cookie raced its single-use
+rotation with no grace period -- a real, reported symptom (one tab bounced to "Authorization
+token expired" while the other stayed logged in). Fixed with a 20s grace window
+(`previousRefreshToken`/`previousTokenExpiresAt`, purely additive) plus a compare-and-swap on the
+rotation write itself. **Real design correction caught in plan-mode review, not shipped as first
+proposed**: an initial unconditional-update design left a genuine concurrency gap -- two truly-
+simultaneous requests could both read the same pre-rotation value before either write commits,
+silently orphaning one tab's cookie in no DB row at all, invisible to a test only checking "both
+got 200". The CAS closes that gap by making Postgres's row-level locking serialize the race
+correctly. Regression: `identity-auth` 16/16, including new sections proving a real two-tab race
+converges on one persisted value, the grace window genuinely expires (deterministic, not a real
+sleep), and a revoked session hard-fails both lookup paths. PR #84, merged `dd7ffa8`.
+
+**F-288**: `WalkInBookingFlow.tsx`'s Morning/Afternoon/Evening tabs derived their dim/disabled
+state purely from real slot data, with zero awareness of `availability.isLoading` -- a fresh
+date/pool query briefly returns `data: undefined`, so every tab flashed "unavailable" during the
+real network fetch window, exactly the real Bala production report (a successful guest booking
+followed by the walk-in screen appearing to show no slots for that pool). Fixed by reusing the
+Slot dropdown's own already-correct `availability.isLoading` flag for the tabs too -- direct
+precedent reuse, not new loading UI. Live-fire proof both directions: reproduced the bug first
+with the fix reverted (confirming the test methodology genuinely detects it), then confirmed
+fixed across three different never-queried dates. PR #85, merged `c2aadf1` (commit `1e8857b`).
+
+**F-276**: once a member batch's real attendance cutoff passed with zero confirmed members,
+nothing let an admin place a guest into the freed court -- `collidesWithMemberAssignment` is
+schedule-only and blocks guest booking into a member-slot window regardless of real attendance.
+`computeGroupReleaseEligibility` reuses `computeBranchMemberAttendance`'s real per-member status
+logic rather than a second copy; `GuestOccupancyDashboard` gained a `'member_released'` status
+(reusing the `'unconfigured'` visual precedent) and a forward-looking attendance card. **Real,
+acknowledged deviation from the signed-off plan**: Section C's approved design called for a new,
+dedicated `POST /bookings/member-release-placement` route, explicitly *not* a modification of
+`/bookings/manual`/`/bookings/negotiated`. What shipped instead adds an additive, gated
+`releaseGroupId` field directly onto the existing `/bookings/manual`, since that route already
+owns the entire multi-payment-method orchestration a dedicated route would have had to duplicate.
+The plan's actual safety property -- real server-side re-verification at write time, never a
+client-trusted flag -- is intact: the new branch re-checks eligibility fresh and fails closed
+`409` if attendance state moved. Flagged explicitly in the PR description (not left to read as
+the originally-approved design) at Chief's request after merge. Real production data fix
+alongside this: JBC's actual `gracePeriodMinutes` was `30` against a stated 60-minute policy --
+corrected on both of JBC's pools via a scoped, read-verified `UPDATE`, `courtowner1` confirmed
+untouched. **Real bug caught and fixed during live-fire browser verification, not just claimed
+clean**: the Live Allocation card kept showing "released" on a court that already had a real
+guest booked in it (status-priority ordering -- group-eligibility was checked before the
+existing-guest-booking check); fixed and re-verified live in the same pass. Regression: new
+payment section proves both a real eligible placement and the write-time re-check genuinely
+firing (a member confirming mid-flow makes a second attempt fail closed `409`) -- payment 25/25,
+full cross-service regression 5/5. PR #86, merged `e0a03ca`.
+
+**F-299 — assigned, Open, not fixed here (rule 9).** Surfaced while deciding how to reuse
+`POST /bookings/negotiated` for F-276: it never calls `collidesWithMemberAssignment` at all,
+relying entirely on the frontend's availability list to keep a member-blocked window unpickable
+for an ordinary walk-in booking. Real, pre-existing defense-in-depth gap on an admin-only,
+internal-key-gated route -- F-276's own new write path re-verifies independently and doesn't
+depend on this gap either way, so it wasn't a blocker, but the gap itself is unfixed.
+
+**Close-out:** `pnpm register:check` — **267 rows, Open 117 / Resolved 150** (was
+263/116/147, confirmed via `git show HEAD` rather than assumed: three new Resolved rows —
+F-276, F-287, F-288 — and one new Open row, F-299).
+`pnpm diagram:verify` — clean, all 67 finding tags agree with the register (advisory-only notes,
+no failures).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
