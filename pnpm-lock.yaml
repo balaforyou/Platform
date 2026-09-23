@@ -449,6 +449,9 @@ importers:
       '@badminton/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@badminton/job-scheduler':
+        specifier: workspace:*
+        version: link:../../packages/job-scheduler
       '@badminton/shared-middleware':
         specifier: workspace:*
         version: link:../../packages/shared-middleware
