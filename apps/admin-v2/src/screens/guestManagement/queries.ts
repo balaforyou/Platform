@@ -175,6 +175,8 @@ export function useCreateManualBooking() {
       negotiatedPrice: number;
       paymentMethod: ManualPaymentMethod;
       upiTransactionId?: string;
+      /** F-276: set only for the "place a guest in this released slot" flow — see WalkInBookingFlow. */
+      releaseGroupId?: string;
     }
   >({
     mutationFn: (body) =>

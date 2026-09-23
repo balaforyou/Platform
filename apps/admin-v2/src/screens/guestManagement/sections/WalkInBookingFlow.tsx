@@ -90,6 +90,17 @@ export type WalkInInitialSelection = {
    * until the admin actually confirms a booking.
    */
   pendingWindow?: { resourceId: string; startTime: string; endTime: string };
+  /**
+   * F-276: a real, already-existing window that a real Group's attendance cutoff has passed with
+   * zero confirmed members — GuestOccupancyDashboard's "Place a guest" action opens this flow with
+   * it set. Mutually exclusive with `windowId`/`pendingWindow`. This window is deliberately
+   * excluded from `useAvailability`'s collision-checked list (it's member-blocked), so it's
+   * synthesized into `slots` directly from this field rather than looked up there — see the
+   * `releaseSlot` memo below. `groupId` travels through to `submit()`, which passes it as
+   * `releaseGroupId` so the backend re-verifies eligibility at write time rather than trusting
+   * this prefill.
+   */
+  releaseWindow?: { windowId: string; groupId: string; resourceId: string | null; startTime: string; endTime: string };
 };
 
 /**
@@ -130,12 +141,16 @@ export function WalkInBookingFlow({
   const createWalkIn = useCreateWalkIn();
   const createBooking = useCreateManualBooking();
 
-  // F-272: the resolved "initial window id" this flow was opened with — a real windowId
-  // (guest-vacant tap) or the PENDING_WINDOW_ID sentinel (empty-cell tap, nothing created yet).
+  // F-272/F-276: the resolved "initial window id" this flow was opened with — a real windowId
+  // (guest-vacant tap), the PENDING_WINDOW_ID sentinel (empty-cell tap, nothing created yet), or a
+  // real-but-normally-excluded released window's own id (F-276's "Place a guest" action).
   // Computed once here and reused everywhere a match is needed, instead of re-deriving the
   // sentinel logic separately in the windowId state init and the band-snap effect below, which
   // is exactly the kind of three-copies-that-can-drift risk this codebase has been bitten by.
-  const initialWindowId = initialSelection?.windowId ?? (initialSelection?.pendingWindow ? PENDING_WINDOW_ID : undefined);
+  const initialWindowId =
+    initialSelection?.windowId ??
+    (initialSelection?.pendingWindow ? PENDING_WINDOW_ID : undefined) ??
+    initialSelection?.releaseWindow?.windowId;
 
   const branch = useMemo(() => (branches.data ?? []).find((b) => b.id === branchId), [branches.data, branchId]);
   const tz = branch?.timezone;
@@ -200,10 +215,26 @@ export function WalkInBookingFlow({
         remainingCapacity: 1,
       }
     : null;
-  const slots: AvailabilitySlot[] = useMemo(
-    () => (pendingSlot ? [...(availability.data ?? []), pendingSlot] : availability.data ?? []),
-    [availability.data, initialSelection?.pendingWindow],
-  );
+  // F-276: same splice-in technique as pendingSlot above, for the opposite reason — this window
+  // is real (a real AvailabilityWindow row exists) but `useAvailability`'s collision-checked list
+  // deliberately never includes a member-blocked window, so it can never appear there on its own.
+  const releaseSlot: AvailabilitySlot | null = initialSelection?.releaseWindow
+    ? {
+        window: {
+          id: initialSelection.releaseWindow.windowId,
+          startTime: initialSelection.releaseWindow.startTime,
+          endTime: initialSelection.releaseWindow.endTime,
+          resourceId: initialSelection.releaseWindow.resourceId,
+          capacity: 1,
+          price: null,
+        },
+        remainingCapacity: 1,
+      }
+    : null;
+  const slots: AvailabilitySlot[] = useMemo(() => {
+    const extra = [pendingSlot, releaseSlot].filter((s): s is AvailabilitySlot => s !== null);
+    return extra.length ? [...(availability.data ?? []), ...extra] : availability.data ?? [];
+  }, [availability.data, initialSelection?.pendingWindow, initialSelection?.releaseWindow]);
   const bandSet = useMemo(() => bandsWithSlots(slots, tz), [slots, tz]);
 
   const [band, setBand] = useState<Band>('evening');
@@ -332,6 +363,10 @@ export function WalkInBookingFlow({
         negotiatedPrice: Number(price),
         paymentMethod: method,
         upiTransactionId: method === 'upi_qr' ? upiTxnId.trim() : undefined,
+        // F-276: tells the backend to re-verify group-release-eligibility server-side, at write
+        // time, before this booking is allowed into a member-blocked window — never trusted from
+        // this prefill alone. Omitted for every other caller of this flow.
+        releaseGroupId: initialSelection?.releaseWindow?.groupId,
       });
 
       if (method === 'razorpay_link' && res.paymentLink?.shortUrl) {

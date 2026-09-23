@@ -1101,6 +1101,100 @@ async function computeBranchMemberAttendance(branchId: string, date: string | un
   });
 }
 
+// F-276: group-level no-show detection. Reuses computeBranchMemberAttendance's exact per-member
+// status logic (CONFIRMED / PENDING_CONFIRMATION / PAST_CUTOFF / RELEASED_NO_SHOW /
+// SUBSCRIPTION_INACTIVE) rather than a second copy -- see that function's own comment for why each
+// state means what it does. A group is release-eligible only once the window's own cutoff has
+// passed AND zero members are CONFIRMED; PENDING_CONFIRMATION only exists pre-cutoff, so it can
+// never coexist with now >= cutoffTime in practice, but the explicit `some` check below is the
+// real gate, not an inferred one.
+//
+// WHY the Group's own resourcePoolId/daysOfWeek/startTime (schema.prisma:425-450), not a per-
+// assignment schedule: a batch's members share one canonical schedule by construction (F-133's
+// creation flow writes every assignment the same way the Group itself specifies), and this is the
+// same assumption GuestOccupancyDashboard's per-window grouping already makes.
+type GroupReleaseEligibility = {
+  groupId: string;
+  groupName: string;
+  eligible: boolean;
+  window: { id: string; startTime: Date; endTime: Date; resourcePoolId: string } | null;
+  cutoffTime: Date | null;
+  members: { userId: string; phone: string; status: MemberAttendanceState }[];
+};
+
+async function computeGroupReleaseEligibility(
+  groupId: string,
+  date: string | undefined,
+  now: Date,
+): Promise<GroupReleaseEligibility | null> {
+  const group = await prisma.group.findUnique({
+    where: { id: groupId },
+    include: { resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } } },
+  });
+  if (!group) return null;
+
+  const timeZone = await getBranchTimeZone(group.resourcePool.branchId);
+  const dateString = date || todayDateString(now, timeZone);
+  let weekday: string;
+  let expectedStart: Date;
+  try {
+    weekday = branchIsoWeekday(branchLocalToUtc(dateString, '12:00', timeZone), timeZone);
+    expectedStart = slotStartForDate(dateString, group.startTime, timeZone);
+  } catch (err: any) {
+    const e = new Error(`Invalid date "${dateString}": ${err.message}`);
+    (e as any).statusCode = 400;
+    (e as any).code = 'INVALID_DATE';
+    throw e;
+  }
+
+  if (!group.daysOfWeek.split(',').map((d) => d.trim()).includes(weekday)) {
+    return { groupId, groupName: group.name, eligible: false, window: null, cutoffTime: null, members: [] };
+  }
+
+  const window = await prisma.availabilityWindow.findFirst({
+    where: { resourcePoolId: group.resourcePoolId, startTime: expectedStart },
+  });
+  if (!window) return { groupId, groupName: group.name, eligible: false, window: null, cutoffTime: null, members: [] };
+
+  const rule = group.resourcePool.bookingRules[0];
+  const gracePeriodMinutes = rule ? rule.gracePeriodMinutes : 30;
+  const cutoffTime = new Date(window.startTime.getTime() - gracePeriodMinutes * 60 * 1000);
+
+  const assignments = await prisma.memberGroupAssignment.findMany({ where: { groupId, status: 'ACTIVE' } });
+  if (assignments.length === 0) return { groupId, groupName: group.name, eligible: false, window, cutoffTime, members: [] };
+
+  const userIds = Array.from(new Set(assignments.map((a) => a.userId)));
+  const [bookings, subscriptions, users] = await Promise.all([
+    prisma.booking.findMany({
+      where: { userId: { in: userIds }, windowId: window.id, isMemberBooking: true, status: { not: BookingStatus.CANCELLED } },
+      select: { userId: true, status: true, memberAttendanceConfirmedAt: true },
+    }),
+    prisma.subscription.findMany({ where: { userId: { in: userIds }, status: 'active' }, select: { userId: true } }),
+    prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, phone: true } }),
+  ]);
+  const bookingByUser = new Map(bookings.map((b) => [b.userId, b]));
+  const activeSubscriptions = new Set(subscriptions.map((s) => s.userId));
+  const phoneByUser = new Map(users.map((u) => [u.id, u.phone || 'Phone not available']));
+
+  const members = assignments.map((a) => {
+    const booking = bookingByUser.get(a.userId);
+    let status: MemberAttendanceState = 'PENDING_CONFIRMATION';
+    if (!activeSubscriptions.has(a.userId)) {
+      status = 'SUBSCRIPTION_INACTIVE';
+    } else if (booking?.memberAttendanceConfirmedAt) {
+      status = 'CONFIRMED';
+    } else if (booking?.status === BookingStatus.RELEASED_NO_SHOW) {
+      status = 'RELEASED_NO_SHOW';
+    } else if (now >= cutoffTime) {
+      status = 'PAST_CUTOFF';
+    }
+    return { userId: a.userId, phone: phoneByUser.get(a.userId) || 'Phone not available', status };
+  });
+
+  const eligible = now >= cutoffTime && !members.some((m) => m.status === 'CONFIRMED');
+  return { groupId, groupName: group.name, eligible, window, cutoffTime, members };
+}
+
 // F-250: shared read for the Guest Occupancy Dashboard and Guest Slot Inventory grid. One pass
 // over a branch's pools/resources/windows/bookings/member-assignments for a given day, on the
 // branch's own clock (not `computePoolGuestOccupancy`'s UTC-day bounds — that function has two
@@ -1132,6 +1226,10 @@ type GuestDayWindow = {
   price: Prisma.Decimal | null;
   memberBlocked: boolean;
   memberBooked: boolean;
+  // F-276: set only when memberBlocked is true AND the blocking assignment belongs to a real
+  // Group (F-133) -- pre-F-133 assignments have groupId: null and are simply never release-
+  // eligible, matching today's behavior exactly.
+  memberBlockedGroupId: string | null;
   guestBookings: GuestDayBooking[];
   // F-252/F-254/F-256: a CANCELLED booking on an elapsed window with nothing rebooked into it
   // renders as its own "Cancelled" state — kept separate from guestBookings so the Dashboard's
@@ -1208,7 +1306,7 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
       : Promise.resolve([]),
     prisma.memberGroupAssignment.findMany({
       where: { status: 'ACTIVE', resourcePoolId: { in: poolIds } },
-      select: { resourcePoolId: true, startTime: true, daysOfWeek: true },
+      select: { resourcePoolId: true, startTime: true, daysOfWeek: true, groupId: true },
     }),
   ]);
 
@@ -1216,10 +1314,16 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
     assignment.daysOfWeek.split(',').map((day) => day.trim()).includes(weekday)
   ));
   const memberBlockedInstants = new Set<string>();
+  // F-276: which real Group (if any) blocks a given instant -- last-write-wins is fine here since
+  // two different groups sharing one exact pool+instant would already be a real scheduling
+  // conflict the platform doesn't otherwise allow.
+  const memberBlockedGroupByInstant = new Map<string, string>();
   for (const assignment of matchingAssignments) {
     try {
       const expectedStart = slotStartForDate(dateString, assignment.startTime, timeZone);
-      memberBlockedInstants.add(`${assignment.resourcePoolId}:${expectedStart.getTime()}`);
+      const key = `${assignment.resourcePoolId}:${expectedStart.getTime()}`;
+      memberBlockedInstants.add(key);
+      if (assignment.groupId) memberBlockedGroupByInstant.set(key, assignment.groupId);
     } catch (err: any) {
       // Same tolerance as computeBranchMemberAttendance: a malformed stored startTime must not
       // fail the whole day's view.
@@ -1252,6 +1356,7 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
       capacity: window.capacity,
       price: window.price,
       memberBlocked: memberBlockedInstants.has(`${window.resourcePoolId}:${window.startTime.getTime()}`),
+      memberBlockedGroupId: memberBlockedGroupByInstant.get(`${window.resourcePoolId}:${window.startTime.getTime()}`) ?? null,
       memberBooked: windowBookings.some((b) => b.isMemberBooking),
       guestBookings: nonMemberBookings.filter((b) => b.status !== BookingStatus.CANCELLED),
       cancelledBookings: nonMemberBookings.filter((b) => b.status === BookingStatus.CANCELLED),
@@ -1384,6 +1489,20 @@ server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => 
       status: now >= window.endTime ? 'closed' as const : now >= window.startTime ? 'live' as const : 'upcoming' as const,
     }));
 
+  // F-276: resolve group-release-eligibility once per distinct group blocking today's windows
+  // (not per resource-loop iteration below, which would repeat the same query many times over for
+  // a POOLED pool's several resources sharing one window). Keyed by groupId; the date is the same
+  // for the whole request so one eligibility answer per group is correct for every window it
+  // blocks today.
+  const blockedGroupIds = Array.from(new Set(
+    day.windows.map((w) => w.memberBlockedGroupId).filter((g): g is string => g !== null),
+  ));
+  const groupEligibilityByGroupId = new Map<string, GroupReleaseEligibility>(
+    (await Promise.all(blockedGroupIds.map((gid) => computeGroupReleaseEligibility(gid, day.dateString, now))))
+      .filter((g): g is GroupReleaseEligibility => g !== null)
+      .map((g) => [g.groupId, g]),
+  );
+
   // Live allocation is a per-resource snapshot of "now". For a POOLED pool (resourceId null on
   // the window), every resource in the pool shares the same window snapshot — POOLED pools have
   // no fixed per-court identity to disambiguate further, same limitation ReservationsPanel's own
@@ -1398,19 +1517,65 @@ server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => 
     // at this exact instant -- distinct from a real window that's genuinely vacant. Reuses the
     // same absence signal `guest-inventory-grid`'s own elapsed/empty vs. guest-vacant split
     // already keys off one level up; no new lookup, no new data.
-    let status: 'open' | 'member' | 'guest' | 'unconfigured' = currentWindow ? 'open' : 'unconfigured';
+    let status: 'open' | 'member' | 'guest' | 'unconfigured' | 'member_released' = currentWindow ? 'open' : 'unconfigured';
     let guestName: string | null = null;
+    let groupId: string | null = null;
     if (currentWindow) {
-      if (currentWindow.memberBlocked || currentWindow.memberBooked) {
-        status = 'member';
-      } else if (currentWindow.guestBookings.length > 0) {
+      // F-276: a real guest booking already placed here (the admin used "Place a guest" on this
+      // exact window) MUST outrank the group-released reading below -- caught live in browser
+      // verification: without this ordering, a court a guest is genuinely occupying kept showing
+      // "Member no-show — released" and offering "Place a guest" again after the fact, since the
+      // group's own attendance state (zero members ever confirmed) never changes just because a
+      // guest was placed into it. A real occupant is always the most current truth for a court.
+      if (currentWindow.guestBookings.length > 0) {
         status = 'guest';
         const user = day.guestUserMap.get(currentWindow.guestBookings[0].userId);
         guestName = user?.name || user?.phone || null;
+      } else {
+        const groupEligibility = currentWindow.memberBlockedGroupId
+          ? groupEligibilityByGroupId.get(currentWindow.memberBlockedGroupId)
+          : undefined;
+        if (groupEligibility?.eligible) {
+          status = 'member_released';
+          groupId = currentWindow.memberBlockedGroupId;
+        } else if (currentWindow.memberBlocked || currentWindow.memberBooked) {
+          status = 'member';
+        }
       }
     }
-    return { resourceId: resource.id, resourceName: resource.name, resourcePoolId: pool.id, status, guestName };
+    return {
+      resourceId: resource.id,
+      resourceName: resource.name,
+      resourcePoolId: pool.id,
+      status,
+      guestName,
+      groupId,
+      windowId: currentWindow?.id ?? null,
+      windowStartTime: currentWindow?.startTime.toISOString() ?? null,
+      windowEndTime: currentWindow?.endTime.toISOString() ?? null,
+    };
   }));
+
+  // F-276: forward-looking member-attendance summary for windows blocked by a real Group starting
+  // within the next 2 hours -- same eligibility answers already computed above, just filtered and
+  // reshaped for display rather than a second query.
+  const twoHoursOut = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  const memberAttendanceNext2Hours = day.windows
+    .filter((w) => w.memberBlockedGroupId && w.startTime >= now && w.startTime <= twoHoursOut)
+    .map((w) => {
+      const eligibility = groupEligibilityByGroupId.get(w.memberBlockedGroupId!);
+      return {
+        windowId: w.id,
+        resourcePoolId: w.resourcePoolId,
+        startTime: w.startTime.toISOString(),
+        endTime: w.endTime.toISOString(),
+        groupId: w.memberBlockedGroupId!,
+        groupName: eligibility?.groupName ?? '',
+        cutoffTime: eligibility?.cutoffTime?.toISOString() ?? null,
+        releaseEligible: eligibility?.eligible ?? false,
+        members: eligibility?.members ?? [],
+      };
+    });
 
   return {
     date: day.dateString,
@@ -1420,6 +1585,7 @@ server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => 
     duesCollected,
     slotMonitor,
     liveAllocation,
+    memberAttendanceNext2Hours,
     // F-255: the exact instant liveAllocation was computed against — rendered branch-local as
     // "as of <time>" so the label can never drift from what's actually shown, regardless of
     // client/server clock skew.
@@ -5690,6 +5856,44 @@ server.get('/groups/:id/roster', async (request, reply) => {
   await requirePoolScope(auth, group.resourcePoolId, reply);
 
   return computeGroupRoster(group, date, new Date());
+});
+
+// GET /groups/:id/release-eligibility?date= — F-276. Real-time "has every member in this batch
+// failed to confirm past cutoff" answer for a given date (default today), reusing
+// computeGroupReleaseEligibility (see its own comment for the CONFIRMED/PAST_CUTOFF/etc. logic).
+// Two real callers: GuestOccupancyDashboard's own preview click (admin-JWT, F-207.3-shaped cheap
+// read before routing into WalkInBookingFlow), and Payment's server-to-server re-verification at
+// booking-write time (internal key) -- the SAME function backs both, so a stale client-side read
+// can never be the thing that actually authorizes the write; the write path always re-asks this.
+server.get('/groups/:id/release-eligibility', async (request, reply) => {
+  const auth = await getInternalOrAdminAuth(request, reply);
+  await requireModuleEntitlement(auth, TenantModule.MEMBER_MANAGEMENT, reply, { write: false }); // F-206
+  const { id } = request.params as any;
+  const { date } = request.query as any;
+
+  const group = await prisma.group.findUnique({ where: { id } });
+  if (!group) {
+    reply.status(404);
+    const err = new Error('Group not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'GROUP_NOT_FOUND';
+    throw err;
+  }
+  await requirePoolScope(auth, group.resourcePoolId, reply);
+
+  const result = await computeGroupReleaseEligibility(id, date, new Date());
+  if (!result) {
+    reply.status(404);
+    const err = new Error('Group not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'GROUP_NOT_FOUND';
+    throw err;
+  }
+  return {
+    ...result,
+    window: result.window ? { ...result.window, startTime: result.window.startTime.toISOString(), endTime: result.window.endTime.toISOString() } : null,
+    cutoffTime: result.cutoffTime?.toISOString() ?? null,
+  };
 });
 
 server.post('/member-group-assignments', async (request, reply) => {

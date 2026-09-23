@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Banner, Badge, Button, Card, LoadingState, Select, Tabs } from '../components';
+import { Banner, Badge, Button, Card, LoadingState, Modal, Select, Tabs } from '../components';
 import { useBranches, useGuestMonthSummary, useGuestOccupancyDashboard } from './guestManagement/queries';
 import { formatHourLabel, formatSlotLabel, todayIsoDate, todayIsoMonth } from './guestManagement/reservationHelpers';
+import { WalkInBookingFlow, type WalkInInitialSelection } from './guestManagement/sections/WalkInBookingFlow';
 import type { BadgeTone } from '../components';
-import type { GuestMonthSummaryRow, LiveAllocationEntry, SlotMonitorStatus } from './guestManagement/types';
+import type { GuestMonthSummaryRow, LiveAllocationEntry, MemberAttendanceState, MemberAttendanceWindow, SlotMonitorStatus } from './guestManagement/types';
 
 const DASHBOARD_TABS = [
   { key: 'today', label: 'Today' },
@@ -63,17 +64,38 @@ const SLOT_STATUS_TONE: Record<SlotMonitorStatus, BadgeTone> = { closed: 'neutra
 // genuine 'open' vacancy -- reusing 'neutral' for both would make them look identical, defeating
 // the point. 'warning' matches the same "not active, not a problem, just not now" reasoning
 // SLOT_STATUS_TONE already uses for 'upcoming' above.
+// F-276: 'member_released' — the batch scheduled here has passed its attendance cutoff with
+// zero confirmed members. A distinct warning-family tone from 'member's 'info', matching the same
+// "needs a look, not a problem" reasoning 'unconfigured' above already established — never reused
+// as plain 'member', since that would silently hide the one state this finding exists to surface.
 const LIVE_ALLOCATION_LABEL: Record<LiveAllocationEntry['status'], string> = {
   guest: 'Reserved',
   member: 'Occupied (Member)',
   open: 'Open',
   unconfigured: 'No slot configured',
+  member_released: 'Member no-show — released',
 };
 const LIVE_ALLOCATION_TONE: Record<LiveAllocationEntry['status'], BadgeTone> = {
   guest: 'success',
   member: 'info',
   open: 'neutral',
   unconfigured: 'warning',
+  member_released: 'warning',
+};
+
+const MEMBER_ATTENDANCE_LABEL: Record<MemberAttendanceState, string> = {
+  CONFIRMED: 'Confirmed',
+  PENDING_CONFIRMATION: 'Pending confirmation',
+  PAST_CUTOFF: 'Cutoff passed',
+  RELEASED_NO_SHOW: 'No-show',
+  SUBSCRIPTION_INACTIVE: 'Subscription inactive',
+};
+const MEMBER_ATTENDANCE_TONE: Record<MemberAttendanceState, BadgeTone> = {
+  CONFIRMED: 'success',
+  PENDING_CONFIRMATION: 'neutral',
+  PAST_CUTOFF: 'warning',
+  RELEASED_NO_SHOW: 'warning',
+  SUBSCRIPTION_INACTIVE: 'neutral',
 };
 
 const metricStyle: React.CSSProperties = {
@@ -83,6 +105,61 @@ const metricStyle: React.CSSProperties = {
 };
 const metricLabel: React.CSSProperties = { fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)', fontWeight: 600 };
 const metricValue: React.CSSProperties = { fontSize: 'var(--av2-text-2xl, 28px)', fontWeight: 700, color: 'var(--av2-text)' };
+
+/**
+ * F-276 — one upcoming member-batch window, its release-eligibility, and (once eligible) the
+ * "Place a guest" action. "Clicking a member slot reveals the group's full per-member status"
+ * per the discovery doc — an inline expand/collapse of the roster already returned alongside the
+ * window (no second fetch; `w.members` is already the full per-member breakdown), not a new modal.
+ */
+function MemberAttendanceWindowCard({
+  window: w,
+  timezone,
+  onPlaceGuest,
+}: {
+  window: MemberAttendanceWindow;
+  timezone: string | undefined;
+  onPlaceGuest: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={{ border: '1px solid var(--av2-border)', borderRadius: 'var(--av2-radius-sm)', padding: 'var(--av2-space-3)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--av2-space-3)' }}>
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          style={{ appearance: 'none', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2 }}
+        >
+          <span style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 700 }}>{w.groupName}</span>
+          <span style={{ fontSize: 'var(--av2-text-xs)', color: 'var(--av2-muted)' }}>
+            {formatSlotLabel({ id: w.windowId, startTime: w.startTime, endTime: w.endTime, capacity: 1 }, timezone)}
+            {' — '}{w.members.length} member{w.members.length === 1 ? '' : 's'} — {expanded ? 'hide' : 'show'} attendance
+          </span>
+        </button>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--av2-space-2)' }}>
+          <Badge tone={w.releaseEligible ? 'warning' : 'neutral'}>
+            {w.releaseEligible ? 'No members confirmed — released' : 'Awaiting confirmation'}
+          </Badge>
+          {w.releaseEligible && (
+            <Button type="button" size="sm" onClick={onPlaceGuest}>
+              Place a guest
+            </Button>
+          )}
+        </span>
+      </div>
+      {expanded && (
+        <div style={{ marginTop: 'var(--av2-space-3)', display: 'grid', gap: 'var(--av2-space-2)' }}>
+          {w.members.map((m) => (
+            <div key={m.userId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 'var(--av2-text-sm)' }}>
+              <span>{m.phone}</span>
+              <Badge tone={MEMBER_ATTENDANCE_TONE[m.status]}>{MEMBER_ATTENDANCE_LABEL[m.status]}</Badge>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * F-250 — the `/dashboard` route's real content, replacing the Slice 1 "you're authenticated"
@@ -105,6 +182,24 @@ export function GuestOccupancyDashboard() {
   const branch = (branches.data ?? []).find((b) => b.id === branchId);
   const dashboard = useGuestOccupancyDashboard(tab === 'today' ? branchId : undefined, date);
   const monthSummary = useGuestMonthSummary(tab === 'month' ? branchId : undefined, month);
+
+  // F-276: "Place a guest" opens the existing walk-in flow prefilled with the released window —
+  // same Modal + WalkInBookingFlow pairing GuestSlotInventory's own tap-to-book already uses, not
+  // a new booking screen.
+  const [releaseSelection, setReleaseSelection] = useState<WalkInInitialSelection | null>(null);
+  const openReleasePlacement = (resourcePoolId: string, windowId: string, groupId: string, startTime: string, endTime: string, resourceId: string | null) => {
+    setReleaseSelection({
+      poolId: resourcePoolId,
+      date,
+      resourceId: resourceId ?? undefined,
+      releaseWindow: { windowId, groupId, resourceId, startTime, endTime },
+    });
+  };
+  const closeReleasePlacement = () => setReleaseSelection(null);
+  const onGuestPlaced = () => {
+    closeReleasePlacement();
+    dashboard.refetch();
+  };
 
   return (
     <div style={{ display: 'grid', gap: 'var(--av2-space-6)', maxWidth: 880, minWidth: 0 }}>
@@ -267,15 +362,53 @@ export function GuestOccupancyDashboard() {
                       <div key={court.resourceId} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <span style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 700 }}>{court.resourceName}</span>
                         <Badge tone={tone}>{label}</Badge>
+                        {court.status === 'member_released' && court.windowId && court.groupId && court.windowStartTime && court.windowEndTime && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => openReleasePlacement(court.resourcePoolId, court.windowId!, court.groupId!, court.windowStartTime!, court.windowEndTime!, court.resourceId)}
+                          >
+                            Place a guest
+                          </Button>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
             </Card>
+
+            {dashboard.data.memberAttendanceNext2Hours.length > 0 && (
+              <Card>
+                <h3 style={{ margin: '0 0 var(--av2-space-3)', fontSize: 'var(--av2-text-base)', fontWeight: 700 }}>
+                  Member Attendance — Next 2 Hours
+                </h3>
+                <div style={{ display: 'grid', gap: 'var(--av2-space-3)' }}>
+                  {dashboard.data.memberAttendanceNext2Hours.map((w) => (
+                    <MemberAttendanceWindowCard
+                      key={w.windowId}
+                      window={w}
+                      timezone={branch?.timezone}
+                      onPlaceGuest={() => openReleasePlacement(w.resourcePoolId, w.windowId, w.groupId, w.startTime, w.endTime, null)}
+                    />
+                  ))}
+                </div>
+              </Card>
+            )}
           </div>
         </>
       ) : null}
+
+      <Modal
+        open={!!releaseSelection}
+        onOpenChange={(open) => { if (!open) closeReleasePlacement(); }}
+        title="Place a guest"
+        size="lg"
+      >
+        {releaseSelection && branchId && (
+          <WalkInBookingFlow branchId={branchId} initialSelection={releaseSelection} onBooked={onGuestPlaced} showHeader={false} />
+        )}
+      </Modal>
     </div>
   );
 }
