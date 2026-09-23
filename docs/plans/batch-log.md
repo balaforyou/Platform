@@ -4122,6 +4122,50 @@ F-276, F-287, F-288 — and one new Open row, F-299).
 `pnpm diagram:verify` — clean, all 67 finding tags agree with the register (advisory-only notes,
 no failures).
 
+## Batch — F-044 Phase 1 (sweep stop-gap, live) + F-300 (key rotation)
+
+**F-044 Phase 1 — delivered, real production evidence.** No application code changed. Re-confirmed
+the gap was still genuinely open before touching anything (rule 8): empty `crontab -l`, no
+application-relevant `systemd` timer, no cron/scheduler sidecar container, and the Cloud Scheduler
+API itself wasn't even enabled on the project yet (now is). Created a real GCP Cloud Scheduler job
+(`bookings-sweep-tick`, `us-central1`, `* * * * *`) hitting the existing, unmodified
+`POST /bookings/sweep` route through Caddy's existing `/api/slot-engine/*` route. Real, unattended
+ticks confirmed returning `200`, correlated against the service's own request logs. **The one thing
+never proven live before**: created a real HELD booking on a genuinely vacant future window (seed/
+demo pool, no real customer data touched), took zero further action, and a real unattended tick
+auto-released it to `RELEASED_NO_SHOW` — the booking's own `updatedAt` matched the correlating
+Scheduler tick's service-log timestamp to the millisecond. Test booking and window both deleted
+afterward, independent read-back confirms `0` rows remain. Exactly one Scheduler job exists, no
+residual manual trigger.
+
+**F-300 — real credential exposure, rotated same day, not deferred.** During Phase 1 verification, a
+`gcloud scheduler jobs describe` call unexpectedly printed the Scheduler job's configured
+`Authorization` header (the real production `INTERNAL_SERVICE_KEY`) back into the agent transcript.
+Chief-assigned and decided the same day: Option A, rotate now — "already in ops-mode... exposure is
+fresh... deferring risks exactly the kind of forgotten-follow-up this project has hit before."
+Delivered: new 64-char hex key generated and written into production `.env` via a `perl -pi -e`
+edit that reads the value from its own environment variable rather than embedding it literally in
+any command `sudo` would log — deliberately avoiding the exact leak class this project already
+documented once (the 22 Aug Postgres-password `sudo`-argv-logging incident). All 5 services
+force-recreated; each container's live env independently confirmed via `docker inspect` to hold the
+new value; real end-to-end health checks through live Caddy routing confirmed all 5 healthy.
+**Real gap observed and reported plainly**: roughly a 6-minute window between the services picking
+up the new key and the Cloud Scheduler job's header being updated to match, during which every real
+tick correctly `401`'d — exactly the risk the authorized plan called out in advance. Self-healing,
+not a data-loss event: the sweep's release condition checks currently-overdue state on every call,
+so the first successful tick after the header update would have caught anything that expired mid-gap
+regardless of timing; confirmed no real booking needed manual recovery. Post-rotation: old key
+confirmed genuinely rejected (`401`) against the live route, new key confirmed working both via a
+manual trigger and a real subsequent unattended tick. Backup `.env` and the temporary rotation
+script both removed from the VM afterward.
+
+**Close-out:** `pnpm register:check` — **268 rows, Open 117 / Resolved 151** (was 267/117/150: one
+new Resolved row, F-300; F-044 itself unchanged — Phase 1 is a mitigation, not F-044's real
+disposition, which moves only once Phase 2 is live and the stop-gap is decommissioned, per the
+handover's own close-out instructions).
+`pnpm diagram:verify` — clean, all 67 finding tags agree with the register (advisory-only notes,
+no failures).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

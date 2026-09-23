@@ -2002,3 +2002,17 @@ appears as pickable in the UI -- but the write path itself has no server-side re
 that exclusion, a real defense-in-depth gap on an admin-only route, not a live guest-facing hole.
 Confirmed-ID: F-299
 Confirmed: 23 Sep 2026
+
+### internal-service-key-exposed-via-scheduler-describe
+Batch: F-044 Phase 1 verification
+Surfaced: 23 Sep 2026, during F-044 Phase 1's real production verification -- a `gcloud scheduler
+jobs describe` call, run to confirm the real Cloud Scheduler job's config, printed the job's
+configured `--headers` value (including the real `INTERNAL_SERVICE_KEY`) back out in full,
+unexpected and not requested, directly into the agent transcript.
+Honest note: named directly in the Chief Architect thread's own decision message ("F-300 --
+INTERNAL_SERVICE_KEY rotation, decision") assigning the ID before this pending-findings entry
+existed, same pattern as the entries above.
+Description: real credential exposure surface on a production secret shared by all 5 backend
+services' internal-key auth. Bala confirmed Option A (rotate now, not deferred) the same day.
+Confirmed-ID: F-300
+Confirmed: 23 Sep 2026
