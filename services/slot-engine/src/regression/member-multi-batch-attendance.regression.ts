@@ -263,7 +263,14 @@ export const memberMultiBatchAttendanceSections: Section<SlotEngineContext>[] = 
         data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: start.toISOString().slice(11, 16), status: 'ACTIVE', ...defaultTermDates() },
       });
 
-      const sweep1 = await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
+      // F-044 Phase 2: /bookings/sweep is decommissioned (410) -- /bookings/sweep/tick is the
+      // sole live trigger. member_assignment_sweep only actually runs once per its real 60s
+      // interval, so an earlier section's own tick this same process run can leave it not-yet-due
+      // -- force it due before each tick below so both genuinely execute (same fix as
+      // f044-phase2-scheduler.regression.ts's forceJobsDue, needed here for the same reason: a
+      // job that silently doesn't run would make the dedup proof below pass for the wrong reason).
+      await db.scheduledJob.updateMany({ where: { name: 'member_assignment_sweep' }, data: { nextRunAt: new Date(0) } });
+      const sweep1 = await fetch(`${baseUrl}/bookings/sweep/tick`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
       if (sweep1.status !== 200) throw new Error(`Expected sweep 200, got ${sweep1.status}`);
 
       const dispatchesAfterFirst = await db.scheduledJobDispatch.findMany({
@@ -281,7 +288,9 @@ export const memberMultiBatchAttendanceSections: Section<SlotEngineContext>[] = 
       }
 
       // Run the sweep again immediately -- real dedup proof: no duplicate dispatch rows.
-      const sweep2 = await fetch(`${baseUrl}/bookings/sweep`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
+      // Force due again first so this is a genuine second execution, not a skip.
+      await db.scheduledJob.updateMany({ where: { name: 'member_assignment_sweep' }, data: { nextRunAt: new Date(0) } });
+      const sweep2 = await fetch(`${baseUrl}/bookings/sweep/tick`, { method: 'POST', headers: { Authorization: `Bearer ${internalKey}` } });
       if (sweep2.status !== 200) throw new Error(`Expected second sweep 200, got ${sweep2.status}`);
 
       const dispatchesAfterSecond = await db.scheduledJobDispatch.findMany({

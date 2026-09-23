@@ -279,7 +279,12 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
 
       // CONSEQUENCE 2: the grace sweep must NOT release it. A forged member flag
       // would have made the sweep release this paid guest booking as a no-show.
-      await fetch(`${baseUrl}/bookings/sweep`, {
+      // F-044 Phase 2: /bookings/sweep is decommissioned (410) -- /bookings/sweep/tick is the
+      // sole live trigger. Force member_assignment_sweep due first -- it only actually runs
+      // once per its real 60s interval, and this test needs a genuine execution (not a silent
+      // skip) to actually prove the survives-sweep guarantee rather than proving nothing ran.
+      await db.scheduledJob.updateMany({ where: { name: 'member_assignment_sweep' }, data: { nextRunAt: new Date(0) } });
+      await fetch(`${baseUrl}/bookings/sweep/tick`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${internalKey}` },
       });

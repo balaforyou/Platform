@@ -6259,410 +6259,36 @@ async function computeExpiringBatchesByBranch(now: Date, tenantId?: string): Pro
 }
 
 // ---------------------------------------------------------------------------
-// Sweep — lazy member booking generation + low-occupancy alert
+// F-044 Phase 2 — decommissioned. /bookings/sweep's real logic now lives as three
+// JobDefinitions (held_booking_expiry, member_assignment_sweep, batch_renewal_reminder)
+// hosted by @badminton/job-scheduler, below. POST /bookings/sweep/tick is the sole live
+// trigger — GCP Cloud Scheduler was cut over to it after a real observed parallel-run
+// window (docs/plans/batch-log.md). requireInternalKey still gates this stub first, same
+// posture as the live route had, so an unauthenticated probe learns nothing either way;
+// an authenticated caller gets a 410 pointing at the real route rather than a bare 404,
+// in case any external config (a forgotten second Scheduler job, a stale doc, a manual
+// script) still targets the old path.
 // ---------------------------------------------------------------------------
-
-// TEST & OPS ONLY: Sweep route to manually trigger background cleanup sweeps.
-// WHY: In production this runs as a cron/background job. Exposed as an endpoint for
-// deterministic automated and manual testing.
-// AUTH: internal service key only (F-053). This endpoint releases real reservations,
-// so it must never be callable anonymously — Caddy routes /api/slot-engine/* publicly.
-// requireInternalKey (not getInternalOrAdminAuth) is deliberate: no admin UI triggers a
-// sweep, so the tighter guard costs nothing today. An ops-facing trigger would need the
-// admin path instead.
 server.post('/bookings/sweep', async (request, reply) => {
   requireInternalKey(request, reply);
-  const now = new Date();
-
-  // 1. Expire stale HELD bookings past their 5-minute hold TTL.
-  const expiredHolds = await prisma.booking.updateMany({
-    where: { status: BookingStatus.HELD, heldUntil: { lt: now } },
-    data: { status: BookingStatus.RELEASED_NO_SHOW },
-  });
-
-  // F-065: the former step 2 — a scan for member bookings CONFIRMED with attendance still
-  // null, released at gracePeriodMinutes — was UNREACHABLE and has been removed.
-  // ensureTodayMemberBooking is the only producer of isMemberBooking: true (every other
-  // write sets it false explicitly). F-133 Slice B added a third call site (member decline,
-  // POST /member/today-assignment/decline) alongside the original two -- member confirm, which
-  // always sets memberAttendanceConfirmedAt, and the sweep below, which always writes
-  // RELEASED_NO_SHOW with no attendanceDeclinedAt (decline is the only caller that sets it).
-  // Member bookings are never created HELD, so the HELD -> CONFIRMED route cannot reach them
-  // either. No row could satisfy all three original conditions.
-  // Member release is now step 2 below, driven by the SAME gracePeriodMinutes the member
-  // is shown and confirm enforces — which is the whole point of F-065.
-
-  // 2. Member release, and 3. the low-occupancy alert — two INDEPENDENT triggers.
-  // WHY: For each active assignment matching today's weekday, ensure a booking exists
-  // for today's matching window. Creates RELEASED_NO_SHOW if past guestAccessCutoffMinutes
-  // so the slot can be opened to guests if occupancy is low.
-  const activeAssignments = await prisma.memberGroupAssignment.findMany({
-    where: { status: 'ACTIVE' },
-    include: {
-      resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } },
-    },
-  });
-
-  let lazyGeneratedCount = 0;
-  let releasedMembersCount = 0;
-  const alertsDispatched: string[] = [];
-
-  // F-066: one weekday cannot be correct for branches in different timezones, so the
-  // weekday and date are derived PER ASSIGNMENT from its own branch's clock. They were
-  // previously hoisted out of this loop, computed once from the server's local weekday and
-  // the UTC date — two clocks that disagree for part of every day.
-  const branchTimeZones = await getBranchTimeZones(
-    activeAssignments.map((a: any) => a.resourcePool.branchId),
-  );
-
-  for (const assignment of activeAssignments) {
-    const timeZone = branchTimeZones.get(assignment.resourcePool.branchId) ?? DEFAULT_TIME_ZONE;
-    // ISO weekday: 1=Mon … 7=Sun (same convention as the daysOfWeek field)
-    const todayIsoWeekday = isoWeekday(now, timeZone);
-
-    const days = assignment.daysOfWeek.split(',').map((d: string) => d.trim());
-    if (!days.includes(todayIsoWeekday)) continue;
-
-    // Find today's availability window for this pool starting at assignment.startTime,
-    // which the schema documents as branch local time.
-    // F-066: `startTime` is stored as a free-form String with no format constraint, so a
-    // malformed value would throw here. One bad assignment row must not abort the sweep
-    // for every other branch, which is what an unguarded throw in this loop would do.
-    const todayDateStr = todayDateString(now, timeZone);
-    let windowStart: Date;
-    try {
-      windowStart = branchLocalToUtc(todayDateStr, assignment.startTime, timeZone);
-    } catch (err: any) {
-      console.warn(
-        `[sweep] skipping assignment ${assignment.id}: unusable startTime ` +
-          `${JSON.stringify(assignment.startTime)} — ${err.message}`,
-      );
-      continue;
-    }
-    // F-170: exact match, no tolerance — see the note on the admin attendance path.
-    const matchingWindow = await prisma.availabilityWindow.findFirst({
-      where: {
-        resourcePoolId: assignment.resourcePoolId,
-        startTime: windowStart,
-      },
-    });
-    if (!matchingWindow) {
-      // F-170: previously a silent `continue`. The unparseable-startTime case above
-      // already warns; a parseable time that simply finds no window was invisible, so the
-      // three consumers reported inconsistently. Both now say why nothing happened.
-      console.warn(
-        `[sweep] skipping assignment ${assignment.id}: no window for pool ` +
-          `${assignment.resourcePoolId} at ${assignment.startTime} on ${todayDateStr}`,
-      );
-      continue;
-    }
-
-    // Check if a booking already exists for this member + window (any non-cancelled status).
-    const existingBooking = await prisma.booking.findFirst({
-      where: {
-        userId: assignment.userId,
-        windowId: matchingWindow.id,
-        status: { not: BookingStatus.CANCELLED },
-      },
-    });
-    const rule = assignment.resourcePool.bookingRules[0];
-    const graceMinutesForCutoff = rule?.gracePeriodMinutes ?? 30;
-    const cutoffTime = new Date(matchingWindow.startTime.getTime() - graceMinutesForCutoff * 60 * 1000);
-
-    // 2. ATTENDANCE REMINDERS — F-133 Slice B: T-2h and T-1h15m before the cutoff, reusing
-    // slot_release_reminder (services/notification/src/index.ts, already dual-channel push+SMS,
-    // already regression-covered, never dispatched until now). Only fires while no action has
-    // been taken yet (!existingBooking) -- a member who already confirmed or declined doesn't
-    // need reminding. Same insert-first dedup pattern as the low-occupancy alert below (step 4),
-    // against the same @@unique([jobName, dedupKey]) on ScheduledJobDispatch -- but keyed per
-    // assignment+window+offset (`${assignmentId}:${windowId}:2h`/`:75m`), not per pool, since
-    // this targets one member, not the whole pool.
-    if (!existingBooking) {
-      const reminderOffsets: { label: '2h' | '75m'; minutesBefore: number }[] = [
-        { label: '2h', minutesBefore: 120 },
-        { label: '75m', minutesBefore: 75 },
-      ];
-      for (const { label, minutesBefore } of reminderOffsets) {
-        const reminderTime = new Date(cutoffTime.getTime() - minutesBefore * 60 * 1000);
-        if (now < reminderTime || now >= cutoffTime) continue;
-
-        try {
-          await prisma.scheduledJobDispatch.create({
-            data: {
-              jobName: 'slot_release_reminder',
-              tenantId: assignment.resourcePool.tenantId,
-              subjectId: assignment.userId,
-              dedupKey: `${assignment.id}:${matchingWindow.id}:${label}`,
-              status: 'SENT',
-              occurrenceAt: matchingWindow.startTime,
-              dispatchedAt: new Date(),
-            },
-          });
-        } catch (err: any) {
-          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-            continue; // already reminded for this assignment + window + offset
-          }
-          throw err;
-        }
-        try {
-          await fetch(`${notificationUrl}/notifications/send`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
-            body: JSON.stringify({
-              tenantId: assignment.resourcePool.tenantId,
-              recipient: assignment.userId,
-              event_type: 'slot_release_reminder',
-              variables: {
-                poolName: assignment.resourcePool.name,
-                cutoffTime: cutoffTime.toISOString(),
-                windowStart: matchingWindow.startTime.toISOString(),
-              },
-            }),
-          });
-        } catch (e) {
-          // Non-blocking, same posture as low_occupancy_alert below.
-        }
-      }
-    }
-
-    // 3. MEMBER RELEASE — gracePeriodMinutes.
-    // F-065: this is the exact value the member is shown (their own today-assignment view) and
-    // that confirm enforces. It previously read guestAccessCutoffMinutes, so a member was
-    // locked out 90 minutes before the deadline still on their screen, and confirm then
-    // rejected them with CONFIRMATION_CUTOFF_PASSED. The moment a member can no longer
-    // confirm is the moment the slot is abandoned — one deadline, not two.
-    //
-    // No timezone conversion here, deliberately: startTime is an absolute instant and
-    // subtracting minutes from it is timezone-invariant. F-066 Stage 1 fixed WHICH window
-    // is selected, which is the lookup above; routing this subtraction through branchTime
-    // would add a conversion where none belongs.
-    if (!existingBooking) {
-      const graceMinutes = rule?.gracePeriodMinutes ?? 30;
-      const releaseTime = new Date(matchingWindow.startTime.getTime() - graceMinutes * 60 * 1000);
-      if (now >= releaseTime) {
-        // Create through the same atomic helper used by member self-confirm.
-        // WHY: Sweep and confirm are competing triggers for one logical daily member
-        // booking, so the lock/double-check/create path must not drift between callers.
-        try {
-          const ensured = await ensureTodayMemberBooking({
-            assignment,
-            matchingWindow,
-            now,
-            timeZone,
-            status: BookingStatus.RELEASED_NO_SHOW,
-            attendanceConfirmedAt: null,
-          });
-          if (ensured.created) {
-            // One event, two honest readings: a booking row was created, and a member lost
-            // their slot. This is now the sole member-release path.
-            lazyGeneratedCount++;
-            releasedMembersCount++;
-          }
-        } catch (err: any) {
-          // P2002 = concurrent sweep already created this booking — safe to skip.
-          // F-207.2: MEMBER_SLOT_AT_CAPACITY = ensureTodayMemberBooking's defensive guard fired
-          // for this one assignment. Rethrowing here would abort the ENTIRE sweep mid-loop,
-          // silently skipping held-booking expiry and low-occupancy alerts for every other pool
-          // still queued behind it -- log and continue, matching the "no window" skip above.
-          const isDuplicateRace = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
-          const isCapacityGuard = err?.code === 'MEMBER_SLOT_AT_CAPACITY';
-          if (isCapacityGuard) {
-            console.warn(`[sweep] skipping assignment ${assignment.id}: window already at capacity (MEMBER_SLOT_AT_CAPACITY)`);
-          } else if (!isDuplicateRace) {
-            throw err;
-          }
-        }
-      }
-    }
-
-    // 4. LOW-OCCUPANCY ALERT — guestAccessCutoffMinutes, unchanged.
-    // F-065: this is why guestAccessCutoffMinutes is NOT vestigial. It governs how much
-    // lead time an admin gets to sell a freed slot to guests, which is a different question
-    // from when a member loses their seat. Collapsing the two onto gracePeriodMinutes would
-    // have moved this to T-30 — too late to act on — while looking like a simplification.
-    //
-    // The `existingBooking` precondition is preserved EXACTLY as it was, using the value
-    // read before the release above. It means a pool where every member already has a
-    // booking never gets an occupancy check at all, which is a real defect — tracked as
-    // F-089 rather than silently widened here.
-    if (existingBooking) continue;
-    const alertMinutes = rule?.guestAccessCutoffMinutes ?? 120;
-    const alertTime = new Date(matchingWindow.startTime.getTime() - alertMinutes * 60 * 1000);
-    if (now < alertTime) continue;
-
-    const thresholdPct = rule?.lowOccupancyThresholdPct ?? 50;
-    const totalCapacity = assignment.resourcePool.capacity;
-    if (totalCapacity > 0) {
-      const confirmedSeats = await prisma.booking.count({
-        where: {
-          windowId: matchingWindow.id,
-          status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
-        },
-      });
-      const occupancyPercentage = Math.round((confirmedSeats / totalCapacity) * 100);
-
-      if (occupancyPercentage < thresholdPct) {
-        const poolId = assignment.resourcePoolId;
-        if (!alertsDispatched.includes(poolId)) {
-          // F-065: dedupe ACROSS sweep runs, not just within one.
-          // Previously the alert fired once by accident: the same iteration that passed the
-          // cutoff also created the booking, so every later run hit `if (existingBooking)`
-          // first. Decoupling release to gracePeriodMinutes removes that, leaving a 90-minute
-          // span with no booking — so an unguarded alert would fire on EVERY run, which is
-          // about 90 duplicate admin alerts per session once F-044 Phase B schedules this
-          // every 60 seconds. That is the very feature F-065 unblocks, so it is solved here.
-          //
-          // Insert-first against the existing @@unique([jobName, dedupKey]) on
-          // ScheduledJobDispatch — the same atomic-gate pattern as payment's webhook
-          // idempotency. Insert-first rather than record-after-send because only the insert
-          // is atomic: two concurrent sweeps would both pass a read-then-send check. The
-          // trade-off is that a failed send is not retried, which matches the existing
-          // non-blocking behaviour below, where a fetch failure is already swallowed.
-          // Written with Prisma directly rather than through the ScheduledJobStore port,
-          // per F-057.
-          try {
-            await prisma.scheduledJobDispatch.create({
-              data: {
-                jobName: 'low_occupancy_alert',
-                tenantId: assignment.resourcePool.tenantId,
-                subjectId: poolId,
-                dedupKey: `${poolId}:${matchingWindow.id}`,
-                status: 'SENT',
-                occurrenceAt: matchingWindow.startTime,
-                dispatchedAt: new Date(),
-              },
-            });
-          } catch (err: any) {
-            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-              continue; // already alerted for this pool + window
-            }
-            throw err;
-          }
-          alertsDispatched.push(poolId);
-          try {
-            await fetch(`${notificationUrl}/notifications/send`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${internalKey}`,
-              },
-              body: JSON.stringify({
-                tenantId: assignment.resourcePool.tenantId,
-                // WHY: low_occupancy_alert targets the tenant admin, not the member.
-                // Using tenantId as recipient — Notification service resolves to admin contact.
-                recipient: assignment.resourcePool.tenantId,
-                event_type: 'low_occupancy_alert',
-                variables: {
-                  poolId,
-                  poolName: assignment.resourcePool.name,
-                  confirmedSeats,
-                  totalCapacity,
-                  occupancyPercentage,
-                  thresholdPct,
-                },
-              }),
-            });
-          } catch (e) {
-            // Non-blocking — sweep continues even if notification fails.
-          }
-        }
-      }
-    }
-  }
-
-  // 5. BATCH RENEWAL REMINDER — F-133 Slice E, admin-facing, once per branch per month.
-  // WHY reusing THIS sweep rather than a new trigger mechanism: /bookings/sweep's real
-  // production invocation frequency isn't directly inspectable from this repo (its own comment
-  // says "runs as a cron/background job" with the actual config external to the repo, and the
-  // in-repo job-scheduler package is not wired into slot-engine's runtime at all -- confirmed by
-  // grep, zero references). But F-133 Slice B's own T-2h/T-1h15m reminders already depend on
-  // sweep firing frequently enough to catch a 2-hour-wide window, and that shipped and was
-  // signed off -- real, already-accepted evidence sweep's true cadence is frequent in practice,
-  // which comfortably covers a once-a-day (the 20th) check too. Reusing the proven mechanism
-  // per rule 3, not inventing a new one on a guess.
-  //
-  // Branch-local "is it the 20th": admin-facing, so it's evaluated on the branch's own clock,
-  // same as every other branch-local check in this file -- unlike computeExpiringBatchesByBranch
-  // itself, which compares a batch's endDate against the UTC calendar month its own endDate was
-  // computed on (see that function's own comment for why those two are deliberately different).
-  //
-  // Dedup key ${branchId}:${YYYY-MM} (branch-local month) -- once per branch per month, not per
-  // sweep invocation, not combined across a multi-branch owner's branches. Real precedent:
-  // low_occupancy_alert dispatches per-pool, never combined across a tenant's pools, so one
-  // admin alert per real trigger unit (here, per branch) matches this project's own established
-  // pattern rather than inventing tenant-wide digesting.
-  const expiringByBranch = await computeExpiringBatchesByBranch(now);
-  const renewalRemindersDispatched: string[] = [];
-  if (expiringByBranch.length > 0) {
-    const renewalBranchTimeZones = await getBranchTimeZones(expiringByBranch.map((b) => b.branchId));
-    for (const branch of expiringByBranch) {
-      const timeZone = renewalBranchTimeZones.get(branch.branchId) ?? DEFAULT_TIME_ZONE;
-      const branchToday = branchDateString(now, timeZone); // 'YYYY-MM-DD'
-      if (!isRenewalReminderDay(branchToday)) continue;
-      const branchMonth = branchToday.slice(0, 7); // 'YYYY-MM'
-
-      try {
-        await prisma.scheduledJobDispatch.create({
-          data: {
-            jobName: 'batch_renewal_reminder',
-            tenantId: branch.tenantId,
-            subjectId: branch.branchId,
-            dedupKey: `${branch.branchId}:${branchMonth}`,
-            status: 'SENT',
-            occurrenceAt: now,
-            dispatchedAt: new Date(),
-          },
-        });
-      } catch (err: any) {
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-          continue; // already reminded for this branch this month
-        }
-        throw err;
-      }
-      renewalRemindersDispatched.push(branch.branchId);
-      try {
-        await fetch(`${notificationUrl}/notifications/send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
-          body: JSON.stringify({
-            tenantId: branch.tenantId,
-            // WHY: batch_renewal_reminder targets the tenant admin, not a member -- same
-            // recipient-resolution convention as low_occupancy_alert above.
-            recipient: branch.tenantId,
-            event_type: 'batch_renewal_reminder',
-            variables: {
-              branchId: branch.branchId,
-              batchNames: branch.batches.map((b) => b.groupName),
-              batchCount: branch.batches.length,
-            },
-          }),
-        });
-      } catch (e) {
-        // Non-blocking, same posture as low_occupancy_alert above.
-      }
-    }
-  }
-
+  reply.code(410);
   return {
-    expiredHoldsCount: expiredHolds.count,
-    releasedMembersCount,
-    lazyGeneratedCount,
-    lowOccupancyAlertsDispatched: alertsDispatched.length,
-    renewalRemindersDispatched: renewalRemindersDispatched.length,
+    error: 'Gone',
+    message: 'POST /bookings/sweep was decommissioned as part of F-044 Phase 2. Use POST /bookings/sweep/tick instead.',
   };
 });
 
 // ---------------------------------------------------------------------------
-// F-044 Phase 2 — job-scheduler-backed decomposition of the sweep above.
+// F-044 Phase 2 — job-scheduler-backed decomposition of the (now decommissioned) sweep above.
 //
-// /bookings/sweep (above) is untouched and keeps running exactly as-is throughout this build and
-// the parallel-run cutover window -- these are new, additive jobs, not a rewrite of it. Three
-// JobDefinitions, not five: HELD-expiry is fully independent, but the attendance-reminder/member-
-// release/low-occupancy-alert steps above all iterate the SAME activeAssignments list and resolve
-// the SAME per-assignment window/rule data -- splitting them into three separate jobs would triple
-// that DB work for zero real scheduling benefit, since all three genuinely want the same cadence.
-// The batch-renewal reminder is fully independent and wants a much coarser interval (it fires at
-// most once per branch per month).
+// Real logic previously inline in /bookings/sweep now lives as three JobDefinitions below,
+// run by @badminton/job-scheduler and triggered exclusively via POST /bookings/sweep/tick.
+// Three JobDefinitions, not five: HELD-expiry is fully independent, but the attendance-reminder/
+// member-release/low-occupancy-alert steps all iterate the SAME activeAssignments list and
+// resolve the SAME per-assignment window/rule data -- splitting them into three separate jobs
+// would triple that DB work for zero real scheduling benefit, since all three genuinely want
+// the same cadence. The batch-renewal reminder is fully independent and wants a much coarser
+// interval (it fires at most once per branch per month).
 //
 // F-057 (docs/findings_register.md): "the ScheduledJobStore port must not be exposed as a domain-
 // facing handler API -- handlers only ever interact through the intended boundary API [ctx.store]
@@ -6949,11 +6575,11 @@ async function seedScheduledJobs() {
   }
 }
 
-// POST /bookings/sweep/tick — F-044 Phase 2: the real job-scheduler-backed trigger. Calls
-// runDueJobsOnce() exactly once per invocation -- GCP Cloud Scheduler (the same job Phase 1 already
-// created) is the sole external heartbeat; job-scheduler's own internal setInterval loop (.start())
-// is never used in production. Sibling to /bookings/sweep above, not a replacement -- both routes
-// are safe to call throughout the parallel-run cutover window described in the F-044 Phase 2 plan.
+// POST /bookings/sweep/tick — F-044 Phase 2: the real job-scheduler-backed trigger, and now the
+// sole live one. Calls runDueJobsOnce() exactly once per invocation -- GCP Cloud Scheduler (the
+// same job Phase 1 pointed at /bookings/sweep, retargeted here after a real observed parallel-run
+// window) is the sole external heartbeat; job-scheduler's own internal setInterval loop (.start())
+// is never used in production.
 server.post('/bookings/sweep/tick', async (request, reply) => {
   requireInternalKey(request, reply);
   const summaries = await jobScheduler.runDueJobsOnce(new Date());
