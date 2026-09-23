@@ -198,8 +198,40 @@ export type LiveAllocationEntry = {
   resourceId: string;
   resourceName: string;
   resourcePoolId: string;
-  status: 'open' | 'member' | 'guest' | 'unconfigured';
+  // F-276: 'member_released' — the group scheduled into this window has passed its attendance
+  // cutoff with zero confirmed members; an admin can place a guest here. `groupId`/`windowId` are
+  // set only for this status, feeding the "Place a guest" action.
+  status: 'open' | 'member' | 'guest' | 'unconfigured' | 'member_released';
   guestName: string | null;
+  groupId: string | null;
+  windowId: string | null;
+  windowStartTime: string | null;
+  windowEndTime: string | null;
+};
+// F-276: per-member live attendance state for a window blocked by a real Group, reused from
+// slot-engine's computeGroupReleaseEligibility (CONFIRMED/PENDING_CONFIRMATION/PAST_CUTOFF/
+// RELEASED_NO_SHOW/SUBSCRIPTION_INACTIVE — see that function's own comment for what each means).
+export type MemberAttendanceState =
+  | 'CONFIRMED'
+  | 'PENDING_CONFIRMATION'
+  | 'PAST_CUTOFF'
+  | 'RELEASED_NO_SHOW'
+  | 'SUBSCRIPTION_INACTIVE';
+export type GroupAttendanceMember = {
+  userId: string;
+  phone: string;
+  status: MemberAttendanceState;
+};
+export type MemberAttendanceWindow = {
+  windowId: string;
+  resourcePoolId: string;
+  startTime: string;
+  endTime: string;
+  groupId: string;
+  groupName: string;
+  cutoffTime: string | null;
+  releaseEligible: boolean;
+  members: GroupAttendanceMember[];
 };
 export type GuestOccupancyDashboard = {
   date: string;
@@ -209,6 +241,7 @@ export type GuestOccupancyDashboard = {
   duesCollected: number;
   slotMonitor: GuestSlotMonitorEntry[];
   liveAllocation: LiveAllocationEntry[];
+  memberAttendanceNext2Hours: MemberAttendanceWindow[];
   liveAllocationAsOf: string;
 };
 

@@ -318,4 +318,128 @@ export const manualBookingSections: Section<PaymentContext>[] = [
       }
     },
   },
+  {
+    name: 'F-276 /bookings/manual — releaseGroupId re-verifies group no-show state server-side at write time: genuinely eligible succeeds, then a member confirming after that makes a second identical placement fail closed (409), never client-trusted',
+    async run() {
+      // Real pool + a real BookingRule with a real gracePeriodMinutes, matching the sweep/member-
+      // attendance precedent (member-multi-batch-attendance.regression.ts).
+      const poolRes = await fetch(`${slotEngineUrl}/resource-pools`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({
+          tenantId: TENANT_ID, branchId: BRANCH_ID, name: `F-276 Pool ${Date.now()}`,
+          allocationMode: 'POOLED', capacity: 4, basePrice: 150, defaultRate: 150,
+        }),
+      });
+      const pool = ((await poolRes.json()) as any).data;
+      // gracePeriodMinutes: 150 (2.5h), paired with a window 2h out (below) -- the top-of-hour
+      // rounding futureAlignedHour applies can shrink that 2h to as little as ~1h depending on
+      // where in the current hour the test happens to run, so 150min keeps the cutoff genuinely
+      // in the past under the worst case, not just the typical one.
+      await db.bookingRule.create({
+        data: { resourcePoolId: pool.id, gracePeriodMinutes: 150, guestAccessCutoffMinutes: 120, cancellationPolicyJson: { type: 'tiered', tiers: [] } },
+      });
+
+      // A real, hour-aligned window ~2h out (availability-window creation requires alignment,
+      // UNALIGNED_TIME_BOUNDARY otherwise) — genuinely not started yet, but with a 150min grace
+      // period its cutoff is already safely in the past. Known, accepted narrow edge case (shared
+      // with every other *AlignedHour-based regression fixture in this codebase): a run within
+      // ~90min of UTC midnight could roll `start` onto tomorrow's calendar date while `daysOfWeek`/
+      // eligibility below resolves against today's -- not engineered around here.
+      const start = futureAlignedHour(2);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      const windowRes = await fetch(`${slotEngineUrl}/resource-pools/${pool.id}/availability-windows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({ startTime: start.toISOString(), endTime: end.toISOString(), capacity: 4 }),
+      });
+      const windowBody = await windowRes.json() as any;
+      if (windowRes.status !== 200 && windowRes.status !== 201) {
+        throw new Error(`Setup: expected availability-window creation to succeed, got ${windowRes.status}: ${JSON.stringify(windowBody)}`);
+      }
+      const window = windowBody.data;
+
+      const todayIsoWeekday = String(start.getUTCDay() === 0 ? 7 : start.getUTCDay());
+      const hhmm = start.toISOString().slice(11, 16);
+      const group = await db.group.create({
+        data: {
+          tenantId: TENANT_ID, name: `F-276 group ${Date.now()}`, resourcePoolId: pool.id,
+          daysOfWeek: todayIsoWeekday, startTime: hhmm,
+          startDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), endDate: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+        },
+      });
+      const memberA = 'f276-member-a';
+      const memberB = 'f276-member-b';
+      for (const userId of [memberA, memberB]) {
+        await db.subscription.create({
+          data: { userId, tenantId: TENANT_ID, mandateId: `f276-${userId}-${Date.now()}`, amount: 100000, frequency: 'monthly', status: 'active' },
+        });
+        await db.memberGroupAssignment.create({
+          data: {
+            userId, groupId: group.id, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday, startTime: hhmm,
+            status: 'ACTIVE', startDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), endDate: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+          },
+        });
+      }
+      // Deliberately NO Booking rows created for either member — the real, majority production
+      // state while F-044 (sweep has no scheduled caller) stays unresolved. Both members must
+      // read as "no-show" from absence alone, not from an explicit RELEASED_NO_SHOW row.
+
+      // --- Real eligibility check, genuinely no-show, zero confirmations ---
+      const eligibilityRes1 = await inspect(await fetch(`${slotEngineUrl}/groups/${group.id}/release-eligibility`, {
+        headers: { Authorization: `Bearer ${internalKey}` },
+      }));
+      if (eligibilityRes1.status !== 200 || eligibilityRes1.json?.data?.eligible !== true) {
+        throw new Error(`Expected genuine no-show group to be release-eligible, got ${eligibilityRes1.raw}`);
+      }
+      if (eligibilityRes1.json.data.window?.id !== window.id) {
+        throw new Error(`Expected eligibility to resolve today's real window ${window.id}, got ${JSON.stringify(eligibilityRes1.json.data.window)}`);
+      }
+      console.log('F276_EVIDENCE eligible_zero_confirmations', JSON.stringify(eligibilityRes1.json.data));
+
+      // --- Real placement, genuinely eligible: /bookings/manual + releaseGroupId succeeds despite
+      //     the window being member-blocked (collidesWithMemberAssignment untouched/unconsulted). ---
+      const placementBody = {
+        tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+        userId: 'f276-walk-in-guest', negotiatedPrice: 150, paymentMethod: 'cash', releaseGroupId: group.id,
+      };
+      const placement = await inspect(await manual(placementBody, `f276-release-${Date.now()}`, ownerJwt));
+      if (placement.status !== 201) {
+        throw new Error(`Expected genuinely-eligible release placement to succeed with 201, got ${placement.raw}`);
+      }
+      const placedBooking = await db.booking.findUnique({ where: { id: placement.json.data.booking.id } });
+      if (!placedBooking || placedBooking.windowId !== window.id || placedBooking.isMemberBooking) {
+        throw new Error(`Expected a real, non-member guest booking in the released window, got ${JSON.stringify(placedBooking)}`);
+      }
+      console.log('F276_EVIDENCE placement_succeeded', placedBooking.id);
+
+      // --- Member A confirms attendance AFTER the placement above (a second, independent window
+      //     on the SAME group, same schedule but a later occurrence, would be the real production
+      //     shape -- here re-using the identical group/window pair to prove the re-check itself
+      //     works: mark memberA CONFIRMED directly, matching what /member/today-assignment/confirm
+      //     would persist, then attempt a SECOND placement attempt against the same window). ---
+      await db.booking.create({
+        data: {
+          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id, userId: memberA,
+          status: 'CONFIRMED', isMemberBooking: true, heldUntil: new Date(),
+          idempotencyKey: `f276-confirm-${Date.now()}`, memberAttendanceConfirmedAt: new Date(),
+        },
+      });
+      const eligibilityRes2 = await inspect(await fetch(`${slotEngineUrl}/groups/${group.id}/release-eligibility`, {
+        headers: { Authorization: `Bearer ${internalKey}` },
+      }));
+      if (eligibilityRes2.json?.data?.eligible !== false) {
+        throw new Error(`Expected eligibility to flip false once a member is genuinely CONFIRMED, got ${eligibilityRes2.raw}`);
+      }
+      const secondAttempt = await inspect(await manual(
+        { ...placementBody, userId: 'f276-walk-in-guest-2' },
+        `f276-release-stale-${Date.now()}`,
+        ownerJwt,
+      ));
+      if (secondAttempt.status !== 409 || secondAttempt.json?.error?.code !== 'RELEASE_NO_LONGER_ELIGIBLE') {
+        throw new Error(`Expected a stale release attempt (member now CONFIRMED) to fail closed 409 RELEASE_NO_LONGER_ELIGIBLE, got ${secondAttempt.status}: ${secondAttempt.raw}`);
+      }
+      console.log('F276_EVIDENCE stale_attempt_rejected', secondAttempt.json?.error);
+    },
+  },
 ];

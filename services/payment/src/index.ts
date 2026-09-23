@@ -1152,6 +1152,11 @@ server.post('/bookings/manual', async (request, reply) => {
     coPlayers,
     paymentMethod,
     upiTransactionId,
+    // F-276: set only by the admin "place a guest in this released slot" flow
+    // (WalkInBookingFlow, via WalkInInitialSelection.releaseWindow). Every other caller of this
+    // route omits it, and the branch below is a no-op when absent — this booking then goes
+    // through byte-identically to before F-276.
+    releaseGroupId,
   } = request.body as any;
 
   if (!tenantId || !branchId || !resourcePoolId || !windowId || !userId || negotiatedPrice == null) {
@@ -1191,6 +1196,37 @@ server.post('/bookings/manual', async (request, reply) => {
       const err = new Error('Forbidden: Not authorized for this branch');
       (err as any).statusCode = 403;
       (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  }
+
+  // F-276: real-time re-verification, never a client-trusted flag. `/bookings/negotiated` below
+  // has no awareness of member-slot collisions at all (by design, see its own file-level comment
+  // in slot-engine) — this is the ONLY gate standing between "this window is genuinely release-
+  // eligible" and a guest silently landing in an active member's slot. Re-asks
+  // computeGroupReleaseEligibility fresh, server-to-server, at the moment of write — the earlier
+  // dashboard read that led the admin here is never trusted on its own, since attendance state can
+  // move between that read and this submit (a member confirming in the meantime, for example).
+  if (releaseGroupId) {
+    const internalKeyHeader = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
+    const slotEngineUrlForCheck = process.env.SLOT_ENGINE_URL || 'http://localhost:3001';
+    const eligibilityRes = await fetch(`${slotEngineUrlForCheck}/groups/${releaseGroupId}/release-eligibility`, {
+      headers: { Authorization: `Bearer ${internalKeyHeader}` },
+    });
+    if (!eligibilityRes.ok) {
+      reply.status(502);
+      const err = new Error('Could not verify group attendance state for this release placement');
+      (err as any).statusCode = 502;
+      (err as any).code = 'RELEASE_ELIGIBILITY_CHECK_FAILED';
+      throw err;
+    }
+    const eligibility = (await eligibilityRes.json()) as any;
+    const data = eligibility.data ?? eligibility;
+    if (!data.eligible || data.window?.id !== windowId) {
+      reply.status(409);
+      const err = new Error('This slot is no longer eligible for guest release — a member may have confirmed attendance since this was last checked');
+      (err as any).statusCode = 409;
+      (err as any).code = 'RELEASE_NO_LONGER_ELIGIBLE';
       throw err;
     }
   }
