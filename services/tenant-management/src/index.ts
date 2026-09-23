@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
-import { responseEnvelopePlugin } from '@badminton/shared-middleware';
+import { responseEnvelopePlugin, requireInternalKey, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
 import { PrismaClient, BranchStatus, UserRole, TenantModule } from '@badminton/database';
 import { resolveEntitlementState, entitlementAllows } from '@badminton/shared-types';
 
@@ -17,30 +17,8 @@ server.register(fastifyJwt, {
 
 const prisma = new PrismaClient();
 
-/**
- * Rejects anything that is not the platform-internal service key.
- *
- * WHY THIS IS A HELPER (F-140). This service had internal-key logic in two spellings already — the
- * internal-or-owner branch inside `verifyTenantOwnerOrInternal` below, and an inlined copy in
- * `POST /tenants` — and F-140 needed it on two more routes. Four copies of one security rule is how
- * they drift apart, so it is extracted once here, mirroring the `requireInternalKey` that F-119
- * extracted in identity-auth and the one slot-engine already had. Same shape, third service.
- *
- * Call this BEFORE reading params or touching the database: F-090/F-045/F-071 all turned on the same
- * lesson, that authenticating after a lookup leaves a pre-auth path an unauthenticated caller reaches.
- */
-function requireInternalKey(request: any, reply: any) {
-  const authHeader = request.headers['authorization'];
-  const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
-
-  if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
-    reply.status(401);
-    const err = new Error('Unauthorized internal service access');
-    (err as any).statusCode = 401;
-    (err as any).code = 'UNAUTHORIZED';
-    throw err;
-  }
-}
+// F-290: requireInternalKey moved to @badminton/shared-middleware (imported above) -- was
+// hand-copied identically across identity-auth/tenant-management/slot-engine.
 
 // Helper to verify authorization (internal service key OR owner JWT matching tenantId)
 // WHY: Authenticates operations securely, separating platform admin scripts (INTERNAL_SERVICE_KEY)
@@ -1031,6 +1009,7 @@ server.get('/users/:userId/branches/:branchId/check', async (request, reply) => 
 
 const start = async () => {
   try {
+    assertInternalServiceKeyConfigured();
     const port = Number(process.env.PORT) || 3003;
     await server.listen({ port, host: '0.0.0.0' });
     console.log(`Tenant Management service running at http://localhost:${port}`);

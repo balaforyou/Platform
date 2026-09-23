@@ -1,6 +1,6 @@
 import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
-import { responseEnvelopePlugin } from '@badminton/shared-middleware';
+import { responseEnvelopePlugin, requireInternalKey, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
 import { PrismaClient, BookingStatus, AllocationMode, PricingMode, Prisma, AvailabilityOverrideType, TenantModule } from '@badminton/database';
 import { resolveEntitlementState, entitlementAllows } from '@badminton/shared-types';
 import { ensureAvailabilityWindowsForDate, reconcilePatternWindows } from './availabilityGeneration.js';
@@ -175,17 +175,8 @@ function describeCourtAssignment(
 // Auth helpers
 // ---------------------------------------------------------------------------
 
-// WHY: Guards endpoints that require a verified INTERNAL_SERVICE_KEY.
-// Used on service-to-service paths where a JWT is not appropriate.
-const requireInternalKey = (request: any, reply: any) => {
-  const authHeader = request.headers['authorization'];
-  if (!authHeader || authHeader !== `Bearer ${internalKey}`) {
-    const err = new Error('Unauthorized internal service access');
-    (err as any).statusCode = 401;
-    (err as any).code = 'UNAUTHORIZED';
-    throw err;
-  }
-};
+// F-290: requireInternalKey moved to @badminton/shared-middleware (imported above) -- was
+// hand-copied identically across identity-auth/tenant-management/slot-engine.
 
 type AdminAuthContext = {
   isInternal: boolean;
@@ -6849,6 +6840,7 @@ server.get('/bookings/:id/cancel-preview', async (request, reply) => {
 
 const start = async () => {
   try {
+    assertInternalServiceKeyConfigured();
     await seedScheduledJobs();
     const port = Number(process.env.PORT) || 3001;
     await server.listen({ port, host: '0.0.0.0' });

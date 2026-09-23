@@ -1,5 +1,5 @@
 import fastify from 'fastify';
-import { responseEnvelopePlugin } from '@badminton/shared-middleware';
+import { responseEnvelopePlugin, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
 import { processQueue, prisma } from './queue.js';
 
 const server = fastify({ logger: true });
@@ -217,6 +217,7 @@ server.get('/notifications/:userId/history', async (request) => {
 // ============================================================
 const start = async () => {
   try {
+    assertInternalServiceKeyConfigured();
     const port = Number(process.env.PORT) || 3005;
     await server.listen({ port, host: '0.0.0.0' });
     console.log(`Notification service running at http://localhost:${port}`);
