@@ -24,6 +24,7 @@ import { groupRosterCalendarSections } from './group-roster-calendar.regression'
 import { groupRelocateRemoveSections } from './group-relocate-remove.regression';
 import { groupRenewalSections } from './group-renewal.regression';
 import { groupTenantScopingSections } from './group-tenant-scoping.regression';
+import { f044Phase2SchedulerSections } from './f044-phase2-scheduler.regression';
 
 async function main() {
   console.log('Starting local Slot Engine server...');
@@ -67,6 +68,7 @@ async function main() {
         ...groupRelocateRemoveSections,
         ...groupRenewalSections,
         ...groupTenantScopingSections,
+        ...f044Phase2SchedulerSections,
       ],
       context,
     );

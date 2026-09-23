@@ -19,6 +19,7 @@ import {
   isRenewalReminderDay,
   safeTimeZone,
 } from './branchTime.js';
+import { createScheduler, createSqlScheduledJobStore, type JobDefinition, type SqlExecutor } from '@badminton/job-scheduler';
 
 const server = fastify({ logger: true });
 
@@ -6652,6 +6653,314 @@ server.post('/bookings/sweep', async (request, reply) => {
 });
 
 // ---------------------------------------------------------------------------
+// F-044 Phase 2 — job-scheduler-backed decomposition of the sweep above.
+//
+// /bookings/sweep (above) is untouched and keeps running exactly as-is throughout this build and
+// the parallel-run cutover window -- these are new, additive jobs, not a rewrite of it. Three
+// JobDefinitions, not five: HELD-expiry is fully independent, but the attendance-reminder/member-
+// release/low-occupancy-alert steps above all iterate the SAME activeAssignments list and resolve
+// the SAME per-assignment window/rule data -- splitting them into three separate jobs would triple
+// that DB work for zero real scheduling benefit, since all three genuinely want the same cadence.
+// The batch-renewal reminder is fully independent and wants a much coarser interval (it fires at
+// most once per branch per month).
+//
+// F-057 (docs/findings_register.md): "the ScheduledJobStore port must not be exposed as a domain-
+// facing handler API -- handlers only ever interact through the intended boundary API [ctx.store]
+// ... enforce this as an architectural constraint in Phase B and beyond." The three dispatch-dedup
+// sites above write ScheduledJobDispatch via raw prisma.scheduledJobDispatch.create() + a manual
+// P2002 catch specifically because job-scheduler wasn't wired into any runtime until now -- this is
+// the real moment F-057 anticipated. Every dedup site below goes through ctx.store.claimDispatch/
+// markDispatched/failDispatch instead. One genuine, disclosed behavior difference from the code
+// above: the old sites inserted status: 'SENT' before even attempting the notification fetch (a
+// failed send was never retried, silently). claimDispatch/markDispatched/failDispatch is a real
+// two-phase claim-then-record flow -- a failed send now gets a real failDispatch instead of a false
+// SENT, so it can be genuinely retried on a later tick. The core guarantee (never send twice for
+// the same dedupKey) is unchanged; this is a real improvement the migration enables, not hidden.
+// ---------------------------------------------------------------------------
+
+class PrismaSqlExecutor implements SqlExecutor {
+  constructor(private readonly client: PrismaClient) {}
+  async query<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+    return this.client.$queryRawUnsafe<T[]>(sql, ...params);
+  }
+  async execute(sql: string, params: unknown[] = []): Promise<number> {
+    return this.client.$executeRawUnsafe(sql, ...params);
+  }
+}
+
+const heldBookingExpiryJob: JobDefinition = {
+  name: 'held_booking_expiry',
+  schedule: { everySeconds: 60 },
+  minimumViableWindowSeconds: 180,
+  async handler(ctx) {
+    // Step 1, verbatim from /bookings/sweep above.
+    const expiredHolds = await prisma.booking.updateMany({
+      where: { status: BookingStatus.HELD, heldUntil: { lt: ctx.now } },
+      data: { status: BookingStatus.RELEASED_NO_SHOW },
+    });
+    return { processed: expiredHolds.count };
+  },
+};
+
+const memberAssignmentSweepJob: JobDefinition = {
+  name: 'member_assignment_sweep',
+  schedule: { everySeconds: 60 },
+  minimumViableWindowSeconds: 180,
+  async handler(ctx) {
+    const now = ctx.now;
+    // Steps 2-4, verbatim shared per-assignment loop from /bookings/sweep above.
+    const activeAssignments = await prisma.memberGroupAssignment.findMany({
+      where: { status: 'ACTIVE' },
+      include: {
+        resourcePool: { include: { bookingRules: { orderBy: { createdAt: 'asc' } } } },
+      },
+    });
+
+    let lazyGeneratedCount = 0;
+    let releasedMembersCount = 0;
+    let remindersDispatched = 0;
+    let alertsDispatchedCount = 0;
+
+    const branchTimeZones = await getBranchTimeZones(
+      activeAssignments.map((a: any) => a.resourcePool.branchId),
+    );
+
+    for (const assignment of activeAssignments) {
+      const timeZone = branchTimeZones.get(assignment.resourcePool.branchId) ?? DEFAULT_TIME_ZONE;
+      const todayIsoWeekday = isoWeekday(now, timeZone);
+      const days = assignment.daysOfWeek.split(',').map((d: string) => d.trim());
+      if (!days.includes(todayIsoWeekday)) continue;
+
+      const todayDateStr = todayDateString(now, timeZone);
+      let windowStart: Date;
+      try {
+        windowStart = branchLocalToUtc(todayDateStr, assignment.startTime, timeZone);
+      } catch (err: any) {
+        ctx.logger.warn('skipping assignment: unusable startTime', { assignmentId: assignment.id, startTime: assignment.startTime, error: err.message });
+        continue;
+      }
+      const matchingWindow = await prisma.availabilityWindow.findFirst({
+        where: { resourcePoolId: assignment.resourcePoolId, startTime: windowStart },
+      });
+      if (!matchingWindow) {
+        ctx.logger.warn('skipping assignment: no window', { assignmentId: assignment.id, resourcePoolId: assignment.resourcePoolId, startTime: assignment.startTime, date: todayDateStr });
+        continue;
+      }
+
+      const existingBooking = await prisma.booking.findFirst({
+        where: { userId: assignment.userId, windowId: matchingWindow.id, status: { not: BookingStatus.CANCELLED } },
+      });
+      const rule = assignment.resourcePool.bookingRules[0];
+      const graceMinutesForCutoff = rule?.gracePeriodMinutes ?? 30;
+      const cutoffTime = new Date(matchingWindow.startTime.getTime() - graceMinutesForCutoff * 60 * 1000);
+
+      // --- Attendance reminders (F-133 Slice B) ---
+      if (!existingBooking) {
+        const reminderOffsets: { label: '2h' | '75m'; minutesBefore: number }[] = [
+          { label: '2h', minutesBefore: 120 },
+          { label: '75m', minutesBefore: 75 },
+        ];
+        for (const { label, minutesBefore } of reminderOffsets) {
+          const reminderTime = new Date(cutoffTime.getTime() - minutesBefore * 60 * 1000);
+          if (now < reminderTime || now >= cutoffTime) continue;
+
+          const dedupKey = `${assignment.id}:${matchingWindow.id}:${label}`;
+          const claimed = await ctx.store.claimDispatch('slot_release_reminder', {
+            dedupKey,
+            tenantId: assignment.resourcePool.tenantId,
+            subjectId: assignment.userId,
+            occurrenceAt: matchingWindow.startTime,
+          });
+          if (!claimed) continue;
+          try {
+            await fetch(`${notificationUrl}/notifications/send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+              body: JSON.stringify({
+                tenantId: assignment.resourcePool.tenantId,
+                recipient: assignment.userId,
+                event_type: 'slot_release_reminder',
+                variables: {
+                  poolName: assignment.resourcePool.name,
+                  cutoffTime: cutoffTime.toISOString(),
+                  windowStart: matchingWindow.startTime.toISOString(),
+                },
+              }),
+            });
+            await ctx.store.markDispatched('slot_release_reminder', dedupKey);
+            remindersDispatched++;
+          } catch (e: any) {
+            await ctx.store.failDispatch('slot_release_reminder', dedupKey, String(e?.message ?? e));
+          }
+        }
+      }
+
+      // --- Member release, unchanged (no dispatch dedup involved) ---
+      if (!existingBooking) {
+        const graceMinutes = rule?.gracePeriodMinutes ?? 30;
+        const releaseTime = new Date(matchingWindow.startTime.getTime() - graceMinutes * 60 * 1000);
+        if (now >= releaseTime) {
+          try {
+            const ensured = await ensureTodayMemberBooking({
+              assignment,
+              matchingWindow,
+              now,
+              timeZone,
+              status: BookingStatus.RELEASED_NO_SHOW,
+              attendanceConfirmedAt: null,
+            });
+            if (ensured.created) {
+              lazyGeneratedCount++;
+              releasedMembersCount++;
+            }
+          } catch (err: any) {
+            const isDuplicateRace = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+            const isCapacityGuard = err?.code === 'MEMBER_SLOT_AT_CAPACITY';
+            if (isCapacityGuard) {
+              ctx.logger.warn('skipping assignment: window at capacity', { assignmentId: assignment.id });
+            } else if (!isDuplicateRace) {
+              throw err;
+            }
+          }
+        }
+      }
+
+      // --- Low-occupancy alert ---
+      if (existingBooking) continue;
+      const alertMinutes = rule?.guestAccessCutoffMinutes ?? 120;
+      const alertTime = new Date(matchingWindow.startTime.getTime() - alertMinutes * 60 * 1000);
+      if (now < alertTime) continue;
+
+      const thresholdPct = rule?.lowOccupancyThresholdPct ?? 50;
+      const totalCapacity = assignment.resourcePool.capacity;
+      if (totalCapacity > 0) {
+        const confirmedSeats = await prisma.booking.count({
+          where: { windowId: matchingWindow.id, status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] } },
+        });
+        const occupancyPercentage = Math.round((confirmedSeats / totalCapacity) * 100);
+
+        if (occupancyPercentage < thresholdPct) {
+          const poolId = assignment.resourcePoolId;
+          const dedupKey = `${poolId}:${matchingWindow.id}`;
+          const claimed = await ctx.store.claimDispatch('low_occupancy_alert', {
+            dedupKey,
+            tenantId: assignment.resourcePool.tenantId,
+            subjectId: poolId,
+            occurrenceAt: matchingWindow.startTime,
+          });
+          if (claimed) {
+            try {
+              await fetch(`${notificationUrl}/notifications/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+                body: JSON.stringify({
+                  tenantId: assignment.resourcePool.tenantId,
+                  recipient: assignment.resourcePool.tenantId,
+                  event_type: 'low_occupancy_alert',
+                  variables: { poolId, poolName: assignment.resourcePool.name, confirmedSeats, totalCapacity, occupancyPercentage, thresholdPct },
+                }),
+              });
+              await ctx.store.markDispatched('low_occupancy_alert', dedupKey);
+              alertsDispatchedCount++;
+            } catch (e: any) {
+              await ctx.store.failDispatch('low_occupancy_alert', dedupKey, String(e?.message ?? e));
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      processed: activeAssignments.length,
+      skipped: activeAssignments.length - (releasedMembersCount + remindersDispatched + alertsDispatchedCount),
+    };
+  },
+};
+
+const batchRenewalReminderJob: JobDefinition = {
+  name: 'batch_renewal_reminder',
+  schedule: { everySeconds: 3600 },
+  minimumViableWindowSeconds: 7200,
+  async handler(ctx) {
+    const now = ctx.now;
+    // Step 5, verbatim from /bookings/sweep above.
+    const expiringByBranch = await computeExpiringBatchesByBranch(now);
+    let remindersDispatched = 0;
+    if (expiringByBranch.length > 0) {
+      const renewalBranchTimeZones = await getBranchTimeZones(expiringByBranch.map((b) => b.branchId));
+      for (const branch of expiringByBranch) {
+        const timeZone = renewalBranchTimeZones.get(branch.branchId) ?? DEFAULT_TIME_ZONE;
+        const branchToday = branchDateString(now, timeZone);
+        if (!isRenewalReminderDay(branchToday)) continue;
+        const branchMonth = branchToday.slice(0, 7);
+        const dedupKey = `${branch.branchId}:${branchMonth}`;
+
+        const claimed = await ctx.store.claimDispatch('batch_renewal_reminder', {
+          dedupKey,
+          tenantId: branch.tenantId,
+          subjectId: branch.branchId,
+          occurrenceAt: now,
+        });
+        if (!claimed) continue;
+        try {
+          await fetch(`${notificationUrl}/notifications/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+            body: JSON.stringify({
+              tenantId: branch.tenantId,
+              recipient: branch.tenantId,
+              event_type: 'batch_renewal_reminder',
+              variables: { branchId: branch.branchId, batchNames: branch.batches.map((b) => b.groupName), batchCount: branch.batches.length },
+            }),
+          });
+          await ctx.store.markDispatched('batch_renewal_reminder', dedupKey);
+          remindersDispatched++;
+        } catch (e: any) {
+          await ctx.store.failDispatch('batch_renewal_reminder', dedupKey, String(e?.message ?? e));
+        }
+      }
+    }
+    return { processed: expiringByBranch.length, skipped: expiringByBranch.length - remindersDispatched };
+  },
+};
+
+const jobScheduler = createScheduler({
+  store: createSqlScheduledJobStore(new PrismaSqlExecutor(prisma)),
+  jobs: [heldBookingExpiryJob, memberAssignmentSweepJob, batchRenewalReminderJob],
+});
+
+const SCHEDULED_JOB_SEEDS: { name: string; intervalSeconds: number }[] = [
+  { name: 'held_booking_expiry', intervalSeconds: 60 },
+  { name: 'member_assignment_sweep', intervalSeconds: 60 },
+  { name: 'batch_renewal_reminder', intervalSeconds: 3600 },
+];
+
+// Idempotent -- safe to call on every startup. A missing row (first deploy, or one deleted by
+// accident) is created with nextRunAt: now() so the very next tick picks it up immediately rather
+// than waiting a full interval; an existing row is left untouched (never resets a real
+// consecutiveFailures/circuitOpenedAt/nextRunAt in flight).
+async function seedScheduledJobs() {
+  for (const seed of SCHEDULED_JOB_SEEDS) {
+    await prisma.scheduledJob.upsert({
+      where: { name: seed.name },
+      update: {},
+      create: { name: seed.name, intervalSeconds: seed.intervalSeconds, nextRunAt: new Date() },
+    });
+  }
+}
+
+// POST /bookings/sweep/tick — F-044 Phase 2: the real job-scheduler-backed trigger. Calls
+// runDueJobsOnce() exactly once per invocation -- GCP Cloud Scheduler (the same job Phase 1 already
+// created) is the sole external heartbeat; job-scheduler's own internal setInterval loop (.start())
+// is never used in production. Sibling to /bookings/sweep above, not a replacement -- both routes
+// are safe to call throughout the parallel-run cutover window described in the F-044 Phase 2 plan.
+server.post('/bookings/sweep/tick', async (request, reply) => {
+  requireInternalKey(request, reply);
+  const summaries = await jobScheduler.runDueJobsOnce(new Date());
+  return { jobs: summaries };
+});
+
+// ---------------------------------------------------------------------------
 // Internal lookup endpoints
 // ---------------------------------------------------------------------------
 
@@ -6914,6 +7223,7 @@ server.get('/bookings/:id/cancel-preview', async (request, reply) => {
 
 const start = async () => {
   try {
+    await seedScheduledJobs();
     const port = Number(process.env.PORT) || 3001;
     await server.listen({ port, host: '0.0.0.0' });
     console.log(`Slot Engine service running at http://localhost:${port}`);

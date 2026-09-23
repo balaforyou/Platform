@@ -16,7 +16,8 @@
     "@fastify/jwt": "^8.0.1",
     "@badminton/shared-middleware": "workspace:*",
     "@badminton/shared-types": "workspace:*",
-    "@badminton/database": "workspace:*"
+    "@badminton/database": "workspace:*",
+    "@badminton/job-scheduler": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.0",
