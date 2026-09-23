@@ -1924,3 +1924,18 @@ anything about the signed-in user, despite `user.displayName` already being on t
 establishing the real fallback-chain precedent for handling it being unset.
 Confirmed-ID: F-285
 Confirmed: 22 Sep 2026
+
+### courtbooking-dead-code-superseded-by-branchbooking
+Batch: F-133 mobile-UX observation round follow-on, surfaced during Slice 3's F-284 implementation
+Surfaced: this session, Claude Code's real evidence-gathering for F-284 (confirmed via a real
+import-search that `CourtBooking.tsx` has zero real importers anywhere in the app), reported to
+Chief.
+Honest note: named directly in the Chief Architect thread's own reply assigning the ID before this
+pending-findings entry existed, same pattern as the entries above.
+Description: `apps/guest-member-pwa/src/components/CourtBooking.tsx` is dead code --
+`BranchBooking.tsx`'s own comments confirm it's "a PORT, not a rewrite" of `CourtBooking.tsx`'s
+real booking engine, and no real `import ... from '...CourtBooking'` exists anywhere else in the
+app (confirmed via grep, only comment references remain). Not fixed here -- flagged as a real
+finding rather than deleted inline, since deleting a file wasn't in scope for F-284's own fix.
+Confirmed-ID: F-289
+Confirmed: 22 Sep 2026
