@@ -31,7 +31,7 @@ export const dispatchAndRoutingSections: Section<NotificationContext>[] = [
     async run(ctx) {
       const regRes = await fetch(`${notificationUrl}/devices/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({ userId: ctx.userId, token: 'fcm-test-token-abc123' }),
       });
       assert(regRes.ok, `Device register should succeed, got ${regRes.status}`);
@@ -114,7 +114,7 @@ export const dispatchAndRoutingSections: Section<NotificationContext>[] = [
     async run(ctx) {
       const tmplRes = await fetch(`${notificationUrl}/notifications/templates`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({
           tenantId: ctx.tenantId,
           channel: 'sms',
