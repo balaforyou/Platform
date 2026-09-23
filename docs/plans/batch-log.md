@@ -4166,6 +4166,55 @@ handover's own close-out instructions).
 `pnpm diagram:verify` — clean, all 67 finding tags agree with the register (advisory-only notes,
 no failures).
 
+## Batch — F-044 Phase 2 cutover, decommission, and close-out (+ F-301)
+
+**F-044 — real, resolved, full disposition sequence, not a single "fixed".** Five distinct real
+stages, each with its own real evidence: (1) Phase 1 stop-gap (already batched above) — unmodified
+`/bookings/sweep` behind a real Cloud Scheduler job, no code change. (2) Phase 2 shipped (PR #89) —
+`/bookings/sweep`'s logic decomposed into three real `JobDefinition`s hosted by
+`packages/job-scheduler`, triggered via a new, additive `POST /bookings/sweep/tick` route; the F-057
+migration (raw-Prisma dispatch writes → `ctx.store.claimDispatch`/`markDispatched`/`failDispatch`)
+closed in the same PR. Real live-fire proof against production itself (not just dev-stack): a
+notification-service outage proved per-job circuit-breaker isolation (`consecutiveFailures: 0` held
+on all 3 `ScheduledJob` rows throughout) and genuine retry-on-recovery (same dispatch rows, `FAILED`
+→ `SENT`), full timestamped trail added to the PR after an explicit challenge to document — not just
+assert — the evidence. (3) Observed — ~1 hour of real production coexistence, both routes live, 3
+manual `/tick` samples, zero errors. (4) Cutover — the real Cloud Scheduler job's URI retargeted
+from `/bookings/sweep` to `/bookings/sweep/tick` (config-only, secret untouched); a real unattended
+post-cutover tick confirmed (Scheduler's `lastAttemptTime` matched `ScheduledJob.lastRunAt` to the
+millisecond); a real, isolated HELD booking auto-released via a real unattended tick with zero
+manual intervention (`Booking.updatedAt` matching the job's `lastRunAt` to the millisecond), test
+data fully deleted, independently confirmed 0 rows. (5) Decommissioned (PR #90) — `/bookings/sweep`
+now returns `410 Gone` for an authenticated caller (`401` unchanged unauthenticated); every real
+remaining caller (3 regression files, 1 e2e spec) migrated to `/tick`, each also fixed to force its
+target job genuinely due first so repeat/dedup/concurrency assertions stay real rather than passing
+because a job silently didn't run. Deployed to production and independently verified: all 8
+components report the deploy SHA (`6e4f4dc`), the Scheduler job confirmed still targeting only
+`/tick`, a real post-redeploy unattended tick confirmed clean.
+
+**F-301 — new Open finding, deliberately not fixed here (rule 9).** CI's regression check on PR #90
+failed on exactly one, unrelated section: `group-roster-calendar.regression.ts`'s brand-new-member
+calendar test (`hasEnoughHistory: false` expectation). Confirmed pre-existing and unrelated to PR
+#90 via an isolated `git worktree` against unmodified `main`@`897765c` — identical single failure,
+110/111 sections, on a file PR #90 never touches. Chief-assigned F-301 same session. Per Chief's
+explicit decision, the failing section was quarantined (excluded from the exported regression array,
+commented and cited, not deleted) in its own tiny commit on the same branch, rather than either
+silently absorbing a fix into PR #90 or leaving CI permanently red on an unrelated bug — genuine
+110/110 green afterward, not a false pass.
+
+**`packages/job-scheduler` — real infrastructure note, not part of F-044 itself.** Real, tested code
+that sat entirely unwired (zero production callers, confirmed by grep, since it was first built) is
+now real, in-production infrastructure, driving 100% of the platform's periodic booking-sweep work.
+Genuinely reusable for any future scheduled-job need, not scaffold debt any more.
+
+**Close-out:** `pnpm register:check` — **269 rows, Open 117 / Resolved 152** (was 268/117/151 before
+this batch: F-301 added as a new Open row, F-044 moved Open → Resolved — net +1 row, Open unchanged,
+Resolved +1).
+`pnpm diagram:verify` — clean, all 67 finding tags agree with the register (`FLOW-048`/`FLOW-049`
+updated to `F-044 (fixed)`; `FLOW-049`'s endpoint updated to `POST /bookings/sweep/tick`, advisory
+notes only, no failures). PRs #89 (Phase 2, already merged prior batch), #90 (decommission, this
+batch) both merged, independently re-verified against real `origin/main`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

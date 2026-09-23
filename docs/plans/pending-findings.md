@@ -2016,3 +2016,22 @@ Description: real credential exposure surface on a production secret shared by a
 services' internal-key auth. Bala confirmed Option A (rotate now, not deferred) the same day.
 Confirmed-ID: F-300
 Confirmed: 23 Sep 2026
+
+### slot-engine-member-calendar-brand-new-member-fails
+Batch: surfaced during PR #90's (F-044 Phase 2 cutover/decommission) CI regression run
+Surfaced: 23 Sep 2026, Claude Code's CI investigation of PR #90 -- the regression suite's
+`group-roster-calendar.regression.ts` section `GET /member/calendar -- a genuinely brand-new
+member gets hasEnoughHistory: false, no seeded data` failed both locally and in CI, on a file
+PR #90 never touches. Confirmed pre-existing and unrelated via an isolated `git worktree` against
+unmodified `main` at commit `897765cf9ec4f69323ef69d6a40e5b9a92d7560d` (fresh install + prisma
+generate + build, run in isolation) -- identical single failure, 110/111 sections, reported to
+Chief.
+Honest note: named directly in the Chief Architect thread's own reply assigning the ID before this
+pending-findings entry existed, same pattern as the entries above.
+Description: `services/slot-engine/src/regression/group-roster-calendar.regression.ts`'s
+brand-new-member calendar section fails to get `hasEnoughHistory: false` for a member with zero
+seeded history. Real regression-suite failure, not yet root-caused -- explicitly not triaged
+further per Chief's instruction (log accurately, pick up in its own pass or the upcoming
+retrofit-batch work).
+Confirmed-ID: F-301
+Confirmed: 23 Sep 2026
