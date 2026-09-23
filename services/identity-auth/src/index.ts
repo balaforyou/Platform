@@ -1362,8 +1362,14 @@ server.post('/auth/logout', async (request, reply) => {
   return { success: true };
 });
 
-// Internal endpoint to retrieve User details
+// Internal endpoint to retrieve User details.
+// F-291: previously had zero auth of any kind despite its own comment saying "Internal
+// endpoint" -- any unauthenticated caller could read a full real User row (phone, email,
+// name, userType) for any id. Real production caller: notification's own resolveRecipient
+// (services/notification/src/index.ts:56-58) already sends the internal-key header, so this
+// guard is additive, not breaking.
 server.get('/users/:id', async (request, reply) => {
+  requireInternalKey(request, reply);
   const { id } = request.params as any;
   const user = await prisma.user.findUnique({
     where: { id },
