@@ -3,7 +3,7 @@ import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import crypto from 'crypto';
 import { Readable } from 'stream';
-import { responseEnvelopePlugin, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
+import { responseEnvelopePlugin, assertInternalServiceKeyConfigured, requireInternalKey } from '@badminton/shared-middleware';
 import { PrismaClient, Prisma } from '@badminton/database';
 import Razorpay from 'razorpay';
 
@@ -384,7 +384,12 @@ server.post('/verify-payment', verifyPaymentHandler);
 
 // Create/Register subscription mandate (Bookkeeping only)
 // WHY: Pure bookkeeping. Mandate creation is initiated and authorized client-side using Razorpay's SDK.
+// F-293: was zero-auth. Confirmed via repo-wide grep -- no frontend implementation of the
+// client-side Razorpay mandate flow this comment describes exists yet anywhere in apps/, and
+// no backend caller either; only this route's own regression test. Internal-key guard closes
+// the gap now regardless of whether/how a future frontend caller is built.
 server.post('/subscriptions', async (request, reply) => {
+  requireInternalKey(request, reply);
   const { tenantId, userId, mandateId, amount, frequency } = request.body as any;
 
   if (!tenantId || !userId || !mandateId || !amount) {
