@@ -958,44 +958,12 @@ const createHeldNegotiatedBooking = async (
   }
 };
 
+// F-295: previously had its own byte-for-byte duplicate of requirePaymentLinkAdmin's inline
+// auth logic instead of calling it -- same duplicated-security-logic risk F-290 already closed
+// for requireInternalKey. Now reuses the shared helper.
 server.post('/payment-links', async (request, reply) => {
-  const authHeader = request.headers['authorization'];
+  const decoded = await requirePaymentLinkAdmin(request, reply);
   const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key';
-
-  let authed = false;
-  if (authHeader === `Bearer ${internalKey}`) {
-    authed = true;
-  } else if (authHeader) {
-    try {
-      const decoded = await request.jwtVerify() as any;
-      const roles: string[] = decoded.roles ?? [];
-      const isAdmin = roles.some((r: string) =>
-        r === 'owner' || r.startsWith('branch_manager:')
-      );
-      if (isAdmin) authed = true;
-      else {
-        reply.status(403);
-        const err = new Error('Forbidden: Owner or Branch Manager role required');
-        (err as any).statusCode = 403;
-        (err as any).code = 'FORBIDDEN';
-        throw err;
-      }
-    } catch (e: any) {
-      if (e.statusCode) throw e;
-      reply.status(401);
-      const err = new Error('Invalid or expired token');
-      (err as any).statusCode = 401;
-      (err as any).code = 'UNAUTHORIZED';
-      throw err;
-    }
-  }
-  if (!authed) {
-    reply.status(401);
-    const err = new Error('Missing authorization header');
-    (err as any).statusCode = 401;
-    (err as any).code = 'UNAUTHORIZED';
-    throw err;
-  }
 
   const { bookingId, tenantId, userId, amount, description } = request.body as any;
   if (!bookingId || !tenantId || !userId || amount == null) {
@@ -1026,6 +994,43 @@ server.post('/payment-links', async (request, reply) => {
     if (e.statusCode) throw e;
     reply.status(500);
     throw new Error('Slot Engine communication failure: ' + e.message);
+  }
+
+  // F-295/F-274: requirePaymentLinkAdmin's own role check has no comparison against this
+  // booking's real branch -- any owner/branch_manager claim would otherwise pass regardless of
+  // which branch they're actually scoped to. decoded === null is the internal-key/platform
+  // caller (requirePaymentLinkAdmin's own bypass, unaffected); a JWT caller is checked against
+  // booking.branchId, same shape as /refunds's existing F-274 fix.
+  if (decoded) {
+    const roles: string[] = decoded.roles ?? [];
+    const isOwner = roles.includes('owner');
+    if (!(isOwner || roles.includes(`branch_manager:${booking.branchId}`))) {
+      reply.status(403);
+      const err = new Error('Forbidden: Not authorized for this branch');
+      (err as any).statusCode = 403;
+      (err as any).code = 'FORBIDDEN';
+      throw err;
+    }
+  }
+
+  // F-295: tenantId/userId/amount were previously trusted straight from the client body with
+  // no comparison against the real booking this route already fetches -- an authorized caller
+  // for one tenant/branch could submit an arbitrary tenantId, userId, or amount unrelated to
+  // the actual booking record. Reject on mismatch (rather than silently deriving from the
+  // booking) so a caller bug surfaces immediately instead of being masked.
+  if (tenantId !== booking.tenantId || userId !== booking.userId) {
+    reply.status(400);
+    const err = new Error('tenantId/userId do not match the real booking');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BOOKING_MISMATCH';
+    throw err;
+  }
+  if (Math.round(Number(amount) * 100) !== Math.round(Number(booking.price) * 100)) {
+    reply.status(400);
+    const err = new Error("amount does not match the booking's real price");
+    (err as any).statusCode = 400;
+    (err as any).code = 'AMOUNT_MISMATCH';
+    throw err;
   }
 
   if (booking.status !== 'HELD') {
