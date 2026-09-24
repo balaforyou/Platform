@@ -10,11 +10,14 @@ import { db, baseUrl, internalKey, withinTodayUtc, SlotEngineContext, TENANT_ID,
  * used to exercise /bookings/sweep directly, were migrated onto /bookings/sweep/tick in the
  * same change.
  *
- * These sections cover POST /bookings/sweep/tick and the three real JobDefinitions it drives:
+ * These sections cover POST /bookings/sweep/tick and the real JobDefinitions it drives:
  * real ScheduledJob seed rows exist, a real HELD booking auto-releases through the route, the
  * F-057 migration to ctx.store.claimDispatch/markDispatched preserves the exact same real dedup
  * guarantee the old raw-Prisma insert-first pattern gave, and /bookings/sweep itself now
  * genuinely 410s rather than running.
+ *
+ * F-296 Stage 1's payment_confirm_reconciliation job (added later, same file for its shared
+ * makePool/tick/forceJobsDue helpers) is covered separately below.
  */
 
 function todayIsoWeekday(): string {
@@ -214,6 +217,98 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
     async run() {
       const res = await fetch(`${baseUrl}/bookings/sweep/tick`, { method: 'POST' });
       if (res.status !== 401) throw new Error(`Expected unauthenticated /bookings/sweep/tick to 401, got ${res.status}`);
+    },
+  },
+
+  {
+    name: 'F-296 Stage 1: payment_confirm_reconciliation recovers a real booking stuck HELD after a captured PaymentIntent (the webhook capture/confirm-ordering bug)',
+    async run() {
+      const pool = await makePool('f296-stuck', 30);
+      const start = withinTodayUtc(240);
+      start.setUTCMinutes(0, 0, 0);
+      const window = await db.availabilityWindow.create({
+        data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 4 },
+      });
+      const booking = await db.booking.create({
+        data: {
+          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+          userId: 'f296-stuck-user', status: BookingStatus.HELD, heldUntil: new Date(Date.now() + 300000),
+        },
+      });
+      const intent = await db.paymentIntent.create({
+        data: {
+          tenantId: TENANT_ID, userId: 'f296-stuck-user', amount: 20000, purpose: 'guest_booking',
+          referenceId: booking.id, status: 'captured', gatewayRef: `pay_f296_${Date.now()}`,
+        },
+      });
+      // Reproduces the real stuck state a failed webhook confirm leaves behind: a captured
+      // intent whose booking never advanced past HELD, already older than the job's 2-minute
+      // minimum-age filter (real timestamp manipulation, not a real wall-clock wait -- same
+      // deterministic technique this codebase already uses elsewhere).
+      await db.paymentIntent.update({ where: { id: intent.id }, data: { updatedAt: new Date(Date.now() - 3 * 60 * 1000) } });
+
+      await forceJobsDue(['payment_confirm_reconciliation']);
+      const tickRes = await tick();
+      if (tickRes.status !== 200) throw new Error(`Expected /bookings/sweep/tick to return 200, got ${tickRes.status}`);
+      const tickBody = ((await tickRes.json()) as any).data;
+      const jobRun = tickBody.jobs.find((j: any) => j.jobName === 'payment_confirm_reconciliation');
+      console.log('F296_EVIDENCE tick_summary', JSON.stringify(jobRun));
+      if (!jobRun || jobRun.status !== 'SUCCESS') {
+        throw new Error(`Expected payment_confirm_reconciliation to run successfully, got ${JSON.stringify(jobRun)}`);
+      }
+
+      const afterBooking = await db.booking.findUnique({ where: { id: booking.id } });
+      if (afterBooking?.status !== BookingStatus.CONFIRMED) {
+        throw new Error(`Expected the stuck booking to be recovered to CONFIRMED, got ${afterBooking?.status}`);
+      }
+      const dispatch = await db.scheduledJobDispatch.findFirst({
+        where: { jobName: 'payment_confirm_reconciliation', dedupKey: intent.id },
+      });
+      if (dispatch?.status !== 'SENT') {
+        throw new Error(`Expected a real SENT dispatch row for this recovery, got ${JSON.stringify(dispatch)}`);
+      }
+      console.log('F296_EVIDENCE recovered', JSON.stringify({ bookingId: booking.id, intentId: intent.id, dispatchStatus: dispatch.status }));
+    },
+  },
+
+  {
+    name: 'F-296 Stage 1: payment_confirm_reconciliation leaves a CANCELLED booking untouched even with a captured intent (must not force-confirm an invalid booking)',
+    async run() {
+      const pool = await makePool('f296-cancelled', 30);
+      const start = withinTodayUtc(250);
+      start.setUTCMinutes(0, 0, 0);
+      const window = await db.availabilityWindow.create({
+        data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 4 },
+      });
+      const booking = await db.booking.create({
+        data: {
+          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+          userId: 'f296-cancelled-user', status: BookingStatus.CANCELLED, heldUntil: new Date(),
+        },
+      });
+      const intent = await db.paymentIntent.create({
+        data: {
+          tenantId: TENANT_ID, userId: 'f296-cancelled-user', amount: 15000, purpose: 'guest_booking',
+          referenceId: booking.id, status: 'captured', gatewayRef: `pay_f296_cancelled_${Date.now()}`,
+        },
+      });
+      await db.paymentIntent.update({ where: { id: intent.id }, data: { updatedAt: new Date(Date.now() - 3 * 60 * 1000) } });
+
+      await forceJobsDue(['payment_confirm_reconciliation']);
+      const tickRes = await tick();
+      if (tickRes.status !== 200) throw new Error(`Expected /bookings/sweep/tick to return 200, got ${tickRes.status}`);
+
+      const afterBooking = await db.booking.findUnique({ where: { id: booking.id } });
+      if (afterBooking?.status !== BookingStatus.CANCELLED) {
+        throw new Error(`Expected a CANCELLED booking to stay untouched, got ${afterBooking?.status}`);
+      }
+      const dispatch = await db.scheduledJobDispatch.findFirst({
+        where: { jobName: 'payment_confirm_reconciliation', dedupKey: intent.id },
+      });
+      if (dispatch) {
+        throw new Error(`Expected no dispatch row for a CANCELLED booking's intent, got ${JSON.stringify(dispatch)}`);
+      }
+      console.log('F296_EVIDENCE cancelled_untouched', JSON.stringify({ bookingId: booking.id, status: afterBooking.status }));
     },
   },
 ];
