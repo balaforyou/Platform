@@ -98,6 +98,22 @@ function requireBookingOwnership(ownerId: string | null | undefined, callerId: s
   }
 }
 
+/**
+ * F-294: dual-path guard for POST /payments/test/simulate-capture. A real internal caller
+ * using INTERNAL_SERVICE_KEY is trusted outright (returns null -- no ownership check needed,
+ * same "internal bypasses ownership" convention used elsewhere). Anything else must be a
+ * real, valid user JWT -- verified via the existing requireUserJwt, whose claims the caller
+ * then checks against the booking's real owner via requireBookingOwnership, same as every
+ * other booking-scoped payment route (F-045's pattern, reused not reinvented).
+ */
+async function requireInternalOrOwnerJwt(request: any, reply: any): Promise<{ userId: string } | null> {
+  const authHeader = request.headers['authorization'];
+  if (authHeader === `Bearer ${process.env.INTERNAL_SERVICE_KEY}`) {
+    return null;
+  }
+  return requireUserJwt(request, reply);
+}
+
 // Create Payment Intent (with duplicate prevention checks)
 // WHY: Ensures only one intent is created per booking, returning the pending one if retried.
 const createIntentHandler = async (request: any, reply: any) => {
@@ -1499,11 +1515,20 @@ server.post('/refunds/override', async (request, reply) => {
 // WHY: Test-only simulation endpoint gated strictly to non-production to keep secrets secure.
 // Computes signature over simulated payload using the local RAZORPAY_WEBHOOK_SECRET and calls
 // /webhooks/razorpay internally.
+// F-294: was gated ONLY by the NODE_ENV check above -- genuinely reachable on any deployment
+// where NODE_ENV isn't literally 'production' (the deployed demo runs NODE_ENV=development,
+// per root CLAUDE.md's own documented environment facts). Real caller: guest-member-pwa's
+// "Simulate Payment" dev-tool (BookingPay.tsx:140) sends the guest/member's own session JWT,
+// not the internal key -- so this needs the dual-path guard alongside the env check, not a
+// replacement for it, plus the same booking-ownership check every other booking-scoped
+// payment route already enforces (F-045's pattern).
 server.post('/payments/test/simulate-capture', async (request, reply) => {
   if (process.env.NODE_ENV === 'production') {
     reply.status(404);
     throw new Error('Not Found');
   }
+
+  const claims = await requireInternalOrOwnerJwt(request, reply);
 
   const { bookingId } = request.body as any;
   if (!bookingId) {
@@ -1519,6 +1544,13 @@ server.post('/payments/test/simulate-capture', async (request, reply) => {
   if (!intent) {
     reply.status(404);
     throw new Error('Payment intent not found for this booking');
+  }
+
+  // F-294: internal caller (claims === null) is trusted outright; a real user JWT must match
+  // the intent's real owner. Checked before the "already captured" early-return so a foreign
+  // caller can't even learn a booking's capture state.
+  if (claims) {
+    requireBookingOwnership(intent.userId, claims.userId, reply);
   }
 
   if (intent.status === 'captured') {
