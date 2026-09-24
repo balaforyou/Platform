@@ -6541,15 +6541,82 @@ const batchRenewalReminderJob: JobDefinition = {
   },
 };
 
+// F-296 Stage 1: payment's POST /webhooks/razorpay (services/payment/src/index.ts) can leave
+// a booking stuck HELD if the Slot Engine confirm call fails after the intent is already
+// marked captured -- the webhook's own idempotency guard then silently no-ops a retry of the
+// same event. This job detects and finishes that specific stuck state. It reads PaymentIntent
+// (payment's own model) the same way 3 other real sites in this file already do (a read-only
+// cross-model query against the one shared schema, not a new coupling) and writes only to
+// Booking, which is this service's own domain -- it never writes PaymentIntent. Stage 2 (the
+// real root-cause fix: reorder the webhook's dedup-write to after confirm succeeds) is
+// deliberately deferred until this job has real production evidence of how often the bug
+// actually fires.
+const paymentConfirmReconciliationJob: JobDefinition = {
+  name: 'payment_confirm_reconciliation',
+  schedule: { everySeconds: 60 },
+  minimumViableWindowSeconds: 180,
+  async handler(ctx) {
+    // 2-minute minimum-age filter: without it, this job could tick in the narrow window
+    // between the webhook's own status->'captured' write and its own confirm call completing
+    // normally -- harmless (the transaction below is idempotent, same end state either way)
+    // but it would make a "recovered" count noisy: it wouldn't cleanly mean "the webhook
+    // confirm actually failed," just "beat a slow-but-succeeding webhook by milliseconds."
+    // This job's real value is telling us how often the bug genuinely fires (informs the
+    // Stage 2 decision), so keeping detection scoped to genuinely stale state keeps that
+    // signal trustworthy.
+    const stuckCandidates = await prisma.paymentIntent.findMany({
+      where: { status: 'captured', purpose: 'guest_booking', updatedAt: { lt: new Date(Date.now() - 2 * 60_000) } },
+    });
+
+    let processed = 0;
+    let recovered = 0;
+    for (const intent of stuckCandidates) {
+      const booking = await prisma.booking.findUnique({ where: { id: intent.referenceId } });
+      // Only a genuinely stuck HELD booking is this job's business -- CONFIRMED means already
+      // fine, CANCELLED/RELEASED_NO_SHOW means the booking is no longer valid and
+      // force-confirming it would be wrong (a separate financial-reconciliation question, out
+      // of scope here). A child booking is never independently actioned, same guard
+      // /bookings/:id/confirm itself enforces.
+      if (!booking || booking.status !== BookingStatus.HELD || booking.parentBookingId) continue;
+      processed++;
+
+      const claimed = await ctx.store.claimDispatch('payment_confirm_reconciliation', {
+        dedupKey: intent.id,
+        tenantId: intent.tenantId,
+        subjectId: booking.id,
+        occurrenceAt: intent.updatedAt,
+      });
+      if (!claimed) continue;
+
+      try {
+        // Verbatim the HELD -> CONFIRMED transition /bookings/:id/confirm already owns,
+        // reused inline rather than an HTTP self-call -- same "reuse the route's own logic,
+        // don't invent a second delivery mechanism" precedent F-044 Phase 2 already
+        // established for its own three jobs.
+        await prisma.$transaction(async (tx: any) => {
+          await tx.booking.update({ where: { id: booking.id }, data: { status: BookingStatus.CONFIRMED } });
+          await tx.booking.updateMany({ where: { parentBookingId: booking.id }, data: { status: BookingStatus.CONFIRMED } });
+        });
+        await ctx.store.markDispatched('payment_confirm_reconciliation', intent.id);
+        recovered++;
+      } catch (e: any) {
+        await ctx.store.failDispatch('payment_confirm_reconciliation', intent.id, String(e?.message ?? e));
+      }
+    }
+    return { processed, recovered };
+  },
+};
+
 const jobScheduler = createScheduler({
   store: createSqlScheduledJobStore(new PrismaSqlExecutor(prisma)),
-  jobs: [heldBookingExpiryJob, memberAssignmentSweepJob, batchRenewalReminderJob],
+  jobs: [heldBookingExpiryJob, memberAssignmentSweepJob, batchRenewalReminderJob, paymentConfirmReconciliationJob],
 });
 
 const SCHEDULED_JOB_SEEDS: { name: string; intervalSeconds: number }[] = [
   { name: 'held_booking_expiry', intervalSeconds: 60 },
   { name: 'member_assignment_sweep', intervalSeconds: 60 },
   { name: 'batch_renewal_reminder', intervalSeconds: 3600 },
+  { name: 'payment_confirm_reconciliation', intervalSeconds: 60 },
 ];
 
 // Idempotent -- safe to call on every startup. A missing row (first deploy, or one deleted by
