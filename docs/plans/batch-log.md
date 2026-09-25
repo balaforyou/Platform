@@ -4295,6 +4295,43 @@ Chief-assigned **F-304** (walk-in court choice), **F-305** (`guestBookable`), **
 timing flake), and are logged in `pending-findings.md`'s "Awaiting confirmation" section — Open,
 no register rows yet.
 
+## Batch — F-260 register close-out (register-accuracy fix, no new code)
+
+**F-260's register row was left in the Open section for 5 days after its real fix had already
+shipped.** PR #62 ("Fix F-260: automate VM image retention in promote.sh") merged 20 Sep 2026
+(`95ce36d`), but the register row was never flipped Open → Resolved at the time — a real drift of
+exactly the kind CLAUDE.md's own rule 6 exists to prevent, caught while backfilling `claude/` plan
+docs for an unrelated pair of findings (F-269/F-302) surfaced the same gap pattern here.
+
+**Re-verified PR #62 as the real evidence before writing the Resolution**, not carried over from
+memory or the plan file alone: `promote.sh` captures each component's pre-move `:rollback` image ID
+during the existing snapshot step, then — only after `verify-deployment.mjs` confirms the newly
+promoted stack healthy — prunes exactly those IDs with a non-forced `docker rmi` (never on a failed
+promotion; never on `--rollback`). Keeps current + 1 prior generation (14 images). Non-forced
+`docker rmi` was confirmed live pre-merge, on the real VM with throwaway tags, to refuse deleting an
+image ID still referenced by another live tag rather than silently removing it.
+
+**One caveat carried into the register honestly rather than smoothed over**: the PR's own test plan
+left "a real promotion firing the prune path" unchecked at merge time. `promote.sh` has since run
+for real production promotions at least twice without incident (the F-302 and F-269 deploys, 24-25
+Sep, both confirmed on-SHA), but neither run recorded a dedicated "settled at 14 images" observation
+— that specific number stays unconfirmed pending a five-minute check on the next promotion. Recorded
+in the register's Resolution column, not smoothed into "fully verified."
+
+**Register**: F-260 moved from the Open section to the Resolved section (`docs/findings_register.md`
+line ~151 → appended after F-269 in Resolved), Found date unchanged (13 Sep 2026), Resolved date set
+to 20 Sep 2026 (PR #62's actual merge date, not today). Description column kept verbatim (the
+original finding text); a dated backfill note added to Context (not Description, not Resolution —
+following the F-210 precedent for where such notes survive); Resolution written fresh from PR #62's
+real evidence per this project's own resolved-row convention (Impact/Action is never carried over).
+
+**Close-out**: `pnpm register:check` — 270 rows, Open 115 / Resolved 155 (was 116/154: F-260 moved
+Open → Resolved). `pnpm diagram:verify` — clean, all 67 finding tags agree.
+
+This is a register-accuracy fix only — no code touched, no new PR against `promote.sh` itself (PR
+#62 already shipped and is already live in production). Isolated into its own small docs-only PR,
+separate from the unrelated `claude/` plan-doc backfill campaign that surfaced this gap.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
