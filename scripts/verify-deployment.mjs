@@ -41,10 +41,13 @@ const SERVICES = [
 ];
 
 // Static bundles have no /health, so each carries a version.json emitted at build time.
-// Entries are absolute URLs — guest-pwa/admin-web share <baseUrl>, admin-v2 does not.
+// Entries are absolute URLs — guest-pwa shares <baseUrl>, admin-v2 does not.
+// F-302: admin-web's entry removed -- its /admin* route was removed from production
+// Caddy (still live/publicly reachable via a fixed, guessable OTP login with no rate
+// limit), so /admin/version.json no longer resolves there. admin-web itself is
+// deliberately untouched otherwise (kept as code reference; its image still builds).
 const FRONTENDS = [
   ['guest-pwa', `${base}/version.json`],
-  ['admin-web', `${base}/admin/version.json`],
 ];
 if (adminV2Base) {
   FRONTENDS.push(['admin-v2', `${adminV2Base}/version.json`]);

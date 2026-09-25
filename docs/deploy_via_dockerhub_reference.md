@@ -105,9 +105,9 @@ is no `$VAR` for an intermediate shell to eat — `<SHA>` is a literal you subst
 | 6 | Step 6 | retag each → `gcp-vm-<svc>` |
 | 7 | Step 7 | write `GIT_SHA=<SHA>` into `.env` (the key Compose interpolation actually reads for the migrate guard — **not** `EXPECTED_GIT_SHA`; see the comment in the script); assert `SITE_ADDRESS=` present |
 | 8 | Step 8 | `export GIT_SHA` + `sudo -E docker compose --env-file .env run --rm migrate` (F-077 guard — aborts on `FAIL: stale image`), then `up -d --force-recreate` the **6** long-running services (`migrate` is one-shot, `postgres`'s image is unchanged — neither is bounced) |
-| — | — | `wait_for_ready` — poll all 7 endpoints `verify-deployment.mjs` checks until each returns `200` (`up -d` returns on container-start, not app-ready) |
+| — | — | `wait_for_ready` — poll all 6 endpoints `verify-deployment.mjs` checks until each returns `200` (`up -d` returns on container-start, not app-ready); F-302 dropped `/admin/version.json` from this list |
 | 10 | Step 10 | `docker compose logs caddy \| grep -c "listening only on the HTTP port"` must be `0` |
-| 9 | Step 9 | `verify-deployment.mjs https://elitecourts.duckdns.org <SHA>` in a throwaway `node:22` container — all 7 must PASS |
+| 9 | Step 9 | `verify-deployment.mjs https://elitecourts.duckdns.org <SHA>` in a throwaway `node:22` container — all 6 must PASS |
 | 11 | — | **F-260**: prune the generation this promotion superseded — `docker rmi` (no `-f`) by image ID on each component's pre-move `:rollback` ID captured at step 2. Runs only after step 9 passes (a failed promotion never reaches this line), and never on `--rollback`. Keeps exactly current + 1 prior generation (14 images: 7 active, 7 `:rollback`) — a plain, non-forced `rmi` refuses if the ID is still referenced by another live tag (e.g. a component whose image didn't actually change this round), so it can never remove a still-in-use image, confirmed live against the real VM before relying on it. Formalizes the informal manual prune previously run by hand three times (F-206's close-out, Batch 61, Batch 64). |
 
 Any failure prints `<script> <SHA> --rollback`, which restores **both** the
@@ -184,7 +184,8 @@ sudo docker compose ps
 ```powershell
 node scripts/verify-deployment.mjs https://elitecourts.duckdns.org <SHA>
 ```
-Should show all 7 components `PASS`, ending in `deploy is complete.`
+Should show all 6 components `PASS`, ending in `deploy is complete.` (F-302: admin-web
+dropped from this check — its `/admin*` route was removed from production Caddy.)
 
 **Known limitation (F-084)**: this script only checks the reported SHA, not the URL scheme — it cannot by itself detect HTTPS being silently down while HTTP still works. Always pair it with the next check.
 

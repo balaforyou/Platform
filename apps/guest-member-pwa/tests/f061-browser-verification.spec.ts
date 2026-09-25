@@ -66,7 +66,10 @@ test.describe('F-061 browser verification', () => {
     execSync('npx tsx tests/seed-test-data.ts', { cwd: process.cwd() });
   });
 
-  test('Paths 1 and 2 — Admin Web booking-rule save and refund preview', async ({ page }) => {
+  // F-302: admin-web's route was removed from production (no real users, its phone+OTP admin
+  // login was a live account-takeover path) — this path can no longer run against the shipped
+  // stack. Skipped rather than deleted; Path 3 below is guest-only and unaffected.
+  test.skip('Paths 1 and 2 — Admin Web booking-rule save and refund preview', async ({ page }) => {
     await loginByOtp(page, OWNER_PHONE, '/admin');
     // WHY: must anchor to the END of the path — a loose /\/admin/ also matches
     // /admin/login, so the test would proceed before the session existed and the next
