@@ -4215,6 +4215,42 @@ updated to `F-044 (fixed)`; `FLOW-049`'s endpoint updated to `POST /bookings/swe
 notes only, no failures). PRs #89 (Phase 2, already merged prior batch), #90 (decommission, this
 batch) both merged, independently re-verified against real `origin/main`.
 
+## Batch — F-302: admin-web's production route removed (+ F-303 retracted)
+
+**F-302 — resolved as an infrastructure-only change, zero `admin-web` code touched.** Surfaced
+during a founder walkthrough: the legacy `admin-web` app (no real users, admin-v2 replaced it) was
+still live and publicly reachable at `/admin`, and its only login path was phone+OTP accepting the
+fixed dev code `123456` — a real, public account-takeover surface. Bala's instruction: keep
+`admin-web` as code reference only, no further work on it. **F-303** (a dependency catalogue for a
+formal phase-out) was retracted the same session — once the route is gone there's nothing reachable
+left to phase out. Logged in `pending-findings.md` without a register row so the number isn't
+reused.
+
+Investigation and patch drafted in the reviewer conversation; applied and independently re-verified
+here rather than applied blind. **Re-verification caught one real gap the drafted patch missed**:
+`deploy/gcp-vm/promote.sh`'s own `wait_for_ready()` had its own hardcoded `/admin/version.json`
+check, so the next real production promotion would have polled a dead path until it timed out.
+Fixed in the same pass. Changes: `deploy/gcp-vm/Caddyfile` `/admin*` block removed;
+`.github/workflows/ci.yml`, `scripts/verify-deployment.mjs`, `promote.sh`, and
+`docs/deploy_via_dockerhub_reference.md` all dropped from 7 to 6 verified components; 4 Playwright
+specs that drive admin-web UI skipped (not deleted) with an F-302 comment (`f061`'s guest-only
+Path 3 still runs). `admin-web`'s source and its image build/push are untouched — it still ships
+inside the Caddy image, just unrouted.
+
+**Evidence (local shipped stack, built the way CI builds it):** the updated 6-endpoint wait loop
+came up clean; `verify-deployment.mjs` → 6/6 PASS at the built SHA. Every `/admin*` path —
+including `/admin/version.json` and admin-web's own bundle path `/admin/assets/index-DA7TdIG6.js`
+— returns `200` with guest-member-pwa's `index.html` (identical asset hash to `/`), not a 404:
+removing the block makes those paths fall through to the SPA catch-all. Confirmed admin-web's files
+("Admin Web Console") are still present in the image at `/srv/admin-web` but nothing routes to them.
+Full regression 5/5 (179 sections). An earlier run at 23:41 UTC failed 12 sections — all
+`withinTodayUtc`-fixture tests whose windows couldn't fit in the ~18 minutes left in the UTC day
+(the known F-073 constraint; e.g. a window at 23:57 with a cutoff already past); re-run after UTC
+midnight passed clean. Not caused by F-302, which touches no backend code.
+
+**Close-out:** `pnpm register:check` — **270 rows, Open 117 / Resolved 153** (was 269/117/152: one
+new Resolved row, F-302). `pnpm diagram:verify` — clean.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

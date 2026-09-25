@@ -2035,3 +2035,35 @@ further per Chief's instruction (log accurately, pick up in its own pass or the 
 retrofit-batch work).
 Confirmed-ID: F-301
 Confirmed: 23 Sep 2026
+
+### admin-web-public-otp-account-takeover
+Batch: founder walkthrough, 24 Sep 2026
+Surfaced: 24 Sep 2026, Bala's founder walkthrough of the legacy `admin-web` app. Chief-assigned
+same session.
+Honest note: named directly in the reviewer conversation's own decision before this
+pending-findings entry existed, same pattern as the entries above (F-299/F-300/F-301).
+Description: `admin-web` has no real users left (admin-v2 replaced it) but remained live and
+publicly reachable at `<production-host>/admin`. Its phone+OTP admin login accepts a fixed,
+guessable OTP (`123456`, no rate limit) — a real, publicly-reachable account-takeover path.
+Bala's explicit instruction: stop all further work on `admin-web` — keep it in the repo as code
+reference only, no more investigation or fixes to its UI. Closed by removing its production route
+rather than fixing its login, once real investigation confirmed removal was safe (no production
+app code links to `/admin`) and identified what actually needed updating alongside it (CI's
+deploy-verification checks, 4 Playwright specs, and `promote.sh`'s own endpoint list -- the last
+one caught during this session's independent re-verification, not present in the originally
+drafted patch) — see the register row for full evidence.
+Confirmed-ID: F-302
+Confirmed: 24 Sep 2026
+
+### admin-web-dependency-catalogue-for-phase-out
+Batch: founder walkthrough, 24 Sep 2026
+Surfaced: 24 Sep 2026, alongside F-302, as a proposed follow-on: catalogue `admin-web`'s
+dependencies to plan a formal phase-out.
+Description: retracted in the same session, before any Confirmed-ID was assigned. Once Bala gave
+the explicit instruction to stop all work on `admin-web` and keep it only as code reference, a
+dependency-cataloguing project meant real engineering time on a codebase nobody uses and nobody
+wants touched further — not justified once F-302's route-removal made a phase-out project
+unnecessary (nothing reachable left to phase out). No register row exists for this; logged here
+only so the number isn't mistaken for available or re-proposed later without this context.
+Confirmed-ID: none — retracted, never implemented
+Confirmed: n/a

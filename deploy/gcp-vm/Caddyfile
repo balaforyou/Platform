@@ -7,17 +7,13 @@
 # real domain in .env. The doubled colon is not a typo: {$VAR:default} is Caddy's env
 # placeholder syntax and the default here is itself ":80".
 {$SITE_ADDRESS::80} {
-	@adminRoot {
-		path /admin
-	}
-	rewrite @adminRoot /admin/
-
-	handle /admin* {
-		uri strip_prefix /admin
-		root * /srv/admin-web
-		try_files {path} /index.html
-		file_server
-	}
+	# F-302: admin-web's /admin* route removed. Its only login path (phone+OTP) accepted a
+	# fixed, guessable OTP (123456) with no rate limit, and the app was still live and
+	# publicly reachable in production. Bala's decision: stop serving it rather than fix its
+	# login -- admin-web is retired as a live surface, kept in the repo as code reference only
+	# (apps/admin-web itself, and its image build/push in CI, are deliberately untouched).
+	# Falls through to the guest-member-pwa catch-all below (handle {}), not a 404 -- confirmed
+	# real behavior, not assumed.
 
 	handle /api/slot-engine/* {
 		uri strip_prefix /api/slot-engine

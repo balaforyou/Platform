@@ -212,7 +212,12 @@ async function loginByOtp(page: any, phone: string, appPrefix = '') {
   await page.goto(`/?tenant=${tenantSubdomain}`);
 }
 
-test.describe('F-043 Phase C scheduling UI', () => {
+// F-302: admin-web's route was removed from production (no real users, its phone+OTP admin
+// login was a live account-takeover path). This spec drives real admin-web UI (/admin/...)
+// throughout and can no longer run against the shipped stack. Skipped rather than deleted —
+// the app's source stays in the repo as reference, and this is real coverage if admin-web is
+// ever revived behind auth instead of removed.
+test.describe.skip('F-043 Phase C scheduling UI', () => {
   test.setTimeout(240000);
   let processes: ChildProcess[] = [];
   let proxyServer: http.Server;

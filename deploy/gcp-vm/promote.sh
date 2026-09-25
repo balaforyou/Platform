@@ -71,6 +71,8 @@ recreate_services() {
 # recreated services take a few seconds and Caddy returns 502 in the gap. Without this the
 # verify step (and the Caddy grep) races the stack coming up.
 wait_for_ready() {
+  # F-302: /admin/version.json dropped -- admin-web's /admin* route was removed from
+  # this same Caddyfile, so this endpoint no longer resolves in production.
   local paths="
     /api/slot-engine/health
     /api/identity/health
@@ -78,7 +80,6 @@ wait_for_ready() {
     /api/payment/health
     /api/notification/health
     /version.json
-    /admin/version.json
   "
   local i ep ok
   for i in $(seq 1 40); do
