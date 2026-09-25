@@ -223,6 +223,42 @@ F-228 steps and root cause not yet established.
 Confirmed-ID: F-232
 Confirmed: 11 Sep 2026
 
+### pooled-walkin-tapped-court-ignored
+Batch: F-269 (PR #100), 25 Sep 2026
+Surfaced: 25 Sep 2026, during F-269's investigation; described (not numbered) in PR #100 and the
+F-269 batch-log entry, Chief-assigned the same day.
+Description: for a POOLED pool, admin-v2's walk-in flow sends the tapped court's `resourceId`, but
+`POST /bookings/negotiated` (`services/slot-engine/src/index.ts`) ignores it and always re-picks the
+first free court via `assignPooledCourt`. An admin who taps Court 3 can see the booking land on
+Court 1 or 2. Masked until F-269: the Guest Slot Inventory grid used to draw every POOLED booking
+across all courts, so the mismatch was never visible. Real UX bug, admin-facing.
+Confirmed-ID: F-304
+Confirmed: 25 Sep 2026
+
+### guest-inventory-grid-ignores-guestbookable
+Batch: F-269 (PR #100), 25 Sep 2026
+Surfaced: 25 Sep 2026, during F-269's investigation; described (not numbered) in PR #100 and the
+F-269 batch-log entry, Chief-assigned the same day.
+Description: the Guest Slot Inventory grid (`GET /branches/:id/guest-inventory-grid`) ignores a
+court's `guestBookable` flag (F-225). A court not open to walk-in guests still renders
+`guest-vacant`, although a walk-in booking can never be assigned to it. Low severity,
+cosmetic-adjacent.
+Confirmed-ID: F-305
+Confirmed: 25 Sep 2026
+
+### f133d-enddate-window-assertion-timing-sensitive
+Batch: F-269 (PR #100), 25 Sep 2026
+Surfaced: 25 Sep 2026, in F-269's full local regression run -- one run failed only F-133D's
+`Remove -- PATCH .../:id to SUSPENDED sets endDate to the real suspension moment` section
+(`services/slot-engine/src/regression/group-relocate-remove.regression.ts`): `Expected endDate
+within [2026-09-25T01:13:53.103Z, 2026-09-25T01:13:53.124Z], got 2026-09-25T01:13:53.128Z` --
+4 ms past the upper bound. The full re-run passed 5/5. Chief-assigned the same day.
+Description: the section's `[before, after]` bracket for `endDate` is timing-sensitive -- the stored
+suspension moment can land a few milliseconds outside the window the test measures. Test-infra
+flake, not a product bug; needs a wider tolerance or a deterministic clock. Not urgent.
+Confirmed-ID: F-306
+Confirmed: 25 Sep 2026
+
 ## Promoted (audit trail)
 
 ### booking-rule-route-missing-owner-and-entitlement-gate

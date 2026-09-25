@@ -4283,6 +4283,18 @@ by 4 ms once, passed on re-run).
 **Close-out:** `pnpm register:check` — **270 rows, Open 116 / Resolved 154** (was 270/117/153: F-269
 moved Open → Resolved). `pnpm diagram:verify` — clean (all 67 finding tags agree).
 
+**Merged and deployed (25 Sep 2026):** PR #100 (plus a test-only commit, `5996f6b`, for two Codacy
+findings in the new regression file: `crypto.randomUUID()` fixture id, `URL`-built request) merged
+as `38bfe69`; main CI green; `promote.sh 38bfe69dd73a45f0636d7ffb14b677f1480d0aae` → all 7
+components report `38bfe69dd73a`. **Production proof, the reported slot itself** (read-only, live
+`guest-inventory-grid` route called inside `gcp-vm-slot-engine-1`): JBC – New Japan Badminton
+Court – Main Courts, 25 Sep 2026, 7:00 AM IST (01:30 UTC) — court 5 `guest-booked`
+(`d7a9ae7c…`, the one CONFIRMED booking, `resourceId` = court 5), courts 6/7/8 `guest-vacant`.
+Before the fix, the same slot showed all four courts booked. The three items described above were
+Chief-assigned **F-304** (walk-in court choice), **F-305** (`guestBookable`), **F-306** (F-133D
+timing flake), and are logged in `pending-findings.md`'s "Awaiting confirmation" section — Open,
+no register rows yet.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
