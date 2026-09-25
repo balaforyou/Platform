@@ -151,6 +151,34 @@ function assignPooledCourt(
 }
 
 /**
+ * F-269: which court each booking on a shared (POOLED, `resourceId: null`) window is drawn on.
+ * A booking with a real `resourceId` in this pool goes on that court; one without (pre-F-186/F-205
+ * bookings, or a court since removed) goes on its `courtSlotIndex` court if free, else the first
+ * free court. `orderedCourtIds` must be Court N order (createdAt asc). Display-only: occupancy
+ * counts never go through this, so an unplaceable extra booking changes no count.
+ */
+function placeBookingsOnCourts<T extends { resourceId: string | null; courtSlotIndex: number | null }>(
+  bookings: T[],
+  orderedCourtIds: string[],
+): Map<string, T> {
+  const placed = new Map<string, T>();
+  const unplaced: T[] = [];
+  for (const booking of bookings) {
+    if (booking.resourceId && orderedCourtIds.includes(booking.resourceId) && !placed.has(booking.resourceId)) {
+      placed.set(booking.resourceId, booking);
+    } else {
+      unplaced.push(booking);
+    }
+  }
+  for (const booking of unplaced) {
+    const indexed = booking.courtSlotIndex != null ? orderedCourtIds[booking.courtSlotIndex - 1] : undefined;
+    const courtId = indexed && !placed.has(indexed) ? indexed : orderedCourtIds.find((id) => !placed.has(id));
+    if (courtId) placed.set(courtId, booking);
+  }
+  return placed;
+}
+
+/**
  * F-263: a human-facing court label, honest about whether `courtSlotIndex` ties to a real
  * `Resource` or is F-186's cosmetic fallback index. Both paths set a non-null `courtSlotIndex`
  * (see `assignPooledCourt` above), so `courtSlotIndex != null` alone can't distinguish them --
@@ -1204,6 +1232,7 @@ type GuestDayBooking = {
   id: string;
   userId: string;
   resourceId: string | null;
+  courtSlotIndex: number | null;
   price: Prisma.Decimal | null;
   isMemberBooking: boolean;
   status: BookingStatus;
@@ -1258,7 +1287,9 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
       id: true,
       name: true,
       minBookingDurationMinutes: true,
-      resources: { select: { id: true, name: true, guestBookable: true } },
+      // F-269: createdAt order is "Court N" order (same order assignPooledCourt numbers courts
+      // by), so grid columns and per-court booking placement line up with court numbering.
+      resources: { select: { id: true, name: true, guestBookable: true }, orderBy: { createdAt: 'asc' } },
     },
     orderBy: { name: 'asc' },
   });
@@ -1290,6 +1321,7 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
             windowId: true,
             userId: true,
             resourceId: true,
+            courtSlotIndex: true,
             price: true,
             isMemberBooking: true,
             status: true,
@@ -1356,6 +1388,30 @@ async function computeBranchGuestDay(branchId: string, date: string | undefined,
   });
 
   return { timeZone, dateString, pools, windows, guestUserMap };
+}
+
+/**
+ * F-269: returns a lookup for "which live / cancelled guest booking is drawn on this court in
+ * this window". A FIXED_INSTANCE window already belongs to one court; a POOLED window is shared,
+ * so its bookings are placed per court (placeBookingsOnCourts) once per window and cached --
+ * never recomputed per court, same once-per-window discipline as F-276's group eligibility.
+ */
+function createCourtPlacementResolver() {
+  const cache = new Map<string, { live: Map<string, GuestDayBooking>; cancelled: Map<string, GuestDayBooking> }>();
+  return (window: GuestDayWindow, courtIds: string[], courtId: string) => {
+    if (window.resourceId != null) {
+      return { live: window.guestBookings[0], cancelled: window.cancelledBookings[0] };
+    }
+    let placement = cache.get(window.id);
+    if (!placement) {
+      placement = {
+        live: placeBookingsOnCourts(window.guestBookings, courtIds),
+        cancelled: placeBookingsOnCourts(window.cancelledBookings, courtIds),
+      };
+      cache.set(window.id, placement);
+    }
+    return { live: placement.live.get(courtId), cancelled: placement.cancelled.get(courtId) };
+  };
 }
 
 // F-258 Phase 1: This Month tab — branch-wide totals for a calendar month, reusing
@@ -1495,10 +1551,13 @@ server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => 
       .map((g) => [g.groupId, g]),
   );
 
-  // Live allocation is a per-resource snapshot of "now". For a POOLED pool (resourceId null on
-  // the window), every resource in the pool shares the same window snapshot — POOLED pools have
-  // no fixed per-court identity to disambiguate further, same limitation ReservationsPanel's own
-  // "Court is assigned automatically for this pool" copy already accepts.
+  // Live allocation is a per-resource snapshot of "now". A POOLED pool's window is shared by every
+  // court (resourceId null); F-269: a guest booking is shown only on the court it is placed on
+  // (its real F-205 court, else the first free one) via the same once-per-window resolver the
+  // inventory grid uses. Member state (memberBlocked/memberBooked) is still window-wide, matching
+  // F-207.2's rule that a member-reserved slot is withheld from guests as a whole.
+  const bookingsOnCourt = createCourtPlacementResolver();
+  const courtIdsByPool = new Map(day.pools.map((pool) => [pool.id, pool.resources.map((r) => r.id)]));
   const liveAllocation = day.pools.flatMap((pool) => pool.resources.map((resource) => {
     const currentWindow = day.windows.find((window) => (
       window.resourcePoolId === pool.id &&
@@ -1519,9 +1578,10 @@ server.get('/branches/:id/guest-occupancy-dashboard', async (request, reply) => 
       // "Member no-show — released" and offering "Place a guest" again after the fact, since the
       // group's own attendance state (zero members ever confirmed) never changes just because a
       // guest was placed into it. A real occupant is always the most current truth for a court.
-      if (currentWindow.guestBookings.length > 0) {
+      const guestOnCourt = bookingsOnCourt(currentWindow, courtIdsByPool.get(pool.id) ?? [], resource.id).live;
+      if (guestOnCourt) {
         status = 'guest';
-        const user = day.guestUserMap.get(currentWindow.guestBookings[0].userId);
+        const user = day.guestUserMap.get(guestOnCourt.userId);
         guestName = user?.name || user?.phone || null;
       } else {
         const groupEligibility = currentWindow.memberBlockedGroupId
@@ -1632,6 +1692,11 @@ server.get('/branches/:id/guest-inventory-grid', async (request, reply) => {
   const poolWindows = day.windows.filter((window) => window.resourcePoolId === poolId);
   const now = new Date();
 
+  // F-269: a POOLED window is shared by every court, so each booking is drawn on its own court
+  // only -- not on every column the shared window matches.
+  const courtIds = pool.resources.map((resource) => resource.id);
+  const bookingsOnCourt = createCourtPlacementResolver();
+
   const cells = pool.resources.flatMap((resource) => rowStarts.map((rowStart) => {
     const window = poolWindows.find((w) => (
       w.startTime.getTime() === rowStart.getTime() && (w.resourceId === resource.id || w.resourceId == null)
@@ -1655,8 +1720,9 @@ server.get('/branches/:id/guest-inventory-grid', async (request, reply) => {
       };
     }
     const isElapsed = now >= window.endTime;
-    if (window.guestBookings.length > 0) {
-      const booking = window.guestBookings[0];
+    const onCourt = bookingsOnCourt(window, courtIds, resource.id);
+    if (onCourt.live) {
+      const booking = onCourt.live;
       return {
         type: isElapsed ? ('completed' as const) : ('guest-booked' as const),
         resourceId: resource.id,
@@ -1669,8 +1735,8 @@ server.get('/branches/:id/guest-inventory-grid', async (request, reply) => {
     // F-252: Cancelled is elapsed-only — a future slot cancelled and reopened with nothing
     // rebooked into it renders as plain Open (Q1, confirmed by the mock's own footnote), never
     // as its own state. Only an elapsed, unresolved cancellation gets the Cancelled treatment.
-    if (isElapsed && window.cancelledBookings.length > 0) {
-      const booking = window.cancelledBookings[0];
+    if (isElapsed && onCourt.cancelled) {
+      const booking = onCourt.cancelled;
       return {
         type: 'cancelled' as const,
         resourceId: resource.id,

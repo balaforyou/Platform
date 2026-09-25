@@ -4251,6 +4251,38 @@ midnight passed clean. Not caused by F-302, which touches no backend code.
 **Close-out:** `pnpm register:check` — **270 rows, Open 117 / Resolved 153** (was 269/117/152: one
 new Resolved row, F-302). `pnpm diagram:verify` — clean.
 
+## Batch — F-269: POOLED bookings drawn on their own court only (Inventory grid + Dashboard)
+
+**F-269 — resolved without the redesign its row anticipated.** Reported live by Bala: admin-v2's
+Guest Slot Inventory for JBC New Japan, 25 Sep 2026, showed all 4 courts booked at 7:00 AM by the
+same guest. Production read-back: one shared POOLED window (`resourceId` null), one CONFIRMED
+booking, assigned to one real court — three courts genuinely free. F-205 now gives every new POOLED
+booking a real `resourceId`, which `computeBranchGuestDay` already loads, so the fix is a placement
+step: new `placeBookingsOnCourts` (real court first; then `courtSlotIndex` court if free; then first
+free court in Court N / `createdAt` order), used by both the Inventory grid and the Dashboard's live
+allocation through one per-window cached resolver (placement computed once per window, per the
+plan-review refinement). Resources now `orderBy createdAt asc`. FIXED_INSTANCE and the row-wide
+`member-blocked` rule unchanged; occupancy counts untouched. Server-side only — no admin-v2 change.
+
+**Evidence:** new `pooled-court-placement.regression.ts` (3 sections: grid placement incl. no-court
+fallback, `courtSlotIndex`, elapsed completed/cancelled and column order; FIXED_INSTANCE unchanged;
+dashboard `liveAllocation`) — red against the old code, green after. Dev-stack live check: JBC in
+admin-v2 — 10:00 AM row only Court 3 Booked, 1/2/4 Open, detail sheet shows Court 3; courtowner1
+isn't entitled to GUEST_BOOKING on the dev DB (admin-v2 correctly gets `MODULE_NOT_ENTITLED`), so it
+was checked through the running slot-engine route with the internal key — only Court 3
+`guest-booked`. Seed data removed afterwards. Full regression 5/5 (182 sections); one earlier run
+failed only F-133D's endDate-window check by 4 ms (`group-relocate-remove`, untouched here) and
+passed on the full re-run — a timing-sensitive assertion, described below.
+
+**Described, not numbered (for Chief):** (1) the walk-in flow's tapped court is ignored for POOLED
+pools — `/bookings/negotiated` re-picks via `assignPooledCourt`, now visible since free courts show
+as free; (2) the grid ignores `guestBookable` (F-225) — a non-guest-bookable court shows
+`guest-vacant`; (3) F-133D's "endDate within [before, after]" assertion is timing-sensitive (failed
+by 4 ms once, passed on re-run).
+
+**Close-out:** `pnpm register:check` — **270 rows, Open 116 / Resolved 154** (was 270/117/153: F-269
+moved Open → Resolved). `pnpm diagram:verify` — clean (all 67 finding tags agree).
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
