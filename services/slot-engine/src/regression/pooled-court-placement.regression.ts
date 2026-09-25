@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Section } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
 import { db, baseUrl, internalKey, SlotEngineContext, TENANT_ID, BRANCH_ID } from './_fixtures';
@@ -49,7 +50,7 @@ async function makeBooking(
       branchId: BRANCH_ID,
       resourcePoolId: poolId,
       windowId,
-      userId: opts.userId ?? `f269-user-${Math.random().toString(36).slice(2, 8)}`,
+      userId: opts.userId ?? `f269-user-${randomUUID()}`,
       status: opts.status ?? BookingStatus.CONFIRMED,
       heldUntil: new Date(),
       isMemberBooking: false,
@@ -60,7 +61,10 @@ async function makeBooking(
 }
 
 async function grid(poolId: string, date: string) {
-  const res = await fetch(`${baseUrl}/branches/${BRANCH_ID}/guest-inventory-grid?date=${date}&poolId=${poolId}`, { headers: auth });
+  const url = new URL(`/branches/${BRANCH_ID}/guest-inventory-grid`, baseUrl);
+  url.searchParams.set('date', date);
+  url.searchParams.set('poolId', poolId);
+  const res = await fetch(url, { headers: auth });
   if (res.status !== 200) throw new Error(`guest-inventory-grid: expected 200, got ${res.status}: ${await res.text()}`);
   return ((await res.json()) as any).data as { resources: { id: string }[]; cells: any[] };
 }
