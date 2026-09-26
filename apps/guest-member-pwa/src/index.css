@@ -79,7 +79,7 @@
    */
 
   /* --- fixed universal tokens (verbatim from ds.css) --- */
-  --color-bg: #f5ead8;
+  --color-bg: #f8fafc;
   --color-text: #201e1d;
 
   --color-neutral-100: #f9f4ed;
@@ -129,7 +129,7 @@
      apps/admin-v2/src/styles.css already uses for its own --av2-accent role token. */
   --color-accent-emphasis: var(--color-accent-700);
 
-  --font-heading: 'Caprasimo', system-ui, sans-serif;
+  --font-heading: 'Inter', system-ui, sans-serif;
   /* The canonical --font-body name is now vacant (the old Inter shorthand was renamed to
      --font-body-legacy-inter above). --font-body-organic still holds the Figtree family and has
      live consumers; a later slice repoints those and promotes this to --font-body. Kept as-is
@@ -206,6 +206,15 @@
      pale cream), the available slot cards were unreadable in dark mode. Same root-cause pattern
      as Correction 6's Button.css fix, caught live while verifying this slice's real screen. */
   --slot-available-surface: var(--color-neutral-100);
+  /* 26 Sep 2026 UI-polish batch: --surface-header/--mint-surface/--border-subtle are F-146 light
+     palette tokens that were never given a dark override (same root-cause class as Correction 5
+     above) -- this batch's new Shell.tsx nav / BranchBooking.tsx top-bar backgrounds paired them
+     with --color-text/--color-neutral-700, which DO invert to pale cream in dark mode, so the
+     fixed-white glass surface + inverted-light text combination went unreadable. Caught live via
+     getComputedStyle while verifying this batch's own screens, not assumed. */
+  --surface-header: rgba(32, 29, 23, 0.82);
+  --mint-surface: #1c2620;
+  --border-subtle: #3a3527;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -235,6 +244,9 @@
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
     --color-accent-emphasis: var(--color-accent-emphasis-dark, var(--color-accent-700));
     --slot-available-surface: var(--color-neutral-100);
+    --surface-header: rgba(32, 29, 23, 0.82);
+    --mint-surface: #1c2620;
+    --border-subtle: #3a3527;
   }
 }
 

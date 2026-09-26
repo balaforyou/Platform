@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest, branchHour, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { Calendar, ChevronDown, Star, Activity, ShieldAlert } from 'lucide-react';
+import { Calendar, ArrowLeft, Info, Activity, ShieldAlert } from 'lucide-react';
 import VenueSwitcherSheet, { type Branch } from './VenueSwitcherSheet';
 import AboutSheet from './AboutSheet';
 import VerifyPhoneDialog from './VerifyPhoneDialog';
@@ -409,23 +409,30 @@ export default function BranchBooking() {
 
   return (
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '1024px' }}>
-      <div className="gpwa-branchbooking__header">
-        <button
-          type="button"
-          className="gpwa-branchbooking__venue-chip"
-          onClick={() => setVenueSheetOpen(true)}
-        >
-          <span>{branchAbout?.name || 'Choose a venue'}</span>
-          <ChevronDown className="h-4 w-4" />
+      {/* 26 Sep 2026 UI-polish batch: replaces the dark dropdown pill (venue-chip) + separate
+          Star about-badge row with one sticky top bar. Both real triggers are kept, relocated
+          rather than dropped -- venue-switch is now the title tap target, about-sheet opens from
+          the info icon next to the subtitle. Judgment call, flagged for Bala/Chief: the two were
+          genuinely separate elements (different sheets), so "fold both into the new bar" was this
+          session's interpretation of a handover line that read them as one -- open to correction.
+          Avatar is intentionally not duplicated here -- Shell.tsx's fixed account-trigger already
+          covers every route. */}
+      <div className="gpwa-branchbooking__topbar">
+        <button type="button" className="gpwa-branchbooking__back-btn" onClick={() => navigate(-1)} aria-label="Back">
+          <ArrowLeft className="h-5 w-5" />
         </button>
+        <div className="gpwa-branchbooking__topbar-text">
+          <button type="button" className="gpwa-branchbooking__topbar-title" onClick={() => setVenueSheetOpen(true)}>
+            {branchAbout?.name || 'Choose a venue'}
+          </button>
+          {branchAbout && (
+            <button type="button" className="gpwa-branchbooking__topbar-subtitle" onClick={() => setAboutSheetOpen(true)}>
+              <span>{branchAbout.address || branchAbout.name}</span>
+              <Info className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
-
-      {branchAbout && (
-        <button type="button" className="gpwa-branchbooking__about-badge" onClick={() => setAboutSheetOpen(true)}>
-          <Star className="h-3.5 w-3.5" style={{ color: 'var(--color-accent-2-700)' }} />
-          <span>{branchAbout.address || branchAbout.name}</span>
-        </button>
-      )}
 
       <VenueSwitcherSheet
         open={venueSheetOpen}
@@ -508,7 +515,7 @@ export default function BranchBooking() {
 
               <div className="space-y-3">
                 <h3 style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
-                  01 &middot; DAY
+                  Select Date
                 </h3>
 
                 <div className="flex items-center gap-2">
@@ -580,7 +587,7 @@ export default function BranchBooking() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
-                    02 &middot; START
+                    Select Time
                   </h3>
                 </div>
 
@@ -839,11 +846,19 @@ export default function BranchBooking() {
                   <div className="sm:hidden" style={{ height: '108px' }} />
                 </>
               ) : (
+                /* 26 Sep 2026 UI-polish batch: hidden on mobile (hidden sm:block) rather than
+                   removed outright -- once a slot IS selected, mobile already gets a real fixed
+                   bottom bar (below) acting as the de facto "anchored bottom sheet"; rebuilding
+                   that working duration-stepper/rate-source/booking-rules panel into a stripped
+                   two-row sheet would be a functional rewrite of live reserve logic, not a
+                   styling pass, so it's kept intact and just no longer shows empty dead space in
+                   the middle of the mobile screen before a slot is picked. Desktop keeps its
+                   inline placeholder in the static side column, unchanged. */
                 <div
-                  className="p-6 text-center py-16 text-xs font-semibold"
+                  className="hidden sm:block p-6 text-center py-16 text-xs font-semibold"
                   style={{
-                    background: 'var(--color-neutral-100)',
-                    border: '1px solid var(--color-neutral-300)',
+                    background: 'var(--mint-surface)',
+                    border: '1px solid var(--border-subtle)',
                     borderRadius: 'var(--radius-md)',
                     fontFamily: 'var(--font-body-organic)',
                     color: 'var(--color-neutral-600)',
