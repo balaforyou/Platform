@@ -140,14 +140,14 @@ export default function BookingConfirmation() {
         style={{
           paddingTop: '56px',
           paddingBottom: '40px',
-          background: isConfirmed ? 'var(--color-accent-2-800)' : 'var(--slot-almostfull-surface)',
+          background: isConfirmed ? 'var(--color-accent-800)' : 'var(--slot-almostfull-surface)',
         }}
       >
         <div
           className="h-16 w-16 rounded-full flex items-center justify-center"
           style={{
-            background: isConfirmed ? 'var(--color-accent-2-300)' : 'var(--slot-almostfull-border)',
-            color: isConfirmed ? 'var(--color-accent-2-900)' : 'var(--slot-almostfull-text)',
+            background: isConfirmed ? 'var(--color-accent-300)' : 'var(--slot-almostfull-border)',
+            color: isConfirmed ? 'var(--color-accent-900)' : 'var(--slot-almostfull-text)',
           }}
         >
           {isConfirmed ? <CheckCircle className="h-8 w-8" /> : <Activity className="h-8 w-8 animate-spin" />}
@@ -167,7 +167,7 @@ export default function BookingConfirmation() {
           </h2>
           <p
             className="text-[13.5px] leading-relaxed"
-            style={{ color: isConfirmed ? 'var(--color-accent-2-200)' : 'var(--slot-almostfull-text)' }}
+            style={{ color: isConfirmed ? 'var(--color-accent-200)' : 'var(--slot-almostfull-text)' }}
           >
             {isConfirmed
               ? (user?.phone ? `Confirmation sent to ${user.phone}.` : 'Payment captured successfully.')
@@ -176,7 +176,7 @@ export default function BookingConfirmation() {
         </div>
 
         {booking?.window && (
-          <div style={{ color: isConfirmed ? 'var(--color-accent-2-100)' : 'var(--slot-almostfull-text)' }}>
+          <div style={{ color: isConfirmed ? 'var(--color-accent-100)' : 'var(--slot-almostfull-text)' }}>
             <div className="text-[13.5px] font-bold">{sDate} &middot; {st} - {et}</div>
             {branchAbout?.name && <div className="text-[13.5px]" id="confirmation-venue-name">{branchAbout.name}</div>}
           </div>
@@ -212,7 +212,7 @@ export default function BookingConfirmation() {
               });
             }}
             className="w-full min-h-[50px] flex items-center justify-center gap-2 font-bold text-[14px]"
-            style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)', border: 'none', borderRadius: '14px' }}
+            style={{ background: 'var(--color-accent-400)', color: 'var(--color-neutral-900)', border: 'none', borderRadius: '14px' }}
           >
             <Download className="h-4 w-4" />
             <span>Download Receipt (PDF)</span>
@@ -223,7 +223,7 @@ export default function BookingConfirmation() {
           to="/"
           className="w-full min-h-[50px] flex items-center justify-center font-bold text-[14px]"
           style={{
-            border: `1px solid ${isConfirmed ? 'var(--color-accent-2-200)' : 'var(--slot-almostfull-border)'}`,
+            border: `1px solid ${isConfirmed ? 'var(--color-accent-200)' : 'var(--slot-almostfull-border)'}`,
             color: isConfirmed ? 'var(--color-bg)' : 'var(--slot-almostfull-text)',
             borderRadius: '14px',
           }}

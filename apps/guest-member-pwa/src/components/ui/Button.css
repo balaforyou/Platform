@@ -23,8 +23,8 @@
 }
 
 .gpwa-btn[data-variant='primary'] {
-  background: var(--color-accent-2-400);
-  color: #3a2800;
+  background: var(--color-accent-400);
+  color: var(--color-neutral-900);
 }
 .gpwa-btn[data-variant='secondary'] {
   /* F-235 Phase 0 Correction 6: was a static #fff literal, never themed -- --color-text
@@ -43,7 +43,7 @@
 
 @media (hover: hover) {
   .gpwa-btn[data-variant='primary']:not(:disabled):hover {
-    background: color-mix(in srgb, var(--color-accent-2-400) 94%, black);
+    background: color-mix(in srgb, var(--color-accent-400) 94%, black);
   }
   .gpwa-btn[data-variant='secondary']:not(:disabled):hover {
     /* Same Correction 6 fix -- was mixing from the static #fff, which no longer matches the

@@ -56,8 +56,9 @@
    * F-192 Slice D: Selected is now a SOLID --color-accent-700 fill (was a 10% --brand-primary
    * tint over white), with --slot-selected-label / --slot-selected-meta carrying the light text
    * on top -- the tenant-derived accent ramp still drives it, so it follows the tenant's brand
-   * without the weak-tint problem. Seats-left "available" joins the fixed sage ramp
-   * (--color-accent-2-700). Almost Full keeps its amber-on-cream: a scarcity signal, not an
+   * without the weak-tint problem. Seats-left "available" repointed to the tenant-derived
+   * ramp (--color-accent-700) in the 26 Sep 2026 feedback round's full gold-to-green reversal
+   * -- was the fixed sage/gold ramp before. Almost Full keeps its amber-on-cream: a scarcity signal, not an
    * error, and the one sanctioned non-system colour on this screen.
    * Consumed only by CourtBooking.tsx.
    */
@@ -66,7 +67,7 @@
 
   --slot-available-border: var(--color-neutral-300);
   --slot-available-surface: var(--surface-white);
-  --slot-available-accent: var(--color-accent-2-700);
+  --slot-available-accent: var(--color-accent-700);
 
   --slot-almostfull-border: #fed7aa;
   --slot-almostfull-surface: #fff7ed;

@@ -6795,7 +6795,12 @@ server.get('/bookings/:id', async (request, reply) => {
     include: {
       window: {
         include: {
-          resourcePool: true,
+          // 26 Sep 2026 feedback round: BookingPay.tsx's cancellation-policy display (moved
+          // here from BranchBooking.tsx) needs the pool's real bookingRules -- additive only,
+          // no other consumer of this route is affected by an extra nested field.
+          resourcePool: {
+            include: { bookingRules: true },
+          },
         }
       },
       players: true,

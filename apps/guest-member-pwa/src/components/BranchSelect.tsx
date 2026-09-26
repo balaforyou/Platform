@@ -141,7 +141,7 @@ export default function BranchSelect() {
 
               {branch.workingHoursStart && branch.workingHoursEnd && (
                 <div className="flex items-center gap-2" style={{ fontFamily: 'var(--font-body-organic)', fontSize: '12.5px', color: 'var(--color-neutral-700)' }}>
-                  <Clock className="h-[15px] w-[15px] shrink-0" style={{ color: 'var(--color-accent-2-700)' }} />
+                  <Clock className="h-[15px] w-[15px] shrink-0" style={{ color: 'var(--color-accent-700)' }} />
                   <span>
                     Open {branch.workingHoursStart} &ndash; {branch.workingHoursEnd}
                   </span>
