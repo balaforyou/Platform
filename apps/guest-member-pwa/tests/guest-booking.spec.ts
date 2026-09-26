@@ -35,7 +35,7 @@ test.describe('Guest Booking Flow E2E', () => {
 
     // Verify redirect to main dashboard
     await expect(page).toHaveURL('/');
-    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible();
+    await expect(page.locator('text=Welcome!')).toBeVisible();
 
     // 2. Click "Book Court Now" -- F-235 Slice A: lands directly on the merged /book screen
     // (venue-switcher chip + About badge + booking UI, no more separate /branches routes).
@@ -43,14 +43,14 @@ test.describe('Guest Booking Flow E2E', () => {
     await expect(page).toHaveURL('/book');
 
     // 3. Open the venue-switcher sheet and pick Coimbatore Main Arena
-    await page.click('.gpwa-branchbooking__venue-chip');
+    await page.click('.gpwa-branchbooking__topbar-title');
     const coimbatoreCard = page.locator('[id^="branch-card-22222222-2222-2222-2222-222222222222"]');
     await expect(coimbatoreCard).toBeVisible();
     await coimbatoreCard.click();
 
     // 4. Open the About sheet for the same real venue-info content that used to live at
     // /branches/:id/about.
-    await page.click('.gpwa-branchbooking__about-badge');
+    await page.click('.gpwa-branchbooking__topbar-subtitle');
     await expect(page.locator('text=Cafeteria')).toBeVisible();
     await page.click('.gpwa-about-sheet__close');
 
@@ -83,9 +83,9 @@ test.describe('Guest Booking Flow E2E', () => {
     expect(amountToPay).toContain('₹150');
     console.log(`[ASSERT SUCCESS] Verified checkout payment page amount is: ${amountToPay?.trim()}`);
 
-    // F-235 Slice B: the pay button is now gated on real terms acceptance -- check the box and
-    // wait for it to actually clear the button's disabled state before clicking pay.
-    await page.click('#accept-terms-checkbox');
+    // F-307 (26 Sep 2026): the visible checkbox is gone -- clicking the simulate-payment button
+    // itself now records terms acceptance (POST /bookings/:id/terms) and creates the intent
+    // before calling simulate-capture, so no separate checkbox interaction exists to click.
     await expect(page.locator('#simulate-success-pay-btn')).toBeEnabled();
 
     // Click the local dev simulate payment button
@@ -121,7 +121,7 @@ test.describe('Guest Booking Flow E2E', () => {
     
     // Return to Dashboard to start booking 2 by clicking the logo
     await page.click('a[href="/"]');
-    await expect(page.locator('text=Welcome back to Elite Courts')).toBeVisible();
+    await expect(page.locator('text=Welcome!')).toBeVisible();
     await page.click('#book-court-dashboard-btn');
     await expect(page).toHaveURL('/book');
 
@@ -139,7 +139,6 @@ test.describe('Guest Booking Flow E2E', () => {
     
     // Pay for Booking 2
     await expect(page).toHaveURL(/\/bookings\/.*\/pay/);
-    await page.click('#accept-terms-checkbox');
     await expect(page.locator('#simulate-success-pay-btn')).toBeEnabled();
     await page.click('#simulate-success-pay-btn');
     

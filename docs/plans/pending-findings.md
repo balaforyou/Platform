@@ -2103,3 +2103,27 @@ unnecessary (nothing reachable left to phase out). No register row exists for th
 only so the number isn't mistaken for available or re-proposed later without this context.
 Confirmed-ID: none — retracted, never implemented
 Confirmed: n/a
+
+### terms-checkbox-implicit-consent
+Batch: guest-member-pwa UI-polish (Home / Slot & Time Selection / Review & Pay), 26 Sep 2026
+Surfaced: 26 Sep 2026, folded into the UI-polish handover as Part 3 §5, Bala-approved ("Option B
+to reduce UI friction"). Honest note, same pattern as the entries above: the decision doc this
+handover originally cited (`claude/chief-decision-f307-terms-checkbox-implicit-consent-26sep.md`)
+does not exist anywhere in the repo — confirmed by direct search before implementation began, per
+this project's source-of-truth rule against inventing content for a referenced-but-missing ID.
+Chief pasted the real decision content directly into the implementing session instead, which is
+what this entry and the register row are built from.
+Description: `BookingPay.tsx`'s explicit "I agree to the venue's court rules..." checkbox
+(`accept-terms-checkbox`, real, server-write-gated since F-235 Slice B) is replaced with a passive
+disclaimer sentence above the Pay button — pressing Pay becomes the single action, no separate
+affirmative tap. This is a real change to what "accepting the court rules" means procedurally for
+a guest (explicit checkbox tap to implicit-in-payment), not a styling change, even though it rode
+along in a visual-polish batch — flagged and decided in the open rather than folded in unremarked,
+per this project's standing corrections-get-a-dated-note discipline extended to this kind of
+implementation-time call. Plan-mode review by Chief caught a second real gap before implementation
+started: the first drafted disclaimer wording dropped "or drinks" and the entire liability-waiver
+clause relative to the real checkbox label it replaces — narrower consent content than Bala
+approved (implicit consent, not narrower consent), corrected to carry the full clause set verbatim
+in substance before any code was written.
+Confirmed-ID: F-307
+Confirmed: 26 Sep 2026

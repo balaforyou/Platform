@@ -441,7 +441,7 @@ test.describe.skip('F-023 cross-system integration', () => {
     // chip row this slice built is what makes selecting poolB specifically still possible, so
     // this exercises that real UI path rather than a direct URL.
     await guestPage.goto('/book?tenant=courtowner1');
-    await guestPage.click('.gpwa-branchbooking__venue-chip');
+    await guestPage.click('.gpwa-branchbooking__topbar-title');
     await guestPage.click(`[id^="branch-card-${branchId}"]`);
     await guestPage.locator(`#court-pool-card-${poolBId}`).waitFor();
     const availabilityResPromise = guestPage.waitForResponse((res) => res.url().includes(`/api/slot-engine/resource-pools/${poolBId}/availability`) && res.request().method() === 'GET');
@@ -465,10 +465,8 @@ test.describe.skip('F-023 cross-system integration', () => {
     }));
     const guestBookingId = bookingBody.data.id;
 
-    // F-235 Slice B: the pay button is now gated on real terms acceptance -- check the box and
-    // wait for it to actually clear the button's disabled state (POST /terms + POST /intents
-    // both complete server-side) before clicking pay, matching real guest behaviour.
-    await guestPage.click('#accept-terms-checkbox');
+    // F-307 (26 Sep 2026): checkbox removed -- clicking simulate-success-pay-btn itself now
+    // records terms acceptance (POST /terms + POST /intents) before simulate-capture runs.
     await expect(guestPage.locator('#simulate-success-pay-btn')).toBeEnabled();
 
     const payPromise = guestPage.waitForResponse((res) => res.url().includes('/api/payment/payments/test/simulate-capture') && res.request().method() === 'POST');

@@ -58,7 +58,7 @@ test.describe('Findings Verification (F-009 client-side rendering)', () => {
     // F-235 Slice A: venue/pool selection now lives inside the merged /book screen.
     await page.click('#book-court-dashboard-btn');
     await expect(page).toHaveURL('/book');
-    await page.click('.gpwa-branchbooking__venue-chip');
+    await page.click('.gpwa-branchbooking__topbar-title');
     await page.click('[id^="branch-card-22222222-2222-2222-2222-222222222222"]');
     // This shared fixture branch carries many accumulated test pools (real, pre-existing
     // e2e data-hygiene debt, not a single pool) -- pick the real e2e pool explicitly via the

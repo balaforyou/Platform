@@ -3,44 +3,83 @@
    inline-style approach verbatim (see BranchBooking.tsx), so only the new header pieces get
    real classes here. */
 
-.gpwa-branchbooking__header {
+/* 26 Sep 2026 UI-polish batch: sticky top bar replacing the old dark venue-chip pill + separate
+   about-badge row. Back button + title (opens VenueSwitcherSheet) + subtitle/info (opens
+   AboutSheet). No avatar here -- Shell.tsx's fixed account-trigger already covers every route. */
+.gpwa-branchbooking__topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 16px 0;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface-header);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.gpwa-branchbooking__venue-chip {
-  display: inline-flex;
+.gpwa-branchbooking__back-btn {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 14px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   border-radius: 999px;
-  background: var(--color-neutral-900);
-  color: var(--color-bg);
+  background: transparent;
   border: none;
-  font-family: var(--font-heading);
-  font-size: 15px;
+  color: var(--color-text);
   cursor: pointer;
 }
 
-.gpwa-branchbooking__about-badge {
+.gpwa-branchbooking__topbar-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+}
+
+.gpwa-branchbooking__topbar-title {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gpwa-branchbooking__topbar-subtitle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 12px;
-  margin: 8px 16px 0;
-  border-radius: 999px;
-  background: var(--color-neutral-200);
-  border: 1px solid var(--color-neutral-300);
-  color: var(--color-neutral-700);
+  gap: 3px;
+  border: none;
+  background: transparent;
+  padding: 0;
   font-family: var(--font-body-organic);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-neutral-600);
   cursor: pointer;
-  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+}
+.gpwa-branchbooking__topbar-subtitle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gpwa-branchbooking__topbar-subtitle svg {
+  flex-shrink: 0;
+  color: var(--color-accent-2-700);
 }
 
 .gpwa-branchbooking__pool-chips {

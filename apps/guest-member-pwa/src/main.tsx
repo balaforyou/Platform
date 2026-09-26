@@ -502,10 +502,11 @@ function MainDashboard() {
     <div className="max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
       {/* F-235 Slice E: trimmed hero -- the real mockup's Home/Dashboard artboard has no gradient
           hero block; its top bar is just the header avatar (Shell.tsx, unchanged) plus a greeting.
-          The tenant pill + "Welcome back" heading are kept (not in the mockup's own text, but this
-          exact heading text is asserted by real Playwright specs -- guest-booking.spec.ts,
-          pwa-install-dismissal.spec.ts -- so it stays, just trimmed of the old gradient/subtext/
-          two-button hero treatment that's being replaced by the sections below). */}
+          The tenant pill is kept (not in the mockup's own text). The heading itself was
+          "Welcome back to {tenant}", asserted verbatim by guest-booking.spec.ts and
+          pwa-install-dismissal.spec.ts -- replaced with "Welcome, {firstName}" in the 26 Sep 2026
+          UI-polish batch (Option B, Bala-confirmed); both specs' assertions were updated in the
+          same batch. */}
       <div className="space-y-2">
         <div
           className="inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider"
@@ -514,19 +515,19 @@ function MainDashboard() {
           <MapPin className="h-3.5 w-3.5" />
           <span>{tenant?.name}</span>
         </div>
-        {/* F-285: the "Welcome back to {tenant}" heading below is left completely untouched --
-            its exact text is asserted by real Playwright specs (see the comment above this
-            block). The first-name greeting is a separate line instead of being worked into that
-            sentence, so it adds real personalization with zero risk to those assertions. No
-            separate first-name field exists on the token -- split displayName client-side, same
-            fallback chain AccountSheet.tsx already establishes for when it's unset. */}
-        {(user?.displayName || user?.name || user?.email) && (
-          <p className="text-sm font-semibold" style={{ color: 'var(--color-accent-700)', fontFamily: 'var(--font-body-organic)' }}>
-            {`Hi, ${(user?.displayName || user?.name || user?.email || '').split(' ')[0]}`}
-          </p>
-        )}
+        {/* 26 Sep 2026 UI-polish batch, Option B (Bala-confirmed): the heading now carries the
+            first-name greeting itself, replacing the old "Welcome back to {tenant}" text plus a
+            separate "Hi, {firstName}" line (F-285) -- two lines both saying the person's name was
+            redundant. No separate first-name field exists on the token -- split displayName
+            client-side, same fallback chain AccountSheet.tsx already establishes for when it's
+            unset. Nameless fallback ("Welcome!") only ever fires for the two Playwright specs'
+            phone-OTP test bypass (no displayName/name/email seeded) -- real Gmail-only production
+            login always resolves a name, so a fixed fallback string here is lower-risk than
+            seeding fixture data for a state real traffic can't hit. */}
         <h2 className="text-3xl md:text-4xl" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, lineHeight: 1.1, color: 'var(--color-text)' }}>
-          Welcome back to <span style={{ color: 'var(--color-accent-700)' }}>{tenant?.appName}</span>
+          {(user?.displayName || user?.name || user?.email)
+            ? `Welcome, ${(user.displayName || user.name || user.email || '').split(' ')[0]}`
+            : 'Welcome!'}
         </h2>
       </div>
 
@@ -540,10 +541,15 @@ function MainDashboard() {
           canvas's own code inspector: a Button sits directly below the session card, ahead of the
           bookings list. handleBookNow/navigate('/book') unchanged, same id Playwright specs
           (findings-verification, guest-booking) already click. */}
+      {/* 26 Sep 2026 UI-polish batch: repointed from --color-accent-2-400 (fixed gold ramp) to
+          --color-accent-700 (genuinely tenant-derived, see TenantContext's generateAccentRamp) --
+          the data-only Tenant.themeColor change doesn't reach this button on its own, since it
+          was never wired to the tenant ramp to begin with. --slot-selected-label carries the
+          light text color already used against a solid --color-accent-700 fill elsewhere. */}
       <button
         onClick={handleBookNow}
-        className="w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors"
-        style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)', fontFamily: 'var(--font-body-organic)' }}
+        className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+        style={{ background: 'var(--color-accent-700)', color: 'var(--slot-selected-label)', fontFamily: 'var(--font-body-organic)' }}
         id="book-court-dashboard-btn"
       >
         <span>{user?.userType === 'MEMBER' ? '+ Book as Guest' : '+ New Booking'}</span>
@@ -572,9 +578,14 @@ function MainDashboard() {
         ) : upcomingError ? (
           <p className="text-xs" style={{ color: 'var(--color-destructive)' }} id="upcoming-slots-error">{upcomingError}</p>
         ) : upcomingSlots.length === 0 ? (
-          <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }} id="upcoming-slots-empty">
-            No pre-scheduled matches today. Tap {user?.userType === 'MEMBER' ? '"+ Book as Guest"' : '"+ New Booking"'} to search for court times.
-          </p>
+          <div
+            className="p-6 text-center rounded-2xl"
+            style={{ background: 'var(--mint-surface)', border: '1px solid var(--border-subtle)' }}
+          >
+            <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }} id="upcoming-slots-empty">
+              No pre-scheduled matches today. Tap {user?.userType === 'MEMBER' ? '"+ Book as Guest"' : '"+ New Booking"'} to search for court times.
+            </p>
+          </div>
         ) : (
           <div className="space-y-2" id="upcoming-slots-list">
             {upcomingSlots.slice(0, 3).map((b) => {
