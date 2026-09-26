@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest, branchHour, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { Calendar, ArrowLeft, Info, Activity, ShieldAlert } from 'lucide-react';
+import { Calendar, ArrowLeft, Info, ShieldAlert, ChevronDown } from 'lucide-react';
+import LoadingState from './ui/LoadingState';
 import VenueSwitcherSheet, { type Branch } from './VenueSwitcherSheet';
 import AboutSheet from './AboutSheet';
 import VerifyPhoneDialog from './VerifyPhoneDialog';
@@ -28,24 +29,6 @@ import './BranchBooking.css';
 const primaryReserveBtn =
   'flex-1 sm:w-full min-h-[54px] py-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ' +
   'bg-[var(--color-accent-400)] text-[var(--color-neutral-900)] hover:bg-[var(--color-accent-300)] active:bg-[var(--color-accent-500)]';
-
-// 26 Sep 2026 feedback round: real seed data uses different dash characters in the same
-// position across JBC's two branches -- one branch's name has no dash at all, the other's real
-// name uses an en-dash (U+2013) where its own pool name uses a plain hyphen (U+002D). An exact
-// string prefix-strip would silently fail on the en-dash branch, the exact case this exists to
-// fix. Normalizing both sides before comparing, never mutating the real underlying data.
-const normalizeDashes = (s: string): string => s.replace(/[–—]/g, '-');
-
-/** Strips a redundant "{branchName} - " prefix from a pool name for display only, when the new
-    sticky top bar directly above already shows the venue name -- falls back to the real pool
-    name unchanged if no such prefix is present (other tenants' pools may not follow this
-    convention). */
-function displayPoolName(poolName: string, branchName?: string | null): string {
-  if (!branchName) return poolName;
-  const prefix = `${normalizeDashes(branchName)} - `;
-  const normalizedPool = normalizeDashes(poolName);
-  return normalizedPool.startsWith(prefix) ? poolName.slice(prefix.length) : poolName;
-}
 
 // F-266: matches admin-v2's `RateSource`/`RATE_SOURCE_LABEL`
 // (apps/admin-v2/src/screens/guestManagement/reservationHelpers.ts) exactly, so a guest and an
@@ -321,7 +304,11 @@ export default function BranchBooking() {
     const el = summaryRef.current;
     if (!selectedSlot || !el) return;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+    // 26 Sep 2026 feedback round: 'nearest' only nudged the minimum distance needed -- often just
+    // enough to reveal the top of the summary card (Slot/Pricing) while Duration stayed below the
+    // fold, confirmed real via Bala's own device report. 'center' reveals the whole (now shorter,
+    // Total hidden on mobile below) card in one scroll.
+    el.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
   }, [selectedSlot?.window?.id]);
 
   const guestOpenWindowDays = pool?.bookingRules?.[0]?.guestOpenWindowDays ?? 7;
@@ -338,8 +325,25 @@ export default function BranchBooking() {
       key: toDateKey(d),
       dow: d.toLocaleDateString([], { weekday: 'short' }).toUpperCase(),
       day: d.getDate(),
+      month: d.getMonth(),
+      year: d.getFullYear(),
     };
   });
+  // 26 Sep 2026 feedback round: the date ribbon's individual chips only ever show a bare day
+  // number (no month), which was ambiguous with no month shown anywhere -- shown once in the
+  // section header instead of repeating it on every chip. Computed from the real chip range
+  // (a static 7-ish-day window, not scroll-tracked -- the whole range is always on screen at
+  // once, unlike a true infinite-scroll calendar), so a real month boundary (e.g. late Sep into
+  // early Oct) renders as a joined "Sep - Oct 2026" label rather than silently picking one.
+  const dateRangeLabel = (() => {
+    if (dayChips.length === 0) return '';
+    const monthName = (m: number) => new Date(2000, m, 1).toLocaleDateString([], { month: 'short' });
+    const first = dayChips[0];
+    const last = dayChips[dayChips.length - 1];
+    if (first.month === last.month && first.year === last.year) return `${monthName(first.month)} ${first.year}`;
+    if (first.year === last.year) return `${monthName(first.month)} - ${monthName(last.month)} ${first.year}`;
+    return `${monthName(first.month)} ${first.year} - ${monthName(last.month)} ${last.year}`;
+  })();
   const maxDateKey = (() => {
     const d = new Date();
     d.setDate(d.getDate() + guestOpenWindowDays);
@@ -431,8 +435,28 @@ export default function BranchBooking() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="gpwa-branchbooking__topbar-text">
+          {/* 26 Sep 2026, real device report: a branch is already known (selectedBranchId comes
+              synchronously from localStorage on mount) the instant this screen loads, but its
+              /about fetch is async -- during that brief real gap, this fell back to literal
+              "Choose a venue" text, which is factually wrong (a venue IS chosen, its details just
+              haven't arrived yet) and reads as a jarring flash/flicker. Only show that literal
+              text for a genuinely venue-less first visit; show a skeleton bar instead while a
+              real selection is just waiting on its own fetch. */}
+          {/* 26 Sep 2026, real feedback: a plain bold title gave no visual cue this is tappable
+              to switch venues -- the old dark pill (before this batch's top-bar redesign) had a
+              ChevronDown for exactly this reason. Restored as a small trailing icon rather than
+              reverting the whole redesign. */}
           <button type="button" className="gpwa-branchbooking__topbar-title" onClick={() => setVenueSheetOpen(true)}>
-            {branchAbout?.name || 'Choose a venue'}
+            <span className="gpwa-branchbooking__topbar-title-text">
+              {branchAbout?.name ? (
+                branchAbout.name
+              ) : selectedBranchId ? (
+                <span className="inline-block h-4 w-32 rounded animate-pulse" style={{ background: 'var(--color-neutral-300)' }} />
+              ) : (
+                'Choose a venue'
+              )}
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0" style={{ color: 'var(--color-neutral-600)' }} />
           </button>
           {branchAbout && (
             <button type="button" className="gpwa-branchbooking__topbar-subtitle" onClick={() => setAboutSheetOpen(true)}>
@@ -483,12 +507,15 @@ export default function BranchBooking() {
       )}
 
       {poolsLoading || (!selectedPoolId && pools.length !== 1) ? (
-        <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-4" style={{ background: 'var(--color-bg)' }}>
-          <Activity className="h-10 w-10 animate-spin" style={{ color: 'var(--color-accent-700)' }} />
-          <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-700)' }}>
-            {poolsLoading ? 'Loading courts…' : 'Pick a court category to see availability.'}
-          </p>
-        </div>
+        poolsLoading ? (
+          <LoadingState variant="full" label="Loading courts…" />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-4" style={{ background: 'var(--color-bg)' }}>
+            <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-700)' }}>
+              Pick a court category to see availability.
+            </p>
+          </div>
+        )
       ) : !pool ? (
         <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] p-4 gap-3 text-center" style={{ background: 'var(--color-bg)' }}>
           <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '13px', color: 'var(--color-neutral-600)' }}>
@@ -500,17 +527,13 @@ export default function BranchBooking() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left column: Date & Slots */}
             <div className="lg:col-span-2 space-y-6">
-              <div className="flex items-center gap-3 mb-3" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', padding: '13px 14px' }}>
-                <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <div className="text-[13.5px] font-bold truncate" style={{ color: 'var(--color-text)' }}>{displayPoolName(pool.name, branchAbout?.name)}</div>
-                  <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.04em', color: 'var(--color-neutral-600)' }}>
-                    {pool.capacity} COURT{pool.capacity === 1 ? '' : 'S'}
-                    {branchAbout?.workingHoursStart && branchAbout?.workingHoursEnd
-                      ? ` · ${branchAbout.workingHoursStart}–${branchAbout.workingHoursEnd}`
-                      : ''}
-                  </div>
-                </div>
-              </div>
+              {/* 26 Sep 2026, real feedback: the "Main Courts" pool-info card removed -- with the
+                  venue-name dedup already applied (Bug B's fix), it had shrunk to just the pool
+                  name + capacity/hours, adding little beyond what the top bar and the real slot
+                  grid below already convey. Not deleting `pool`/`displayPoolName` logic itself --
+                  `pool` still drives the real booking flow below; `displayPoolName` is now genuinely
+                  unused in this file (main.tsx keeps its own copy for the Home screen's card) and
+                  removed alongside this block. */}
 
               {upcomingBooking && (
                 <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3 mb-3" style={{ background: 'var(--color-accent-200)' }}>
@@ -524,7 +547,7 @@ export default function BranchBooking() {
 
               <div className="space-y-3">
                 <h3 style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
-                  Select Date
+                  Select Date &middot; {dateRangeLabel}
                 </h3>
 
                 <div className="flex items-center gap-2">
@@ -623,9 +646,7 @@ export default function BranchBooking() {
                 )}
 
                 {slotsLoading ? (
-                  <div className="py-12 flex justify-center">
-                    <Activity className="h-8 w-8 animate-spin" style={{ color: 'var(--color-accent-700)' }} />
-                  </div>
+                  <LoadingState variant="compact" />
                 ) : slots.length === 0 ? (
                   <p
                     className="text-xs py-8 text-center"
@@ -743,6 +764,15 @@ export default function BranchBooking() {
                             </span>
                           </div>
                         )}
+                        {/* 26 Sep 2026 feedback round: static disclaimer, real number confirmed
+                            for JBC's courts -- no per-pool max-players field exists in the schema
+                            (only minOccupancy, a minimum), so this is intentionally static copy,
+                            not data-driven. */}
+                        <div className="flex justify-end">
+                          <span className="text-[11.5px]" style={{ color: 'var(--color-neutral-600)' }}>
+                            Up to 6 players per court
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex justify-between items-center py-3">
@@ -776,7 +806,15 @@ export default function BranchBooking() {
                         </div>
                       </div>
 
-                      <div className="flex justify-between items-center pt-3" style={{ borderTop: '1px solid var(--color-neutral-200)' }}>
+                      {/* 26 Sep 2026 feedback round: the sticky footer's own TOTAL block below is
+                          `sm:hidden` (mobile-only) -- on mobile this row duplicated it (real
+                          complaint, confirmed via Bala's device screenshot); on desktop the
+                          footer shows no total at all, so this is the only place it exists there.
+                          Hidden on mobile, kept on desktop -- not deleted outright, which would
+                          have silently removed the total from desktop entirely. #computed-price-
+                          display stays in the DOM either way (Playwright's own
+                          guest-booking.spec.ts asserts its textContent, not visibility). */}
+                      <div className="hidden sm:flex justify-between items-center pt-3" style={{ borderTop: '1px solid var(--color-neutral-200)' }}>
                         <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-neutral-700)' }}>Total</span>
                         <span className="text-xl font-extrabold font-mono" style={{ color: 'var(--color-accent-700)' }} id="computed-price-display">
                           ₹{calculatePrice()}
@@ -801,19 +839,25 @@ export default function BranchBooking() {
 
                   <div
                     className="fixed inset-x-0 bottom-0 z-20 flex flex-col gap-2 px-5 pt-3.5
-                      bg-[var(--color-neutral-900)] pb-[calc(14px+env(safe-area-inset-bottom))]
+                      pb-[calc(14px+env(safe-area-inset-bottom))]
                       sm:static sm:px-0 sm:pt-0 sm:pb-0 sm:bg-transparent sm:block"
+                    style={{ background: 'var(--gpwa-fixed-dark-bg)' }}
                   >
                     {/* F-235 Slice B: persistent notice, independent of the conditional
                         bookingError banner above -- both can be visible at once. The real
                         checkbox/acceptance happens on the Payment screen once the booking exists.
-                        Split into two spans, not one color: the mobile bar's bg-neutral-900 is a
-                        fixed dark literal regardless of app theme, while the desktop bg goes
-                        theme-aware (sm:bg-transparent -> page bg). neutral-400 (always-light,
-                        matching the TOTAL label above) reads correctly against the always-dark
-                        mobile bar; neutral-700 (theme-inverted) reads correctly against the
-                        theme-aware desktop page background. Neither alone covers both. */}
-                    <div id="reserve-bar-terms-notice" className="text-[11px] sm:hidden" style={{ color: 'var(--color-neutral-400)' }}>
+                        26 Sep 2026, real dark-mode bug found and fixed: this bar's own comment
+                        always said the mobile background should be "a fixed dark literal
+                        regardless of app theme", but it used --color-neutral-900 -- a token that
+                        INVERTS to light in dark mode (confirmed live: the bar and its text all
+                        flipped to a light-on-light mess in real dark mode, caught via a real
+                        device screenshot). Repointed to real fixed (non-theme-aware) hex literals
+                        --gpwa-fixed-dark-* below, matching light mode's own neutral-900/100/400
+                        values -- this bar is deliberately theme-INDEPENDENT, so it must not use
+                        the theme-inverting neutral scale at all, in either mode. Desktop's own
+                        bg-transparent/neutral-700 path (theme-aware, matching the real page
+                        background) is unaffected. */}
+                    <div id="reserve-bar-terms-notice" className="text-[11px] sm:hidden" style={{ color: 'var(--gpwa-fixed-dark-muted)' }}>
                       By reserving, you agree to our court rules — you&rsquo;ll review and accept them before payment.
                     </div>
                     <div className="hidden sm:block text-[11px] sm:mb-2" style={{ color: 'var(--color-neutral-700)' }}>
@@ -821,10 +865,10 @@ export default function BranchBooking() {
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col gap-0.5 min-w-[80px] sm:hidden">
-                        <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '10px', letterSpacing: '0.08em', color: 'var(--color-neutral-500)' }}>
+                        <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '10px', letterSpacing: '0.08em', color: 'var(--gpwa-fixed-dark-label)' }}>
                           TOTAL
                         </div>
-                        <div className="font-extrabold" style={{ fontSize: '21px', color: 'var(--color-neutral-100)' }}>
+                        <div className="font-extrabold" style={{ fontSize: '21px', color: 'var(--gpwa-fixed-dark-text)' }}>
                           ₹{calculatePrice()}
                         </div>
                       </div>
@@ -836,11 +880,11 @@ export default function BranchBooking() {
                       >
                         {submitting ? (
                           <>
-                            <Activity className="h-4 w-4 animate-spin" />
+                            <LoadingState variant="inline" />
                             <span>Processing Hold...</span>
                           </>
                         ) : (
-                          <span>Continue to Payment</span>
+                          <span>Review and Book</span>
                         )}
                       </button>
                     </div>

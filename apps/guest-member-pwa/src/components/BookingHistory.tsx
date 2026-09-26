@@ -5,6 +5,7 @@ import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
 import ConfirmDialog from './ui/ConfirmDialog';
+import LoadingState from './ui/LoadingState';
 import { describeCourtAssignment } from '../lib/courtLabel';
 
 export default function BookingHistory() {
@@ -223,13 +224,7 @@ export default function BookingHistory() {
   const isCancelable = (booking: any) => new Date(booking.window.startTime) > new Date();
 
   if (loading) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
-        <style>{'@keyframes booking-history-spin { to { transform: rotate(360deg); } }'}</style>
-        <div style={{ width: '52px', height: '52px', borderRadius: '999px', border: '4px solid var(--color-accent-200)', borderTopColor: 'var(--color-accent-700)', animation: 'booking-history-spin 1s linear infinite' }} />
-        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-600)' }}>Retrieving your bookings&hellip;</p>
-      </div>
-    );
+    return <LoadingState variant="full" label="Retrieving your bookings…" />;
   }
 
   if (error) {

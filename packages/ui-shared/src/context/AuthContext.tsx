@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiRequest } from '../lib/api';
+import { apiRequest, registerRefreshHandler } from '../lib/api';
 
 interface AuthContextType {
   accessToken: string | null;
@@ -39,7 +39,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const refreshSession = async () => {
+  // 26 Sep 2026 feedback round, real bug fix: now returns the new access token (or null) so
+  // apiRequest's own refresh-and-retry (registerRefreshHandler below) can use it immediately --
+  // reading `accessToken` state right after calling this would still see the stale pre-refresh
+  // value, since setState hasn't committed yet.
+  const refreshSession = async (): Promise<string | null> => {
     if (activeRefreshPromise) {
       console.log('Authentication refresh already in progress. Reusing in-flight promise.');
       return activeRefreshPromise;
@@ -56,14 +60,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const decoded = parseJwt(res.accessToken);
           setUser(decoded);
           console.log('Authentication session silently refreshed.');
+          return res.accessToken;
         } else {
           setAccessToken(null);
           setUser(null);
+          return null;
         }
       } catch {
         // Token expired or invalid, clear state quietly on silent refresh
         setAccessToken(null);
         setUser(null);
+        return null;
       } finally {
         setLoading(false);
         activeRefreshPromise = null;
@@ -78,7 +85,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession();
   }, []);
 
-  // 2. Setup periodic refresh timer (every 14 minutes, since token expires in 15 minutes)
+  // 2. Setup periodic refresh timer (every 14 minutes, since token expires in 15 minutes).
+  // Real, known gap this alone doesn't cover: mobile browsers throttle or fully suspend
+  // setInterval timers in a backgrounded tab (screen off, app-switched-away), so this can be
+  // skipped entirely across a real idle period -- see the visibility listener (3) and
+  // apiRequest's own retry-on-401 (registered below) for the two real fixes for that gap.
   useEffect(() => {
     if (!accessToken) return;
 
@@ -89,6 +100,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => clearInterval(interval);
   }, [accessToken]);
+
+  // 3. Real fix: refresh immediately when the tab/app becomes visible again, rather than only
+  // relying on the interval above -- catches exactly the case a real device idled through (screen
+  // off or app-switched-away long enough that the interval was suspended and never fired).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSession();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
+  // 4. Real fix: registers with apiRequest so a genuine 401 (the token having gone stale for any
+  // reason -- backgrounding, clock drift, or anything else) gets one silent refresh-and-retry
+  // instead of surfacing "Couldn't load booking details / Unauthorized" straight to the guest.
+  useEffect(() => {
+    registerRefreshHandler(refreshSession);
+  }, []);
 
   // Direct extraction of what every login method used to do inline (setAccessToken + decode +
   // setUser) — behavior unchanged, only the app-local login functions (guest-pwa's/admin-web's

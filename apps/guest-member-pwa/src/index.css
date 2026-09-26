@@ -93,6 +93,18 @@
   --color-neutral-800: #474238;
   --color-neutral-900: #2e2b25;
 
+  /* 26 Sep 2026, real dark-mode bug fix: BranchBooking.tsx's mobile sticky reserve bar is
+     deliberately "a fixed dark literal regardless of app theme" (its own long-standing comment)
+     -- it was built with var(--color-neutral-900/100/400), which is exactly backwards for that
+     intent, since those DO invert in dark mode. These four are the real fix: genuinely fixed,
+     theme-independent values (identical to light mode's own neutral-900/100/500/400), defined
+     once here only -- deliberately absent from both dark-mode blocks below, since inverting
+     these defeats the entire point of being theme-independent. */
+  --gpwa-fixed-dark-bg: #2e2b25;
+  --gpwa-fixed-dark-text: #f9f4ed;
+  --gpwa-fixed-dark-label: #a19786;
+  --gpwa-fixed-dark-muted: #c0b6a5;
+
   /* --color-accent-2 (gold) is fixed/universal across tenants -- not generated, matching the
      "one tenant-derived color, everything else universal" convention --brand-secondary already
      establishes above. F-235 Phase 0: replaced the original sage ramp with the design brief's

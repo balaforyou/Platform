@@ -56,7 +56,11 @@ export default function Shell() {
         aria-label="Account"
         onClick={() => setAccountOpen(true)}
       >
-        {avatarName ? <Avatar src={user?.photoUrl} name={avatarName} size={32} /> : <UserIcon className="h-4 w-4" />}
+        {/* 26 Sep 2026, second real-device report: size=32 on a 44px button (42px content-box
+            after its 1px border) still left visible padding and read as "small" on a real phone
+            with a real Google photo -- bumped to 38, leaving just 2px of the button's own ring
+            visible, matching how a typical app avatar fills its frame. */}
+        {avatarName ? <Avatar src={user?.photoUrl} name={avatarName} size={38} /> : <UserIcon className="h-4 w-4" />}
       </button>
 
       <main className="gpwa-shell__outlet">

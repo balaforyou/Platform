@@ -4,6 +4,7 @@ import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { CheckCircle, AlertCircle, Activity, ArrowRight, Navigation, Download } from 'lucide-react';
 import { describeCourtAssignment } from '../lib/courtLabel';
+import LoadingState from './ui/LoadingState';
 
 export default function BookingConfirmation() {
   const { bookingId } = useParams();
@@ -92,13 +93,7 @@ export default function BookingConfirmation() {
     typeof branchAbout?.longitude === 'number' && Number.isFinite(branchAbout.longitude);
 
   if (loading && !booking) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
-        <style>{'@keyframes booking-confirm-spin { to { transform: rotate(360deg); } }'}</style>
-        <div style={{ width: '52px', height: '52px', borderRadius: '999px', border: '4px solid var(--color-accent-200)', borderTopColor: 'var(--color-accent-700)', animation: 'booking-confirm-spin 1s linear infinite' }} />
-        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-600)' }}>Verifying payment confirmation&hellip;</p>
-      </div>
-    );
+    return <LoadingState variant="full" label="Verifying payment confirmation…" />;
   }
 
   if (error) {
