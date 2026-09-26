@@ -168,6 +168,20 @@ function TenantResolveError({ message }: { message: string }) {
   );
 }
 
+// 26 Sep 2026 feedback round: same dedup logic as BranchBooking.tsx's displayPoolName (real
+// seed data embeds the venue name inside the pool's own name, e.g. JBC's real
+// "JBC - New Japan Badminton Court - Main Courts") -- duplicated rather than shared, same
+// tradeoff already taken for formatCancellationPolicy/lib/courtLabel.ts in this app. Branch
+// names use different dash characters in the same position across JBC's two real branches
+// (one plain hyphen, one en-dash) -- normalized before comparing, not an exact string match.
+const normalizeDashesHome = (s: string): string => s.replace(/[–—]/g, '-');
+function displayPoolNameHome(poolName: string, branchName?: string | null): string {
+  if (!branchName) return poolName;
+  const prefix = `${normalizeDashesHome(branchName)} - `;
+  const normalizedPool = normalizeDashesHome(poolName);
+  return normalizedPool.startsWith(prefix) ? poolName.slice(prefix.length) : poolName;
+}
+
 /**
  * Main dashboard screen loaded when authenticated.
  */
@@ -613,24 +627,28 @@ function MainDashboard() {
                   style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold truncate" style={{ color: 'var(--color-text)' }}>
-                      {b.window.resourcePool?.name || 'Court booking'}
-                      {/* 26 Sep 2026 feedback round: real assigned court (F-189/F-205), already
-                          fetched via GET /bookings/my's resource: true include -- nullable-safe
-                          for a legacy pre-F-205 booking with no resource. */}
-                      {b.resource?.name ? ` • ${b.resource.name}` : ''}
+                    {/* 26 Sep 2026 feedback round, Option C (Bala's call): deduped pool name here
+                        too (same displayPoolNameHome logic as Slot & Time Selection's real fix)
+                        so row 1 never competes with the badge, and the court number moved to the
+                        time row below instead of living here -- both real fixes for the same
+                        underlying bug (a long real pool name, e.g. JBC's actual "JBC - New Japan
+                        Badminton Court - Main Courts", swallowed the court number on a real
+                        narrow mobile device, confirmed via Bala's own device screenshot). */}
+                    <span className="text-xs font-bold truncate min-w-0 flex-1" style={{ color: 'var(--color-text)' }}>
+                      {displayPoolNameHome(b.window.resourcePool?.name || 'Court booking', about?.name)}
                     </span>
                     <span className="shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border" style={badge.style}>
                       {badge.label}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-[11px] font-mono" style={{ color: 'var(--color-neutral-600)' }}>
+                    <div className="text-[11px] font-mono font-bold" style={{ color: 'var(--color-text)' }}>
                       {formatBranchTime(b.window.startTime, timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
                       {' · '}
                       {formatBranchTime(b.window.startTime, timezone, { hour: '2-digit', minute: '2-digit' })}
                       {' - '}
                       {formatBranchTime(b.window.endTime, timezone, { hour: '2-digit', minute: '2-digit' })}
+                      {b.resource?.name ? ` · ${b.resource.name}` : ''}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {/* F-247: same real Directions link BookingHistory.tsx already has --

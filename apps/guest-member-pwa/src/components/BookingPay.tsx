@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { Activity, MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
+import LoadingState from './ui/LoadingState';
 import { TERMS_VERSION } from '../constants/terms';
 
 export default function BookingPay() {
@@ -272,10 +273,24 @@ export default function BookingPay() {
         // 26 Sep 2026 feedback round: UPI shown first, everything else collapsed under it --
         // reorders within Razorpay's existing one-overlay checkout, does not reintroduce a
         // second button (F-190 Slice 3 kept this to one real button, still true here).
+        //
+        // Real bug found and fixed via a live device report (the "Payment Options" screen
+        // showed Cards/Netbanking/Wallet under the "Other payment methods" custom name --
+        // proving config.display WAS being read -- but no UPI block at all, not even under
+        // defaults): a bare `{ method: 'upi' }` instrument has no flows/apps and Razorpay
+        // silently drops a block that resolves to nothing. Razorpay's own documented UPI
+        // instrument shape requires `flows` and `apps` explicitly -- "intent" is the specific
+        // flow that shows tappable app icons (GPay/PhonePe/etc.), which is what was actually
+        // missing ("no UPI intent prompt").
         config: {
           display: {
             blocks: {
-              upi: { name: 'Pay via UPI', instruments: [{ method: 'upi' }] },
+              upi: {
+                name: 'Pay via UPI',
+                instruments: [
+                  { method: 'upi', flows: ['intent', 'collect', 'qr'], apps: ['google_pay', 'phonepe', 'paytm', 'bhim'] },
+                ],
+              },
               other: { name: 'Other payment methods', instruments: [{ method: 'card' }, { method: 'netbanking' }, { method: 'wallet' }] },
             },
             sequence: ['block.upi', 'block.other'],
@@ -310,24 +325,7 @@ export default function BookingPay() {
   };
 
   if (loading) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
-        <style>{'@keyframes booking-pay-spin { to { transform: rotate(360deg); } }'}</style>
-        <div
-          style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '999px',
-            border: '4px solid var(--color-accent-200)',
-            borderTopColor: 'var(--color-accent-700)',
-            animation: 'booking-pay-spin 1s linear infinite',
-          }}
-        />
-        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-600)' }}>
-          Securing payment gateway&hellip;
-        </p>
-      </div>
-    );
+    return <LoadingState variant="full" label="Securing payment gateway…" />;
   }
 
   if (error || !booking) {
@@ -437,18 +435,16 @@ export default function BookingPay() {
               </div>
             )}
           </div>
-          {/* 26 Sep 2026 UI-polish batch: booking.window.resourcePool.capacity is already returned
-              by GET /bookings/:id (slot-engine/src/index.ts's window: { include: { resourcePool:
-              true } }) -- genuinely data-driven, not hardcoded to 4. Falls back to the old
-              "Players" headcount if capacity is somehow absent (legacy booking with no pool). */}
+          {/* 26 Sep 2026 feedback round, real bug fix: `resourcePool.capacity` is real seed data,
+              but it means the number of COURTS in the pool (JBC's real pool has 4 courts,
+              "resources": ["Court 1".."Court 4"]), not players-per-court -- the prior batch
+              mislabeled it. No per-pool max-players field exists anywhere in the schema (only
+              minOccupancy, a minimum), so this is static copy, same real "6" confirmed for
+              BranchBooking.tsx's own "Up to 6 players per court" line, not data-driven. */}
           <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-            <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>
-              {booking.window?.resourcePool?.capacity ? 'Court Capacity' : 'Players'}
-            </span>
+            <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Court Capacity</span>
             <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
-              {booking.window?.resourcePool?.capacity
-                ? `Entire Court (Up to ${booking.window.resourcePool.capacity} players)`
-                : 1 + (booking.players?.length || 0)}
+              6 Players Allowed
             </span>
           </div>
           <div className="flex justify-between items-center px-4 py-3">
@@ -588,7 +584,7 @@ export default function BookingPay() {
                 </div>
               </div>
               {paying ? (
-                <Activity className="h-4 w-4 animate-spin" style={{ color: 'var(--color-accent-800)' }} />
+                <LoadingState variant="inline" />
               ) : (
                 <span
                   className="text-xs px-2 py-0.5 rounded font-mono font-bold"
@@ -641,7 +637,7 @@ export default function BookingPay() {
           id="real-razorpay-btn"
         >
           {paying || acceptingTerms ? (
-            <Activity className="h-4 w-4 animate-spin" />
+            <LoadingState variant="inline" />
           ) : (
             <>
               <span aria-hidden="true">🔒</span>

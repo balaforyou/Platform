@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiRequest, useTenant } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { ShieldAlert, Activity, X, Download, CheckCircle } from 'lucide-react';
+import { ShieldAlert, X, Download, CheckCircle } from 'lucide-react';
+import LoadingState from './ui/LoadingState';
 
 interface CancelBookingModalProps {
   bookingId: string;
@@ -107,10 +108,7 @@ export default function CancelBookingModal({ bookingId, booking, branchAbout, on
         </div>
 
         {loading ? (
-          <div className="py-12 flex flex-col items-center justify-center">
-            <Activity className="h-8 w-8 animate-spin mb-2" style={{ color: 'var(--color-accent-700)' }} />
-            <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }}>Computing refund amount&hellip;</p>
-          </div>
+          <LoadingState variant="compact" label="Computing refund amount…" />
         ) : error ? (
           <div className="p-4 rounded-xl text-xs" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', color: 'var(--color-destructive)' }}>
             {error}
@@ -214,7 +212,7 @@ export default function CancelBookingModal({ bookingId, booking, branchAbout, on
                 id="confirm-cancellation-btn"
               >
                 {submitting ? (
-                  <Activity className="h-4 w-4 animate-spin" />
+                  <LoadingState variant="inline" />
                 ) : (
                   <span>Confirm Cancel</span>
                 )}

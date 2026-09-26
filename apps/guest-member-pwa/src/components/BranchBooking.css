@@ -47,6 +47,9 @@
 }
 
 .gpwa-branchbooking__topbar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: none;
   background: transparent;
   padding: 0;
@@ -57,6 +60,9 @@
   cursor: pointer;
   text-align: left;
   max-width: 100%;
+}
+.gpwa-branchbooking__topbar-title-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
