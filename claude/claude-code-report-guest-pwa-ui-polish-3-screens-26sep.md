@@ -35,7 +35,7 @@ Full diff available via `git diff --cached` on this branch — real, staged, rev
 - `--color-bg` `#f5ead8` → `#F8FAFC`; `--font-heading` Caprasimo → Inter.
 - JBC's real `Tenant.themeColor` DB row updated `#166534` → `#16A34A` (plus `scripts/tenants/jbc.json` so a future rebuild doesn't restore the old value).
 - `index.html`'s static `meta-theme-color` fallback → `#F8FAFC` (confirmed live: `document.getElementById('meta-theme-color').content === '#f8fafc'`).
-- Home's primary CTA (`book-court-dashboard-btn`) explicitly repointed from the fixed gold ramp to the tenant-derived `--color-accent-700` — confirmed it was never wired to the tenant ramp before.
+- Home's primary CTA (`book-court-dashboard-btn`) was found still using the fixed gold ramp and was explicitly repointed to the tenant-derived `--color-accent-700` — confirmed it was never wired to the tenant ramp before.
 
 ### Home (`main.tsx`)
 - Welcome heading: Option B, `"Welcome, {firstName}"`, old separate `"Hi, {firstName}"` line removed.
@@ -92,7 +92,7 @@ Full diff available via `git diff --cached` on this branch — real, staged, rev
 2. **The venue-chip/about-badge were two separate real elements**, not one as the handover's phrasing suggested — both relocated into the new top bar rather than one being silently dropped; called out as this session's interpretation, open to correction.
 3. **Home CTA weight/font-weight consistency**: chose to keep `fontWeight: 400` on the Home heading (matching all 22 other `--font-heading` consumers app-wide) rather than bumping just this one to bold, to avoid introducing a one-off typographic inconsistency the Inter swap didn't explicitly call for.
 4. **Court-name row on the Review & Pay summary card** — not added back, since F-189 deliberately omitted it from this exact card for a documented reason; flagged rather than silently reversed.
-5. **A synthetic test booking remains in the real `badminton_db` demo database** (`0ceb7c68-4322-4a58-862b-2b3bda4fb3a2`, phone `+919812300001`, ₹400, JBC) from the live-fire F-307 verification above. My cleanup attempt (a multi-statement `DELETE`) was blocked by this session's own safety classifier ("Cloud Storage Mass Delete") before it ran — per that block's own instruction, I did not attempt a workaround. **This row is real, harmless, and still present** — Bala/Chief, your call on removing it (a simple cascade delete on that booking id + user phone) or leaving it as a demo artifact.
+5. **A synthetic test booking remains in the real `badminton_db` demo database** (`0ceb7c68-4322-4a58-862b-2b3bda4fb3a2`, a synthetic test phone number, ₹400, JBC) from the live-fire F-307 verification above. My cleanup attempt (a multi-statement `DELETE`) was blocked by this session's own safety classifier ("Cloud Storage Mass Delete") before it ran — per that block's own instruction, I did not attempt a workaround. **This row is real, harmless, and still present** — Bala/Chief, your call on removing it (a simple cascade delete on that booking id + user phone) or leaving it as a demo artifact.
 6. **`badminton_postgres` was found running on host port 65500 before this session** (matching `.env`'s `DATABASE_URL`), not the canonical `65432` `docker-compose.yml` maps it to. Bringing up the dev stack for e2e recreated the container on the documented canonical port (data intact, same named volume) — `.env` now disagrees with the running container's real port until whoever owns that drift reconciles it. Not this batch's to fix; flagged per rule 8.
 
 ## Screenshots
