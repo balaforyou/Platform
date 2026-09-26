@@ -2103,3 +2103,100 @@ unnecessary (nothing reachable left to phase out). No register row exists for th
 only so the number isn't mistaken for available or re-proposed later without this context.
 Confirmed-ID: none — retracted, never implemented
 Confirmed: n/a
+
+### shared-internal-key-guard-extraction
+Batch: Security retrofit, F-290–F-299 assigned 23 Sep 2026
+Surfaced: 23 Sep 2026 (`claude/chief-triage-security-retrofit-audit-f290-f298.md`, independently
+re-verified against real `main` before assignment — a second Claude thread's own re-check of a
+separate Claude Code audit brief)
+Description: `requireInternalKey` was hand-copied identically across `identity-auth:72`,
+`tenant-management:32`, `slot-engine:105`, each commented as mirroring the others — genuinely three
+copies of one rule, never extracted, the root structural cause underlying F-291/F-292/F-293/F-294's
+fix shape.
+Confirmed-ID: F-290
+Confirmed: 23 Sep 2026
+
+### identity-auth-get-users-id-zero-auth
+Batch: Security retrofit, F-290–F-299 assigned 23 Sep 2026
+Surfaced: 23 Sep 2026, same audit/triage session as F-290
+Description: `identity-auth/src/index.ts:1320` — `GET /users/:id` had zero auth despite its own
+comment ("Internal endpoint to retrieve User details"), returning a full real `User` row (phone,
+email, name, userType) for any id to any unauthenticated caller.
+Confirmed-ID: F-291
+Confirmed: 23 Sep 2026
+
+### notification-service-four-unguarded-routes
+Batch: Security retrofit, F-290–F-299 assigned 23 Sep 2026
+Surfaced: 23 Sep 2026, same audit/triage session as F-290
+Description: `notification` service — all 4 routes (`/notifications/send`,
+`/notifications/templates`, `/devices/register`, `/notifications/:userId/history`) confirmed
+unguarded, zero auth on any of them.
+Confirmed-ID: F-292
+Confirmed: 23 Sep 2026
+
+### payment-post-subscriptions-zero-auth
+Batch: Security retrofit, F-290–F-299 assigned 23 Sep 2026
+Surfaced: 23 Sep 2026, same audit/triage session as F-290
+Description: `POST /subscriptions` (payment) confirmed to exist with zero auth despite its own
+comment describing a real intended client-side Razorpay mandate flow.
+Confirmed-ID: F-293
+Confirmed: 23 Sep 2026
+
+### simulate-capture-nodeenv-only-gate
+Batch: Security retrofit, F-290–F-299 assigned 23 Sep 2026
+Surfaced: 23 Sep 2026, same audit/triage session as F-290
+Description: `POST /payments/test/simulate-capture`'s only gate was `NODE_ENV === 'production'` —
+genuinely reachable on any deployment where that env var isn't literally set, including the real
+deployed demo (`NODE_ENV=development`, per root `CLAUDE.md`'s documented environment facts).
+Confirmed-ID: F-294
+Confirmed: 23 Sep 2026
+
+### payment-links-unvalidated-tenant-user-amount
+Batch: Security retrofit, F-290–F-299 assigned 23 Sep 2026
+Surfaced: 23 Sep 2026, same audit/triage session as F-290
+Description: `POST /payment-links` read `tenantId`/`userId`/`amount` straight from the client body
+with no cross-check against the real booking — an authorized admin for one tenant/branch could
+submit arbitrary values unrelated to the real booking when creating a payment link.
+Confirmed-ID: F-295
+Confirmed: 23 Sep 2026
+
+### webhook-capture-confirm-ordering-stuck-held
+Batch: Security retrofit, F-290–F-299 assigned 23 Sep 2026
+Surfaced: 23 Sep 2026, same audit/triage session as F-290
+Description: payment's `POST /webhooks/razorpay` inserts its `WebhookEvent` idempotency-guard row
+before updating `PaymentIntent.status` to `'captured'` and calling Slot Engine's confirm endpoint —
+if the confirm call fails, the intent is already captured but the booking stays stuck `HELD`, and a
+Razorpay retry of the same event hits the idempotency guard and silently no-ops, never retrying the
+confirm. Decided shape: two stages (Stage 1, this batch — a compensating-retry reconciliation job;
+Stage 2, deferred — reorder the webhook's dedup-write to after confirm succeeds, pending real
+production evidence of how often Stage 1's job actually fires).
+Confirmed-ID: F-296
+Confirmed: 23 Sep 2026
+
+### internal-service-key-fail-open-fallback
+Batch: Security retrofit, F-290–F-299 assigned 23 Sep 2026
+Surfaced: 23 Sep 2026, same audit/triage session as F-290
+Description: the literal `'test-service-key'` fallback, confirmed via grep at 27 real occurrences
+across the 5 services' internal-call sites — every service silently fell back to a public,
+guessable shared secret if `INTERNAL_SERVICE_KEY` was unset, rather than failing closed at startup.
+Confirmed-ID: F-298
+Confirmed: 23 Sep 2026
+
+### guest-pwa-slot-card-seats-wording
+Batch: Post-deploy observation round, Slice 3 (`claude/chief-slicing-f278-f287-post-deploy-cleanup.md`)
+Surfaced: 22 Sep 2026
+Description: identical logic in `BranchBooking.tsx:678` and `CourtBooking.tsx:727` showed "X seats"
+for a normal-capacity slot — the wrong domain word (a court isn't a seat), ambiguously suggesting
+player-count rather than remaining bookable-court capacity.
+Confirmed-ID: F-284
+Confirmed: 22 Sep 2026
+
+### cancellation-receipt-fabricated-for-held-bookings
+Batch: Post-deploy observation round, Slice 3 (`claude/chief-slicing-f278-f287-post-deploy-cleanup.md`)
+Surfaced: 22 Sep 2026
+Description: `CancelBookingModal.tsx`'s "Download Cancellation Receipt (PDF)" button rendered
+unconditionally for both HELD and paid cancellations — `receipt.ts` unconditionally renders Amount
+Paid/Original Price/Refund Percent/Refund Amount straight from `preview`, fabricating a
+payment/refund cycle for a booking that was never actually paid for.
+Confirmed-ID: F-286
+Confirmed: 22 Sep 2026
