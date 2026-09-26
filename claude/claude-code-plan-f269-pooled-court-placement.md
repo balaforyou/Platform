@@ -16,7 +16,7 @@ here changes code or the register — documentation catching up to already-shipp
 Bala reported the admin-v2 Guest Slot Inventory for **JBC – New Japan Badminton Court, 25 Sep 2026**
 showing **all 4 courts booked at 7:00 AM by the same user**. A read-only check against real production
 data confirmed: the pool is POOLED (4 real courts, capacity 4) with **one** shared 7:00 window
-(`resourceId: null`) and **one** CONFIRMED booking on it (`sviji3584@gmail.com`, ₹600) assigned to
+(`resourceId: null`) and **one** CONFIRMED booking on it (`user@example.com`, ₹600) assigned to
 **one** real court (`resourceId c9334046…`, `courtSlotIndex` 1). Three courts were genuinely free.
 
 Root cause, `services/slot-engine/src/index.ts:1635-1668` (Guest Slot Inventory grid): each court column
