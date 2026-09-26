@@ -170,7 +170,7 @@ exactly what shipped and what remains.
 
 ## 6. Verification (real evidence, per standing rule 2)
 
-1. Real permission grant against the dev stack, real JBC admin account (`balaforyou@gmail.com`) → real
+1. Real permission grant against the dev stack, real JBC admin account (`admin@example.com`) → real
    `getToken()` → confirmed via a real `DeviceToken` row read-back, repeated across multiple
    re-registrations.
 2. Real end-to-end send: a real `low_occupancy_alert` push round-tripped through the actual, unmodified
