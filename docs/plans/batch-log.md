@@ -4295,6 +4295,100 @@ Chief-assigned **F-304** (walk-in court choice), **F-305** (`guestBookable`), **
 timing flake), and are logged in `pending-findings.md`'s "Awaiting confirmation" section — Open,
 no register rows yet.
 
+## Batch — Guest-member-pwa booking/payment copy (F-284, F-286) — retroactive log entry
+
+**Backfill, not a correction.** This batch shipped and merged real, live on `main` on 22 Sep 2026
+(PR #82, `0390142`) with zero trace in this file, `docs/findings_register.md`, or
+`docs/plans/pending-findings.md` until now — caught by the 25 Sep 2026 reconciliation sweep
+(`claude/chief-handover-tracker-reconciliation-sweep-25sep.md`) and closed out here, 26 Sep 2026,
+alongside the F-290–F-298 security batch below. Same honest framing as F-210's own backfill entry
+in `pending-findings.md`.
+
+Both findings sliced together as "Slice 3" (`claude/chief-slicing-f278-f287-post-deploy-cleanup.md`,
+22 Sep 2026 post-deploy observation round) since both touch guest-member-pwa's booking/payment
+area, each keeping its own ID/evidence per rule 9.
+
+**F-284 (Medium) — "X seats" wording.** `BranchBooking.tsx:678` and `CourtBooking.tsx:727` both
+showed "X seats" for a normal-capacity slot, the wrong domain word (a court isn't a seat). Changed
+to "X courts open"; the already-correct "X left" for the `isAlmostFull` branch untouched.
+
+**F-286 (Medium) — cancellation receipt fabricated a payment/refund cycle for HELD bookings.**
+`CancelBookingModal.tsx`'s "Download Cancellation Receipt (PDF)" button rendered unconditionally
+even for HELD (never-paid) bookings, whose receipt PDF then rendered a nonsensical Amount
+Paid/Refund breakdown from `preview`. Gated the button on `!isHeld` — nothing to receipt for a
+released hold; the real paid-booking receipt path is unchanged.
+
+**Evidence (real, from the merged PR):** live-fire on the real dev stack via a real OTP-verified
+session — F-284 confirmed on real `BranchBooking.tsx` data ("4 courts open" normal slot, "1 left"
+unchanged on a real near-full slot created via 3 real filler bookings, reverted after);
+`CourtBooking.tsx` confirmed dead/unrouted in the current app (zero real imports anywhere), verified
+via a temporary route added to `main.tsx` purely to screenshot it and then fully reverted (empty
+diff on that file). F-286 confirmed via a real HELD booking cancelled through the actual UI (no
+download button, matching the existing "no payment was ever taken" copy) and a real
+CONFIRMED/paid booking cancelled the same way (download button present, PDF correct, unchanged).
+All test bookings/users deleted afterward. Full backend regression 5/5 suites (no backend files
+touched by this PR); guest-member-pwa typecheck/build clean.
+
+**Close-out:** register rows written for F-284 and F-286 (Resolved) in this same docs-only pass.
+Merged 22 Sep 2026, PR #82, `0390142`.
+
+## Batch — Security retrofit, F-290–F-296/F-298 — retroactive log entry
+
+**Backfill, not a correction**, same as the Slice 3 entry above — this batch shipped real, merged
+code across PRs #92–#98 (23–24 Sep 2026) with zero register/pending-findings/batch-log trace until
+the 25 Sep 2026 reconciliation sweep caught it. F-297 and F-299, assigned in the same triage session
+(`claude/chief-triage-security-retrofit-audit-f290-f298.md`, 23 Sep 2026), are **not** part of this
+close-out — F-297 had not shipped as of this pass and F-299 remains held per its own kickoff note;
+neither gets a register row here (rule 9 — don't let this close-out silently absorb them).
+
+Sequencing followed the approved kickoff (`claude/claude-code-handover-security-retrofit-f290-f299-kickoff.md`):
+
+- **F-290 + F-298** (PR #92, `688f90d` → merged `ce58f22`) — `requireInternalKey` extracted into
+  `@badminton/shared-middleware` (closing the 3x hand-copy structural gap); same PR closed F-298's
+  fail-open startup gap (`assertInternalServiceKeyConfigured()`, all 5 services fail closed if
+  `INTERNAL_SERVICE_KEY` is unset).
+- **F-291** (PR #93, `5890cf5` → merged `f77f4e0`) — `GET /users/:id` (identity-auth) guarded.
+- **F-292** (PR #94, `77763ed` → merged `6365824`) — all 4 notification routes guarded, dual-path
+  (internal key or user JWT) for `/devices/register` since its real caller is admin-v2's push
+  opt-in sending a session JWT, not the internal key.
+- **F-293** (PR #95, `022cf23` → merged `cfdb40e`) — `POST /subscriptions` (payment) guarded.
+- **F-294** (PR #96, `4eec281` → merged `6a00313`) — `POST /payments/test/simulate-capture` guarded
+  dual-path, plus a real IDOR ownership check found during implementation (any authenticated guest
+  could otherwise fake-capture any other guest's booking).
+- **F-295** (PR #97, `c71fe6d` → merged `fa69c48`) — `POST /payment-links` guarded via the shared
+  `requirePaymentLinkAdmin` helper (was duplicated inline), plus the F-274 branch-scoping fix
+  applied to that helper's own role check, plus a real tenant/user/amount cross-check against the
+  booking (previously read unvalidated from the client body).
+- **F-296 Stage 1** (PR #98, `ca5a9d2` → merged `29ac9fb`) — compensating-retry reconciliation job
+  for the webhook capture/confirm ordering bug (stuck-`HELD` bookings with an already-captured
+  intent). Stage 2 (the root-cause webhook reorder) deliberately deferred pending Stage 1
+  production evidence — tracked as a follow-up note on F-296's register row, not a new finding.
+
+**Evidence, real per PR (full detail in each register row and in the PRs' own commit messages):**
+every guard proven with a real 401 unauthenticated, 401 wrong-credential, and a real success case
+for both the internal-key path and any real user-facing caller that needed to keep working; F-294's
+IDOR case proven 403 with the target `PaymentIntent` confirmed untouched; F-295's cross-check
+proven with real 400s on tenant/user/amount mismatches and a real 201 on a matching case; F-296
+proven with a real live-fire force-kill test against the dev stack (slot-engine stopped mid-webhook,
+a real signed Razorpay webhook fired, the confirm call genuinely failed, the booking genuinely stuck
+HELD, a replay silently no-op'd exactly as described, and a real tick after the 2-minute age window
+recovered it to CONFIRMED with zero manual intervention). Full regression suite green at each stage
+(5/5 suites throughout; slot-engine climbed 110 → 112 sections across the batch; payment climbed
+26 → 28 across F-294/F-295; notification 7 → 11 across F-292).
+
+**Close-out:** register rows written for F-290, F-291, F-292, F-293, F-294, F-295, F-296, F-298
+(all Resolved) in this same docs-only pass. `pnpm register:check` — **280 rows, Open 116 / Resolved
+164** (was 270/116/154: 10 new Resolved rows, this batch's 8 plus Slice 3's 2 above — Open count
+unchanged since none of these 10 IDs ever carried an Open row). `pnpm diagram:verify` — clean, all
+67 finding tags agree with the register.
+
+**Also in this same pass:** two new standing rules added to root `CLAUDE.md` (11 — close the loop
+back to the reviewer conversation on everything this repo's own record shows Resolved; 12 — archive
+the final, approved version of a plan/handover into `docs/plans/chief-archive/` in the same PR that
+resolves the finding(s) it authorized) to close the reporting gap that let this whole batch, plus
+Slice 3 above, ship invisibly for 5+ days. Two archive files added under `docs/plans/chief-archive/`
+per the new rule 12: `f290-f298-security-retrofit.md` and `f284-f286-slice3-booking-copy-fixes.md`.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
