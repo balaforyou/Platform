@@ -268,7 +268,20 @@ export default function BookingPay() {
             tenant?.themeColor ||
             getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
             '#e11d48',
-        }
+        },
+        // 26 Sep 2026 feedback round: UPI shown first, everything else collapsed under it --
+        // reorders within Razorpay's existing one-overlay checkout, does not reintroduce a
+        // second button (F-190 Slice 3 kept this to one real button, still true here).
+        config: {
+          display: {
+            blocks: {
+              upi: { name: 'Pay via UPI', instruments: [{ method: 'upi' }] },
+              other: { name: 'Other payment methods', instruments: [{ method: 'card' }, { method: 'netbanking' }, { method: 'wallet' }] },
+            },
+            sequence: ['block.upi', 'block.other'],
+            preferences: { show_default_blocks: false },
+          },
+        },
       };
 
       const rzp = new (window as any).Razorpay(options);
@@ -446,6 +459,36 @@ export default function BookingPay() {
           </div>
         </div>
 
+        {/* 26 Sep 2026 feedback round: moved here from BranchBooking.tsx's Slot & Time Selection
+            screen, per Bala's call -- the cancellation policy reads more naturally right before
+            payment than one screen earlier. booking.window.resourcePool.bookingRules is a new,
+            additive-only backend include (GET /bookings/:id) added for exactly this. */}
+        {(() => {
+          const rule = booking.window?.resourcePool?.bookingRules?.[0];
+          if (!rule || (rule.maxDailyBookingsPerGuest == null && !rule.cancellationPolicyJson)) return null;
+          const policy = rule.cancellationPolicyJson;
+          const policyLines: string[] =
+            policy && policy.type === 'tiered' && Array.isArray(policy.tiers)
+              ? [...policy.tiers]
+                  .sort((a: any, b: any) => b.min_hours_before_slot - a.min_hours_before_slot)
+                  .map((tier: any) =>
+                    tier.min_hours_before_slot > 0
+                      ? `${tier.refund_percent}% refund if cancelled ${tier.min_hours_before_slot}h+ before the slot`
+                      : `${tier.refund_percent}% refund after that`,
+                  )
+              : [];
+          return (
+            <div className="text-[11.5px] rounded-2xl p-4 space-y-1" style={{ background: 'var(--color-neutral-100)', color: 'var(--color-neutral-700)' }}>
+              <p>
+                Up to <span className="font-bold" style={{ color: 'var(--color-text)' }}>{rule.maxDailyBookingsPerGuest ?? 3}</span> booking(s) per day per guest.
+              </p>
+              {policyLines.map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. booking.phone (used below in
             Razorpay's prefill.contact) is confirmed dead: Booking has no phone column and
             GET /bookings/:id never joins one in, so that reference has always silently resolved to
@@ -474,7 +517,7 @@ export default function BookingPay() {
               {user.isPhoneVerified && (
                 <span
                   className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full"
-                  style={{ color: 'var(--color-accent-2-800)', background: 'var(--color-accent-2-200)' }}
+                  style={{ color: 'var(--color-accent-800)', background: 'var(--color-accent-200)' }}
                 >
                   Verified
                 </span>
@@ -498,7 +541,7 @@ export default function BookingPay() {
             change is exactly what that file's own comment says to bump for. */}
         <div
           className="p-4"
-          style={{ background: 'var(--color-accent-2-100)', border: '1px solid var(--color-accent-2-300)', borderRadius: '16px' }}
+          style={{ background: 'var(--color-accent-100)', border: '1px solid var(--color-accent-300)', borderRadius: '16px' }}
           id="terms-disclaimer-block"
         >
           <p className="text-[12px] leading-relaxed" style={{ color: 'var(--color-neutral-700)' }}>
@@ -525,8 +568,8 @@ export default function BookingPay() {
               disabled={paying || acceptingTerms}
               className="w-full p-4 flex items-center justify-between text-left transition-colors"
               style={{
-                background: 'var(--color-accent-2-100)',
-                border: '1px solid var(--color-accent-2-300)',
+                background: 'var(--color-accent-100)',
+                border: '1px solid var(--color-accent-300)',
                 borderRadius: '16px',
                 fontFamily: 'var(--font-body-organic)',
               }}
@@ -535,7 +578,7 @@ export default function BookingPay() {
               <div className="flex items-center space-x-3">
                 <div
                   className="h-10 w-10 rounded-xl flex items-center justify-center"
-                  style={{ background: 'var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }}
+                  style={{ background: 'var(--color-accent-200)', color: 'var(--color-accent-800)' }}
                 >
                   <ShieldCheck className="h-5 w-5" />
                 </div>
@@ -545,11 +588,11 @@ export default function BookingPay() {
                 </div>
               </div>
               {paying ? (
-                <Activity className="h-4 w-4 animate-spin" style={{ color: 'var(--color-accent-2-800)' }} />
+                <Activity className="h-4 w-4 animate-spin" style={{ color: 'var(--color-accent-800)' }} />
               ) : (
                 <span
                   className="text-xs px-2 py-0.5 rounded font-mono font-bold"
-                  style={{ background: 'var(--color-accent-2-300)', color: 'var(--color-accent-2-800)' }}
+                  style={{ background: 'var(--color-accent-300)', color: 'var(--color-accent-800)' }}
                 >
                   Local
                 </span>
@@ -578,28 +621,18 @@ export default function BookingPay() {
         </div>
       </div>
 
-      {/* F-235 Slice F: sticky TOTAL + Pay footer, matching the real mockup's Payment-half
-          sticky bar shape (same pattern BookingConfirmation.tsx's own sticky footer already
-          uses). F-190 Slice 3: one real button, not two -- UPI needs no separate button or
-          config.display work, Razorpay's Standard Checkout already surfaces it as a selectable
-          method inside the one overlay and hands off to the device's UPI apps (Intent) directly.
-          handleRazorpayCheckout is entirely unchanged -- same order-creation/verify/navigate
-          flow, same unrestricted options. #pay-amount-display (in the summary card above) is not
-          duplicated here -- the footer repeating the amount is the mockup's own intentional
-          redundancy (TOTAL label + Pay button both show it), not a mistake to fix. */}
+      {/* 26 Sep 2026 feedback round: the separate "TOTAL ₹N" block removed per Bala's call --
+          the Pay button itself already shows the amount, so showing it twice was redundant.
+          F-190 Slice 3: one real button, not two -- UPI needs no separate button, Razorpay's
+          Standard Checkout already surfaces it as a selectable method inside the one overlay;
+          this batch adds a config.display block (below) so UPI shows first, not a second
+          button. handleRazorpayCheckout's own order-creation/verify/navigate flow is unchanged.
+          #pay-amount-display (in the summary card above) still shows the real amount once. */}
       <div
         className="fixed inset-x-0 bottom-0 z-20 px-5 pt-3.5 pb-[calc(14px+env(safe-area-inset-bottom))] flex items-center gap-4
           sm:static sm:px-0 sm:pt-0 sm:pb-6"
         style={{ background: 'var(--color-neutral-100)', borderTop: '1px solid var(--color-neutral-300)' }}
       >
-        <div className="flex flex-col shrink-0">
-          <span style={{ fontFamily: 'var(--font-body-organic)', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
-            TOTAL
-          </span>
-          <span className="text-lg font-extrabold font-mono" style={{ color: 'var(--color-text)' }}>
-            ₹{payAmount}
-          </span>
-        </div>
         <button
           onClick={handlePayPress}
           disabled={paying || acceptingTerms}

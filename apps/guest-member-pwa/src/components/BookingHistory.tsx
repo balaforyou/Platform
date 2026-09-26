@@ -79,7 +79,14 @@ export default function BookingHistory() {
       const res = await apiRequest<any[]>('/slot-engine/bookings/my', {
         token: accessToken,
       });
-      setBookings(res || []);
+      // 26 Sep 2026 feedback round: display-order sort only (backend order, heldAt desc, is
+      // when the booking was MADE, not the slot's own date) -- descending by the real slot
+      // date/time, latest first, per Bala's explicit call. Same pattern as main.tsx's own
+      // upcomingSlots sort, reversed comparator.
+      const sorted = (res || [])
+        .slice()
+        .sort((a: any, b: any) => new Date(b.window.startTime).getTime() - new Date(a.window.startTime).getTime());
+      setBookings(sorted);
     } catch (err: any) {
       setError(err.message || 'Failed to load booking history.');
     } finally {
@@ -155,7 +162,7 @@ export default function BookingHistory() {
         return (
           <span
             className={base}
-            style={{ background: 'var(--color-accent-2-100)', color: 'var(--color-accent-2-800)', borderColor: 'var(--color-accent-2-200)' }}
+            style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-800)', borderColor: 'var(--color-accent-200)' }}
           >
             Confirmed
           </span>
@@ -262,7 +269,7 @@ export default function BookingHistory() {
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="text-3xl tracking-tight" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>
-            My Bookings
+            History
           </h2>
           <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }}>
             Manage your scheduled court matches, complete checkout, check-in, or request cancellations.
@@ -352,7 +359,7 @@ export default function BookingHistory() {
                       <span>{sDate}</span>
                     </div>
                     <div className="flex items-start space-x-1.5">
-                      <Clock className="h-3.5 w-3.5 shrink-0 mt-px" style={{ color: 'var(--color-accent-2-700)' }} />
+                      <Clock className="h-3.5 w-3.5 shrink-0 mt-px" style={{ color: 'var(--color-accent-700)' }} />
                       <div className="space-y-0.5">
                         <div>{st} - {et}</div>
                         {/* F-187: a multi-window (F-183) booking's extra hours live on separate
@@ -447,7 +454,7 @@ export default function BookingHistory() {
                       <button
                         onClick={() => { setCheckInError(null); setCheckInTarget(booking); }}
                         className="py-2 px-4 text-xs font-semibold rounded-xl transition-all shadow-lg"
-                        style={{ background: 'var(--color-accent-2-700)', color: 'var(--color-accent-2-100)' }}
+                        style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
                         id={`check-in-btn-${booking.id}`}
                       >
                         I'm Here

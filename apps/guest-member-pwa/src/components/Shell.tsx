@@ -18,7 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { icon: HomeIcon, label: 'Home', to: '/', matchPaths: ['/'] },
   {
     icon: CalendarCheck2,
-    label: 'My Bookings',
+    label: 'History',
     to: '/bookings/my',
     matchPaths: ['/bookings/my', '/bookings/:id/pay', '/bookings/:id/confirmation'],
   },
@@ -56,7 +56,7 @@ export default function Shell() {
         aria-label="Account"
         onClick={() => setAccountOpen(true)}
       >
-        {avatarName ? <Avatar src={user?.photoUrl} name={avatarName} size={28} /> : <UserIcon className="h-4 w-4" />}
+        {avatarName ? <Avatar src={user?.photoUrl} name={avatarName} size={32} /> : <UserIcon className="h-4 w-4" />}
       </button>
 
       <main className="gpwa-shell__outlet">

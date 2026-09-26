@@ -20,12 +20,32 @@ import './BranchBooking.css';
 // accent-700 / accent-100). On the dark sticky bar the old pairing measured ~2.25:1 -- below
 // WCAG AA's 3:1 floor for UI components; accent-400 on neutral-900 clears it at ~6.8:1. Matches
 // JBC Migration.dc.html frame 08. Deliberately NOT migrated to the shared Button component this
-// slice -- Button's primary variant is width:100% and gold (--color-accent-2-400), a different
-// color role than this tenant-green CTA; forcing the migration risks a real visual regression
-// for no benefit, same discipline Phase 0 already applied to CancelBookingModal.tsx.
+// slice -- Button's primary variant is width:100%, a different layout role than this
+// flex-1/sm:w-full CTA (both are tenant-green as of the 26 Sep 2026 feedback round's gold-ramp
+// reversal, so color is no longer the distinguishing factor); forcing the migration risks a
+// real visual regression for no benefit, same discipline Phase 0 already applied to
+// CancelBookingModal.tsx.
 const primaryReserveBtn =
   'flex-1 sm:w-full min-h-[54px] py-3 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ' +
   'bg-[var(--color-accent-400)] text-[var(--color-neutral-900)] hover:bg-[var(--color-accent-300)] active:bg-[var(--color-accent-500)]';
+
+// 26 Sep 2026 feedback round: real seed data uses different dash characters in the same
+// position across JBC's two branches -- one branch's name has no dash at all, the other's real
+// name uses an en-dash (U+2013) where its own pool name uses a plain hyphen (U+002D). An exact
+// string prefix-strip would silently fail on the en-dash branch, the exact case this exists to
+// fix. Normalizing both sides before comparing, never mutating the real underlying data.
+const normalizeDashes = (s: string): string => s.replace(/[–—]/g, '-');
+
+/** Strips a redundant "{branchName} - " prefix from a pool name for display only, when the new
+    sticky top bar directly above already shows the venue name -- falls back to the real pool
+    name unchanged if no such prefix is present (other tenants' pools may not follow this
+    convention). */
+function displayPoolName(poolName: string, branchName?: string | null): string {
+  if (!branchName) return poolName;
+  const prefix = `${normalizeDashes(branchName)} - `;
+  const normalizedPool = normalizeDashes(poolName);
+  return normalizedPool.startsWith(prefix) ? poolName.slice(prefix.length) : poolName;
+}
 
 // F-266: matches admin-v2's `RateSource`/`RATE_SOURCE_LABEL`
 // (apps/admin-v2/src/screens/guestManagement/reservationHelpers.ts) exactly, so a guest and an
@@ -346,17 +366,6 @@ export default function BranchBooking() {
     return getSelectedChain().reduce((sum, slot) => sum + Number(slot.guestPrice), 0);
   };
 
-  const formatCancellationPolicy = (policy: any): string[] => {
-    if (!policy || policy.type !== 'tiered' || !Array.isArray(policy.tiers)) return [];
-    return [...policy.tiers]
-      .sort((a, b) => b.min_hours_before_slot - a.min_hours_before_slot)
-      .map((tier) =>
-        tier.min_hours_before_slot > 0
-          ? `${tier.refund_percent}% refund if cancelled ${tier.min_hours_before_slot}h+ before the slot`
-          : `${tier.refund_percent}% refund after that`,
-      );
-  };
-
   const handleReserve = async () => {
     if (!tenant || !branchId || !poolId || !selectedSlot || !user) return;
 
@@ -493,7 +502,7 @@ export default function BranchBooking() {
             <div className="lg:col-span-2 space-y-6">
               <div className="flex items-center gap-3 mb-3" style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', padding: '13px 14px' }}>
                 <div className="flex-1 flex flex-col gap-0.5 min-w-0">
-                  <div className="text-[13.5px] font-bold truncate" style={{ color: 'var(--color-text)' }}>{pool.name}</div>
+                  <div className="text-[13.5px] font-bold truncate" style={{ color: 'var(--color-text)' }}>{displayPoolName(pool.name, branchAbout?.name)}</div>
                   <div style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', letterSpacing: '0.04em', color: 'var(--color-neutral-600)' }}>
                     {pool.capacity} COURT{pool.capacity === 1 ? '' : 'S'}
                     {branchAbout?.workingHoursStart && branchAbout?.workingHoursEnd
@@ -504,9 +513,9 @@ export default function BranchBooking() {
               </div>
 
               {upcomingBooking && (
-                <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3 mb-3" style={{ background: 'var(--color-accent-2-200)' }}>
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--color-accent-2-600)' }} />
-                  <div className="flex-1 text-[12.5px] font-semibold" style={{ color: 'var(--color-accent-2-800)' }}>
+                <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3 mb-3" style={{ background: 'var(--color-accent-200)' }}>
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--color-accent-600)' }} />
+                  <div className="flex-1 text-[12.5px] font-semibold" style={{ color: 'var(--color-accent-800)' }}>
                     {formatBranchTime(upcomingBooking.window.startTime, upcomingBranchAbout?.timezone, { weekday: 'short' })}{' '}
                     {formatBranchTime(upcomingBooking.window.startTime, upcomingBranchAbout?.timezone, { hour: 'numeric', minute: '2-digit' })}
                   </div>
@@ -775,16 +784,9 @@ export default function BranchBooking() {
                       </div>
                     </div>
 
-                    {(pool.bookingRules?.[0]?.maxDailyBookingsPerGuest != null || pool.bookingRules?.[0]?.cancellationPolicyJson) && (
-                      <div className="text-[11.5px] p-4 space-y-1" style={{ background: 'var(--color-neutral-100)', color: 'var(--color-neutral-700)' }}>
-                        <p>
-                          Up to <span className="font-bold" style={{ color: 'var(--color-text)' }}>{pool.bookingRules?.[0]?.maxDailyBookingsPerGuest ?? 3}</span> booking(s) per day per guest.
-                        </p>
-                        {formatCancellationPolicy(pool.bookingRules?.[0]?.cancellationPolicyJson).map((line, i) => (
-                          <p key={i}>{line}</p>
-                        ))}
-                      </div>
-                    )}
+                    {/* 26 Sep 2026 feedback round: cancellation policy moved to Review & Pay
+                        (BookingPay.tsx), per Bala's call -- this screen keeps only the real
+                        duration/pricing summary. */}
 
                     {bookingError && (
                       <div
@@ -838,7 +840,7 @@ export default function BranchBooking() {
                             <span>Processing Hold...</span>
                           </>
                         ) : (
-                          <span>Hold & Proceed to Pay</span>
+                          <span>Continue to Payment</span>
                         )}
                       </button>
                     </div>

@@ -15,7 +15,7 @@ import BookingHistory from './components/BookingHistory';
 import BookingConfirmation from './components/BookingConfirmation';
 import Shell from './components/Shell';
 import LoadingState from './components/ui/LoadingState';
-import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Clock, MapPin, Navigation } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Clock, MapPin, Navigation, Feather, Calendar } from 'lucide-react';
 import './index.css';
 
 // Capture beforeinstallprompt event globally to avoid React component mounting race conditions
@@ -315,7 +315,7 @@ function MainDashboard() {
     };
     return {
       label: 'Confirmed',
-      style: { background: 'var(--color-accent-2-100)', color: 'var(--color-accent-2-800)', borderColor: 'var(--color-accent-2-200)' },
+      style: { background: 'var(--color-accent-100)', color: 'var(--color-accent-800)', borderColor: 'var(--color-accent-200)' },
     };
   };
 
@@ -437,7 +437,7 @@ function MainDashboard() {
               {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{formatBranchTime(memberSession.cutoffTime, branchTimezone, { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
             </div>
             {isConfirmed ? (
-              <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-accent-2-100)', border: '1px solid var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }}>
+              <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-accent-100)', border: '1px solid var(--color-accent-200)', color: 'var(--color-accent-800)' }}>
                 <CheckCircle className="h-4 w-4" />Attendance confirmed
               </div>
             ) : isDeclined ? (
@@ -552,7 +552,7 @@ function MainDashboard() {
         style={{ background: 'var(--color-accent-700)', color: 'var(--slot-selected-label)', fontFamily: 'var(--font-body-organic)' }}
         id="book-court-dashboard-btn"
       >
-        <span>{user?.userType === 'MEMBER' ? '+ Book as Guest' : '+ New Booking'}</span>
+        <span>{user?.userType === 'MEMBER' ? '+ Book as Guest' : 'Book a Court +'}</span>
       </button>
 
       {/* F-235 Slice E: "My Bookings" -- the mockup's real bookings-list body. Reuses upcomingSlots'
@@ -561,7 +561,7 @@ function MainDashboard() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>
-            My Bookings
+            Current Bookings
           </h3>
           <Link
             to="/bookings/my"
@@ -579,11 +579,24 @@ function MainDashboard() {
           <p className="text-xs" style={{ color: 'var(--color-destructive)' }} id="upcoming-slots-error">{upcomingError}</p>
         ) : upcomingSlots.length === 0 ? (
           <div
-            className="p-6 text-center rounded-2xl"
+            className="p-6 text-center rounded-2xl flex flex-col items-center gap-2"
             style={{ background: 'var(--mint-surface)', border: '1px solid var(--border-subtle)' }}
           >
+            {/* 26 Sep 2026 feedback round: no shuttlecock icon asset exists anywhere in the repo
+                and lucide-react has no literal shuttlecock icon -- composed from Feather
+                (shuttlecocks are feathered) layered over Calendar, per Bala's confirmed call. */}
+            <div className="relative" style={{ width: '40px', height: '40px' }}>
+              <Calendar className="h-10 w-10" style={{ color: 'var(--color-accent-300)' }} />
+              <Feather
+                className="h-5 w-5"
+                style={{ position: 'absolute', bottom: '-4px', right: '-4px', color: 'var(--color-accent-700)', transform: 'rotate(45deg)' }}
+              />
+            </div>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>
+              No pre-scheduled booking.
+            </p>
             <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }} id="upcoming-slots-empty">
-              No pre-scheduled matches today. Tap {user?.userType === 'MEMBER' ? '"+ Book as Guest"' : '"+ New Booking"'} to search for court times.
+              Tap Book a Court to search and book your slot.
             </p>
           </div>
         ) : (
@@ -602,6 +615,10 @@ function MainDashboard() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold truncate" style={{ color: 'var(--color-text)' }}>
                       {b.window.resourcePool?.name || 'Court booking'}
+                      {/* 26 Sep 2026 feedback round: real assigned court (F-189/F-205), already
+                          fetched via GET /bookings/my's resource: true include -- nullable-safe
+                          for a legacy pre-F-205 booking with no resource. */}
+                      {b.resource?.name ? ` • ${b.resource.name}` : ''}
                     </span>
                     <span className="shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border" style={badge.style}>
                       {badge.label}
@@ -672,7 +689,7 @@ function MainDashboard() {
 // the decided derivation (memberAttendanceConfirmedAt/DeclinedAt, never CHECKED_IN); a real "not
 // enough history yet" empty state when the server reports no session has occurred yet.
 const CALENDAR_STATE_STYLE: Record<string, React.CSSProperties> = {
-  ATTENDED: { background: 'var(--color-accent-2-500, #16a34a)', color: '#fff' },
+  ATTENDED: { background: 'var(--color-accent-500)', color: '#fff' },
   DECLINED: { background: 'var(--slot-almostfull-surface)', color: 'var(--slot-almostfull-text)', border: '1px solid var(--slot-almostfull-border)' },
   NO_RESPONSE: { background: 'var(--color-destructive, #dc2626)', color: '#fff' },
   NO_DATA: { background: 'var(--color-neutral-200)', color: 'var(--color-neutral-400)' },
