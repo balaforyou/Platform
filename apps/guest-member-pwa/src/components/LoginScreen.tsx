@@ -152,12 +152,12 @@ export default function LoginScreen() {
         className="flex-none flex flex-col justify-end px-6 pt-8 pb-6 mx-auto w-full max-w-md"
         style={{
           minHeight: '200px',
-          background: 'repeating-linear-gradient(115deg, var(--color-accent-2-700) 0 12px, var(--color-accent-2-800) 12px 24px)',
+          background: 'repeating-linear-gradient(115deg, var(--color-accent-700) 0 12px, var(--color-accent-800) 12px 24px)',
         }}
       >
         <span
           className="self-start px-2.5 py-1.5 rounded-full text-[10.5px] font-semibold tracking-wide"
-          style={{ fontFamily: 'var(--font-body-organic)', color: 'var(--color-accent-2-100)', background: 'rgba(32,30,29,0.55)' }}
+          style={{ fontFamily: 'var(--font-body-organic)', color: 'var(--color-accent-100)', background: 'rgba(32,30,29,0.55)' }}
         >
           court photo
         </span>

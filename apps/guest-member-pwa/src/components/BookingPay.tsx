@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { Smartphone, Activity, MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
+import LoadingState from './ui/LoadingState';
 import { TERMS_VERSION } from '../constants/terms';
+import { buildRazorpayPrefill, resolveConfirmedRedirect } from '../lib/bookingPayLogic';
 
 export default function BookingPay() {
   const { bookingId } = useParams();
@@ -68,6 +70,15 @@ export default function BookingPay() {
         const bookingRes = await apiRequest<any>(`/slot-engine/bookings/${bookingId}`, {
           token: accessToken,
         });
+        // F-308: a page refresh, bookmarked/shared URL, or another tab can land here for a
+        // booking already CONFIRMED (paid). Redirect straight to Confirmation instead of
+        // rendering the stale Pay UI -- the history-replace fix above only covers the
+        // back-swipe case, not a fresh mount on this URL.
+        const redirect = resolveConfirmedRedirect(bookingId, bookingRes.status);
+        if (redirect) {
+          navigate(redirect.to, redirect.options);
+          return;
+        }
         setBooking(bookingRes);
       } catch (err: any) {
         setError(err.message || 'Failed to initialize payment process.');
@@ -95,13 +106,15 @@ export default function BookingPay() {
     return () => { isMounted = false; };
   }, [booking?.branchId, branchAbout, accessToken]);
 
-  const handleTermsCheckbox = async (checked: boolean) => {
-    if (!checked) {
-      // Unchecking is a pure UI reversal -- the server write from a prior check is harmless
-      // (idempotent) and simply gets re-asserted if the guest re-checks.
-      setTermsAccepted(false);
-      return;
-    }
+  // F-307 (26 Sep 2026, Bala-approved): the visible checkbox is gone -- consent is now implicit
+  // in pressing Pay, per the pasted decision content. The server-side consent record is
+  // preserved unchanged: this still calls POST /bookings/:id/terms (same TERMS_VERSION) before
+  // creating the payment intent, same two-call order createIntentHandler's TERMS_NOT_ACCEPTED
+  // check already enforces -- only the trigger moved from a checkbox onChange to the Pay button
+  // itself (see handlePayPress/handleMockPayment below). Returns the created intent (or the
+  // already-created one) so callers don't read `intent` state before React has committed it.
+  const ensureTermsAndIntent = async (): Promise<any | null> => {
+    if (termsAccepted && intent) return intent;
 
     try {
       setAcceptingTerms(true);
@@ -112,9 +125,6 @@ export default function BookingPay() {
         body: JSON.stringify({ termsVersion: TERMS_VERSION }),
       });
 
-      // Only now -- after the server has actually recorded acceptance -- create the payment
-      // intent. createIntentHandler's TERMS_NOT_ACCEPTED check would otherwise reject this same
-      // call if it ran before the line above.
       const intentRes = await apiRequest<any>('/payment/intents', {
         method: 'POST',
         token: accessToken,
@@ -122,15 +132,22 @@ export default function BookingPay() {
       });
       setIntent(intentRes);
       setTermsAccepted(true);
+      return intentRes;
     } catch (err: any) {
       setTermsError(err.message || 'Could not record terms acceptance. Please try again.');
       setTermsAccepted(false);
+      return null;
     } finally {
       setAcceptingTerms(false);
     }
   };
 
   const handleMockPayment = async () => {
+    // F-307: dev-only path gets the same implicit-consent sequencing as the real Razorpay button
+    // below, so it keeps recording a real terms-acceptance row before simulate-capture runs.
+    const ok = await ensureTermsAndIntent();
+    if (!ok) return;
+
     try {
       setPaying(true);
       setError(null);
@@ -144,7 +161,9 @@ export default function BookingPay() {
       });
 
       // Optimistic redirect to confirmation screen
-      navigate(`/bookings/${bookingId}/confirmation`);
+      // F-308: replace, not push -- a back-swipe from Confirmation must not land back on this
+      // now-stale, already-paid Pay screen.
+      navigate(`/bookings/${bookingId}/confirmation`, { replace: true });
     } catch (err: any) {
       setPaymentError(err.message || 'Simulation payment capture failed.');
     } finally {
@@ -166,8 +185,12 @@ export default function BookingPay() {
     });
   };
 
-  const handleRazorpayCheckout = async () => {
-    if (!intent || !booking) return;
+  // F-307: accepts the just-created intent directly rather than only reading `intent` state --
+  // handlePayPress calls this immediately after ensureTermsAndIntent resolves, before React has
+  // necessarily committed that setIntent() call.
+  const handleRazorpayCheckout = async (activeIntent?: any) => {
+    const resolvedIntent = activeIntent ?? intent;
+    if (!resolvedIntent || !booking) return;
     setPaying(true);
     // F-163: clearing on each new attempt is the half CourtBooking has (:122) and this screen did
     // not. Without it a banner from a previous failed attempt would still be on screen during the
@@ -188,7 +211,7 @@ export default function BookingPay() {
         token: accessToken,
         body: JSON.stringify({
           bookingId,
-          amount: intent.amount,
+          amount: resolvedIntent.amount,
           currency: 'INR',
           receipt: bookingId,
         }),
@@ -230,7 +253,8 @@ export default function BookingPay() {
             });
 
             // Navigate to confirmation page
-            navigate(`/bookings/${bookingId}/confirmation`);
+            // F-308: replace, not push -- see the mock-payment path above for why.
+            navigate(`/bookings/${bookingId}/confirmation`, { replace: true });
           } catch (err: any) {
             // F-165, deliberately UNCHANGED here. This fires when our own verify call fails, by
             // which point Razorpay's checkout has already closed and the payment may well have
@@ -250,15 +274,44 @@ export default function BookingPay() {
             console.log('Payment modal dismissed by user');
           }
         },
-        prefill: {
-          contact: booking.phone || '',
-        },
+        ...buildRazorpayPrefill(user),
         theme: {
           color:
             tenant?.themeColor ||
             getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
             '#e11d48',
-        }
+        },
+        // 26 Sep 2026 feedback round: UPI shown first, everything else collapsed under it --
+        // reorders within Razorpay's existing one-overlay checkout, does not reintroduce a
+        // second button (F-190 Slice 3 kept this to one real button, still true here).
+        //
+        // Real bug found and fixed via a live device report (the "Payment Options" screen
+        // showed Cards/Netbanking/Wallet under the "Other payment methods" custom name --
+        // proving config.display WAS being read -- but no UPI block at all, not even under
+        // defaults): the original instrument was a bare `{ method: 'upi' }`, which has no
+        // `flows` and Razorpay silently drops a block that resolves to nothing. Razorpay's
+        // own documented UPI instrument shape requires `flows` explicitly -- "intent" is the
+        // specific flow that shows tappable app icons (GPay/PhonePe/etc.), which is what was
+        // actually missing ("no UPI intent prompt"). That first fix also added an `apps`
+        // whitelist, which a real Codacy catch flagged as the actual remaining problem: it
+        // silently excluded any UPI app not on the list (Amazon Pay, CRED, bank apps, etc.).
+        // `apps` is now deliberately omitted -- Razorpay auto-detects installed apps for the
+        // intent flow when it's left out.
+        config: {
+          display: {
+            blocks: {
+              upi: {
+                name: 'Pay via UPI',
+                instruments: [
+                  { method: 'upi', flows: ['intent', 'collect', 'qr'] },
+                ],
+              },
+              other: { name: 'Other payment methods', instruments: [{ method: 'card' }, { method: 'netbanking' }, { method: 'wallet' }] },
+            },
+            sequence: ['block.upi', 'block.other'],
+            preferences: { show_default_blocks: false },
+          },
+        },
       };
 
       const rzp = new (window as any).Razorpay(options);
@@ -277,25 +330,17 @@ export default function BookingPay() {
     }
   };
 
+  // F-307: the real Pay button's onClick -- records terms acceptance + creates the payment
+  // intent first (same server calls the old checkbox triggered), then opens Razorpay with that
+  // intent passed directly, not read back from state.
+  const handlePayPress = async () => {
+    const activeIntent = await ensureTermsAndIntent();
+    if (!activeIntent) return;
+    await handleRazorpayCheckout(activeIntent);
+  };
+
   if (loading) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
-        <style>{'@keyframes booking-pay-spin { to { transform: rotate(360deg); } }'}</style>
-        <div
-          style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '999px',
-            border: '4px solid var(--color-accent-200)',
-            borderTopColor: 'var(--color-accent-700)',
-            animation: 'booking-pay-spin 1s linear infinite',
-          }}
-        />
-        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-600)' }}>
-          Securing payment gateway&hellip;
-        </p>
-      </div>
-    );
+    return <LoadingState variant="full" label="Securing payment gateway…" />;
   }
 
   if (error || !booking) {
@@ -405,9 +450,17 @@ export default function BookingPay() {
               </div>
             )}
           </div>
+          {/* 26 Sep 2026 feedback round, real bug fix: `resourcePool.capacity` is real seed data,
+              but it means the number of COURTS in the pool (JBC's real pool has 4 courts,
+              "resources": ["Court 1".."Court 4"]), not players-per-court -- the prior batch
+              mislabeled it. No per-pool max-players field exists anywhere in the schema (only
+              minOccupancy, a minimum), so this is static copy, same real "6" confirmed for
+              BranchBooking.tsx's own "Up to 6 players per court" line, not data-driven. */}
           <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-            <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Players</span>
-            <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>{1 + (booking.players?.length || 0)}</span>
+            <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Court Capacity</span>
+            <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
+              6 Players Allowed
+            </span>
           </div>
           <div className="flex justify-between items-center px-4 py-3">
             <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-neutral-700)' }}>Amount to Pay</span>
@@ -417,11 +470,42 @@ export default function BookingPay() {
           </div>
         </div>
 
-        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. booking.phone (used below in
-            Razorpay's prefill.contact) is confirmed dead: Booking has no phone column and
-            GET /bookings/:id never joins one in, so that reference has always silently resolved to
-            undefined. useAuth().user.phone is the JWT's own phone claim, already decoded into
-            AuthContext -- real, already-available, no new request. "Verified" is accurate, not
+        {/* 26 Sep 2026 feedback round: moved here from BranchBooking.tsx's Slot & Time Selection
+            screen, per Bala's call -- the cancellation policy reads more naturally right before
+            payment than one screen earlier. booking.window.resourcePool.bookingRules is a new,
+            additive-only backend include (GET /bookings/:id) added for exactly this. */}
+        {(() => {
+          const rule = booking.window?.resourcePool?.bookingRules?.[0];
+          if (!rule || (rule.maxDailyBookingsPerGuest == null && !rule.cancellationPolicyJson)) return null;
+          const policy = rule.cancellationPolicyJson;
+          const policyLines: string[] =
+            policy && policy.type === 'tiered' && Array.isArray(policy.tiers)
+              ? [...policy.tiers]
+                  .sort((a: any, b: any) => b.min_hours_before_slot - a.min_hours_before_slot)
+                  .map((tier: any) =>
+                    tier.min_hours_before_slot > 0
+                      ? `${tier.refund_percent}% refund if cancelled ${tier.min_hours_before_slot}h+ before the slot`
+                      : `${tier.refund_percent}% refund after that`,
+                  )
+              : [];
+          return (
+            <div className="text-[11.5px] rounded-2xl p-4 space-y-1" style={{ background: 'var(--color-neutral-100)', color: 'var(--color-neutral-700)' }}>
+              <p>
+                Up to <span className="font-bold" style={{ color: 'var(--color-text)' }}>{rule.maxDailyBookingsPerGuest ?? 3}</span> booking(s) per day per guest.
+              </p>
+              {policyLines.map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. useAuth().user.phone is the
+            JWT's own phone claim, already decoded into AuthContext -- real, already-available, no
+            new request. F-309: this same user.phone is now also what Razorpay's prefill.contact
+            uses below (locked read-only there) -- booking.phone, which that field used to
+            reference, was confirmed dead: Booking has no phone column and GET /bookings/:id never
+            joins one in, so it always silently resolved to undefined. "Verified" is accurate, not
             decorative -- but as of F-235 Slice D, not for the reason originally written here:
             main.tsx's ProtectedRoute no longer gates on phone presence at all (a fresh Google
             signup with no phone reaches every route, including this one). Phone presence AND
@@ -439,12 +523,17 @@ export default function BookingPay() {
               style={{ border: '1px solid var(--color-neutral-300)', background: 'var(--color-neutral-100)', borderRadius: '14px', minHeight: '52px' }}
             >
               <span className="text-[14px] font-bold" style={{ color: 'var(--color-text)' }}>{user.phone}</span>
-              <span
-                className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full"
-                style={{ color: 'var(--color-accent-2-800)', background: 'var(--color-accent-2-200)' }}
-              >
-                Verified
-              </span>
+              {/* 26 Sep 2026 UI-polish batch: wired to the real user.isPhoneVerified claim
+                  (already decoded onto AuthContext's user, see lib/auth.ts) instead of rendering
+                  unconditionally whenever user.phone is truthy -- no new fetch needed. */}
+              {user.isPhoneVerified && (
+                <span
+                  className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full"
+                  style={{ color: 'var(--color-accent-800)', background: 'var(--color-accent-200)' }}
+                >
+                  Verified
+                </span>
+              )}
             </div>
             {/* Generic, non-numeric -- not the wireframe's hardcoded "Free cancellation until 3:00
                 PM today". The real tiered policy was already shown one screen earlier on
@@ -456,42 +545,29 @@ export default function BookingPay() {
           </div>
         )}
 
-        {/* F-235 Slice F: restyled to the real mockup's single combined-paragraph shape (one
-            checkbox + one sentence carrying all three clauses, plus a small persistence caption)
-            instead of the F-235 Slice B bulleted-list-plus-separate-checkbox-line shape.
-            Presentation-only change -- #accept-terms-checkbox id and handleTermsCheckbox's
-            server-write-gated logic (POST /bookings/:id/terms, then /payment/intents) are
-            byte-identical to Slice B. */}
-        <label
-          className="flex items-start gap-3 p-4"
-          style={{ background: 'var(--color-accent-2-100)', border: '1px solid var(--color-accent-2-300)', borderRadius: '16px', cursor: acceptingTerms ? 'default' : 'pointer' }}
-          id="terms-acceptance-block"
+        {/* F-307 (26 Sep 2026, Bala-approved): explicit checkbox removed -- consent is now
+            implicit in pressing Pay (ensureTermsAndIntent/handlePayPress above). Chief review
+            required the full clause set (shoes, food AND drinks, the liability waiver, venue
+            name) to carry over verbatim in substance, just restructured into a passive sentence
+            -- not shortened. TERMS_VERSION bumped in constants/terms.ts since this wording
+            change is exactly what that file's own comment says to bump for. */}
+        <div
+          className="p-4"
+          style={{ background: 'var(--color-accent-100)', border: '1px solid var(--color-accent-300)', borderRadius: '16px' }}
+          id="terms-disclaimer-block"
         >
-          <input
-            type="checkbox"
-            id="accept-terms-checkbox"
-            checked={termsAccepted}
-            disabled={acceptingTerms}
-            onChange={(e) => handleTermsCheckbox(e.target.checked)}
-            style={{ marginTop: '2px', width: '18px', height: '18px', flexShrink: 0 }}
-          />
-          <div className="space-y-1.5">
-            <p className="text-[12.5px] font-bold leading-relaxed" style={{ color: 'var(--color-text)' }}>
-              I agree to the venue&rsquo;s court rules for this booking &mdash; non-marking shoes,
-              no food or drinks on court, no liability for injuries sustained during play at{' '}
-              {branchAbout?.name || 'this venue'}.
-            </p>
-            <p className="text-[11px]" style={{ color: 'var(--color-neutral-700)' }}>
-              Accepted terms are recorded against this specific booking.
-            </p>
-            {termsError && (
-              <div className="flex items-start space-x-2 text-xs pt-1" style={{ color: 'var(--color-destructive)' }} id="terms-error-banner">
-                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{termsError}</span>
-              </div>
-            )}
-          </div>
-        </label>
+          <p className="text-[12px] leading-relaxed" style={{ color: 'var(--color-neutral-700)' }}>
+            By continuing, you agree to {branchAbout?.name || 'this venue'}&rsquo;s court rules for
+            this booking &mdash; non-marking shoes, no food or drinks on court, and no liability
+            for injuries sustained during play.
+          </p>
+          {termsError && (
+            <div className="flex items-start space-x-2 text-xs pt-2" style={{ color: 'var(--color-destructive)' }} id="terms-error-banner">
+              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{termsError}</span>
+            </div>
+          )}
+        </div>
 
         {/* Payment methods -- dev-only simulate button has no mockup equivalent (mockup shows one
             sticky Pay button only), kept per this project's governing principle: real V1
@@ -501,11 +577,11 @@ export default function BookingPay() {
           {isDev && (
             <button
               onClick={handleMockPayment}
-              disabled={paying || !termsAccepted}
+              disabled={paying || acceptingTerms}
               className="w-full p-4 flex items-center justify-between text-left transition-colors"
               style={{
-                background: 'var(--color-accent-2-100)',
-                border: '1px solid var(--color-accent-2-300)',
+                background: 'var(--color-accent-100)',
+                border: '1px solid var(--color-accent-300)',
                 borderRadius: '16px',
                 fontFamily: 'var(--font-body-organic)',
               }}
@@ -514,7 +590,7 @@ export default function BookingPay() {
               <div className="flex items-center space-x-3">
                 <div
                   className="h-10 w-10 rounded-xl flex items-center justify-center"
-                  style={{ background: 'var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }}
+                  style={{ background: 'var(--color-accent-200)', color: 'var(--color-accent-800)' }}
                 >
                   <ShieldCheck className="h-5 w-5" />
                 </div>
@@ -524,11 +600,11 @@ export default function BookingPay() {
                 </div>
               </div>
               {paying ? (
-                <Activity className="h-4 w-4 animate-spin" style={{ color: 'var(--color-accent-2-800)' }} />
+                <LoadingState variant="inline" />
               ) : (
                 <span
                   className="text-xs px-2 py-0.5 rounded font-mono font-bold"
-                  style={{ background: 'var(--color-accent-2-300)', color: 'var(--color-accent-2-800)' }}
+                  style={{ background: 'var(--color-accent-300)', color: 'var(--color-accent-800)' }}
                 >
                   Local
                 </span>
@@ -557,40 +633,30 @@ export default function BookingPay() {
         </div>
       </div>
 
-      {/* F-235 Slice F: sticky TOTAL + Pay footer, matching the real mockup's Payment-half
-          sticky bar shape (same pattern BookingConfirmation.tsx's own sticky footer already
-          uses). F-190 Slice 3: one real button, not two -- UPI needs no separate button or
-          config.display work, Razorpay's Standard Checkout already surfaces it as a selectable
-          method inside the one overlay and hands off to the device's UPI apps (Intent) directly.
-          handleRazorpayCheckout is entirely unchanged -- same order-creation/verify/navigate
-          flow, same unrestricted options. #pay-amount-display (in the summary card above) is not
-          duplicated here -- the footer repeating the amount is the mockup's own intentional
-          redundancy (TOTAL label + Pay button both show it), not a mistake to fix. */}
+      {/* 26 Sep 2026 feedback round: the separate "TOTAL ₹N" block removed per Bala's call --
+          the Pay button itself already shows the amount, so showing it twice was redundant.
+          F-190 Slice 3: one real button, not two -- UPI needs no separate button, Razorpay's
+          Standard Checkout already surfaces it as a selectable method inside the one overlay;
+          this batch adds a config.display block (below) so UPI shows first, not a second
+          button. handleRazorpayCheckout's own order-creation/verify/navigate flow is unchanged.
+          #pay-amount-display (in the summary card above) still shows the real amount once. */}
       <div
         className="fixed inset-x-0 bottom-0 z-20 px-5 pt-3.5 pb-[calc(14px+env(safe-area-inset-bottom))] flex items-center gap-4
           sm:static sm:px-0 sm:pt-0 sm:pb-6"
         style={{ background: 'var(--color-neutral-100)', borderTop: '1px solid var(--color-neutral-300)' }}
       >
-        <div className="flex flex-col shrink-0">
-          <span style={{ fontFamily: 'var(--font-body-organic)', fontSize: '10.5px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
-            TOTAL
-          </span>
-          <span className="text-lg font-extrabold font-mono" style={{ color: 'var(--color-text)' }}>
-            ₹{payAmount}
-          </span>
-        </div>
         <button
-          onClick={handleRazorpayCheckout}
-          disabled={paying || !termsAccepted}
-          className="flex-1 min-h-[54px] rounded-2xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ background: 'var(--color-accent-400)', color: 'var(--color-neutral-900)', border: 'none' }}
+          onClick={handlePayPress}
+          disabled={paying || acceptingTerms}
+          className="flex-1 min-h-[54px] rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: 'var(--color-accent-700)', color: 'var(--slot-selected-label)', border: 'none' }}
           id="real-razorpay-btn"
         >
-          {paying ? (
-            <Activity className="h-4 w-4 animate-spin" />
+          {paying || acceptingTerms ? (
+            <LoadingState variant="inline" />
           ) : (
             <>
-              <Smartphone className="h-4 w-4" />
+              <span aria-hidden="true">🔒</span>
               <span>Pay ₹{payAmount}</span>
             </>
           )}

@@ -333,7 +333,7 @@ test.describe.skip('F-043 Phase C scheduling UI', () => {
     // has more than one real branch, so auto-select-first can't be relied on -- pick f043c-branch
     // explicitly via the venue-switcher sheet, same as a real guest would.
     await guestPage.goto(`/book?tenant=${tenantSubdomain}`);
-    await guestPage.click('.gpwa-branchbooking__venue-chip');
+    await guestPage.click('.gpwa-branchbooking__topbar-title');
     await guestPage.click(`[id^="branch-card-${branchId}"]`);
     const guestAvailabilityResponse = guestPage.waitForResponse((res) =>
       res.url().includes(`/api/slot-engine/resource-pools/${poolId}/availability?date=${guestDate}`)

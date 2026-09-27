@@ -7,8 +7,8 @@
   color: var(--color-accent-800);
 }
 .gpwa-status-pill[data-status='HELD'] {
-  background: var(--color-accent-2-200);
-  color: var(--color-accent-2-800);
+  background: var(--color-accent-200);
+  color: var(--color-accent-800);
 }
 .gpwa-status-pill[data-status='CANCELLED'],
 .gpwa-status-pill[data-status='RELEASED_NO_SHOW'] {
@@ -22,8 +22,8 @@
   color: var(--color-accent-100);
 }
 :root[data-theme='dark'] .gpwa-status-pill[data-status='HELD'] {
-  background: var(--color-accent-2-800);
-  color: var(--color-accent-2-200);
+  background: var(--color-accent-800);
+  color: var(--color-accent-200);
 }
 :root[data-theme='dark'] .gpwa-status-pill[data-status='CANCELLED'],
 :root[data-theme='dark'] .gpwa-status-pill[data-status='RELEASED_NO_SHOW'] {
@@ -38,8 +38,8 @@
     color: var(--color-accent-100);
   }
   :root:not([data-theme='light']) .gpwa-status-pill[data-status='HELD'] {
-    background: var(--color-accent-2-800);
-    color: var(--color-accent-2-200);
+    background: var(--color-accent-800);
+    color: var(--color-accent-200);
   }
   :root:not([data-theme='light']) .gpwa-status-pill[data-status='CANCELLED'],
   :root:not([data-theme='light']) .gpwa-status-pill[data-status='RELEASED_NO_SHOW'] {

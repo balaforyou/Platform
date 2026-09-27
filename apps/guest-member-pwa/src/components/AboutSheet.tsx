@@ -113,7 +113,7 @@ export default function AboutSheet({ open, onOpenChange, branchId }: AboutSheetP
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2" style={{ fontFamily: 'var(--font-body-organic)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.09em', color: 'var(--color-neutral-700)' }}>
-                    <Clock className="h-4 w-4" style={{ color: 'var(--color-accent-2-700)' }} />
+                    <Clock className="h-4 w-4" style={{ color: 'var(--color-accent-700)' }} />
                     <span>WORKING SCHEDULE</span>
                   </div>
                   <div className="font-mono space-y-1" style={{ fontSize: '12px', lineHeight: 1.7, color: 'var(--color-neutral-700)' }}>
