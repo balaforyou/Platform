@@ -4585,6 +4585,20 @@ separate from the unrelated `claude/` plan-doc backfill campaign that surfaced t
 
 **New candidate finding surfaced, described not numbered, for Chief to assign (rule 9 / the register's own numbering discipline):** `POST /bookings` (the F-183 route) also never validates that a caller-supplied `resourcePoolId`/`windowId` belongs to the caller's own JWT `tenantId` -- the same class of gap fixed on the new `POST /booking-orders` route above, but pre-existing and not introduced by this batch. Not fixed here since it is not unique to this route and fixing the already-hardened `/bookings` path is its own real change deserving its own review, not a drive-by inside this batch.
 
+## Batch — production promotion to `ead6789` (F-310 Phase 1 + F-308/F-309 live) + real device close-out
+
+**Promoted `main` HEAD `ead678974d929956cc9f9285562c202294f74b12` to production, run from Bala's own machine with real `gcloud`/VM access** (this session has no `gcloud` CLI and no network route to `elitecourts.duckdns.org` — confirmed, not assumed, before handing off the command). Bundles three PRs merged since the last documented promotion (`5a82036`, PR #109): **#113** (F-308 back-swipe fix, F-309 Razorpay prefill fix) and **#114** (F-310 Phase 1, `POST /booking-orders`). All three share zero blast radius with each other and with existing `/bookings`/`BookingPay.tsx` behavior (per each PR's own blast-radius check), so bundling the three into one promotion carried no additional risk over promoting any one alone.
+
+**Real promote.sh evidence, not summarized from a claim:** migrate guard passed (`[verify-build-sha] ok`, the F-310 migration `20260927120000_booking_orders_f310` applied); all 6 long-running services recreated; the transient `connection refused`/`502`s during `wait_for_ready` are the documented normal restart window, resolved in ~21s; Caddy HTTP-fallback grep = **0** (HTTPS genuinely live, not silently HTTP-only); `verify-deployment.mjs` — **all 7 components PASS on `ead678974d92`**, including admin-v2; F-260's prune step removed exactly the superseded generation (`30237ec`-tagged images, two promotions back), keeping current + 1 prior intact.
+
+**Real device close-out, closing F-308/F-309's previously disclosed "not performed this round" gap (both register rows updated directly, in the same pass):**
+- **F-309** — real Razorpay checkout on a real phone against `jbc.elitecourts.duckdns.org`: contact field showed the account's real verified number and was confirmed **non-editable** — both halves of the fix (`prefill.contact` repointed to `user.phone`, `readonly.contact` lock) are genuinely live, not just unit-tested via `buildRazorpayPrefill`.
+- **F-308** — real back-swipe after a completed payment: landed on the date/slot-selection screen (Pay's history entry genuinely replaced by Confirmation, never re-shown), with **no flash of the stale Pay screen** at any point during the gesture — the intended effect of `{ replace: true }`, confirmed live rather than assumed from the code read. Direct-URL-to-CONFIRMED-booking re-verification was not separately re-run this pass (unchanged code path, already covered by the extracted `resolveConfirmedRedirect` vitest section) — named here rather than silently folded into "fully re-verified."
+
+**F-310 register row unchanged (stays Open):** Phase 1 being live in production doesn't resolve the row — per the F-207 precedent already recorded at merge time, it stays Open until Phase 2 (guest-facing UI) also lands. Noted here only so "deployed" isn't mistaken for "resolved."
+
+**Close-out:** `docs/findings_register.md` — F-308 and F-309's Resolution columns each got a dated (27 Sep 2026) closure note appended, converting their disclosed live-verification gap to closed; no Open→Resolved transition needed (both were already Resolved) so nothing in either row's Description was touched or lost. No new finding IDs. Production now confirmed live on `ead6789` — the last SHA this file documents as deployed.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside
