@@ -4351,6 +4351,18 @@ no register rows yet.
 
 **Close-out:** no register/finding ID needed — real bugfixes plus content/layout polish, same convention as the prior two rounds. PR #108 opened against `main`, reviewed and approved by Chief after the fact (see `claude/chief-review-guest-pwa-feedback-round3-pr108-26sep.md`), and merged into `main`. A same-round follow-up (PR #109) then dropped the UPI instrument's hardcoded app whitelist per a Codacy catch. Not yet deployed — awaiting Bala's go-ahead, per rule 6 and this project's per-deploy authorization convention.
 
+## Batch — F-309: Razorpay contact prefill repointed to the real verified number
+
+**Chief handover, scoped to `apps/guest-member-pwa/src/components/BookingPay.tsx` only, no backend change.** Bala noticed Razorpay's real checkout still prompted for a phone number even though the guest's verified number was already shown on this exact screen. Investigated against real code first, per rule 1 — the handover's root-cause claim held: `options.prefill.contact` read `booking.phone || ''`, and `booking.phone` is dead (no `phone` column on `Booking`, confirmed against `schema.prisma`; `GET /bookings/:id` never joins one in), so the field always silently resolved to `''`.
+
+**Fix:** `prefill.contact` repointed to `user?.phone` (the JWT's own phone claim, already decoded onto `AuthContext`, already displayed on this same screen as "YOUR NUMBER"); added `prefill.name` reusing the exact `displayName || name || email` fallback chain `main.tsx` already established for F-285, rather than a new one (rule 4); added `readonly: { contact: true }` since the number is genuinely pre-verified, closing a real gap beyond UX (without it a guest could check out with a different, unverified number). Updated the file's own existing comment (previously describing `booking.phone` as the dead value `prefill.contact` used) to match the new reality.
+
+**Blast-radius check:** confirmed via grep that `options`/`prefill` in this file has exactly one Razorpay checkout call site and `booking.phone` has no other reference anywhere in the file after the change. No other component builds Razorpay options.
+
+**Evidence:** `@badminton/ui-shared` rebuilt first, then `guest-member-pwa` — `tsc --noEmit` and `tsc && vite build` both clean, zero errors (rebuild-before-test per rule 7). Confirmed by code read, not assumption, that no fallback case needs designing for: `BranchBooking.tsx`'s `handleReserve` blocks on `!user.isPhoneVerified` and routes through `VerifyPhoneDialog` before `POST /slot-engine/bookings` can ever be called, so a booking reaching this pay screen already guarantees a real, verified `user.phone` — the same guarantee the pre-existing "YOUR NUMBER" display already relies on. **Not performed this round, disclosed rather than claimed:** the real Razorpay-checkout device/production confirmation (contact field arriving pre-filled and locked) — this repo's own documented constraint (root `CLAUDE.md`) is that real Razorpay checkout needs a static IP + HTTPS domain, reachable only from the deployed VM, not from this sandboxed session.
+
+**Close-out:** `pnpm register:check` — 272 rows, Open 116 / Resolved 156 (was 271, Open 116 / Resolved 155): one new Resolved row, F-309. Register row and pending-findings `Confirmed-ID: F-309` entry land in the same pass as this batch-log entry, per rule 6. **Not committed or pushed — awaiting Bala/Chief sign-off per rule 6**, and no deploy without a separate explicit instruction.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

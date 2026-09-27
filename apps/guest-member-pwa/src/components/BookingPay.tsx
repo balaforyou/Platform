@@ -262,7 +262,11 @@ export default function BookingPay() {
           }
         },
         prefill: {
-          contact: booking.phone || '',
+          contact: user?.phone || '',
+          name: user?.displayName || user?.name || user?.email || undefined,
+        },
+        readonly: {
+          contact: true,
         },
         theme: {
           color:
@@ -489,11 +493,12 @@ export default function BookingPay() {
           );
         })()}
 
-        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. booking.phone (used below in
-            Razorpay's prefill.contact) is confirmed dead: Booking has no phone column and
-            GET /bookings/:id never joins one in, so that reference has always silently resolved to
-            undefined. useAuth().user.phone is the JWT's own phone claim, already decoded into
-            AuthContext -- real, already-available, no new request. "Verified" is accurate, not
+        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. useAuth().user.phone is the
+            JWT's own phone claim, already decoded into AuthContext -- real, already-available, no
+            new request. F-309: this same user.phone is now also what Razorpay's prefill.contact
+            uses below (locked read-only there) -- booking.phone, which that field used to
+            reference, was confirmed dead: Booking has no phone column and GET /bookings/:id never
+            joins one in, so it always silently resolved to undefined. "Verified" is accurate, not
             decorative -- but as of F-235 Slice D, not for the reason originally written here:
             main.tsx's ProtectedRoute no longer gates on phone presence at all (a fresh Google
             signup with no phone reaches every route, including this one). Phone presence AND

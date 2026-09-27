@@ -2127,3 +2127,22 @@ approved (implicit consent, not narrower consent), corrected to carry the full c
 in substance before any code was written.
 Confirmed-ID: F-307
 Confirmed: 26 Sep 2026
+
+### razorpay-contact-prefill-dead-field
+Batch: guest-member-pwa, 27 Sep 2026
+Surfaced: Bala reported Razorpay's real checkout still prompting for a phone number despite the
+guest's verified number already showing on the same screen; Chief-assigned F-309 in the handover
+itself.
+Description: `BookingPay.tsx`'s Razorpay `options.prefill.contact` read `booking.phone || ''` --
+confirmed dead, since `Booking` has no `phone` column and `GET /bookings/:id` never joins one in,
+so it always silently resolved to `''`. Repointed to the real, already-verified `user.phone`
+already rendered on this screen as "YOUR NUMBER"; added `prefill.name` reusing the existing
+`displayName || name || email` fallback chain (F-285 precedent, `main.tsx`); added
+`readonly: { contact: true }` since the number is genuinely pre-verified. Confirmed via grep that
+`booking.phone` had no other reference in the file. Confirmed via code read that a session lacking
+a verified `user.phone` never reaches this screen (`BranchBooking.tsx`'s `handleReserve` gate), so
+there is no fallback case to design for. Real Razorpay-checkout device/production verification
+not performed this round -- this repo's documented sandbox-IP/HTTPS constraint means that
+confirmation needs a real device or production pass, flagged back rather than claimed.
+Confirmed-ID: F-309
+Confirmed: 27 Sep 2026
