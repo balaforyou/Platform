@@ -277,18 +277,22 @@ export default function BookingPay() {
         // Real bug found and fixed via a live device report (the "Payment Options" screen
         // showed Cards/Netbanking/Wallet under the "Other payment methods" custom name --
         // proving config.display WAS being read -- but no UPI block at all, not even under
-        // defaults): a bare `{ method: 'upi' }` instrument has no flows/apps and Razorpay
-        // silently drops a block that resolves to nothing. Razorpay's own documented UPI
-        // instrument shape requires `flows` and `apps` explicitly -- "intent" is the specific
-        // flow that shows tappable app icons (GPay/PhonePe/etc.), which is what was actually
-        // missing ("no UPI intent prompt").
+        // defaults): the original instrument was a bare `{ method: 'upi' }`, which has no
+        // `flows` and Razorpay silently drops a block that resolves to nothing. Razorpay's
+        // own documented UPI instrument shape requires `flows` explicitly -- "intent" is the
+        // specific flow that shows tappable app icons (GPay/PhonePe/etc.), which is what was
+        // actually missing ("no UPI intent prompt"). That first fix also added an `apps`
+        // whitelist, which a real Codacy catch flagged as the actual remaining problem: it
+        // silently excluded any UPI app not on the list (Amazon Pay, CRED, bank apps, etc.).
+        // `apps` is now deliberately omitted -- Razorpay auto-detects installed apps for the
+        // intent flow when it's left out.
         config: {
           display: {
             blocks: {
               upi: {
                 name: 'Pay via UPI',
                 instruments: [
-                  { method: 'upi', flows: ['intent', 'collect', 'qr'], apps: ['google_pay', 'phonepe', 'paytm', 'bhim'] },
+                  { method: 'upi', flows: ['intent', 'collect', 'qr'] },
                 ],
               },
               other: { name: 'Other payment methods', instruments: [{ method: 'card' }, { method: 'netbanking' }, { method: 'wallet' }] },
