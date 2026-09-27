@@ -261,8 +261,20 @@ export default function BookingPay() {
             console.log('Payment modal dismissed by user');
           }
         },
+        // F-309: contact was reading booking.phone, which has always been dead (see the comment
+        // at the "YOUR NUMBER" block below) -- Booking has no phone column. Repointed to
+        // user.phone, the same real, verified value already displayed on this screen. name uses
+        // the same displayName/name/email fallback chain as main.tsx's welcome heading (F-285).
+        // readonly.contact locks the field since it's genuinely pre-verified -- BranchBooking.tsx's
+        // handleReserve blocks on !user.isPhoneVerified before this booking can even exist, so
+        // letting a guest retype a different, unverified number at checkout would be a real gap,
+        // not just a UX nicety.
         prefill: {
-          contact: booking.phone || '',
+          contact: user?.phone || '',
+          name: user?.displayName || user?.name || user?.email || undefined,
+        },
+        readonly: {
+          contact: true,
         },
         theme: {
           color:
@@ -489,12 +501,14 @@ export default function BookingPay() {
           );
         })()}
 
-        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. booking.phone (used below in
-            Razorpay's prefill.contact) is confirmed dead: Booking has no phone column and
-            GET /bookings/:id never joins one in, so that reference has always silently resolved to
-            undefined. useAuth().user.phone is the JWT's own phone claim, already decoded into
-            AuthContext -- real, already-available, no new request. "Verified" is accurate, not
-            decorative -- but as of F-235 Slice D, not for the reason originally written here:
+        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. useAuth().user.phone is the
+            JWT's own phone claim, already decoded into AuthContext -- real, already-available, no
+            new request. F-309: this same value is what Razorpay's prefill.contact now reads above;
+            it used to read booking.phone instead, which was confirmed dead (Booking has no phone
+            column and GET /bookings/:id never joins one in, so that reference always silently
+            resolved to undefined -- fixed in the same change that added this note).
+            "Verified" is accurate, not decorative -- but as of F-235 Slice D, not for the reason
+            originally written here:
             main.tsx's ProtectedRoute no longer gates on phone presence at all (a fresh Google
             signup with no phone reaches every route, including this one). Phone presence AND
             verification by the time this screen is reached are instead guaranteed by

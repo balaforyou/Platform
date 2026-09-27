@@ -2127,3 +2127,22 @@ approved (implicit consent, not narrower consent), corrected to carry the full c
 in substance before any code was written.
 Confirmed-ID: F-307
 Confirmed: 26 Sep 2026
+
+### razorpay-contact-prefill-dead-field
+Batch: guest-member-pwa round-3 follow-up, 27 Sep 2026
+Surfaced: 27 Sep 2026, Bala noticed Razorpay's real checkout still prompted for a phone number
+despite the guest's verified number already being shown on the same Review & Pay screen. Chief
+handover assigned F-309 directly (Finding ID stated in the handover itself, per rule 5) — investigated
+and confirmed against real code before implementation began, per the handover's own instruction.
+Honest note: this handover also referenced "the same convention as F-307/F-308" — F-308 does not
+exist anywhere in this register or in this file, confirmed by a full grep across both plus repo-wide
+git history before proceeding. Flagged plainly rather than silently invented or silently skipped;
+F-309 itself was directly Chief-assigned in the same handover, so this discrepancy does not block
+logging F-309's own real content here.
+Description: `BookingPay.tsx`'s Razorpay `options.prefill.contact` read `booking.phone`, which has
+always been dead — `Booking` has no `phone` column (confirmed against `schema.prisma`; the only
+`phone` field in that neighborhood is on the unrelated `BookingPlayer` model), so the field always
+silently resolved to `''`. The real, already-verified value (`user.phone`) was already rendered one
+field away on the same screen as "YOUR NUMBER" / "Verified".
+Confirmed-ID: F-309
+Confirmed: 27 Sep 2026
