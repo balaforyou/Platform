@@ -4377,6 +4377,31 @@ no register rows yet.
 
 **Close-out:** `pnpm register:check` — 272 rows, Open 116 / Resolved 156 (was 271, Open 116 / Resolved 155): one new Resolved row, F-309. Register row and pending-findings `Confirmed-ID: F-309` entry land in the same pass as this batch-log entry, per rule 6. **Not committed or pushed — awaiting Bala/Chief sign-off per rule 6**, and no deploy without a separate explicit instruction.
 
+## Batch — F-308/F-309 duplication cleanup: PR consolidation + real evidence on PR #113
+
+**Chief-assigned scoped cleanup, not a new finding.** Three separate sessions each independently picked up F-308 and/or F-309 off the same handover docs, producing three PRs against the same real fix: #111 (F-309 only, fully independently verified by Chief including a real runtime-intercept check), #112 (F-309 only, a different independent implementation, thinner evidence), and #113 (`claude/sweet-wright-cbqyu8`, carrying #112's exact F-309 commit `a07bce8` forward plus a new F-308 commit `2f3a9e5`). Chief had already independently verified both commits' diffs on #113 against the real remote and confirmed they match their respective handovers correctly — what was missing was real runtime evidence (both PRs honestly disclosed "not performed this round" for live verification) and closing the two now-superseded PRs.
+
+**PR housekeeping:** confirmed via `gh pr view` that #112 was already closed by Bala directly (comment "duplicate PR", 2026-09-27T09:05) before this pass started — not re-closed. #111 closed this pass with an explanatory comment pointing to #113; confirmed `state: CLOSED` via `gh pr view 111`.
+
+**Evidence gap closed without a component-test harness:** confirmed (repo-wide grep, reading `apps/admin-v2/vitest.config.ts` and its 3 existing test files) that no React-component-rendering test harness exists anywhere in the monorepo — `admin-v2`'s only vitest coverage is `environment: 'node'` unit tests on pure helpers, and `@badminton/test-harness` is DB-only. Rather than silently deciding to introduce `jsdom`/`@testing-library/react` as a new tooling choice, this was flagged back and the chosen approach was: extract the two testable decisions inside `BookingPay.tsx` into pure, exported functions in a new `apps/guest-member-pwa/src/lib/bookingPayLogic.ts` — `buildRazorpayPrefill(user)` (the F-309 fix: builds the nested `{ prefill: { contact, name }, readonly: { contact: true } }` shape Razorpay's `options` actually reads) and `resolveConfirmedRedirect(bookingId, status)` (the F-308 fix: the mount-guard's CONFIRMED-redirect decision) — then cover both with a real, executing `vitest run` using the exact same `environment: 'node'` pattern as `admin-v2`'s existing config (new `apps/guest-member-pwa/vitest.config.ts`, `"test": "vitest run"` script, `vitest@^3.2.4` devDependency). **Disclosed explicitly, not folded in silently:** this is a small scope expansion beyond the handover's literal "no new code logic" line, since it required re-editing the already-reviewed `BookingPay.tsx` — behavior-preserving (the component now calls the extracted functions instead of inlining the same literals), not a design change.
+
+**Real captured evidence (from an actual passing `vitest run`, not reasoning from code):**
+- `buildRazorpayPrefill({ phone: '+919812399099' })` → `result.prefill.contact === '+919812399099'`, `result.readonly.contact === true`, `result.prefill.name === undefined`.
+- `buildRazorpayPrefill({ phone: '+919812399099', displayName: 'Priya' })` → `result.prefill.name === 'Priya'`.
+- `resolveConfirmedRedirect('abc123', 'CONFIRMED')` → `{ to: '/bookings/abc123/confirmation', options: { replace: true } }`.
+- `resolveConfirmedRedirect('abc123', 'PENDING')` → `null`.
+- All 4 tests passed (`vitest run`, `src/lib/bookingPayLogic.test.ts`).
+
+**Verify-against-the-built-artifact discipline applied** (per this file's own tooling traps): after the extraction, `apps/guest-member-pwa/dist/assets/index-*.js` was grepped directly and confirmed to still emit nested `prefill:{contact:...,name:...}` and `readonly:{contact:!0}` — ruling out exactly the kind of refactor that silently flattens the object Razorpay's SDK actually reads (a real defect caught in the Technical Lead thread's plan review before implementation, corrected before any code was written: the first drafted `buildRazorpayPrefill` shape was flat, not nested).
+
+**Blast-radius check (re-confirmed against real current code, not carried over from the original handover's evidence):** `booking.phone` still has exactly 2 references app-wide, both comments, no functional use; only `BookingPay.tsx` constructs Razorpay `options`/`prefill` anywhere in the app; `BookingPay` is imported only by `main.tsx` for routing, so the extraction has no other consumer to affect.
+
+**Still honestly open, not closed by this pass:** the real Razorpay checkout UI confirmation (contact field arriving pre-filled and non-editable in the actual overlay) and the real device back-swipe-after-payment / direct-URL-to-CONFIRMED-booking checks still need a real device or the deployed VM, per this repo's documented sandbox constraint. The two success-path `navigate(..., { replace: true })` calls (`handleMockPayment`, the Razorpay `handler` callback) sit inside async closures this pass did not extract, so those remain verified by code read only.
+
+**Evidence:** whole-app `tsc --noEmit` and `tsc && vite build` clean, zero errors (`@badminton/ui-shared` rebuilt first, then `guest-member-pwa`, rebuild-before-test per rule 7). `pnpm register:check` green.
+
+**Close-out:** register Resolution column updated for F-308 and F-309 (no new rows — both were already Resolved), pending-findings.md's two Description entries updated to match, this batch-log entry added in the same pass, per rule 6. Committed as one evidence-only commit on `claude/sweet-wright-cbqyu8`, on top of the existing `a07bce8`/`2f3a9e5` commits, and pushed to origin. **#113 marked ready-for-review. Not merged — awaiting explicit Bala/Chief sign-off per rule 6.**
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

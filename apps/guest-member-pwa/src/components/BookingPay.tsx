@@ -5,6 +5,7 @@ import { useAuth, useTenant } from '@badminton/ui-shared';
 import { MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
 import LoadingState from './ui/LoadingState';
 import { TERMS_VERSION } from '../constants/terms';
+import { buildRazorpayPrefill, resolveConfirmedRedirect } from '../lib/bookingPayLogic';
 
 export default function BookingPay() {
   const { bookingId } = useParams();
@@ -73,8 +74,9 @@ export default function BookingPay() {
         // booking already CONFIRMED (paid). Redirect straight to Confirmation instead of
         // rendering the stale Pay UI -- the history-replace fix above only covers the
         // back-swipe case, not a fresh mount on this URL.
-        if (bookingRes.status === 'CONFIRMED') {
-          navigate(`/bookings/${bookingId}/confirmation`, { replace: true });
+        const redirect = resolveConfirmedRedirect(bookingId, bookingRes.status);
+        if (redirect) {
+          navigate(redirect.to, redirect.options);
           return;
         }
         setBooking(bookingRes);
@@ -272,13 +274,7 @@ export default function BookingPay() {
             console.log('Payment modal dismissed by user');
           }
         },
-        prefill: {
-          contact: user?.phone || '',
-          name: user?.displayName || user?.name || user?.email || undefined,
-        },
-        readonly: {
-          contact: true,
-        },
+        ...buildRazorpayPrefill(user),
         theme: {
           color:
             tenant?.themeColor ||

@@ -2141,9 +2141,14 @@ already rendered on this screen as "YOUR NUMBER"; added `prefill.name` reusing t
 `readonly: { contact: true }` since the number is genuinely pre-verified. Confirmed via grep that
 `booking.phone` had no other reference in the file. Confirmed via code read that a session lacking
 a verified `user.phone` never reaches this screen (`BranchBooking.tsx`'s `handleReserve` gate), so
-there is no fallback case to design for. Real Razorpay-checkout device/production verification
-not performed this round -- this repo's documented sandbox-IP/HTTPS constraint means that
-confirmation needs a real device or production pass, flagged back rather than claimed.
+there is no fallback case to design for. PR #113 closeout pass (27 Sep 2026): prefill construction
+extracted into pure `buildRazorpayPrefill(user)` (`apps/guest-member-pwa/src/lib/bookingPayLogic.ts`)
+and covered by a real, executing vitest run (new node-environment config, mirroring admin-v2's
+pattern) -- captured real values: contact === '+919812399099' with readonly.contact === true and
+name undefined for a phone-only user; name === 'Priya' once displayName is set. Compiled bundle
+grepped post-extraction to confirm the nested prefill/readonly shape survived. Still open: real
+Razorpay-checkout device/production verification -- this repo's documented sandbox-IP/HTTPS
+constraint means that confirmation still needs a real device or production pass.
 Confirmed-ID: F-309
 Confirmed: 27 Sep 2026
 
@@ -2159,7 +2164,14 @@ both, plus a defense-in-depth mount guard in `loadBooking`'s effect that redirec
 immediately when the fetched booking is already `status === 'CONFIRMED'`, covering page-refresh/
 bookmarked-URL/multi-tab re-entry that the history fix alone doesn't reach. Deliberately scoped to
 `CONFIRMED` only -- `CANCELLED`/`CHECKED_IN`/`RELEASED_NO_SHOW` reaching this screen is a separate,
-unaddressed scenario per rule 9. Real device/dev-stack verification not performed this round --
-this sandboxed session has no reachable Docker daemon or `.env`, same disclosed gap as F-309.
+unaddressed scenario per rule 9. PR #113 closeout pass (27 Sep 2026): the mount-guard's redirect
+decision extracted into pure `resolveConfirmedRedirect(bookingId, status)` (same new
+`bookingPayLogic.ts`) and covered by a real, executing vitest run -- captured real values:
+`resolveConfirmedRedirect('abc123', 'CONFIRMED')` returns
+`{ to: '/bookings/abc123/confirmation', options: { replace: true } }`;
+`resolveConfirmedRedirect('abc123', 'PENDING')` returns `null`. Still open: a real device
+back-swipe-after-payment check and a direct-URL visit to a known-CONFIRMED booking's Pay route;
+the two success-path `navigate(..., { replace: true })` calls inside async closures remain
+code-read-only, not covered by this pass.
 Confirmed-ID: F-308
 Confirmed: 27 Sep 2026
