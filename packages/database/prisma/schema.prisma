@@ -356,6 +356,9 @@ model BookingRule {
   // branch-local calendar day, counted across every pool in the branch. Default of 3
   // changes no existing behavior for pools that never set it explicitly.
   maxDailyBookingsPerGuest Int          @default(3)
+  // F-310: lets a pool opt out of the F-184 daily cap entirely. Additive, default true so
+  // every existing pool's enforcement is unchanged.
+  dailyBookingCapEnabled   Boolean      @default(true)
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
 
@@ -497,9 +500,16 @@ model Booking {
   parentBookingId             String?
   parentBooking               Booking?           @relation("BookingChildren", fields: [parentBookingId], references: [id], onDelete: Cascade)
   childBookings               Booking[]          @relation("BookingChildren")
+  // F-310: shared, non-relational grouping id for bookings created by one POST
+  // /booking-orders call (same "plain scalar, no DB relation yet" convention as branchId
+  // above). Null for every booking created through the existing /bookings route. Each
+  // order-member row is an independent top-level Booking (parentBookingId: null) — used
+  // for grouped receipt/history rendering and finding siblings on an order-wide cancel.
+  orderId                     String?
 
   @@index([status, heldUntil])
   @@index([parentBookingId])
+  @@index([orderId])
 }
 
 enum UserType {
