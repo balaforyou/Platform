@@ -4349,7 +4349,7 @@ no register rows yet.
 
 **Evidence:** `pnpm register:check` — 271 rows, unchanged (no new finding ID needed, pure bugfix/polish, same convention as rounds 1-2). Full build clean (`@badminton/ui-shared` then `guest-member-pwa`, `tsc && vite build`, zero errors) in an isolated worktree pulled from the real pushed branch, independently by Chief, not taken from the PR description. All real (non-placeholder) `LoadingState` call sites checked against the new prop API — none orphaned on the old inline-spinner markup.
 
-**Close-out:** no register/finding ID needed — real bugfixes plus content/layout polish, same convention as the prior two rounds. PR #108 opened against `main`, reviewed and approved by Chief after the fact (see `claude/chief-review-guest-pwa-feedback-round3-pr108-26sep.md`). Not yet merged or deployed — awaiting Bala's go-ahead for each, per rule 6 and this project's per-deploy authorization convention.
+**Close-out:** no register/finding ID needed — real bugfixes plus content/layout polish, same convention as the prior two rounds. PR #108 opened against `main`, reviewed and approved by Chief after the fact (see `claude/chief-review-guest-pwa-feedback-round3-pr108-26sep.md`), and merged into `main`. A same-round follow-up (PR #109) then dropped the UPI instrument's hardcoded app whitelist per a Codacy catch. Not yet deployed — awaiting Bala's go-ahead, per rule 6 and this project's per-deploy authorization convention.
 
 ## Queued, not yet batched
 
