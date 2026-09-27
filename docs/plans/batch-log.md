@@ -4351,6 +4351,20 @@ no register rows yet.
 
 **Close-out:** no register/finding ID needed — real bugfixes plus content/layout polish, same convention as the prior two rounds. PR #108 opened against `main`, reviewed and approved by Chief after the fact (see `claude/chief-review-guest-pwa-feedback-round3-pr108-26sep.md`), and merged into `main`. A same-round follow-up (PR #109) then dropped the UPI instrument's hardcoded app whitelist per a Codacy catch. Not yet deployed — awaiting Bala's go-ahead, per rule 6 and this project's per-deploy authorization convention.
 
+## Batch — F-308: back-swipe after payment no longer returns to the stale Pay screen
+
+**Chief handover, scoped to `apps/guest-member-pwa/src/components/BookingPay.tsx` only, no backend change.** Bala reported live: after a successful payment, swiping back from Confirmation lands back on Pay for the same, already-paid booking. Investigated against real code first, per rule 1 — held: both success paths (`handleMockPayment` and the real Razorpay `handler`) did a plain history-push `navigate('/bookings/:id/confirmation')`, and grepping the whole app confirmed no `{ replace: true }` precedent existed anywhere before this.
+
+**Severity, stated honestly per the handover's own instruction:** a real UX/confusion bug, not a payment-safety bug — `services/payment/src/index.ts`'s `createIntentHandler` already returns `400 PAYMENT_ALREADY_CAPTURED` before a second intent could ever be created, so the worst case pre-fix was a confusing error message, never a real double charge.
+
+**Fix:** both `navigate(...)` calls now pass `{ replace: true }`. Added a defense-in-depth mount guard to the `loadBooking` effect: once the booking is fetched, `status === 'CONFIRMED'` redirects immediately (`replace: true`) instead of rendering Pay — covers a page refresh, a bookmarked/shared Pay URL, or a second tab on the same booking, none of which the history fix alone reaches. The redirect's `return` sits inside the existing `try`, so the existing `finally`'s `setLoading(false)` still runs — no stuck-loading regression. Deliberately scoped to `CONFIRMED` only, per the handover — `CANCELLED`/`CHECKED_IN`/`RELEASED_NO_SHOW` reaching this screen is flagged as a separate, unaddressed scenario (rule 9), not folded in here.
+
+**Blast-radius check:** both edited `navigate(...)` call sites and the `loadBooking` effect are local to this file; no other component reads or calls into either.
+
+**Evidence:** whole-app `tsc --noEmit` and `tsc && vite build` clean, zero errors. **Real live-fire verification not performed this round, disclosed rather than claimed:** the handover's three real-device/dev-stack checks (back-swipe after a real payment; direct-URL visit to a known-`CONFIRMED` booking's Pay route; unchanged first-time-through flow) all need a running dev stack, and this sandboxed session has no reachable Docker daemon (`/var/run/docker.sock` missing) and no `.env` — the same disclosed gap as the F-309 batch above.
+
+**Close-out:** `pnpm register:check` — 273 rows, Open 116 / Resolved 157 (was 272, Open 116 / Resolved 156): one new Resolved row, F-308. Register row and pending-findings `Confirmed-ID: F-308` entry land in the same pass as this batch-log entry, per rule 6. **Not committed or pushed — awaiting Bala/Chief sign-off per rule 6**, and no deploy without a separate explicit instruction.
+
 ## Batch — F-309: Razorpay contact prefill repointed to the real verified number
 
 **Chief handover, scoped to `apps/guest-member-pwa/src/components/BookingPay.tsx` only, no backend change.** Bala noticed Razorpay's real checkout still prompted for a phone number even though the guest's verified number was already shown on this exact screen. Investigated against real code first, per rule 1 — the handover's root-cause claim held: `options.prefill.contact` read `booking.phone || ''`, and `booking.phone` is dead (no `phone` column on `Booking`, confirmed against `schema.prisma`; `GET /bookings/:id` never joins one in), so the field always silently resolved to `''`.

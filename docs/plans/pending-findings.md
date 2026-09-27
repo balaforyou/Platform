@@ -2146,3 +2146,20 @@ not performed this round -- this repo's documented sandbox-IP/HTTPS constraint m
 confirmation needs a real device or production pass, flagged back rather than claimed.
 Confirmed-ID: F-309
 Confirmed: 27 Sep 2026
+
+### booking-pay-back-swipe-returns-to-stale-pay-screen
+Batch: guest-member-pwa, 27 Sep 2026
+Surfaced: Bala reported live that swiping back from the Confirmation screen after a successful
+payment lands back on Pay for the same, already-paid booking; Chief-assigned F-308 in the handover
+itself.
+Description: `BookingPay.tsx`'s two payment-success paths (`handleMockPayment`, the real Razorpay
+`handler`) both did a plain history-push `navigate(...)`, confirmed via grep to have no
+`{ replace: true }` precedent anywhere in the file or app. Fixed by passing `{ replace: true }` on
+both, plus a defense-in-depth mount guard in `loadBooking`'s effect that redirects to Confirmation
+immediately when the fetched booking is already `status === 'CONFIRMED'`, covering page-refresh/
+bookmarked-URL/multi-tab re-entry that the history fix alone doesn't reach. Deliberately scoped to
+`CONFIRMED` only -- `CANCELLED`/`CHECKED_IN`/`RELEASED_NO_SHOW` reaching this screen is a separate,
+unaddressed scenario per rule 9. Real device/dev-stack verification not performed this round --
+this sandboxed session has no reachable Docker daemon or `.env`, same disclosed gap as F-309.
+Confirmed-ID: F-308
+Confirmed: 27 Sep 2026

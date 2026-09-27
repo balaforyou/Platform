@@ -69,6 +69,14 @@ export default function BookingPay() {
         const bookingRes = await apiRequest<any>(`/slot-engine/bookings/${bookingId}`, {
           token: accessToken,
         });
+        // F-308: a page refresh, bookmarked/shared URL, or another tab can land here for a
+        // booking already CONFIRMED (paid). Redirect straight to Confirmation instead of
+        // rendering the stale Pay UI -- the history-replace fix above only covers the
+        // back-swipe case, not a fresh mount on this URL.
+        if (bookingRes.status === 'CONFIRMED') {
+          navigate(`/bookings/${bookingId}/confirmation`, { replace: true });
+          return;
+        }
         setBooking(bookingRes);
       } catch (err: any) {
         setError(err.message || 'Failed to initialize payment process.');
@@ -151,7 +159,9 @@ export default function BookingPay() {
       });
 
       // Optimistic redirect to confirmation screen
-      navigate(`/bookings/${bookingId}/confirmation`);
+      // F-308: replace, not push -- a back-swipe from Confirmation must not land back on this
+      // now-stale, already-paid Pay screen.
+      navigate(`/bookings/${bookingId}/confirmation`, { replace: true });
     } catch (err: any) {
       setPaymentError(err.message || 'Simulation payment capture failed.');
     } finally {
@@ -241,7 +251,8 @@ export default function BookingPay() {
             });
 
             // Navigate to confirmation page
-            navigate(`/bookings/${bookingId}/confirmation`);
+            // F-308: replace, not push -- see the mock-payment path above for why.
+            navigate(`/bookings/${bookingId}/confirmation`, { replace: true });
           } catch (err: any) {
             // F-165, deliberately UNCHANGED here. This fires when our own verify call fails, by
             // which point Razorpay's checkout has already closed and the payment may well have
