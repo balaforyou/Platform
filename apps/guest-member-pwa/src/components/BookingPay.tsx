@@ -277,18 +277,21 @@ export default function BookingPay() {
         // Real bug found and fixed via a live device report (the "Payment Options" screen
         // showed Cards/Netbanking/Wallet under the "Other payment methods" custom name --
         // proving config.display WAS being read -- but no UPI block at all, not even under
-        // defaults): a bare `{ method: 'upi' }` instrument has no flows/apps and Razorpay
+        // defaults): a bare `{ method: 'upi' }` instrument has no flows and Razorpay
         // silently drops a block that resolves to nothing. Razorpay's own documented UPI
-        // instrument shape requires `flows` and `apps` explicitly -- "intent" is the specific
+        // instrument shape requires `flows` explicitly -- "intent" is the specific
         // flow that shows tappable app icons (GPay/PhonePe/etc.), which is what was actually
-        // missing ("no UPI intent prompt").
+        // missing ("no UPI intent prompt"). `apps` is deliberately omitted: a real Codacy
+        // catch found the earlier hardcoded whitelist silently excluded any UPI app not in
+        // that list (Amazon Pay, CRED, bank apps, etc.) -- Razorpay auto-detects installed
+        // apps for the intent flow when `apps` is left out.
         config: {
           display: {
             blocks: {
               upi: {
                 name: 'Pay via UPI',
                 instruments: [
-                  { method: 'upi', flows: ['intent', 'collect', 'qr'], apps: ['google_pay', 'phonepe', 'paytm', 'bhim'] },
+                  { method: 'upi', flows: ['intent', 'collect', 'qr'] },
                 ],
               },
               other: { name: 'Other payment methods', instruments: [{ method: 'card' }, { method: 'netbanking' }, { method: 'wallet' }] },
