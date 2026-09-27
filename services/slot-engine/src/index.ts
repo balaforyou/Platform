@@ -1,5 +1,6 @@
 import fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
+import crypto from 'crypto';
 import { responseEnvelopePlugin, requireInternalKey, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
 import { PrismaClient, BookingStatus, AllocationMode, PricingMode, Prisma, AvailabilityOverrideType, TenantModule } from '@badminton/database';
 import { resolveEntitlementState, entitlementAllows } from '@badminton/shared-types';
@@ -3436,6 +3437,21 @@ function validateBookingRuleFields(body: any, reply: any): Record<string, any> {
     data.prepaymentRequired = body.prepaymentRequired;
   }
 
+  // F-310: lets a pool opt out of the F-184 daily cap entirely (needed for pools that
+  // primarily take non-contiguous multi-slot orders, where the cap's existing per-chain
+  // semantics don't apply the same way). Same boolean-only validation shape as
+  // prepaymentRequired above -- no silent truthy/falsy coercion.
+  if (isProvided(body.dailyBookingCapEnabled)) {
+    if (typeof body.dailyBookingCapEnabled !== 'boolean') {
+      reply.status(400);
+      const err = new Error('dailyBookingCapEnabled must be a boolean');
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_RULE_VALUE';
+      throw err;
+    }
+    data.dailyBookingCapEnabled = body.dailyBookingCapEnabled;
+  }
+
   if (isProvided(body.cancellationPolicyJson)) {
     data.cancellationPolicyJson = body.cancellationPolicyJson;
   }
@@ -3485,6 +3501,7 @@ server.post('/booking-rules', async (request, reply) => {
         cancellationPolicyJson: data.cancellationPolicyJson ?? DEFAULT_CANCELLATION_POLICY,
         maxAdditionalWindows: data.maxAdditionalWindows ?? 1,
         maxDailyBookingsPerGuest: data.maxDailyBookingsPerGuest ?? 3,
+        dailyBookingCapEnabled: data.dailyBookingCapEnabled ?? true,
       },
     });
     return rule;
@@ -3550,6 +3567,7 @@ server.put('/resource-pools/:id/booking-rule', async (request, reply) => {
       cancellationPolicyJson: data.cancellationPolicyJson ?? defaultPolicy,
       maxAdditionalWindows: data.maxAdditionalWindows ?? 1,
       maxDailyBookingsPerGuest: data.maxDailyBookingsPerGuest ?? 3,
+      dailyBookingCapEnabled: data.dailyBookingCapEnabled ?? true,
     },
   });
 });
@@ -4202,7 +4220,9 @@ server.post('/bookings', async (request, reply) => {
         },
       });
 
-      if (dailyBookingCount >= (rule?.maxDailyBookingsPerGuest ?? 3)) {
+      // F-310: lets a pool opt out of this cap entirely. Default true (rule?.dailyBookingCapEnabled
+      // !== false) so every existing pool's enforcement is byte-identical to before this field existed.
+      if (rule?.dailyBookingCapEnabled !== false && dailyBookingCount >= (rule?.maxDailyBookingsPerGuest ?? 3)) {
         const err = new Error(`Daily booking limit of ${rule?.maxDailyBookingsPerGuest ?? 3} reached for this branch`);
         (err as any).statusCode = 400;
         (err as any).code = 'DAILY_BOOKING_LIMIT_REACHED';
@@ -4449,6 +4469,339 @@ server.post('/bookings', async (request, reply) => {
     }
     throw err;
   }
+});
+
+// ---------------------------------------------------------------------------
+// POST /booking-orders — F-310: non-contiguous / cross-pool multi-slot guest booking.
+//
+// Deliberately a separate route from POST /bookings, not a third mode on it. That route's
+// contiguous-chain behavior is already hardened (F-183/F-186/F-187/F-207/F-268 regression
+// coverage) and this capability needs behavior that would be wrong there: N independent
+// top-level rows (no parentBookingId chain), independent per-row cancellation via the
+// existing POST /bookings/:id/cancel, and no contiguity/same-pool requirement. Overloading
+// one route with two incompatible behavior sets risks regressing the already-proven one.
+//
+// Cross-pool / non-contiguous combinations are deliberately NOT restricted here -- whether
+// one order should be allowed to span more than one resource pool/court is an open product
+// question (see the F-310 handover's Open Items), and this route is built to allow it
+// technically rather than inventing a restriction nobody asked for. Flagged prominently in
+// this feature's own report, not decided silently either way.
+//
+// PaymentIntent linking is NOT built in this phase (a real, wide fork -- referenceId is read
+// at 16 call sites across 9 files, and both of payment/src/index.ts's amount-resolution paths
+// currently assume exactly one booking fetched by id). This route only creates real HELD
+// bookings; the actual Pay step for a multi-slot order is a follow-up once that fork is
+// decided.
+// ---------------------------------------------------------------------------
+
+server.post('/booking-orders', async (request, reply) => {
+  // F-045 precedent: identity comes from the verified token, never from the request body --
+  // POST /bookings destructures and discards any body-supplied userId/tenantId for the same
+  // reason (a caller must never be able to assert someone else's identity).
+  const claims = await requireUserJwt(request, reply);
+  const userId = claims.userId;
+  const tenantId = claims.tenantId;
+
+  const idempotencyKey = request.headers['idempotency-key'] as string | undefined;
+  if (!idempotencyKey) {
+    reply.status(400);
+    const err = new Error('Idempotency-Key header is required');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const { branchId, windowIds, coPlayers } = request.body as any;
+
+  if (!Array.isArray(windowIds) || windowIds.length === 0) {
+    reply.status(400);
+    const err = new Error('windowIds must be a non-empty array');
+    (err as any).statusCode = 400;
+    (err as any).code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  if (coPlayers && Array.isArray(coPlayers)) {
+    for (const phone of coPlayers) {
+      if (!isValidIndianPhone(phone)) {
+        reply.status(400);
+        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
+        (err as any).statusCode = 400;
+        (err as any).code = 'INVALID_PHONE_FORMAT';
+        throw err;
+      }
+    }
+  }
+  const normalizedCoPlayers = coPlayers && Array.isArray(coPlayers)
+    ? coPlayers.map(normalizePhone)
+    : [];
+  const groupSize = 1 + normalizedCoPlayers.length;
+
+  // 1. Real chronological order first, same reasoning as POST /bookings (:4011-4014) -- never
+  // trust client-supplied order for lock order, which is what keeps two concurrent multi-window
+  // requests naming overlapping windows from deadlocking each other.
+  const orderingRows = await prisma.availabilityWindow.findMany({
+    where: { id: { in: windowIds } },
+    select: { id: true, startTime: true },
+  });
+  if (orderingRows.length !== windowIds.length) {
+    reply.status(404);
+    const err = new Error('Availability window not found');
+    (err as any).statusCode = 404;
+    (err as any).code = 'NOT_FOUND';
+    throw err;
+  }
+  const sortedWindowIds = [...orderingRows]
+    .sort((a: any, b: any) => {
+      const diff = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+      if (diff !== 0) return diff;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    })
+    .map((row: any) => row.id);
+
+  // 2. Whole-order daily-cap gate, BEFORE any window is locked or any row created. F-184's cap
+  // exists to bound how many active bookings a guest can hold in a day -- this route creates
+  // `windowIds.length` independent top-level rows in ONE call (unlike POST /bookings, where a
+  // whole contiguous chain is one countable unit), so the check must account for the incoming
+  // order's own size, not just the guest's count from before this call. On violation the ENTIRE
+  // order is rejected -- silently trimming to however many windows fit under the cap would mean
+  // the backend picks which of the guest's chosen windows to drop, which isn't its call to make.
+  //
+  // Pool selection for the rule mirrors F-184's own already-documented caveat: "if pools in the
+  // same branch carry different values, the effective cap for a given request is whichever pool
+  // it targets" -- for a multi-pool order that's the earliest (first sorted) window's pool.
+  const earliestWindow = await prisma.availabilityWindow.findUnique({
+    where: { id: sortedWindowIds[0] },
+    select: { resourcePoolId: true },
+  });
+  const primaryRule = await prisma.bookingRule.findFirst({
+    where: { resourcePoolId: earliestWindow!.resourcePoolId },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (primaryRule?.dailyBookingCapEnabled !== false) {
+    const primaryPool = await prisma.resourcePool.findUnique({ where: { id: earliestWindow!.resourcePoolId } });
+    const horizonTimeZone = await getBranchTimeZone(primaryPool!.branchId);
+    const requestedDateString = branchDateString(new Date(orderingRows[0].startTime), horizonTimeZone);
+    const dayStart = branchLocalToUtc(requestedDateString, '00:00', horizonTimeZone);
+    const dayEnd = addBranchDays(dayStart, 1, horizonTimeZone);
+
+    const dailyBookingCount = await prisma.booking.count({
+      where: {
+        userId,
+        status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
+        parentBookingId: null,
+        window: {
+          startTime: { gte: dayStart, lt: dayEnd },
+          resourcePool: { branchId },
+        },
+      },
+    });
+
+    const cap = primaryRule?.maxDailyBookingsPerGuest ?? 3;
+    if (dailyBookingCount + windowIds.length > cap) {
+      reply.status(400);
+      const err = new Error(
+        `This order's ${windowIds.length} slot(s) would exceed the daily booking limit of ${cap} for this branch (${dailyBookingCount} already held/confirmed today)`,
+      );
+      (err as any).statusCode = 400;
+      (err as any).code = 'DAILY_CAP_EXCEEDED';
+      throw err;
+    }
+  }
+
+  // 3. Process each window independently -- lock, validate, create or reject -- so one window's
+  // failure never rolls back another's success. Each window gets its own short transaction: no
+  // transaction here ever holds more than one window's FOR UPDATE lock at a time, so the
+  // deadlock-avoidance that sorted locking gives POST /bookings (which locks several rows inside
+  // ONE transaction) isn't needed in this shape -- sorted processing order is kept anyway for
+  // deterministic behavior and to match the real chronological intent of the order.
+  const orderId = crypto.randomUUID();
+  const held: any[] = [];
+  const rejected: { windowId: string; code: string; message: string }[] = [];
+
+  for (const windowId of sortedWindowIds) {
+    const derivedIdempotencyKey = `${idempotencyKey}:${windowId}`;
+
+    // Idempotent replay: a retry of the same request reproduces the same derived keys per
+    // window, so an already-created row from a prior attempt is returned as-is, not recreated.
+    const existing = await prisma.booking.findUnique({ where: { idempotencyKey: derivedIdempotencyKey } });
+    if (existing) {
+      held.push(existing);
+      continue;
+    }
+
+    try {
+      const booking = await prisma.$transaction(async (tx: any) => {
+        const rows = await tx.$queryRaw<any[]>`
+          SELECT * FROM "AvailabilityWindow" WHERE id = ${windowId} FOR UPDATE
+        `;
+        if (!rows || rows.length === 0) {
+          const err = new Error('Availability window not found');
+          (err as any).code = 'NOT_FOUND';
+          throw err;
+        }
+        const window = rows[0];
+
+        const pool = await tx.resourcePool.findUnique({
+          where: { id: window.resourcePoolId },
+          include: { resources: { orderBy: { createdAt: 'asc' } } },
+        });
+        if (!pool) {
+          const err = new Error('Resource pool not found');
+          (err as any).code = 'NOT_FOUND';
+          throw err;
+        }
+
+        if (groupSize < pool.minOccupancy) {
+          const err = new Error(`Minimum group size for this pool is ${pool.minOccupancy}`);
+          (err as any).code = 'INVALID_GROUP_SIZE';
+          throw err;
+        }
+        if (groupSize > pool.capacity) {
+          const err = new Error(`Group size exceeds pool capacity of ${pool.capacity}`);
+          (err as any).code = 'INVALID_GROUP_SIZE';
+          throw err;
+        }
+
+        const rule = await tx.bookingRule.findFirst({ where: { resourcePoolId: window.resourcePoolId }, orderBy: { createdAt: 'asc' } });
+        const horizonTimeZone = await getBranchTimeZone(pool.branchId);
+        const windowDays = rule?.guestOpenWindowDays ?? 7;
+        const maxBookingDate = addBranchDays(new Date(), windowDays, horizonTimeZone);
+        if (new Date(window.startTime) > maxBookingDate) {
+          const err = new Error('Booking window is not open yet');
+          (err as any).code = 'BOOKING_WINDOW_CLOSED';
+          throw err;
+        }
+
+        // F-155: a slot that has already started cannot be sold.
+        if (new Date(window.startTime) <= new Date()) {
+          const err = new Error('This slot has already started and can no longer be booked');
+          (err as any).code = 'SLOT_ALREADY_STARTED';
+          throw err;
+        }
+
+        // F-207.2: member-exclusion, same real check as POST /bookings.
+        const memberExclusion = await fetchMemberExclusionContext(pool, undefined, tx);
+        if (collidesWithMemberAssignment(window, memberExclusion)) {
+          const err = new Error('This slot is reserved for a Member contract');
+          (err as any).code = 'MEMBER_SLOT_RESERVED';
+          throw err;
+        }
+
+        const blocked = await tx.blockedWindow.findFirst({
+          where: {
+            resourcePoolId: window.resourcePoolId,
+            OR: [{ resourceId: null }, ...(window.resourceId ? [{ resourceId: window.resourceId }] : [])],
+            startTime: { lte: window.endTime },
+            endTime: { gte: window.startTime },
+          },
+        });
+        if (blocked) {
+          const err = new Error('Slot is blocked');
+          (err as any).code = 'SLOT_BLOCKED';
+          throw err;
+        }
+
+        let targetResource: string | null = null;
+        if (pool.allocationMode === AllocationMode.FIXED_INSTANCE) {
+          targetResource = window.resourceId;
+          const activeBooking = await tx.booking.findFirst({
+            where: {
+              windowId: window.id,
+              resourceId: targetResource,
+              status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] },
+            },
+          });
+          if (activeBooking) {
+            const err = new Error('Slot is already booked');
+            (err as any).code = 'SLOT_ALREADY_BOOKED';
+            throw err;
+          }
+        } else {
+          const activeCount = await tx.booking.count({
+            where: { windowId: window.id, status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] } },
+          });
+          if (activeCount >= window.capacity) {
+            const err = new Error('Pool capacity exceeded');
+            (err as any).code = 'POOL_CAPACITY_EXCEEDED';
+            throw err;
+          }
+        }
+
+        const branchGuestPricing = await tx.branch.findUnique({
+          where: { id: pool.branchId },
+          select: { guestStandardRate: true, guestPeakRate: true, guestPeakWindows: true },
+        });
+        const guestPeakWindows: { start: string; end: string }[] = Array.isArray(branchGuestPricing?.guestPeakWindows)
+          ? (branchGuestPricing!.guestPeakWindows as any[]).filter(
+              (x) => x && typeof x.start === 'string' && typeof x.end === 'string',
+            )
+          : [];
+        const resolvedPrice = resolvePrice(pool, window, groupSize, {
+          standardRate: branchGuestPricing?.guestStandardRate ?? null,
+          peakRate: branchGuestPricing?.guestPeakRate ?? null,
+          peakWindows: guestPeakWindows,
+          windowStartInstant: window.startTime,
+          timeZone: horizonTimeZone,
+        }).price;
+
+        let courtSlotIndex: number | null = null;
+        let pooledResourceId: string | null = null;
+        if (pool.allocationMode === AllocationMode.POOLED) {
+          const active = await tx.booking.findMany({
+            where: { windowId: window.id, status: { in: [BookingStatus.HELD, BookingStatus.CONFIRMED] } },
+            select: { courtSlotIndex: true, resourceId: true },
+          });
+          const assigned = assignPooledCourt(pool, active, { guestOnly: true });
+          pooledResourceId = assigned.resourceId;
+          courtSlotIndex = assigned.courtSlotIndex;
+        }
+
+        const now = new Date();
+        const heldUntil = new Date(now.getTime() + 5 * 60 * 1000);
+        const bookingResourceId = pool.allocationMode === AllocationMode.FIXED_INSTANCE ? targetResource : pooledResourceId;
+
+        return tx.booking.create({
+          data: {
+            tenantId,
+            branchId,
+            resourcePoolId: window.resourcePoolId,
+            resourceId: bookingResourceId,
+            courtSlotIndex,
+            windowId: window.id,
+            userId,
+            orderId,
+            status: BookingStatus.HELD,
+            heldAt: now,
+            heldUntil,
+            idempotencyKey: derivedIdempotencyKey,
+            isMemberBooking: false,
+            refundAmount: null,
+            price: resolvedPrice,
+            players: normalizedCoPlayers.length > 0 ? { create: normalizedCoPlayers.map((phone: string) => ({ phone })) } : undefined,
+          },
+        });
+      });
+      held.push(booking);
+    } catch (err: any) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const dup = await prisma.booking.findUnique({ where: { idempotencyKey: derivedIdempotencyKey } });
+        if (dup) {
+          held.push(dup);
+          continue;
+        }
+      }
+      rejected.push({
+        windowId,
+        code: (err as any).code || 'BOOKING_ORDER_WINDOW_FAILED',
+        message: err.message || 'This slot could not be held.',
+      });
+    }
+  }
+
+  reply.status(held.length > 0 ? 201 : 409);
+  return { orderId, held, rejected };
 });
 
 // ---------------------------------------------------------------------------

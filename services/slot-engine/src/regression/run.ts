@@ -14,6 +14,7 @@ import { availabilityGenerationApiSections } from './availability-generation-api
 import { coPlayerAndAlignmentSections } from './co-player-and-alignment.regression';
 import { multiSlotBookingSections } from './multi-slot-booking.regression';
 import { dailyBookingCapSections } from './daily-booking-cap.regression';
+import { bookingOrdersSections } from './booking-orders.regression';
 import { courtSlotIndexSections } from './court-slot-index.regression';
 import { nextAvailableDateSections } from './next-available-date.regression';
 import { moduleEntitlementSections } from './module-entitlement.regression';
@@ -59,6 +60,7 @@ async function main() {
         ...coPlayerAndAlignmentSections,
         ...multiSlotBookingSections,
         ...dailyBookingCapSections,
+        ...bookingOrdersSections,
         ...courtSlotIndexSections,
         ...nextAvailableDateSections,
         ...moduleEntitlementSections,

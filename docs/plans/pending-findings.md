@@ -2175,3 +2175,27 @@ the two success-path `navigate(..., { replace: true })` calls inside async closu
 code-read-only, not covered by this pass.
 Confirmed-ID: F-308
 Confirmed: 27 Sep 2026
+
+### non-contiguous-multi-slot-guest-booking
+Batch: slot-engine + guest-member-pwa, 27 Sep 2026
+Surfaced: Chief-assigned handover (full discovery record:
+`claude/discovery-non-contiguous-multi-slot-booking.md`) -- `POST /bookings` (F-183) requires every
+additional window to be contiguous with the base slot and on the same resource pool, so a guest
+cannot book two separate time periods (e.g. 9 AM and 6 PM) in one action.
+Description: New capability, two phases. Phase 1 (this pass): new `POST /booking-orders` route,
+deliberately separate from `/bookings` to keep zero blast radius on F-183's hardened
+contiguous-chain behavior -- creates N independent top-level `Booking` rows (no `parentBookingId`)
+sharing one new `orderId` scalar, no contiguity/same-pool requirement (cross-pool spanning
+technically allowed, flagged as an open product question, not decided silently). New
+`BookingRule.dailyBookingCapEnabled` (default true) lets a pool opt out of the F-184 cap. A real
+defect was caught in plan review before implementation: the daily-cap check as originally scoped
+would have been a no-op for this route's own capability (comparing only the guest's pre-existing
+count, never the incoming order's own size) -- fixed to reject the entire order
+(`DAILY_CAP_EXCEEDED`) when `dailyBookingCount + windowIds.length > cap`, not silently trim to
+whichever windows fit. PaymentIntent linking deliberately not built this phase -- a real, wide fork
+(16 `referenceId` call sites across 9 files) investigated and reported back rather than decided
+unilaterally. Phase 2 (guest-facing UI in `CourtBooking.tsx`/`BookingConfirmation.tsx`/
+`BookingHistory.tsx`) not yet started, gated on Phase 1 landing. Real evidence: new regression file
+`booking-orders.regression.ts`, 6 sections, 121/121 full suite green.
+Confirmed-ID: F-310
+Confirmed: 27 Sep 2026
