@@ -2200,3 +2200,107 @@ Paid/Original Price/Refund Percent/Refund Amount straight from `preview`, fabric
 payment/refund cycle for a booking that was never actually paid for.
 Confirmed-ID: F-286
 Confirmed: 22 Sep 2026
+### terms-checkbox-implicit-consent
+Batch: guest-member-pwa UI-polish (Home / Slot & Time Selection / Review & Pay), 26 Sep 2026
+Surfaced: 26 Sep 2026, folded into the UI-polish handover as Part 3 §5, Bala-approved ("Option B
+to reduce UI friction"). Honest note, same pattern as the entries above: the decision doc this
+handover originally cited (`claude/chief-decision-f307-terms-checkbox-implicit-consent-26sep.md`)
+does not exist anywhere in the repo — confirmed by direct search before implementation began, per
+this project's source-of-truth rule against inventing content for a referenced-but-missing ID.
+Chief pasted the real decision content directly into the implementing session instead, which is
+what this entry and the register row are built from.
+Description: `BookingPay.tsx`'s explicit "I agree to the venue's court rules..." checkbox
+(`accept-terms-checkbox`, real, server-write-gated since F-235 Slice B) is replaced with a passive
+disclaimer sentence above the Pay button — pressing Pay becomes the single action, no separate
+affirmative tap. This is a real change to what "accepting the court rules" means procedurally for
+a guest (explicit checkbox tap to implicit-in-payment), not a styling change, even though it rode
+along in a visual-polish batch — flagged and decided in the open rather than folded in unremarked,
+per this project's standing corrections-get-a-dated-note discipline extended to this kind of
+implementation-time call. Plan-mode review by Chief caught a second real gap before implementation
+started: the first drafted disclaimer wording dropped "or drinks" and the entire liability-waiver
+clause relative to the real checkbox label it replaces — narrower consent content than Bala
+approved (implicit consent, not narrower consent), corrected to carry the full clause set verbatim
+in substance before any code was written.
+Confirmed-ID: F-307
+Confirmed: 26 Sep 2026
+
+### razorpay-contact-prefill-dead-field
+Batch: guest-member-pwa, 27 Sep 2026
+Surfaced: Bala reported Razorpay's real checkout still prompting for a phone number despite the
+guest's verified number already showing on the same screen; Chief-assigned F-309 in the handover
+itself.
+Description: `BookingPay.tsx`'s Razorpay `options.prefill.contact` read `booking.phone || ''` --
+confirmed dead, since `Booking` has no `phone` column and `GET /bookings/:id` never joins one in,
+so it always silently resolved to `''`. Repointed to the real, already-verified `user.phone`
+already rendered on this screen as "YOUR NUMBER"; added `prefill.name` reusing the existing
+`displayName || name || email` fallback chain (F-285 precedent, `main.tsx`); added
+`readonly: { contact: true }` since the number is genuinely pre-verified. Confirmed via grep that
+`booking.phone` had no other reference in the file. Confirmed via code read that a session lacking
+a verified `user.phone` never reaches this screen (`BranchBooking.tsx`'s `handleReserve` gate), so
+there is no fallback case to design for. PR #113 closeout pass (27 Sep 2026): prefill construction
+extracted into pure `buildRazorpayPrefill(user)` (`apps/guest-member-pwa/src/lib/bookingPayLogic.ts`)
+and covered by a real, executing vitest run (new node-environment config, mirroring admin-v2's
+pattern) -- captured real values: contact === '+919812399099' with readonly.contact === true and
+name undefined for a phone-only user; name === 'Priya' once displayName is set. Compiled bundle
+grepped post-extraction to confirm the nested prefill/readonly shape survived. Still open: real
+Razorpay-checkout device/production verification -- this repo's documented sandbox-IP/HTTPS
+constraint means that confirmation still needs a real device or production pass.
+Confirmed-ID: F-309
+Confirmed: 27 Sep 2026
+
+### booking-pay-back-swipe-returns-to-stale-pay-screen
+Batch: guest-member-pwa, 27 Sep 2026
+Surfaced: Bala reported live that swiping back from the Confirmation screen after a successful
+payment lands back on Pay for the same, already-paid booking; Chief-assigned F-308 in the handover
+itself.
+Description: `BookingPay.tsx`'s two payment-success paths (`handleMockPayment`, the real Razorpay
+`handler`) both did a plain history-push `navigate(...)`, confirmed via grep to have no
+`{ replace: true }` precedent anywhere in the file or app. Fixed by passing `{ replace: true }` on
+both, plus a defense-in-depth mount guard in `loadBooking`'s effect that redirects to Confirmation
+immediately when the fetched booking is already `status === 'CONFIRMED'`, covering page-refresh/
+bookmarked-URL/multi-tab re-entry that the history fix alone doesn't reach. Deliberately scoped to
+`CONFIRMED` only -- `CANCELLED`/`CHECKED_IN`/`RELEASED_NO_SHOW` reaching this screen is a separate,
+unaddressed scenario per rule 9. PR #113 closeout pass (27 Sep 2026): the mount-guard's redirect
+decision extracted into pure `resolveConfirmedRedirect(bookingId, status)` (same new
+`bookingPayLogic.ts`) and covered by a real, executing vitest run -- captured real values:
+`resolveConfirmedRedirect('abc123', 'CONFIRMED')` returns
+`{ to: '/bookings/abc123/confirmation', options: { replace: true } }`;
+`resolveConfirmedRedirect('abc123', 'PENDING')` returns `null`. Still open: a real device
+back-swipe-after-payment check and a direct-URL visit to a known-CONFIRMED booking's Pay route;
+the two success-path `navigate(..., { replace: true })` calls inside async closures remain
+code-read-only, not covered by this pass.
+Confirmed-ID: F-308
+Confirmed: 27 Sep 2026
+
+### non-contiguous-multi-slot-guest-booking
+Batch: slot-engine + guest-member-pwa, 27 Sep 2026
+Surfaced: Chief-assigned handover (full discovery record:
+`claude/discovery-non-contiguous-multi-slot-booking.md`) -- `POST /bookings` (F-183) requires every
+additional window to be contiguous with the base slot and on the same resource pool, so a guest
+cannot book two separate time periods (e.g. 9 AM and 6 PM) in one action.
+Description: New capability, two phases. Phase 1 (this pass): new `POST /booking-orders` route,
+deliberately separate from `/bookings` to keep zero blast radius on F-183's hardened
+contiguous-chain behavior -- creates N independent top-level `Booking` rows (no `parentBookingId`)
+sharing one new `orderId` scalar, no contiguity/same-pool requirement (cross-pool spanning
+technically allowed, flagged as an open product question, not decided silently). New
+`BookingRule.dailyBookingCapEnabled` (default true) lets a pool opt out of the F-184 cap. A real
+defect was caught in plan review before implementation: the daily-cap check as originally scoped
+would have been a no-op for this route's own capability (comparing only the guest's pre-existing
+count, never the incoming order's own size) -- fixed to reject the entire order
+(`DAILY_CAP_EXCEEDED`) when `dailyBookingCount + newWindowsCount > cap` (net of any window this
+exact request already created on a prior attempt, so a legitimate retry isn't double-counted
+against its own prior success), not silently trim to whichever windows fit. Three more real defects
+independently caught by Codacy's automated PR review on #114 and fixed before merge: the daily-cap
+query originally scoped its branch filter by the raw client-supplied `branchId` instead of the
+requested windows' real pool's branchId (a genuine limit-bypass); no check confirmed a requested
+windowId's pool belonged to the caller's own tenantId (a cross-tenant window is now rejected
+`NOT_FOUND`, not silently booked -- a pre-existing gap `POST /bookings` also has, flagged
+separately, not fixed there); `orderId` was a fresh random UUID every call rather than derived from
+`(tenantId, userId, idempotencyKey)`, so a retry of an already-succeeded request returned a
+mismatched orderId. PaymentIntent linking deliberately not built this phase -- a real, wide fork
+(16 `referenceId` call sites across 9 files) investigated and reported back rather than decided
+unilaterally. Phase 2 (guest-facing UI in `CourtBooking.tsx`/`BookingConfirmation.tsx`/
+`BookingHistory.tsx`) not yet started, gated on Phase 1 landing. Real evidence: new regression file
+`booking-orders.regression.ts`, 8 sections, 123/123 full suite green.
+Confirmed-ID: F-310
+Confirmed: 27 Sep 2026

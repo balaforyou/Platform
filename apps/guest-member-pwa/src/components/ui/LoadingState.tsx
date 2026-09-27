@@ -5,51 +5,51 @@ export interface LoadingStateProps {
   label?: string;
 }
 
-// F-235 Phase 0: the shuttlecock-and-racket rally loader, ported from the design canvas's
-// `LoadingState.dc.html` artboard (Bala's supplied component -- see claude/guestPWA2/02-*.md
-// §0.3 and 05-*.md §3 for the full behavioral spec: two independently-fixed rackets, each
-// striking only when the shuttle reaches its side; request-driven, never a fixed-duration
-// timer; a static single frame under prefers-reduced-motion).
-//
-// NOTE: the actual canvas artboard lives behind Bala's claude.ai sign-in and this session had
-// no access to it (private, no credentials) -- the illustration below is a good-faith
-// reconstruction from the written spec (two fixed rackets, shuttle arcs between them, feather
-// ink / cork green-yellow-green / racket teal illustration colors), not a pixel-verified port.
-// Flagged explicitly in the implementation report: diff this against the real canvas before
-// treating it as done.
+// 26 Sep 2026, real replacement: the prior SVG rally scene was an explicitly-flagged "good-faith
+// reconstruction" -- the real canvas artboard was never accessible in that session, and Bala
+// called the result unintuitive. This ports his real supplied design (two rackets rallying a
+// shuttlecock, div/CSS-based, not SVG) verbatim for its choreography (keyframe values unchanged),
+// with colors repointed from the reference's own hardcoded hex onto this app's real theme tokens
+// (tenant-derived green for the rackets, matching the rest of the app's post-reversal theming --
+// see index.css's own gold-to-green history -- rather than reintroducing a new fixed blue/red).
+// `variant`/`label` props and every real call site (main.tsx, AboutSheet.tsx, VenueSwitcherSheet.
+// tsx, Button.tsx) are unchanged. `inline` (only ever used inside Button.tsx's own 22px spinner
+// slot) keeps a small dedicated spinner rather than squeezing the full 180x80 rally scene into
+// that space -- the reference has no guidance for that size, and Bala's own complaint was about
+// the loaders users actually see (full/compact), not this tiny in-button one.
 export default function LoadingState({ variant, label }: LoadingStateProps) {
   const showLabel = variant !== 'inline' && !!label;
 
+  if (variant === 'inline') {
+    return (
+      <div className="gpwa-loading gpwa-loading--inline" role="status" aria-live="polite">
+        <span className="gpwa-loading__inline-spinner" aria-hidden="true" />
+      </div>
+    );
+  }
+
   return (
     <div className={`gpwa-loading gpwa-loading--${variant}`} role="status" aria-live="polite">
-      <svg
-        className="gpwa-loading__stage"
-        viewBox="0 0 220 100"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        {/* Left racket, fixed on its own side */}
-        <g className="gpwa-loading__racket gpwa-loading__racket--left">
-          <ellipse cx="30" cy="50" rx="16" ry="20" fill="none" stroke="var(--gpwa-loading-teal)" strokeWidth="4" />
-          <line x1="30" y1="70" x2="22" y2="94" stroke="var(--gpwa-loading-teal)" strokeWidth="5" strokeLinecap="round" />
-        </g>
+      <div className="gpwa-loading__rally-stage" aria-hidden="true">
+        <div className="gpwa-loading__racket gpwa-loading__racket--left">
+          <div className="gpwa-loading__racket-head" />
+          <div className="gpwa-loading__racket-shaft" />
+          <div className="gpwa-loading__racket-grip" />
+        </div>
 
-        {/* Right racket, fixed on its own side */}
-        <g className="gpwa-loading__racket gpwa-loading__racket--right">
-          <ellipse cx="190" cy="50" rx="16" ry="20" fill="none" stroke="var(--gpwa-loading-teal)" strokeWidth="4" />
-          <line x1="190" y1="70" x2="198" y2="94" stroke="var(--gpwa-loading-teal)" strokeWidth="5" strokeLinecap="round" />
-        </g>
+        <div className="gpwa-loading__shuttle">
+          <div className="gpwa-loading__shuttle-skirt" />
+          <div className="gpwa-loading__shuttle-cork" />
+        </div>
 
-        {/* Shuttlecock, arcs between the two fixed rackets */}
-        <g className="gpwa-loading__shuttle">
-          <circle r="4" fill="var(--gpwa-loading-ink)" />
-          <path
-            d="M 0 0 L -6 8 L -2 6 L -4 12 L 0 8 L 4 12 L 2 6 L 6 8 Z"
-            fill="var(--gpwa-loading-cork)"
-            transform="translate(0,-2)"
-          />
-        </g>
-      </svg>
+        <div className="gpwa-loading__racket gpwa-loading__racket--right">
+          <div className="gpwa-loading__racket-head" />
+          <div className="gpwa-loading__racket-shaft" />
+          <div className="gpwa-loading__racket-grip" />
+        </div>
+
+        <div className="gpwa-loading__rally-shadow" />
+      </div>
 
       {showLabel && <p className="gpwa-loading__label">{label}</p>}
     </div>

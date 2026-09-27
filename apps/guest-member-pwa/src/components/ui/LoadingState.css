@@ -1,5 +1,8 @@
-/* F-235 Phase 0 LoadingState.tsx -- see LoadingState.tsx's own header comment for the
-   reconstruction caveat (canvas artboard was inaccessible this session). */
+/* 26 Sep 2026, real replacement (see LoadingState.tsx's own header comment): keyframe
+   choreography ported verbatim from Bala's real supplied design -- values below are unchanged
+   from that reference, only colors are repointed onto this app's theme tokens and the whole
+   stage is scaled per `variant` via a CSS custom property instead of the reference's own
+   fixed-size standalone page. */
 
 .gpwa-loading {
   display: flex;
@@ -7,9 +10,6 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-3, 13px);
-  --gpwa-loading-ink: var(--color-neutral-900);
-  --gpwa-loading-cork: #6b8e23;
-  --gpwa-loading-teal: #2f6f6f;
 }
 
 .gpwa-loading--full {
@@ -17,27 +17,12 @@
   inset: 0;
   background: var(--color-bg);
   z-index: 100;
+  --gpwa-rally-scale: 1.15;
 }
 
 .gpwa-loading--compact {
   padding: var(--space-6, 26px) 0;
-}
-
-.gpwa-loading--inline {
-  display: inline-flex;
-}
-.gpwa-loading--inline .gpwa-loading__stage {
-  width: 22px;
-  height: 22px;
-}
-
-.gpwa-loading__stage {
-  width: 140px;
-  height: auto;
-  overflow: visible;
-}
-.gpwa-loading--compact .gpwa-loading__stage {
-  width: 96px;
+  --gpwa-rally-scale: 0.65;
 }
 
 .gpwa-loading__label {
@@ -48,46 +33,164 @@
   text-align: center;
 }
 
-/* Two independently-fixed rackets: each only "strikes" (rotates in) as the shuttle reaches its
-   side, on its own timing offset -- never one racket sliding across the stage. */
-.gpwa-loading__racket--left {
-  transform-origin: 30px 50px;
-  animation: gpwa-racket-left 1.6s ease-in-out infinite;
-}
-.gpwa-loading__racket--right {
-  transform-origin: 190px 50px;
-  animation: gpwa-racket-right 1.6s ease-in-out infinite;
-}
-@keyframes gpwa-racket-left {
-  0%, 15% { transform: rotate(0deg); }
-  25% { transform: rotate(-18deg); }
-  35%, 100% { transform: rotate(0deg); }
-}
-@keyframes gpwa-racket-right {
-  0%, 65% { transform: rotate(0deg); }
-  75% { transform: rotate(18deg); }
-  85%, 100% { transform: rotate(0deg); }
+/* --- Rally stage (ported from the reference's .rally-stage) --- */
+.gpwa-loading__rally-stage {
+  position: relative;
+  width: 180px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transform: scale(var(--gpwa-rally-scale, 1));
 }
 
-/* Shuttle arcs left-racket -> right-racket -> left-racket, striking at each side in sync with
-   that side's racket keyframes above. */
-.gpwa-loading__shuttle {
-  animation: gpwa-shuttle-arc 1.6s ease-in-out infinite;
+/* --- Rackets --- */
+.gpwa-loading__racket {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 22px;
+  z-index: 2;
 }
-@keyframes gpwa-shuttle-arc {
-  0%, 15% { transform: translate(30px, 50px); }
-  50% { transform: translate(110px, 20px); }
-  65%, 100% { transform: translate(190px, 50px); }
+
+.gpwa-loading__racket-head {
+  width: 16px;
+  height: 22px;
+  /* Reference used a fixed #38bdf8 (blue) -- repointed to the tenant-derived accent, matching
+     this app's own "no fixed brand color outside the sanctioned scarcity amber" convention. */
+  border: 2px solid var(--color-accent-700);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.gpwa-loading__racket-shaft {
+  width: 2px;
+  height: 14px;
+  background: var(--color-neutral-400);
+}
+
+.gpwa-loading__racket-grip {
+  width: 3px;
+  height: 8px;
+  background: var(--color-destructive);
+  border-radius: 1px;
+}
+
+.gpwa-loading__racket--left {
+  animation: gpwa-rally-hit-left 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.gpwa-loading__racket--right {
+  animation: gpwa-rally-hit-right 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* --- Shuttlecock --- */
+.gpwa-loading__shuttle {
+  position: absolute;
+  top: 18px;
+  left: calc(50% - 7px);
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  animation: gpwa-rally-shuttle 1.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.gpwa-loading__shuttle-skirt {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-right: 9px solid var(--color-neutral-100);
+}
+
+.gpwa-loading__shuttle-cork {
+  width: 5px;
+  height: 7px;
+  /* Real shuttlecock cork color -- a fixed decorative detail, not a brand color, kept as-is
+     from the reference. */
+  background: #f59e0b;
+  border-radius: 0 3px 3px 0;
+  margin-left: -1px;
+}
+
+/* --- Court floor shadow --- */
+.gpwa-loading__rally-shadow {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  width: 20px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  animation: gpwa-rally-shadow 1.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+/* --- Keyframe choreography (values unchanged from the reference) --- */
+@keyframes gpwa-rally-shuttle {
+  0% { transform: translate(-56px, 2px) rotate(0deg); }
+  48% { transform: translate(0px, -20px) rotate(10deg); }
+  50% { transform: translate(56px, 2px) rotate(0deg) scaleX(-1); }
+  98% { transform: translate(0px, -20px) rotate(-10deg) scaleX(-1); }
+  100% { transform: translate(-56px, 2px) rotate(0deg) scaleX(1); }
+}
+
+@keyframes gpwa-rally-hit-left {
+  0%, 100% { transform: rotate(-22deg) translateX(-2px); }
+  10% { transform: rotate(0deg); }
+  50% { transform: rotate(-8deg); }
+}
+
+@keyframes gpwa-rally-hit-right {
+  0%, 100% { transform: rotate(8deg); }
+  50% { transform: rotate(22deg) translateX(2px); }
+  60% { transform: rotate(0deg); }
+}
+
+@keyframes gpwa-rally-shadow {
+  0% { transform: translateX(-56px) scale(0.9); opacity: 0.6; }
+  25% { transform: translateX(-28px) scale(0.45); opacity: 0.2; }
+  50% { transform: translateX(56px) scale(0.9); opacity: 0.6; }
+  75% { transform: translateX(28px) scale(0.45); opacity: 0.2; }
+  100% { transform: translateX(-56px) scale(0.9); opacity: 0.6; }
+}
+
+/* --- Inline variant: a small dedicated spinner, not the full rally scene (see
+   LoadingState.tsx's own comment -- only ever used inside Button.tsx's 22px loading slot). --- */
+.gpwa-loading--inline {
+  display: inline-flex;
+}
+.gpwa-loading__inline-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  /* currentColor, not a fixed accent -- this sits inside many different button colors (green
+     CTAs, the red destructive cancel-confirm button, etc.), so it must inherit whatever text
+     color the surrounding button already uses rather than clashing with a hardcoded ramp. The
+     base ring is a dimmed currentColor (color-mix, same pattern Button.css already uses) so the
+     solid currentColor top segment reads as the moving highlight. */
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: gpwa-inline-spin 0.7s linear infinite;
+}
+@keyframes gpwa-inline-spin {
+  to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Static single frame: shuttle centered, both rackets at rest -- never the looping animation. */
+  /* Static single frame: shuttle at its apex between the two rackets, both rackets at rest. */
   .gpwa-loading__racket--left,
   .gpwa-loading__racket--right,
-  .gpwa-loading__shuttle {
+  .gpwa-loading__shuttle,
+  .gpwa-loading__rally-shadow,
+  .gpwa-loading__inline-spinner {
     animation: none;
   }
   .gpwa-loading__shuttle {
-    transform: translate(110px, 35px);
+    transform: translate(0px, -20px) rotate(10deg);
+  }
+  .gpwa-loading__rally-shadow {
+    transform: translateX(0px) scale(0.6);
+    opacity: 0.35;
   }
 }

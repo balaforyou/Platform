@@ -15,7 +15,7 @@ import BookingHistory from './components/BookingHistory';
 import BookingConfirmation from './components/BookingConfirmation';
 import Shell from './components/Shell';
 import LoadingState from './components/ui/LoadingState';
-import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Clock, MapPin, Navigation } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Clock, MapPin, Navigation, Feather, Calendar } from 'lucide-react';
 import './index.css';
 
 // Capture beforeinstallprompt event globally to avoid React component mounting race conditions
@@ -168,6 +168,20 @@ function TenantResolveError({ message }: { message: string }) {
   );
 }
 
+// 26 Sep 2026 feedback round: same dedup logic as BranchBooking.tsx's displayPoolName (real
+// seed data embeds the venue name inside the pool's own name, e.g. JBC's real
+// "JBC - New Japan Badminton Court - Main Courts") -- duplicated rather than shared, same
+// tradeoff already taken for formatCancellationPolicy/lib/courtLabel.ts in this app. Branch
+// names use different dash characters in the same position across JBC's two real branches
+// (one plain hyphen, one en-dash) -- normalized before comparing, not an exact string match.
+const normalizeDashesHome = (s: string): string => s.replace(/[–—]/g, '-');
+function displayPoolNameHome(poolName: string, branchName?: string | null): string {
+  if (!branchName) return poolName;
+  const prefix = `${normalizeDashesHome(branchName)} - `;
+  const normalizedPool = normalizeDashesHome(poolName);
+  return normalizedPool.startsWith(prefix) ? poolName.slice(prefix.length) : poolName;
+}
+
 /**
  * Main dashboard screen loaded when authenticated.
  */
@@ -315,7 +329,7 @@ function MainDashboard() {
     };
     return {
       label: 'Confirmed',
-      style: { background: 'var(--color-accent-2-100)', color: 'var(--color-accent-2-800)', borderColor: 'var(--color-accent-2-200)' },
+      style: { background: 'var(--color-accent-100)', color: 'var(--color-accent-800)', borderColor: 'var(--color-accent-200)' },
     };
   };
 
@@ -437,7 +451,7 @@ function MainDashboard() {
               {memberSession.cutoffTime ? <div className="flex justify-between gap-4"><span>Confirm before</span><span className="font-semibold" style={{ color: 'var(--color-text)' }}>{formatBranchTime(memberSession.cutoffTime, branchTimezone, { hour: '2-digit', minute: '2-digit' })}</span></div> : null}
             </div>
             {isConfirmed ? (
-              <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-accent-2-100)', border: '1px solid var(--color-accent-2-200)', color: 'var(--color-accent-2-800)' }}>
+              <div className="flex items-center gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--color-accent-100)', border: '1px solid var(--color-accent-200)', color: 'var(--color-accent-800)' }}>
                 <CheckCircle className="h-4 w-4" />Attendance confirmed
               </div>
             ) : isDeclined ? (
@@ -502,10 +516,11 @@ function MainDashboard() {
     <div className="max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
       {/* F-235 Slice E: trimmed hero -- the real mockup's Home/Dashboard artboard has no gradient
           hero block; its top bar is just the header avatar (Shell.tsx, unchanged) plus a greeting.
-          The tenant pill + "Welcome back" heading are kept (not in the mockup's own text, but this
-          exact heading text is asserted by real Playwright specs -- guest-booking.spec.ts,
-          pwa-install-dismissal.spec.ts -- so it stays, just trimmed of the old gradient/subtext/
-          two-button hero treatment that's being replaced by the sections below). */}
+          The tenant pill is kept (not in the mockup's own text). The heading itself was
+          "Welcome back to {tenant}", asserted verbatim by guest-booking.spec.ts and
+          pwa-install-dismissal.spec.ts -- replaced with "Welcome, {firstName}" in the 26 Sep 2026
+          UI-polish batch (Option B, Bala-confirmed); both specs' assertions were updated in the
+          same batch. */}
       <div className="space-y-2">
         <div
           className="inline-flex items-center space-x-1 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider"
@@ -514,19 +529,19 @@ function MainDashboard() {
           <MapPin className="h-3.5 w-3.5" />
           <span>{tenant?.name}</span>
         </div>
-        {/* F-285: the "Welcome back to {tenant}" heading below is left completely untouched --
-            its exact text is asserted by real Playwright specs (see the comment above this
-            block). The first-name greeting is a separate line instead of being worked into that
-            sentence, so it adds real personalization with zero risk to those assertions. No
-            separate first-name field exists on the token -- split displayName client-side, same
-            fallback chain AccountSheet.tsx already establishes for when it's unset. */}
-        {(user?.displayName || user?.name || user?.email) && (
-          <p className="text-sm font-semibold" style={{ color: 'var(--color-accent-700)', fontFamily: 'var(--font-body-organic)' }}>
-            {`Hi, ${(user?.displayName || user?.name || user?.email || '').split(' ')[0]}`}
-          </p>
-        )}
+        {/* 26 Sep 2026 UI-polish batch, Option B (Bala-confirmed): the heading now carries the
+            first-name greeting itself, replacing the old "Welcome back to {tenant}" text plus a
+            separate "Hi, {firstName}" line (F-285) -- two lines both saying the person's name was
+            redundant. No separate first-name field exists on the token -- split displayName
+            client-side, same fallback chain AccountSheet.tsx already establishes for when it's
+            unset. Nameless fallback ("Welcome!") only ever fires for the two Playwright specs'
+            phone-OTP test bypass (no displayName/name/email seeded) -- real Gmail-only production
+            login always resolves a name, so a fixed fallback string here is lower-risk than
+            seeding fixture data for a state real traffic can't hit. */}
         <h2 className="text-3xl md:text-4xl" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, lineHeight: 1.1, color: 'var(--color-text)' }}>
-          Welcome back to <span style={{ color: 'var(--color-accent-700)' }}>{tenant?.appName}</span>
+          {(user?.displayName || user?.name || user?.email)
+            ? `Welcome, ${(user.displayName || user.name || user.email || '').split(' ')[0]}`
+            : 'Welcome!'}
         </h2>
       </div>
 
@@ -540,13 +555,18 @@ function MainDashboard() {
           canvas's own code inspector: a Button sits directly below the session card, ahead of the
           bookings list. handleBookNow/navigate('/book') unchanged, same id Playwright specs
           (findings-verification, guest-booking) already click. */}
+      {/* 26 Sep 2026 UI-polish batch: repointed from --color-accent-2-400 (fixed gold ramp) to
+          --color-accent-700 (genuinely tenant-derived, see TenantContext's generateAccentRamp) --
+          the data-only Tenant.themeColor change doesn't reach this button on its own, since it
+          was never wired to the tenant ramp to begin with. --slot-selected-label carries the
+          light text color already used against a solid --color-accent-700 fill elsewhere. */}
       <button
         onClick={handleBookNow}
-        className="w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors"
-        style={{ background: 'var(--color-accent-2-400)', color: 'var(--color-neutral-900)', fontFamily: 'var(--font-body-organic)' }}
+        className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+        style={{ background: 'var(--color-accent-700)', color: 'var(--slot-selected-label)', fontFamily: 'var(--font-body-organic)' }}
         id="book-court-dashboard-btn"
       >
-        <span>{user?.userType === 'MEMBER' ? '+ Book as Guest' : '+ New Booking'}</span>
+        <span>{user?.userType === 'MEMBER' ? '+ Book as Guest' : 'Book a Court +'}</span>
       </button>
 
       {/* F-235 Slice E: "My Bookings" -- the mockup's real bookings-list body. Reuses upcomingSlots'
@@ -555,7 +575,7 @@ function MainDashboard() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>
-            My Bookings
+            Current Bookings
           </h3>
           <Link
             to="/bookings/my"
@@ -572,9 +592,27 @@ function MainDashboard() {
         ) : upcomingError ? (
           <p className="text-xs" style={{ color: 'var(--color-destructive)' }} id="upcoming-slots-error">{upcomingError}</p>
         ) : upcomingSlots.length === 0 ? (
-          <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }} id="upcoming-slots-empty">
-            No pre-scheduled matches today. Tap {user?.userType === 'MEMBER' ? '"+ Book as Guest"' : '"+ New Booking"'} to search for court times.
-          </p>
+          <div
+            className="p-6 text-center rounded-2xl flex flex-col items-center gap-2"
+            style={{ background: 'var(--mint-surface)', border: '1px solid var(--border-subtle)' }}
+          >
+            {/* 26 Sep 2026 feedback round: no shuttlecock icon asset exists anywhere in the repo
+                and lucide-react has no literal shuttlecock icon -- composed from Feather
+                (shuttlecocks are feathered) layered over Calendar, per Bala's confirmed call. */}
+            <div className="relative" style={{ width: '40px', height: '40px' }}>
+              <Calendar className="h-10 w-10" style={{ color: 'var(--color-accent-300)' }} />
+              <Feather
+                className="h-5 w-5"
+                style={{ position: 'absolute', bottom: '-4px', right: '-4px', color: 'var(--color-accent-700)', transform: 'rotate(45deg)' }}
+              />
+            </div>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>
+              No pre-scheduled booking.
+            </p>
+            <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }} id="upcoming-slots-empty">
+              Tap Book a Court to search and book your slot.
+            </p>
+          </div>
         ) : (
           <div className="space-y-2" id="upcoming-slots-list">
             {upcomingSlots.slice(0, 3).map((b) => {
@@ -589,20 +627,28 @@ function MainDashboard() {
                   style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold truncate" style={{ color: 'var(--color-text)' }}>
-                      {b.window.resourcePool?.name || 'Court booking'}
+                    {/* 26 Sep 2026 feedback round, Option C (Bala's call): deduped pool name here
+                        too (same displayPoolNameHome logic as Slot & Time Selection's real fix)
+                        so row 1 never competes with the badge, and the court number moved to the
+                        time row below instead of living here -- both real fixes for the same
+                        underlying bug (a long real pool name, e.g. JBC's actual "JBC - New Japan
+                        Badminton Court - Main Courts", swallowed the court number on a real
+                        narrow mobile device, confirmed via Bala's own device screenshot). */}
+                    <span className="text-xs font-bold truncate min-w-0 flex-1" style={{ color: 'var(--color-text)' }}>
+                      {displayPoolNameHome(b.window.resourcePool?.name || 'Court booking', about?.name)}
                     </span>
                     <span className="shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border" style={badge.style}>
                       {badge.label}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-[11px] font-mono" style={{ color: 'var(--color-neutral-600)' }}>
+                    <div className="text-[11px] font-mono font-bold" style={{ color: 'var(--color-text)' }}>
                       {formatBranchTime(b.window.startTime, timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
                       {' · '}
                       {formatBranchTime(b.window.startTime, timezone, { hour: '2-digit', minute: '2-digit' })}
                       {' - '}
                       {formatBranchTime(b.window.endTime, timezone, { hour: '2-digit', minute: '2-digit' })}
+                      {b.resource?.name ? ` · ${b.resource.name}` : ''}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {/* F-247: same real Directions link BookingHistory.tsx already has --
@@ -661,7 +707,7 @@ function MainDashboard() {
 // the decided derivation (memberAttendanceConfirmedAt/DeclinedAt, never CHECKED_IN); a real "not
 // enough history yet" empty state when the server reports no session has occurred yet.
 const CALENDAR_STATE_STYLE: Record<string, React.CSSProperties> = {
-  ATTENDED: { background: 'var(--color-accent-2-500, #16a34a)', color: '#fff' },
+  ATTENDED: { background: 'var(--color-accent-500)', color: '#fff' },
   DECLINED: { background: 'var(--slot-almostfull-surface)', color: 'var(--slot-almostfull-text)', border: '1px solid var(--slot-almostfull-border)' },
   NO_RESPONSE: { background: 'var(--color-destructive, #dc2626)', color: '#fff' },
   NO_DATA: { background: 'var(--color-neutral-200)', color: 'var(--color-neutral-400)' },

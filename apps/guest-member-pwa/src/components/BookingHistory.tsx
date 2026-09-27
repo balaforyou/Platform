@@ -5,6 +5,7 @@ import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
 import ConfirmDialog from './ui/ConfirmDialog';
+import LoadingState from './ui/LoadingState';
 import { describeCourtAssignment } from '../lib/courtLabel';
 
 export default function BookingHistory() {
@@ -79,7 +80,14 @@ export default function BookingHistory() {
       const res = await apiRequest<any[]>('/slot-engine/bookings/my', {
         token: accessToken,
       });
-      setBookings(res || []);
+      // 26 Sep 2026 feedback round: display-order sort only (backend order, heldAt desc, is
+      // when the booking was MADE, not the slot's own date) -- descending by the real slot
+      // date/time, latest first, per Bala's explicit call. Same pattern as main.tsx's own
+      // upcomingSlots sort, reversed comparator.
+      const sorted = (res || [])
+        .slice()
+        .sort((a: any, b: any) => new Date(b.window.startTime).getTime() - new Date(a.window.startTime).getTime());
+      setBookings(sorted);
     } catch (err: any) {
       setError(err.message || 'Failed to load booking history.');
     } finally {
@@ -155,7 +163,7 @@ export default function BookingHistory() {
         return (
           <span
             className={base}
-            style={{ background: 'var(--color-accent-2-100)', color: 'var(--color-accent-2-800)', borderColor: 'var(--color-accent-2-200)' }}
+            style={{ background: 'var(--color-accent-100)', color: 'var(--color-accent-800)', borderColor: 'var(--color-accent-200)' }}
           >
             Confirmed
           </span>
@@ -216,13 +224,7 @@ export default function BookingHistory() {
   const isCancelable = (booking: any) => new Date(booking.window.startTime) > new Date();
 
   if (loading) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] gap-[14px]" style={{ background: 'var(--color-bg)' }}>
-        <style>{'@keyframes booking-history-spin { to { transform: rotate(360deg); } }'}</style>
-        <div style={{ width: '52px', height: '52px', borderRadius: '999px', border: '4px solid var(--color-accent-200)', borderTopColor: 'var(--color-accent-700)', animation: 'booking-history-spin 1s linear infinite' }} />
-        <p style={{ fontFamily: 'var(--font-body-organic)', fontSize: '14px', color: 'var(--color-neutral-600)' }}>Retrieving your bookings&hellip;</p>
-      </div>
-    );
+    return <LoadingState variant="full" label="Retrieving your bookings…" />;
   }
 
   if (error) {
@@ -262,7 +264,7 @@ export default function BookingHistory() {
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="text-3xl tracking-tight" style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, color: 'var(--color-text)' }}>
-            My Bookings
+            History
           </h2>
           <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }}>
             Manage your scheduled court matches, complete checkout, check-in, or request cancellations.
@@ -352,7 +354,7 @@ export default function BookingHistory() {
                       <span>{sDate}</span>
                     </div>
                     <div className="flex items-start space-x-1.5">
-                      <Clock className="h-3.5 w-3.5 shrink-0 mt-px" style={{ color: 'var(--color-accent-2-700)' }} />
+                      <Clock className="h-3.5 w-3.5 shrink-0 mt-px" style={{ color: 'var(--color-accent-700)' }} />
                       <div className="space-y-0.5">
                         <div>{st} - {et}</div>
                         {/* F-187: a multi-window (F-183) booking's extra hours live on separate
@@ -447,7 +449,7 @@ export default function BookingHistory() {
                       <button
                         onClick={() => { setCheckInError(null); setCheckInTarget(booking); }}
                         className="py-2 px-4 text-xs font-semibold rounded-xl transition-all shadow-lg"
-                        style={{ background: 'var(--color-accent-2-700)', color: 'var(--color-accent-2-100)' }}
+                        style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
                         id={`check-in-btn-${booking.id}`}
                       >
                         I'm Here
