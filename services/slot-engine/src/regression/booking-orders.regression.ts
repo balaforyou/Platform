@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Section, inspect } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
 import {
@@ -46,7 +47,7 @@ async function createPoolWithRule(opts: {
     body: JSON.stringify({
       tenantId: TENANT_ID,
       branchId: BRANCH_ID,
-      name: `F-310 Pool ${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: `F-310 Pool ${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
       allocationMode: 'POOLED',
       capacity,
     }),
@@ -311,6 +312,100 @@ export const bookingOrdersSections: Section<SlotEngineContext>[] = [
       console.log('F310_EVIDENCE order_size_cap_boundary_ok', JSON.stringify({ status: atCapRes.status, held: atCapBody.held?.length }));
       if (atCapRes.status !== 201 || atCapBody.held.length !== 2) {
         throw new Error(`Expected a same-day order right at the cap boundary to succeed, got ${atCapRes.status}: ${atCapRes.raw}`);
+      }
+    },
+  },
+
+  {
+    name: 'F-310: a windowId belonging to a different tenant is rejected as not found, not silently booked across tenants',
+    async run() {
+      // A second, real tenant + branch -- same real-cross-tenant pattern as F-277's own section
+      // (group-tenant-scoping.regression.ts), proving isolation against an ACTUAL other tenant
+      // rather than a synthetic id that happens not to match.
+      const OTHER_TENANT_ID = 'f310-11111111-2222-3333-4444-555555555555';
+      const OTHER_BRANCH_ID = 'f310-66666666-7777-8888-9999-000000000000';
+      await db.tenant.upsert({
+        where: { id: OTHER_TENANT_ID },
+        update: {},
+        create: { id: OTHER_TENANT_ID, name: 'F-310 Other Tenant', subdomain: 'f310-other-tenant' },
+      });
+      await db.branch.upsert({
+        where: { id: OTHER_BRANCH_ID },
+        update: {},
+        create: { id: OTHER_BRANCH_ID, tenantId: OTHER_TENANT_ID, name: 'F-310 Other Branch', status: 'ACTIVE', timezone: 'UTC' },
+      });
+      const foreignPoolRes = await fetch(`${baseUrl}/resource-pools`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({ tenantId: OTHER_TENANT_ID, branchId: OTHER_BRANCH_ID, name: 'F-310 Foreign Pool', allocationMode: 'POOLED', capacity: 4 }),
+      });
+      const foreignPool = ((await foreignPoolRes.json()) as any).data;
+      const foreignWindow = await createWindow(foreignPool.id, 4);
+
+      const { pool } = await createPoolWithRule({});
+      const ownWindow = await createWindow(pool.id, 12);
+      const userId = 'f310-tenant-isolation-user';
+
+      const res = await inspect(
+        await fetch(`${baseUrl}/booking-orders`, {
+          method: 'POST',
+          headers: bookingHeaders(userId, 'f310-tenant-isolation-key'),
+          body: JSON.stringify({ branchId: BRANCH_ID, windowIds: [ownWindow.id, foreignWindow.id] }),
+        }),
+      );
+      const body = res.json?.data ?? res.json;
+      console.log('F310_EVIDENCE tenant_isolation', JSON.stringify({ status: res.status, held: body.held?.length, rejected: body.rejected }));
+      if (res.status !== 201 || body.held.length !== 1 || body.rejected.length !== 1) {
+        throw new Error(`Expected the caller's own window held and the foreign-tenant window rejected, got ${res.status}: ${JSON.stringify(body)}`);
+      }
+      if (body.rejected[0].windowId !== foreignWindow.id || body.rejected[0].code !== 'NOT_FOUND') {
+        throw new Error(`Expected the foreign window rejected NOT_FOUND (not a distinguishing error, to avoid leaking cross-tenant existence), got ${JSON.stringify(body.rejected[0])}`);
+      }
+
+      const foreignRows = await db.booking.findMany({ where: { windowId: foreignWindow.id } });
+      if (foreignRows.length !== 0) {
+        throw new Error(`Expected zero bookings created against the foreign tenant's window, got ${foreignRows.length}`);
+      }
+    },
+  },
+
+  {
+    name: 'F-310: a retried request (same Idempotency-Key) reproduces the identical orderId, not a fresh one',
+    async run() {
+      const { pool } = await createPoolWithRule({});
+      const morning = await createWindow(pool.id, 4);
+      const evening = await createWindow(pool.id, 12);
+      const userId = 'f310-retry-user';
+      const headers = bookingHeaders(userId, 'f310-retry-key');
+
+      const first = await inspect(
+        await fetch(`${baseUrl}/booking-orders`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ branchId: BRANCH_ID, windowIds: [morning.id, evening.id] }),
+        }),
+      );
+      const firstBody = first.json?.data ?? first.json;
+
+      // Same Idempotency-Key, same windowIds -- simulates a client retry after e.g. a timeout,
+      // where every window's derived per-window key already exists from the first attempt.
+      const retry = await inspect(
+        await fetch(`${baseUrl}/booking-orders`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ branchId: BRANCH_ID, windowIds: [morning.id, evening.id] }),
+        }),
+      );
+      const retryBody = retry.json?.data ?? retry.json;
+      console.log('F310_EVIDENCE retry_orderid_stable', JSON.stringify({ firstOrderId: firstBody.orderId, retryOrderId: retryBody.orderId, retryHeldIds: retryBody.held.map((b: any) => b.id) }));
+
+      if (retryBody.orderId !== firstBody.orderId) {
+        throw new Error(`Expected the retry to reproduce the identical orderId, got first=${firstBody.orderId} retry=${retryBody.orderId}`);
+      }
+      const retryIds = retryBody.held.map((b: any) => b.id).sort();
+      const firstIds = firstBody.held.map((b: any) => b.id).sort();
+      if (JSON.stringify(retryIds) !== JSON.stringify(firstIds)) {
+        throw new Error(`Expected the retry to return the exact same booking rows, got first=${JSON.stringify(firstIds)} retry=${JSON.stringify(retryIds)}`);
       }
     },
   },

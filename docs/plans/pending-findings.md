@@ -2191,11 +2191,20 @@ technically allowed, flagged as an open product question, not decided silently).
 defect was caught in plan review before implementation: the daily-cap check as originally scoped
 would have been a no-op for this route's own capability (comparing only the guest's pre-existing
 count, never the incoming order's own size) -- fixed to reject the entire order
-(`DAILY_CAP_EXCEEDED`) when `dailyBookingCount + windowIds.length > cap`, not silently trim to
-whichever windows fit. PaymentIntent linking deliberately not built this phase -- a real, wide fork
+(`DAILY_CAP_EXCEEDED`) when `dailyBookingCount + newWindowsCount > cap` (net of any window this
+exact request already created on a prior attempt, so a legitimate retry isn't double-counted
+against its own prior success), not silently trim to whichever windows fit. Three more real defects
+independently caught by Codacy's automated PR review on #114 and fixed before merge: the daily-cap
+query originally scoped its branch filter by the raw client-supplied `branchId` instead of the
+requested windows' real pool's branchId (a genuine limit-bypass); no check confirmed a requested
+windowId's pool belonged to the caller's own tenantId (a cross-tenant window is now rejected
+`NOT_FOUND`, not silently booked -- a pre-existing gap `POST /bookings` also has, flagged
+separately, not fixed there); `orderId` was a fresh random UUID every call rather than derived from
+`(tenantId, userId, idempotencyKey)`, so a retry of an already-succeeded request returned a
+mismatched orderId. PaymentIntent linking deliberately not built this phase -- a real, wide fork
 (16 `referenceId` call sites across 9 files) investigated and reported back rather than decided
 unilaterally. Phase 2 (guest-facing UI in `CourtBooking.tsx`/`BookingConfirmation.tsx`/
 `BookingHistory.tsx`) not yet started, gated on Phase 1 landing. Real evidence: new regression file
-`booking-orders.regression.ts`, 6 sections, 121/121 full suite green.
+`booking-orders.regression.ts`, 8 sections, 123/123 full suite green.
 Confirmed-ID: F-310
 Confirmed: 27 Sep 2026

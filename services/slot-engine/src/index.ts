@@ -4586,6 +4586,14 @@ server.post('/booking-orders', async (request, reply) => {
     const dayStart = branchLocalToUtc(requestedDateString, '00:00', horizonTimeZone);
     const dayEnd = addBranchDays(dayStart, 1, horizonTimeZone);
 
+    // WHY primaryPool.branchId, not the raw request-body `branchId`: this scopes which
+    // branch's existing bookings count against the cap. Using the unvalidated client-supplied
+    // value here (rather than the real branch the requested windows actually belong to) would
+    // let a caller name a different branchId and have the count query look in the wrong place,
+    // silently bypassing the cap for their real branch -- a genuine limit-bypass, not just a
+    // data-hygiene issue (unlike storing the raw scalar on the created Booking rows below, which
+    // matches Booking.branchId's own pre-existing, already-documented "no DB relation yet"
+    // convention and is not this route's bug to fix).
     const dailyBookingCount = await prisma.booking.count({
       where: {
         userId,
@@ -4593,16 +4601,32 @@ server.post('/booking-orders', async (request, reply) => {
         parentBookingId: null,
         window: {
           startTime: { gte: dayStart, lt: dayEnd },
-          resourcePool: { branchId },
+          resourcePool: { branchId: primaryPool!.branchId },
         },
       },
     });
 
+    // WHY netted against already-existing rows for THIS request's own derived idempotency keys:
+    // dailyBookingCount already counts any row a prior attempt of this exact request created (an
+    // idempotent retry after a client timeout, same Idempotency-Key). Gating on the order's raw
+    // `windowIds.length` here would double-count those rows -- once because they already exist
+    // and are included in dailyBookingCount, again because they're still present in this
+    // request's own windowIds -- incorrectly rejecting a legitimate retry of an already-successful
+    // order. Only genuinely NEW windows (no existing row yet under their derived key) count
+    // against the cap's remaining headroom.
+    const alreadyExistingCount = (
+      await prisma.booking.findMany({
+        where: { idempotencyKey: { in: sortedWindowIds.map((id) => `${idempotencyKey}:${id}`) } },
+        select: { id: true },
+      })
+    ).length;
+    const newWindowsCount = windowIds.length - alreadyExistingCount;
+
     const cap = primaryRule?.maxDailyBookingsPerGuest ?? 3;
-    if (dailyBookingCount + windowIds.length > cap) {
+    if (dailyBookingCount + newWindowsCount > cap) {
       reply.status(400);
       const err = new Error(
-        `This order's ${windowIds.length} slot(s) would exceed the daily booking limit of ${cap} for this branch (${dailyBookingCount} already held/confirmed today)`,
+        `This order's ${newWindowsCount} new slot(s) would exceed the daily booking limit of ${cap} for this branch (${dailyBookingCount} already held/confirmed today)`,
       );
       (err as any).statusCode = 400;
       (err as any).code = 'DAILY_CAP_EXCEEDED';
@@ -4616,7 +4640,18 @@ server.post('/booking-orders', async (request, reply) => {
   // deadlock-avoidance that sorted locking gives POST /bookings (which locks several rows inside
   // ONE transaction) isn't needed in this shape -- sorted processing order is kept anyway for
   // deterministic behavior and to match the real chronological intent of the order.
-  const orderId = crypto.randomUUID();
+  // WHY derived, not crypto.randomUUID(): Idempotency-Key is required on this route specifically
+  // so a retried request (client timeout, network blip) is safe to resend. A random orderId here
+  // would only ever land on newly-created rows -- on a retry where every window's derived
+  // per-window key already exists (full idempotent replay), this route would return the
+  // ALREADY-STORED orderId on each booking but a DIFFERENT freshly-generated orderId at the
+  // response's top level, a real mismatch. Deriving it from (tenantId, userId, idempotencyKey)
+  // makes every retry of the same request produce the identical orderId, scoped per user so two
+  // different callers choosing an identical literal idempotency-key string can never collide.
+  const orderId = crypto
+    .createHash('sha256')
+    .update(`${tenantId}:${userId}:${idempotencyKey}`)
+    .digest('hex');
   const held: any[] = [];
   const rejected: { windowId: string; code: string; message: string }[] = [];
 
@@ -4649,6 +4684,19 @@ server.post('/booking-orders', async (request, reply) => {
         });
         if (!pool) {
           const err = new Error('Resource pool not found');
+          (err as any).code = 'NOT_FOUND';
+          throw err;
+        }
+
+        // WHY: windowIds are caller-supplied and never otherwise scoped to the caller's own
+        // tenant (unlike resourcePoolId on POST /bookings, which at least comes from the same
+        // caller-supplied source but is equally unchecked there -- a real, pre-existing gap
+        // flagged separately, not fixed here since it is not unique to this route). This route
+        // is new, so it is held to the real bar rather than silently inheriting that gap:
+        // reject a window belonging to a different tenant's pool as a per-window failure, not a
+        // whole-order fatal, consistent with every other per-window validation below.
+        if (pool.tenantId !== tenantId) {
+          const err = new Error('Availability window not found');
           (err as any).code = 'NOT_FOUND';
           throw err;
         }
