@@ -5,6 +5,7 @@ import { useAuth, useTenant } from '@badminton/ui-shared';
 import { MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
 import LoadingState from './ui/LoadingState';
 import { TERMS_VERSION } from '../constants/terms';
+import { buildRazorpayPrefill, resolveConfirmedRedirect } from '../lib/bookingPayLogic';
 
 export default function BookingPay() {
   const { bookingId } = useParams();
@@ -69,6 +70,15 @@ export default function BookingPay() {
         const bookingRes = await apiRequest<any>(`/slot-engine/bookings/${bookingId}`, {
           token: accessToken,
         });
+        // F-308: a page refresh, bookmarked/shared URL, or another tab can land here for a
+        // booking already CONFIRMED (paid). Redirect straight to Confirmation instead of
+        // rendering the stale Pay UI -- the history-replace fix above only covers the
+        // back-swipe case, not a fresh mount on this URL.
+        const redirect = resolveConfirmedRedirect(bookingId, bookingRes.status);
+        if (redirect) {
+          navigate(redirect.to, redirect.options);
+          return;
+        }
         setBooking(bookingRes);
       } catch (err: any) {
         setError(err.message || 'Failed to initialize payment process.');
@@ -151,7 +161,9 @@ export default function BookingPay() {
       });
 
       // Optimistic redirect to confirmation screen
-      navigate(`/bookings/${bookingId}/confirmation`);
+      // F-308: replace, not push -- a back-swipe from Confirmation must not land back on this
+      // now-stale, already-paid Pay screen.
+      navigate(`/bookings/${bookingId}/confirmation`, { replace: true });
     } catch (err: any) {
       setPaymentError(err.message || 'Simulation payment capture failed.');
     } finally {
@@ -241,7 +253,8 @@ export default function BookingPay() {
             });
 
             // Navigate to confirmation page
-            navigate(`/bookings/${bookingId}/confirmation`);
+            // F-308: replace, not push -- see the mock-payment path above for why.
+            navigate(`/bookings/${bookingId}/confirmation`, { replace: true });
           } catch (err: any) {
             // F-165, deliberately UNCHANGED here. This fires when our own verify call fails, by
             // which point Razorpay's checkout has already closed and the payment may well have
@@ -261,9 +274,7 @@ export default function BookingPay() {
             console.log('Payment modal dismissed by user');
           }
         },
-        prefill: {
-          contact: booking.phone || '',
-        },
+        ...buildRazorpayPrefill(user),
         theme: {
           color:
             tenant?.themeColor ||
@@ -489,11 +500,12 @@ export default function BookingPay() {
           );
         })()}
 
-        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. booking.phone (used below in
-            Razorpay's prefill.contact) is confirmed dead: Booking has no phone column and
-            GET /bookings/:id never joins one in, so that reference has always silently resolved to
-            undefined. useAuth().user.phone is the JWT's own phone claim, already decoded into
-            AuthContext -- real, already-available, no new request. "Verified" is accurate, not
+        {/* F-190 Slice 3: "YOUR NUMBER" -- real data, zero new fetch. useAuth().user.phone is the
+            JWT's own phone claim, already decoded into AuthContext -- real, already-available, no
+            new request. F-309: this same user.phone is now also what Razorpay's prefill.contact
+            uses below (locked read-only there) -- booking.phone, which that field used to
+            reference, was confirmed dead: Booking has no phone column and GET /bookings/:id never
+            joins one in, so it always silently resolved to undefined. "Verified" is accurate, not
             decorative -- but as of F-235 Slice D, not for the reason originally written here:
             main.tsx's ProtectedRoute no longer gates on phone presence at all (a fresh Google
             signup with no phone reaches every route, including this one). Phone presence AND
