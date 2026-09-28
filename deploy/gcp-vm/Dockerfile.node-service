@@ -21,6 +21,17 @@ RUN pnpm --filter @badminton/shared-types run build
 RUN pnpm --filter @badminton/shared-middleware run build
 RUN pnpm --filter @badminton/database run prisma:generate
 RUN pnpm --filter @badminton/database run build
+# F-313: a genuinely clean build (verified: cleared docker builder cache, built from empty)
+# surfaced this exact same gap twice. Neither package had an explicit build step here --
+# both silently depended on a host-prebuilt dist riding along inside `COPY packages ./packages`,
+# invisible only because no .dockerignore existed to ever exclude it. Built explicitly now,
+# same pattern as the three packages above, so this image no longer depends on host state.
+# @badminton/job-scheduler: a real, non-test runtime dependency of slot-engine's src/index.ts.
+RUN pnpm --filter @badminton/job-scheduler run build
+# @badminton/test-harness: every service's src/regression/*.ts imports this (tsconfig's
+# `include: ["src/**/*"]` compiles them as part of the ordinary `run build`, same as
+# production source, for every one of the 5 services this Dockerfile builds).
+RUN pnpm --filter @badminton/test-harness run build
 
 ARG SERVICE_PACKAGE
 RUN pnpm --filter ${SERVICE_PACKAGE} run build

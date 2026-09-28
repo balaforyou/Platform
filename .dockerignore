@@ -1,0 +1,28 @@
+# Every image here runs `pnpm install --frozen-lockfile` inside the build stage (see
+# deploy/gcp-vm/Dockerfile.node-service and Dockerfile.caddy-static) -- host node_modules
+# is never read by any Dockerfile, only bloats and slows the build context, and a broken
+# symlink inside one (apps/admin-v2/node_modules/@radix-ui/react-dropdown-menu, real,
+# reproduced locally) can crash the context upload entirely.
+**/node_modules
+
+# Dockerfile.caddy-static's own comment already assumes this: ".git is not in the build
+# context". Never was excluded explicitly -- this file didn't exist before.
+.git
+
+# Build output that every image rebuilds from source inside the container; shipping the
+# host's own dist/ (built for the host OS/arch, not the container's) buys nothing.
+#
+# F-313: excluding this unconditionally originally broke every service's build --
+# Dockerfile.node-service had no explicit build step for @badminton/test-harness (every
+# *.regression.ts imports it) and silently depended on a host-prebuilt dist riding along
+# inside `COPY packages ./packages`, invisible only because no .dockerignore ever existed
+# to exclude it. Fixed at the real source (an explicit `pnpm --filter @badminton/test-harness
+# run build` step in the Dockerfile itself, same pattern as its sibling packages) rather than
+# carving out an exception here -- the image no longer depends on host state for anything.
+**/dist
+**/build
+
+# Editor/OS noise, never needed inside any image.
+.vscode
+.idea
+*.log
