@@ -2304,3 +2304,31 @@ unilaterally. Phase 2 (guest-facing UI in `CourtBooking.tsx`/`BookingConfirmatio
 `booking-orders.regression.ts`, 8 sections, 123/123 full suite green.
 Confirmed-ID: F-310
 Confirmed: 27 Sep 2026
+
+### bookings-route-missing-tenant-isolation-on-window-ids
+Batch: slot-engine, 28 Sep 2026
+Surfaced: during F-310's Codacy-driven fix pass on `POST /booking-orders`; Chief-assigned same day.
+Description: `POST /bookings` (the F-183 route) never validates that a caller-supplied
+`resourcePoolId`/`windowId` belongs to the caller's own JWT `tenantId` -- the identical class of gap
+Codacy's automated PR review caught and F-310 fixed on the new `POST /booking-orders` route. Pre-
+existing, not introduced by F-310. Not yet triaged for real exploitability/severity -- same
+discipline as every other tenant-isolation finding in this register (F-277/F-295/F-299 class):
+confirm real scope before a severity call, not just "the check is structurally missing."
+Confirmed-ID: F-311
+Confirmed: 28 Sep 2026
+
+### apirequest-discards-response-body-on-non-2xx-status
+Batch: guest-member-pwa (shared client), 28 Sep 2026
+Surfaced: while building F-310 Phase 1's evidence for a fully-rejected `POST /booking-orders`
+order; Chief-assigned same day.
+Description: `@badminton/ui-shared`'s `apiRequest()` discards the response body on ANY non-2xx HTTP
+status, even when the body carries real structured data the caller needs -- it only skips this when
+the body is shaped `{ error: {...} }`. Surfaced concretely by `POST /booking-orders` originally
+replying `409` with a real `{ orderId, held: [], rejected }` body on a fully-rejected order; worked
+around locally by always replying `201` instead (a request-shape decision on that one route, not a
+client fix), which leaves the generalizable defect in the shared client for the next endpoint that
+legitimately wants a structured body alongside a non-2xx status. Pre-existing, not introduced by
+F-310. Not yet triaged for severity -- needs real investigation of every current `apiRequest()`
+caller across both PWAs before deciding whether to fix now or bundle into later hardening.
+Confirmed-ID: F-312
+Confirmed: 28 Sep 2026

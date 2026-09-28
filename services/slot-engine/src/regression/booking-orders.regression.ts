@@ -409,4 +409,43 @@ export const bookingOrdersSections: Section<SlotEngineContext>[] = [
       }
     },
   },
+
+  {
+    name: 'F-310: an order where every window is rejected still responds 201 with the real held/rejected body, not a non-2xx status that would discard it',
+    async run() {
+      // WHY this matters beyond a raw fetch() assertion: the guest-facing app calls this route
+      // through @badminton/ui-shared's apiRequest(), which throws away the real response body on
+      // any non-2xx status unless it carries an `error` key (see api.ts's `!response.ok` branch).
+      // A per-window outcome -- even "every window failed" -- is not a request error; it's this
+      // response's own held/rejected split doing its job. Caught during Phase 2 frontend
+      // integration, not by this file's own earlier sections (which all call fetch() directly).
+      const { pool } = await createPoolWithRule({ capacity: 1 });
+      const window = await createWindow(pool.id, 4);
+      const blockerToken = guestToken('f310-all-rejected-blocker');
+      const blockRes = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${blockerToken}`, 'idempotency-key': 'f310-all-rejected-block-key' },
+          body: JSON.stringify({ branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id }),
+        }),
+      );
+      if (blockRes.status !== 201) throw new Error(`Expected 201 pre-holding the only window, got ${blockRes.status}: ${blockRes.raw}`);
+
+      const res = await inspect(
+        await fetch(`${baseUrl}/booking-orders`, {
+          method: 'POST',
+          headers: bookingHeaders('f310-all-rejected-user', 'f310-all-rejected-key'),
+          body: JSON.stringify({ branchId: BRANCH_ID, windowIds: [window.id] }),
+        }),
+      );
+      const body = res.json?.data ?? res.json;
+      console.log('F310_EVIDENCE all_rejected_still_201', JSON.stringify({ status: res.status, held: body?.held?.length, rejected: body?.rejected }));
+      if (res.status !== 201) {
+        throw new Error(`Expected 201 even when every window is rejected (so apiRequest() doesn't discard the body), got ${res.status}: ${res.raw}`);
+      }
+      if (!Array.isArray(body?.held) || body.held.length !== 0 || !Array.isArray(body?.rejected) || body.rejected.length !== 1) {
+        throw new Error(`Expected a real body with held: [] and rejected: [1 entry], got ${JSON.stringify(body)}`);
+      }
+    },
+  },
 ];

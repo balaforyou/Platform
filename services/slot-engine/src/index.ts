@@ -4848,7 +4848,19 @@ server.post('/booking-orders', async (request, reply) => {
     }
   }
 
-  reply.status(held.length > 0 ? 201 : 409);
+  // WHY always 201, even when held.length is 0: the request itself was well-formed (validated
+  // above, before any window was touched) -- a per-window outcome (capacity/blocked/tenant/etc.)
+  // is a normal, expected result this response's own held/rejected split already describes, not
+  // a request error. A non-2xx status here would be actively harmful to the real frontend caller:
+  // responseEnvelopePlugin's preSerialization hook only skips wrapping when the payload already
+  // has a `data` or `error` key -- this plain object gets wrapped as `{ data: {...} }` regardless
+  // of the status code set -- but @badminton/ui-shared's apiRequest() checks response.ok (status
+  // only) and, on a non-2xx response with no `error` key, discards the real body entirely and
+  // throws a generic "An unexpected error occurred" -- exactly the failure mode Phase 2's guest
+  // UI would have silently hit on a fully-rejected order. Caught during Phase 2 integration, not
+  // by the Phase 1 regression suite, which calls this route via raw fetch() and never exercises
+  // apiRequest()'s own success/error branching.
+  reply.status(201);
   return { orderId, held, rejected };
 });
 
