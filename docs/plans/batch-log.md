@@ -4607,6 +4607,32 @@ separate from the unrelated `claude/` plan-doc backfill campaign that surfaced t
 
 **Close-out:** F-310's register row moved from Open to Resolved (both phases delivered), F-311 and F-312 added as new Open rows; `pending-findings.md`'s three `Confirmed-ID` entries land in the same pass; `pnpm register:check` green (276 rows, Open 118 / Resolved 158); `pnpm diagram:verify` green (67 finding tags agree with the register). **Not committed or pushed -- awaiting Bala/Chief sign-off per rule 6.**
 
+## Batch — PR #116 merge confirmation + F-313: missing .dockerignore and incomplete Dockerfile.node-service build steps
+
+**PR #116 (F-310 Phase 2) merge closeout.** After the guest-facing multi-slot UI batch was reported, Chief asked for the e2e gap to actually close before merge, not just be disclosed -- a fair correction, since the plan's own verification section named 4 specs as protecting the single-slot path and a one-off manual click-through isn't equivalent to what they assert programmatically.
+
+**Real attempt to close it, and a real, useful trail of what was learned along the way, even though it didn't end in a local Playwright run:**
+1. First stood up the wrong stack (`docker-compose.dev.yml`). Corrected to `docker-compose.gcp-verify.yml` + `deploy/gcp-vm/docker-compose.yml`, the real CI-matching stack per root `CLAUDE.md`.
+2. Hit a genuinely pre-existing gap (no `.dockerignore`, see F-313 below) blocking any image build at all on this machine; fixed with a temporary narrow workaround to keep moving.
+3. Got the real stack partially up, seeded `badminton_db_e2e` for real, but hit a second real environment mismatch: `docker-compose.dev.yml`'s services are hardcoded to `badminton_db` (no `${VAR}` substitution), so seeding into `_e2e` and running services against `badminton_db` never agreed -- confirmed via direct `GET /availability` calls returning empty against real, unexpired, correctly-seeded fixture windows.
+4. Standing up the *correct* `gcp-verify` stack then hit real `pnpm install` network timeouts inside fresh containers (no build cache, unlike host) -- confirmed twice independently, not a config issue.
+
+**Chief's read on this, which reframed the actual ask:** demanding a clean local Playwright run was the wrong bar given this repo's own CI reality -- `.github/workflows/ci.yml`'s `integration` job (which includes the e2e step) is gated `if: push:main only`, and `apps/guest-member-pwa/CLAUDE.md` documents that suite's own baseline as **4 passed / 4 failed / 1 skipped, non-blocking** -- never a clean-pass gate, not on a PR and not even post-merge. The real, authoritative venue for this PR's sign-off was GitHub's own CI, already triggered on the PR and not fighting the sandbox's network limits.
+
+**Real close-out:** `gh pr checks 116` confirmed `checks`/`regression`/Codacy/SonarCloud all `pass`; `integration` correctly `skipping` (not failing) per its own push-only trigger -- there was never a PR-time e2e gate to wait on. `gh pr view` confirmed `mergeStateStatus: CLEAN`. Merged (`gh pr merge 116 --merge`), independently re-verified via a real `git fetch`/`git log FETCH_HEAD` against the remote (not the merge command's own claimed success) -- `3ce7c4a2287e9cbd538f895944632af96fbd11dd` confirmed on `origin/main`.
+
+---
+
+**F-313, assigned by Bala this session:** the `.dockerignore` gap discovered above is more than devex cleanup -- a missing `.dockerignore` that hard-crashes the build context on a broken symlink, plus a Dockerfile silently depending on host-built `dist` state, are real structural gaps that would bite CI too if its build cache ever cold-starts. Kept out of PR #116's own diff per rule 9 (a real, separate, pre-existing issue, not F-310's to silently absorb) -- its own small PR instead.
+
+**Real investigation, not just the first symptom:** the initial fix (add a root `.dockerignore` excluding `node_modules`/`.git`/`dist`/`build`) was verified with a **genuinely cleared build cache** (`docker builder prune -a -f`, 7.5GB reclaimed) rather than trusted on the strength of the fix alone. That clean build immediately surfaced a second, identically-shaped gap Codacy-style automated review would never have caught locally: `deploy/gcp-vm/Dockerfile.node-service` explicitly builds `@badminton/shared-types`/`shared-middleware`/`database` but has no build step for `@badminton/test-harness` (every service's `src/regression/*.ts` imports it -- compiled as ordinary source, not excluded, per each service's own `tsconfig.json` `include: ["src/**/*"]`) or `@badminton/job-scheduler` (confirmed via grep: a real, non-test production dependency of `slot-engine/src/index.ts`, not test-only). Both packages had always silently ridden along as an already-built host `dist` inside the broad `COPY packages ./packages`, invisible only because nothing had ever excluded `dist` from the build context before.
+
+**Real fix, not the first workaround that unblocked one service:** rather than keep the narrow `.dockerignore` carve-out that got `slot-engine` alone building, added explicit `RUN pnpm --filter @badminton/job-scheduler run build` and `RUN pnpm --filter @badminton/test-harness run build` steps to the Dockerfile itself, same pattern as its three sibling packages -- the image no longer depends on host state for anything, and the `.dockerignore`'s `**/dist` rule is now a clean, unconditional exclusion with no exception needed.
+
+**Real evidence:** with the cache still cleared from the step above, built all 7 shipped images fresh via the real `deploy/gcp-vm/docker-compose.yml` + `docker-compose.gcp-verify.yml` + `deploy/gcp-vm/.env` (copied from the committed `.env.ci`, matching `.github/workflows/ci.yml`'s own `integration` job exactly) -- `slot-engine`, `identity-auth`, `tenant-management`, `payment`, `notification`, `caddy`, and `migrate` all built successfully with zero errors. Test images removed afterward.
+
+**Close-out:** F-313 register row added directly as Resolved (fixed and verified in the same pass); `pending-findings.md`'s `Confirmed-ID: F-313` entry added in the same pass; F-310's own Resolved row got a short addendum recording the real PR #116 merge confirmation above rather than leaving it implied. `pnpm register:check` and `pnpm diagram:verify` both green. **Not committed or pushed -- awaiting Bala/Chief sign-off per rule 6**, own small PR, separate from #116.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

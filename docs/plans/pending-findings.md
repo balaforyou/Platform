@@ -2332,3 +2332,26 @@ F-310. Not yet triaged for severity -- needs real investigation of every current
 caller across both PWAs before deciding whether to fix now or bundle into later hardening.
 Confirmed-ID: F-312
 Confirmed: 28 Sep 2026
+
+### missing-dockerignore-and-incomplete-node-service-build-steps
+Batch: repo-root / deploy/gcp-vm, 28 Sep 2026
+Surfaced: while trying to run the real Caddy-fronted e2e stack for PR #116's own
+verification; Chief-assigned same day.
+Description: No `.dockerignore` exists anywhere in this repo -- Docker's build context
+therefore includes every `node_modules` tree, and a broken symlink under
+`apps/admin-v2/node_modules/@radix-ui/react-dropdown-menu` (real, reproduced locally)
+crashes the context upload outright. Fixing that surfaced a second, same-shaped gap:
+`deploy/gcp-vm/Dockerfile.node-service` builds `shared-types`/`shared-middleware`/`database`
+explicitly but had no build step for `@badminton/test-harness` (every service's
+`src/regression/*.ts` imports it, compiled as ordinary source) or `@badminton/job-scheduler`
+(a real runtime dependency of `slot-engine/src/index.ts`) -- both silently rode along as an
+already-built host `dist` inside `COPY packages ./packages`, invisible only because nothing
+had ever excluded it. Pre-existing, not introduced by F-310.
+Resolution: root `.dockerignore` added; `Dockerfile.node-service` given explicit build steps
+for both packages, same pattern as the three already built there. Verified via a genuinely
+cleared build cache (`docker builder prune -a -f`, 7.5GB reclaimed) followed by a clean build
+of all 7 shipped images via the real `deploy/gcp-vm/docker-compose.yml` +
+`docker-compose.gcp-verify.yml` + `deploy/gcp-vm/.env` (from the committed `.env.ci`, matching
+CI's own `integration` job) -- all 7 succeeded with zero errors.
+Confirmed-ID: F-313
+Confirmed: 28 Sep 2026
