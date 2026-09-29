@@ -61,6 +61,29 @@ function isValidIndianPhone(phone: string): boolean {
   return /^\+91[6-9]\d{9}$/.test(normalized);
 }
 
+/**
+ * Validates and normalizes an optional coPlayers array, shared by every booking-creation route
+ * (POST /bookings, /booking-orders, /bookings/negotiated) that accepts one.
+ *
+ * WHY THIS EXISTS. Flagged by SonarCloud's duplication gate on PR #118: the identical
+ * validate-then-normalize sequence (throw INVALID_PHONE_FORMAT on the first bad number,
+ * otherwise map every entry through normalizePhone) was copy-pasted into all three routes.
+ * Extracted here instead of reworded in place -- same "give the next occurrence somewhere
+ * obvious to go" reasoning as this file's other shared helpers.
+ */
+function validateAndNormalizeCoPlayers(coPlayers: any): string[] {
+  if (!coPlayers || !Array.isArray(coPlayers)) return [];
+  for (const phone of coPlayers) {
+    if (!isValidIndianPhone(phone)) {
+      const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PHONE_FORMAT';
+      throw err;
+    }
+  }
+  return coPlayers.map(normalizePhone);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers: F-010 Time Boundary Alignment Snapping
 // ---------------------------------------------------------------------------
@@ -4010,21 +4033,7 @@ server.post('/bookings', async (request, reply) => {
   } = request.body as any;
   void rest; // suppresses unused-var lint for the spread remainder
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-
-  const normalizedCoPlayers = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayers = validateAndNormalizeCoPlayers(coPlayers);
 
   // F-183 Phase 1: additionalWindowIds lets a guest extend a booking by whole contiguous
   // hours. Combined with windowId and re-sorted server-side below — client-supplied order
@@ -4138,17 +4147,15 @@ server.post('/bookings', async (request, reply) => {
         }
       }
 
-      // F-183: Phase 1 only supports contiguous whole-hour extension — each additional
-      // window's start must equal the previous window's end, in the real chronological
-      // order established in step 1 (not the order the caller sent them in).
-      for (let i = 1; i < lockedWindows.length; i++) {
-        if (new Date(lockedWindows[i].startTime).getTime() !== new Date(lockedWindows[i - 1].endTime).getTime()) {
-          const err = new Error('Additional windows must be contiguous with the base booking');
-          (err as any).statusCode = 400;
-          (err as any).code = 'NON_CONTIGUOUS_WINDOWS';
-          throw err;
-        }
-      }
+      // F-317 (29 Sep 2026): the F-183 Phase 1 contiguity requirement (additional windows had
+      // to be back-to-back with the base booking, enforced via NON_CONTIGUOUS_WINDOWS) is
+      // deliberately removed here. Chief decision: reuse this same parent/child chain for
+      // non-contiguous multi-slot guest booking too, superseding POST /booking-orders'
+      // independent-rows model (see that route's own deprecation comment below). Real gaps
+      // between windows are now allowed; MIXED_RESOURCE_POOL above is unchanged and still
+      // requires every window to share one resource pool. Pricing (step 8 below) sums each
+      // window's own independently-resolved rate and was never contiguity-dependent, so no
+      // change was needed there.
 
       // F-183: for FIXED_INSTANCE pools, every window must resolve to the same physical
       // court — a guest extending a booking needs the SAME court, not a different one
@@ -4472,6 +4479,13 @@ server.post('/bookings', async (request, reply) => {
 });
 
 // ---------------------------------------------------------------------------
+// DEPRECATED as of F-317 (29 Sep 2026) — superseded by F-183 chain reuse for non-contiguous
+// booking (POST /bookings now accepts non-contiguous additionalWindowIds directly). Not wired
+// into any active UI path -- BranchBooking.tsx's multi-select submit now calls POST /bookings.
+// Kept for possible extraction into a generic multi-booking component in a future project, per
+// Chief's explicit instruction not to delete real, shipped, tested F-310 code. The whole-order
+// daily-cap logic inside this route is deprecated along with it.
+//
 // POST /booking-orders — F-310: non-contiguous / cross-pool multi-slot guest booking.
 //
 // Deliberately a separate route from POST /bookings, not a third mode on it. That route's
@@ -4521,20 +4535,7 @@ server.post('/booking-orders', async (request, reply) => {
     throw err;
   }
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-  const normalizedCoPlayers = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayers = validateAndNormalizeCoPlayers(coPlayers);
   const groupSize = 1 + normalizedCoPlayers.length;
 
   // 1. Real chronological order first, same reasoning as POST /bookings (:4011-4014) -- never
@@ -4910,21 +4911,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
     throw err;
   }
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-
-  const normalizedCoPlayersNegotiated = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayersNegotiated = validateAndNormalizeCoPlayers(coPlayers);
 
   try {
     const booking = await prisma.$transaction(async (tx: any) => {

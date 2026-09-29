@@ -1,3 +1,5 @@
+import { formatBranchTime } from './branchTime';
+
 /**
  * Display formatters shared by both apps.
  *
@@ -38,4 +40,32 @@ export function formatBookingReference(id: string | null | undefined): string {
   // render worse than the raw value it replaced.
   const code = (firstBlock || String(id)).slice(0, 8).toUpperCase();
   return `BK-${code}`;
+}
+
+/**
+ * Renders a chronologically-sorted, comma-separated list of time ranges for a set of bookings
+ * (each carrying its own `window` relation, F-183's real shape for both a chain's children and
+ * the parent itself).
+ *
+ * WHY THIS EXISTS. Identical sort/format/join logic for a multi-window booking's time ranges was
+ * copy-pasted into three screens (`BookingConfirmation.tsx`, `BookingPay.tsx`,
+ * `BookingHistory.tsx`), each independently formatting `childBookings` (or, on the confirmation
+ * banner, the parent + its children together) the same way. Flagged by SonarCloud's duplication
+ * gate on PR #118 (7.5% new-code duplication, threshold 3%) -- extracted here rather than
+ * reworded in place, same "give the next occurrence somewhere obvious to go" reasoning this
+ * file's own header already states for `formatBookingReference`.
+ *
+ * Each caller decides which bookings to pass -- `booking.childBookings` alone (BookingPay.tsx,
+ * BookingHistory.tsx), or the parent plus its children together (BookingConfirmation.tsx's
+ * banner, which shows every window the guest booked in one place).
+ */
+export function formatWindowRangesLabel(
+  bookings: { window: { startTime: string; endTime: string } }[],
+  timezone: string | undefined,
+): string {
+  return bookings
+    .slice()
+    .sort((a, b) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
+    .map((b) => `${formatBranchTime(b.window.startTime, timezone, { hour: '2-digit', minute: '2-digit' })} - ${formatBranchTime(b.window.endTime, timezone, { hour: '2-digit', minute: '2-digit' })}`)
+    .join(', ');
 }

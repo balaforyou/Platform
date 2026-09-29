@@ -394,51 +394,61 @@ export default function BranchBooking() {
     await doReserve();
   };
 
-  // F-310 Phase 2: single-slot path is byte-identical to today (real e2e specs assert navigation
-  // straight to /bookings/:id/pay off this exact call) -- only 2+ selected slots take the new
-  // POST /booking-orders path below.
+  // F-317 (29 Sep 2026): single-slot path is unchanged (real e2e specs assert navigation
+  // straight to /bookings/:id/pay off this exact call). The 2+-slot path now also calls
+  // POST /slot-engine/bookings -- F-183's parent/child chain, with NON_CONTIGUOUS_WINDOWS
+  // relaxed server-side, superseding the old POST /booking-orders path (see
+  // reserveViaBookingOrders_DEPRECATED_F317 below, kept but no longer called). One booking, one
+  // payment, one cancellation for the whole selection -- same post-submit navigation as the
+  // single-slot case, no held/rejected banner: a chain-create is one atomic transaction, so a
+  // failure (e.g. a window no longer available) surfaces through the same bookingError state
+  // the single-slot path already uses, not a partial-failure summary.
   const doReserve = async () => {
     if (!tenant || !branchId || !poolId || !user || selectedSlots.length === 0) return;
 
-    if (selectedSlots.length === 1) {
-      const selectedSlot = selectedSlots[0];
-      try {
-        setSubmitting(true);
-        setBookingError(null);
+    const [firstSlot, ...additionalSlots] = selectedSlots;
+    try {
+      setSubmitting(true);
+      setBookingError(null);
 
-        const idempotencyKey = crypto.randomUUID();
+      const idempotencyKey = crypto.randomUUID();
 
-        const booking = await apiRequest<any>('/slot-engine/bookings', {
-          method: 'POST',
-          token: accessToken,
-          headers: { 'idempotency-key': idempotencyKey },
-          body: JSON.stringify({
-            tenantId: tenant.id,
-            branchId,
-            resourcePoolId: poolId,
-            resourceId: selectedSlot.window.resourceId || null,
-            windowId: selectedSlot.window.id,
-            userId: user.userId || user.id,
-            coPlayers: [],
-          }),
-        });
+      const booking = await apiRequest<any>('/slot-engine/bookings', {
+        method: 'POST',
+        token: accessToken,
+        headers: { 'idempotency-key': idempotencyKey },
+        body: JSON.stringify({
+          tenantId: tenant.id,
+          branchId,
+          resourcePoolId: poolId,
+          resourceId: firstSlot.window.resourceId || null,
+          windowId: firstSlot.window.id,
+          additionalWindowIds: additionalSlots.map((slot) => slot.window.id),
+          userId: user.userId || user.id,
+          coPlayers: [],
+        }),
+      });
 
-        navigate(`/bookings/${booking.id}/pay`);
-      } catch (err: any) {
-        setBookingError(err.message || 'Failed to reserve slot. Please try another slot.');
-      } finally {
-        setSubmitting(false);
-      }
-      return;
+      navigate(`/bookings/${booking.id}/pay`);
+    } catch (err: any) {
+      setBookingError(err.message || 'Failed to reserve slot. Please try another slot.');
+    } finally {
+      setSubmitting(false);
     }
+  };
 
-    // F-310: 2+ non-contiguous/cross-pool slots in one order. POST /booking-orders creates N
-    // independent HELD bookings (no parentBookingId chain) sharing one orderId, and always
-    // responds 201 with the real { orderId, held, rejected } split -- even when every window was
-    // rejected, so apiRequest() never discards this body (see F-312, filed for the underlying
-    // shared-client defect this route's status-code choice works around). Rendered inline here,
-    // not a new route: the guest sees exactly which slots held before an explicit tap sends them
-    // on to pay for each individually.
+  // DEPRECATED as of F-317 (29 Sep 2026) -- superseded by F-183 chain reuse for non-contiguous
+  // booking (see doReserve above). Not wired into any active UI path -- nothing calls this
+  // function any more. Kept for possible extraction into a generic multi-booking component in a
+  // future project, per Chief's explicit instruction not to delete real, shipped, tested F-310
+  // code. This is the original F-310 Phase 2 >1-slot submit path: POST /booking-orders creates N
+  // independent HELD bookings (no parentBookingId chain) sharing one orderId, and always
+  // responds 201 with the real { orderId, held, rejected } split -- even when every window was
+  // rejected, so apiRequest() never discards this body (see F-312, filed for the underlying
+  // shared-client defect this route's status-code choice works around).
+  // @ts-expect-error -- deliberately unused (deprecated, kept for reference only)
+  const reserveViaBookingOrders_DEPRECATED_F317 = async () => {
+    if (!tenant || !branchId || !poolId || !user || selectedSlots.length === 0) return;
     try {
       setSubmitting(true);
       setBookingError(null);
@@ -859,7 +869,14 @@ export default function BranchBooking() {
                         (BookingPay.tsx), per Bala's call -- this screen keeps only the real
                         duration/pricing summary. */}
 
-                    {/* F-310 Phase 2: real held/rejected split from POST /booking-orders, rendered
+                    {/* DEPRECATED as of F-317 (29 Sep 2026) -- superseded by F-183 chain reuse.
+                        doReserve's 2+-slot path no longer calls POST /booking-orders (see
+                        reserveViaBookingOrders_DEPRECATED_F317, kept but never called), so
+                        orderResult is never set from any live path any more and this block is
+                        permanently dead. Kept, not deleted, alongside the deprecated function it
+                        renders, per Chief's explicit instruction not to delete real, shipped,
+                        tested F-310 code.
+                        F-310 Phase 2: real held/rejected split from POST /booking-orders, rendered
                         inline on this same screen -- the "explicit confirm tap" the handover asked
                         for, without a new route or a combined payment step. Only ever set on the
                         2+-slot path; the single-slot path navigates away on success and never

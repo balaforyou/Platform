@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference, formatBranchTime, formatWindowRangesLabel } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
@@ -325,7 +325,14 @@ export default function BookingHistory() {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* F-310 Phase 2: minimal, additive grouping -- a shared heading over adjacent cards
+          {/* DEPRECATED as of F-317 (29 Sep 2026) -- superseded by F-183 chain reuse for
+              non-contiguous booking (BranchBooking.tsx's multi-select now creates a real
+              parentBookingId chain via POST /bookings, never a new orderId). No new booking sets
+              orderId any more, so this block has nothing left to group going forward -- kept,
+              not deleted, since real F-310 UAT rows already carry orderId and this still renders
+              them correctly. The childBookings-based rendering a few lines below (F-187) needs no
+              change: it already displays any chain, contiguous or not.
+              F-310 Phase 2: minimal, additive grouping -- a shared heading over adjacent cards
               when 2+ bookings share an orderId (already sorted adjacent above), otherwise nothing
               changes. Computed once per render, not per-booking state, since it's purely derived
               from the already-fetched `bookings` list. */}
@@ -406,15 +413,7 @@ export default function BookingHistory() {
                             the first hour here despite paying for all of them. */}
                         {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
                           <div id={`booking-additional-windows-${booking.id}`}>
-                            {booking.childBookings
-                              .slice()
-                              .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                              .map((child: any) => (
-                                <div key={child.id}>
-                                  + {formatBranchTime(child.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
-                                  {formatBranchTime(child.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              ))}
+                            {formatWindowRangesLabel(booking.childBookings, about?.timezone)}
                           </div>
                         )}
                       </div>
