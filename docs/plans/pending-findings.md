@@ -2391,6 +2391,28 @@ regression suite 124/124 sections passed, rebuilt from dist.
 Confirmed-ID: F-317
 Confirmed: 29 Sep 2026
 
+### duplicate-held-booking-on-back-navigation-resubmit
+Batch: services/slot-engine, apps/guest-member-pwa, 29 Sep 2026
+Surfaced: PR #118 review, a guest reaching /pay then navigating back and resubmitting the same
+selection; Chief-assigned same day.
+Description: A guest who reaches /pay after a real hold and navigates back, then resubmits the
+same selection, created a second independent HELD booking -- a fresh idempotency key per submit
+bypasses the existing idempotency-key replay guard. Reproduced live before any fix: two real
+submits, two real HELD rows for the same guest/window, DB read-back.
+Resolution: POST /bookings now detects an existing unpaid HELD booking for the same guest + exact
+window set (checked after the existing window locks, so a genuine concurrent resubmit is
+naturally serialized by those same locks) and returns it (200) instead of creating a duplicate.
+Bundled sessionStorage persistence for BranchBooking.tsx's slot selection reduces how often a
+guest reaches the resubmit path at all -- two real bugs in that secondary fix (a write-through/
+restore race, and clearing the selection on successful submit) were caught and fixed during live
+verification against the Pay screen's real back arrow. Real evidence: pre-fix duplicate
+reproduced live, post-fix collapse to one chain confirmed live and via two new regression tests;
+a pre-existing concurrency test's reuse of one user across two of three concurrent requests was
+corrected to a genuinely distinct third guest. Re-verified against the real post-#118-merge main.
+126/126 regression sections pass.
+Confirmed-ID: F-318
+Confirmed: 29 Sep 2026
+
 ### almostfull-slot-tile-dark-mode-color-bug
 Batch: apps/guest-member-pwa, 29 Sep 2026
 Surfaced: Bala asking for F-318's dark-mode screenshots to also be checked in light mode; the

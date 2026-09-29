@@ -833,4 +833,97 @@ export const multiSlotBookingSections: Section<SlotEngineContext>[] = [
       }
     },
   },
+
+  {
+    // F-318 (29 Sep 2026): a guest who reaches /pay and hits back, then resubmits the exact same
+    // selection with a fresh idempotency key (the real scenario -- selectedSlots is plain
+    // component state, unmounted on route change), used to create a second, independent HELD
+    // chain for the same windows. Reproduced live against real JBC data before this fix landed:
+    // two real submits, two real HELD rows for the same user+window. This proves the fix
+    // collapses that to one: the second call returns 200 (not 201) with the SAME booking id, and
+    // only one real row exists in the database.
+    name: 'F-318: an exact resubmit of the same window (fresh idempotency key) redirects to the existing HELD booking instead of creating a duplicate',
+    async run() {
+      const { pool, windows } = await createPooledPoolWithWindows({ hours: 1, maxAdditionalWindows: 1 });
+      const userId = 'f318-resubmit-user';
+      const token = guestToken(userId);
+      const body = JSON.stringify({ branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: windows[0].id });
+
+      const first = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'idempotency-key': 'f318-first-key' },
+          body,
+        }),
+      );
+      if (first.status !== 201) throw new Error(`Expected 201 on first submit, got ${first.status}: ${first.raw}`);
+      const firstBooking = first.json?.data ?? first.json;
+
+      const second = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'idempotency-key': 'f318-second-key-different' },
+          body,
+        }),
+      );
+      console.log('F318_EVIDENCE resubmit', JSON.stringify({ firstId: firstBooking.id, secondStatus: second.status, secondId: (second.json?.data ?? second.json)?.id }));
+      if (second.status !== 200) {
+        throw new Error(`Expected 200 (redirected to existing HELD booking), got ${second.status}: ${second.raw}`);
+      }
+      const secondBooking = second.json?.data ?? second.json;
+      if (secondBooking.id !== firstBooking.id) {
+        throw new Error(`Expected the same booking id as the first submit, got ${secondBooking.id} vs ${firstBooking.id}`);
+      }
+
+      // Real DB read-back: exactly one row for this user+window, not two.
+      const rows = await db.booking.findMany({ where: { userId, windowId: windows[0].id } });
+      if (rows.length !== 1) {
+        throw new Error(`Expected exactly 1 real Booking row for this user+window, found ${rows.length}`);
+      }
+    },
+  },
+
+  {
+    // F-318: the flip side of the test above -- a genuinely different window selection for the
+    // same guest must NOT be caught by the duplicate check. Proves no false positive: the
+    // exact-set-equality comparison correctly distinguishes "the same selection resubmitted"
+    // from "a different, legitimate second booking."
+    name: 'F-318: a genuinely different window for the same guest still creates a real second booking, not a false-positive redirect',
+    async run() {
+      const { pool, windows } = await createPooledPoolWithWindows({ hours: 2, maxAdditionalWindows: 1 });
+      const userId = 'f318-nofalsepositive-user';
+      const token = guestToken(userId);
+
+      const first = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'idempotency-key': 'f318-nfp-first' },
+          body: JSON.stringify({ branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: windows[0].id }),
+        }),
+      );
+      if (first.status !== 201) throw new Error(`Expected 201 on first submit, got ${first.status}: ${first.raw}`);
+      const firstBooking = first.json?.data ?? first.json;
+
+      const second = await inspect(
+        await fetch(`${baseUrl}/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'idempotency-key': 'f318-nfp-second' },
+          body: JSON.stringify({ branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: windows[1].id }),
+        }),
+      );
+      console.log('F318_EVIDENCE no_false_positive', JSON.stringify({ firstId: firstBooking.id, secondStatus: second.status }));
+      if (second.status !== 201) {
+        throw new Error(`Expected 201 (a real, different booking), got ${second.status}: ${second.raw}`);
+      }
+      const secondBooking = second.json?.data ?? second.json;
+      if (secondBooking.id === firstBooking.id) {
+        throw new Error('Expected a different booking id for a genuinely different window, got the same one back');
+      }
+
+      const rows = await db.booking.findMany({ where: { userId } });
+      if (rows.length !== 2) {
+        throw new Error(`Expected exactly 2 real Booking rows (two independent single-window bookings), found ${rows.length}`);
+      }
+    },
+  },
 ];
