@@ -743,12 +743,14 @@ export default function BranchBooking() {
                           style={{
                             borderRadius: 'var(--radius-md)',
                             minHeight: '66px',
-                            background: isSelected
-                              ? 'var(--slot-selected-surface)'
-                              : isAlmostFull ? 'var(--slot-almostfull-surface)' : 'var(--slot-available-surface)',
-                            borderColor: isSelected
-                              ? 'var(--slot-selected-border)'
-                              : isAlmostFull ? 'var(--slot-almostfull-border)' : 'var(--slot-available-border)',
+                            // 29 Sep 2026, Bala's review: every non-selected tile shares one
+                            // background/border regardless of remaining capacity -- "X left" vs
+                            // "X courts open" (below) is the only almost-full signal now, not a
+                            // separate tile color. --slot-almostfull-surface/-border are no
+                            // longer read here (kept in index.css, unused) -- only the text color
+                            // still distinguishes the low-capacity case.
+                            background: isSelected ? 'var(--slot-selected-surface)' : 'var(--slot-available-surface)',
+                            borderColor: isSelected ? 'var(--slot-selected-border)' : 'var(--slot-available-border)',
                           }}
                           data-slot-state={slotState}
                           id={`slot-card-${slot.window.id}`}
