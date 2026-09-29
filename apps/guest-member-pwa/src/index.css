@@ -69,9 +69,13 @@
   --slot-available-surface: var(--surface-white);
   --slot-available-accent: var(--color-accent-700);
 
-  --slot-almostfull-border: #fed7aa;
-  --slot-almostfull-surface: #fff7ed;
-  --slot-almostfull-text: #c2410c;
+  /* F-319 (29 Sep 2026): mapped onto the existing --color-accent-2-* gold ramp (deliberately
+     not tenant-derived, see main.tsx's own comment on that ramp) instead of hardcoded hex, so
+     dark mode inherits a correct value automatically -- these three tokens had no dark-mode
+     override at all, the same root-cause class as Correction 5/the 26 Sep batch below. */
+  --slot-almostfull-border: var(--color-accent-2-300);
+  --slot-almostfull-surface: var(--color-accent-2-100);
+  --slot-almostfull-text: var(--color-accent-2-600);
 
   /*
    * F-190 Slice 0: Organic design system tokens, copied from
@@ -228,6 +232,12 @@
   --surface-header: rgba(32, 29, 23, 0.82);
   --mint-surface: #1c2620;
   --border-subtle: #3a3527;
+  /* F-319: --slot-almostfull-* (index.css :72-74) had no dark-mode override at all, same
+     root-cause class as the two corrections above -- added here reusing the same
+     --color-accent-2-* gold ramp, which already inverts correctly for dark mode. */
+  --slot-almostfull-border: var(--color-accent-2-300);
+  --slot-almostfull-surface: var(--color-accent-2-100);
+  --slot-almostfull-text: var(--color-accent-2-600);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -260,6 +270,11 @@
     --surface-header: rgba(32, 29, 23, 0.82);
     --mint-surface: #1c2620;
     --border-subtle: #3a3527;
+    /* F-319: same fix as the :root[data-theme="dark"] block above, duplicated here per this
+       file's existing pattern for the OS-preference (no explicit data-theme) dark-mode path. */
+    --slot-almostfull-border: var(--color-accent-2-300);
+    --slot-almostfull-surface: var(--color-accent-2-100);
+    --slot-almostfull-text: var(--color-accent-2-600);
   }
 }
 

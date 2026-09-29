@@ -2412,3 +2412,22 @@ corrected to a genuinely distinct third guest. Re-verified against the real post
 126/126 regression sections pass.
 Confirmed-ID: F-318
 Confirmed: 29 Sep 2026
+
+### almostfull-slot-tile-dark-mode-color-bug
+Batch: apps/guest-member-pwa, 29 Sep 2026
+Surfaced: Bala asking for F-318's dark-mode screenshots to also be checked in light mode; the
+washed-out "1 left" tile color turned out to be a real, separate, pre-existing bug. Chief-assigned
+same day.
+Description: --slot-almostfull-surface/-border/-text (index.css) had no dark-mode override at
+all -- the fourth instance of a bug class this same file has already fixed three times. Confirmed
+via git blame to predate every change this session (last touched 19 Aug 2026), not a regression.
+Resolution: Mapped the three tokens onto the existing dual-mode --color-accent-2-* gold ramp
+(deliberately not tenant-derived, the correct property for a warning color) instead of inventing
+new hex values, applied to all three token-definition sites. A second design decision from the
+same review pass: BranchBooking.tsx's slot tiles no longer distinguish "almost full" by
+background/border color at all -- every non-selected tile shares one background, with the
+existing "X left" text as the only signal; the tokens stay defined, unused by this component, kept
+rather than deleted. Real evidence: before/after screenshots in both themes on the real PR branch
+(fresh off the real post-#118-merge main). Whole-app typecheck and build clean.
+Confirmed-ID: F-319
+Confirmed: 29 Sep 2026
