@@ -5,12 +5,11 @@ import crypto from 'crypto';
 import { responseEnvelopePlugin, requireInternalKey, assertInternalServiceKeyConfigured } from '@badminton/shared-middleware';
 import { PrismaClient, UserType } from '@badminton/database';
 import {
-  verifyGoogleIdToken,
   resolveAdminUser,
   googleRemoteJwks,
   ADMIN_ROLES,
   GoogleTokenError,
-  resolveDevLoginBypass,
+  resolveGoogleIdentity,
   type VerifiedGoogleIdentity,
 } from './adminGoogleAuth';
 import { findOrCreateMemberUser } from './memberGoogleAuth';
@@ -701,34 +700,26 @@ server.post('/auth/google/verify', async (request, reply) => {
 
   // Real Google ID token verification (F-228 Decision 3), with one narrow, opt-in exception:
   // a dev-only bypass for local testing, same shape as /auth/admin/google/verify's own
-  // dev-admin-token- path below (shared via resolveDevLoginBypass, adminGoogleAuth.ts).
+  // dev-admin-token- path below (shared via resolveGoogleIdentity, adminGoogleAuth.ts).
   // Gated on its OWN flag (GUEST_DEV_LOGIN=true), NOT ADMIN_DEV_LOGIN and NOT NODE_ENV -- the
   // deployed demo runs NODE_ENV=development for an unrelated reason (guest OTP's fixed 123456
   // code), and that must not also unlock this. Default-off, fail-closed: an unset flag 403s
   // even a correctly-shaped sentinel token.
-  let identity: VerifiedGoogleIdentity;
-  const devIdentity = resolveDevLoginBypass(
+  const identity: VerifiedGoogleIdentity = await resolveGoogleIdentity(
     googleIdToken,
     { tokenPrefix: 'dev-guest-token-', envFlag: 'GUEST_DEV_LOGIN', subject: 'guest' },
     server.log,
-  );
-  if (devIdentity) {
-    identity = devIdentity;
-  } else {
-    try {
-      identity = await verifyGoogleIdToken(googleIdToken, {
-        jwks: googleRemoteJwks(),
-        clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
-      });
-    } catch (e) {
+    googleRemoteJwks(),
+    process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+    (e) => {
       if (e instanceof GoogleTokenError) {
         reply.status(e.statusCode);
         (e as any).code = e.code;
-        throw e;
+        return e;
       }
-      throw e;
-    }
-  }
+      return e as Error;
+    },
+  );
 
   // Find-or-create: a brand-new Google identity gets a GUEST row instead of being rejected
   // into the phone-verification flow (F-228 Step 1). No more userType gate — GUEST proceeds
@@ -883,30 +874,21 @@ server.post('/auth/admin/google/verify', async (request, reply) => {
   // NODE_ENV: the deployed demo runs NODE_ENV=development so guest/member OTP can use the
   // fixed 123456 code, and that guest-side UAT convenience must not also unlock an admin
   // auth bypass. Default-off (absent flag = disabled), fail-closed. Production never
-  // sets it; CI/e2e do. Shared with the guest bypass above via resolveDevLoginBypass
+  // sets it; CI/e2e do. Shared with the guest bypass above via resolveGoogleIdentity
   // (adminGoogleAuth.ts).
-  let identity: VerifiedGoogleIdentity;
-  const devIdentity = resolveDevLoginBypass(
+  const identity: VerifiedGoogleIdentity = await resolveGoogleIdentity(
     googleIdToken,
     { tokenPrefix: 'dev-admin-token-', envFlag: 'ADMIN_DEV_LOGIN', subject: 'admin' },
     server.log,
-  );
-  if (devIdentity) {
-    identity = devIdentity;
-  } else {
-    try {
-      identity = await verifyGoogleIdToken(googleIdToken, {
-        jwks: googleRemoteJwks(),
-        clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
-      });
-    } catch (e) {
-      reply.status(401);
+    googleRemoteJwks(),
+    process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+    (e) => {
       const err = new Error(e instanceof Error ? e.message : 'Invalid Google ID token');
       (err as any).statusCode = 401;
       (err as any).code = 'INVALID_GOOGLE_TOKEN';
-      throw err;
-    }
-  }
+      return err;
+    },
+  );
 
   const resolution = await resolveAdminUser(prisma, identity);
   if (resolution.kind === 'not_found') {

@@ -72,6 +72,37 @@ export function resolveDevLoginBypass(
   return identity;
 }
 
+/**
+ * Resolves a caller's identity: the dev-login bypass if the token is dev-shaped (see
+ * `resolveDevLoginBypass` above), otherwise real Google ID-token verification. Shared by both
+ * `/auth/admin/google/verify` and `/auth/google/verify` (index.ts) -- extracted one level
+ * deeper than `resolveDevLoginBypass` alone once SonarCloud's duplication gate on PR #118
+ * flagged that the two routes' surrounding `if (dev) {...} else { try {...} catch {...} }`
+ * skeleton had itself become identical after that first extraction (29 duplicated lines, up
+ * from 16 before it -- the fix made the two call sites *more* alike, not less, until this
+ * deeper cut). `mapVerificationError` is the one real behavioral difference between the two
+ * routes (admin always maps to a generic 401 INVALID_GOOGLE_TOKEN; guest re-throws
+ * GoogleTokenError's own statusCode/code) -- kept as a caller-supplied callback rather than
+ * folded in, since collapsing that difference would be a real behavior change, not a
+ * refactor.
+ */
+export async function resolveGoogleIdentity(
+  googleIdToken: string,
+  devOpts: { tokenPrefix: string; envFlag: string; subject: string },
+  log: { warn: (msg: string) => void },
+  jwks: JWTVerifyGetKey,
+  clientId: string,
+  mapVerificationError: (e: unknown) => Error,
+): Promise<VerifiedGoogleIdentity> {
+  const devIdentity = resolveDevLoginBypass(googleIdToken, devOpts, log);
+  if (devIdentity) return devIdentity;
+  try {
+    return await verifyGoogleIdToken(googleIdToken, { jwks, clientId });
+  } catch (e) {
+    throw mapVerificationError(e);
+  }
+}
+
 export class GoogleTokenError extends Error {
   readonly statusCode = 401;
   readonly code = 'INVALID_GOOGLE_TOKEN';
