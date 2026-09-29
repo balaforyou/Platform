@@ -482,10 +482,18 @@ export const guestBookingSections: Section<SlotEngineContext>[] = [
           }),
         });
 
+      // F-318 (29 Sep 2026): the third request used to reuse USER_ID_1 -- since the real fix for
+      // that finding now correctly redirects a same-user, same-exact-window resubmit to the
+      // guest's own existing HELD booking instead of letting it independently compete for
+      // capacity, reusing USER_ID_1 here no longer exercises 3-way capacity contention (it
+      // exercises the resubmit-redirect path, a different, already-covered scenario). A third,
+      // genuinely distinct guest keeps this test's real intent -- 3 different guests racing for
+      // capacity=2 -- uncoupled from the resubmit fix.
+      const USER_ID_3 = '55555555-5555-5555-5555-555555555555';
       const [pres1, pres2, pres3] = await Promise.all([
         makeReq('pooled-key-1', USER_ID_1),
         makeReq('pooled-key-2', USER_ID_2),
-        makeReq('pooled-key-3', USER_ID_1),
+        makeReq('pooled-key-3', USER_ID_3),
       ]);
       const pdata1 = (await pres1.json()) as any;
       const pdata2 = (await pres2.json()) as any;
