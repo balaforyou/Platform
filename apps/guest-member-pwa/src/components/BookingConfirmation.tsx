@@ -116,9 +116,21 @@ export default function BookingConfirmation() {
   }
 
   const isConfirmed = booking?.status === 'CONFIRMED' || booking?.status === 'CHECKED_IN';
-  const st = booking?.window ? formatBranchTime(booking.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' }) : '';
-  const et = booking?.window ? formatBranchTime(booking.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' }) : '';
   const sDate = booking?.window ? formatBranchTime(booking.window.startTime, branchAbout?.timezone, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '';
+  // 29 Sep 2026, Bala's review: the top banner is the screen a guest actually checks first --
+  // it previously showed only the base window's time, so a real multi-window (F-183/F-317)
+  // booking's extra hour(s) were invisible unless the guest scrolled to the detail box below.
+  // Every window (base + childBookings, F-187) now renders here, comma-joined chronologically,
+  // same formatting the detail rows below already used for the child-only list.
+  const allWindows = booking?.window
+    ? [{ window: booking.window }, ...(Array.isArray(booking.childBookings) ? booking.childBookings : [])]
+        .slice()
+        .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
+    : [];
+  const allTimesLabel = allWindows
+    .map((w: any) => `${formatBranchTime(w.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} - ${formatBranchTime(w.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}`)
+    .join(', ');
+  const courtLabel = booking ? describeCourtAssignment(booking.resource?.name, booking.resourceId, booking.courtSlotIndex) : null;
 
   return (
     <div className="flex-1 w-full mx-auto text-ink" style={{ maxWidth: '480px' }}>
@@ -172,8 +184,20 @@ export default function BookingConfirmation() {
 
         {booking?.window && (
           <div style={{ color: isConfirmed ? 'var(--color-accent-100)' : 'var(--slot-almostfull-text)' }}>
-            <div className="text-[13.5px] font-bold">{sDate} &middot; {st} - {et}</div>
+            <div className="text-[13.5px] font-bold" id="confirmation-time">{sDate} &middot; {allTimesLabel}</div>
             {branchAbout?.name && <div className="text-[13.5px]" id="confirmation-venue-name">{branchAbout.name}</div>}
+          </div>
+        )}
+
+        {booking && (
+          <div
+            className="flex items-center gap-4 text-[13.5px]"
+            style={{ color: isConfirmed ? 'var(--color-accent-100)' : 'var(--slot-almostfull-text)' }}
+          >
+            {courtLabel && <span id="confirmation-court-name">{courtLabel}</span>}
+            <span className="font-bold" style={{ color: isConfirmed ? 'var(--color-bg)' : 'var(--slot-almostfull-text)' }} id="confirmation-paid-amount">
+              Paid &#8377;{Number(booking.price)}
+            </span>
           </div>
         )}
 
@@ -228,54 +252,12 @@ export default function BookingConfirmation() {
       </div>
 
       <div className="px-5 py-6 space-y-6">
-        {/* Real V1 detail rows with no equivalent on the mockup's Confirmation panel (which only
-            shows date/time/venue/reference, already ported into the header above) -- kept per
-            this project's governing principle rather than dropped, same fold-in shape as Slice
-            E's AccountSheet move. */}
-        {booking && (
-          <div style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}>
-            {/* F-187: a multi-window (F-183) booking's additional hours are separate child rows,
-                each with its own window — without this, a guest who booked 2+ hours would see
-                only the first hour despite paying for all of them. */}
-            {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
-              <div id="confirmation-additional-windows" className="px-4 py-3 text-[12.5px]" style={{ borderBottom: '1px solid var(--color-neutral-200)', color: 'var(--color-neutral-700)' }}>
-                {booking.childBookings
-                  .slice()
-                  .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                  .map((child: any) =>
-                    `${formatBranchTime(child.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} - ${formatBranchTime(child.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}`,
-                  )
-                  .join(', ')}
-              </div>
-            )}
-            {/* F-189: the assigned court. Real Resource name (F-205) when one was assigned;
-                the cosmetic "Court N" (F-186) as fallback; nothing at all when neither is set
-                (a legacy pre-F-205 booking) — never a blank row implying data that isn't real. */}
-            {(() => {
-              const court = describeCourtAssignment(booking.resource?.name, booking.resourceId, booking.courtSlotIndex);
-              return court ? (
-                <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-                  <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Court</span>
-                  <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }} id="confirmation-court-name">
-                    {court}
-                  </span>
-                </div>
-              ) : null;
-            })()}
-            <div className="flex justify-between items-center px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-              <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Players</span>
-              <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
-                {1 + (booking.players?.length || 0)} ({booking.isMemberBooking ? 'Member' : 'Guest'})
-              </span>
-            </div>
-            <div className="flex justify-between items-center px-4 py-3">
-              <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-neutral-700)' }}>Paid</span>
-              <span className="text-xl font-extrabold font-mono" style={{ color: 'var(--color-accent-700)' }}>
-                ₹{Number(booking.price)}
-              </span>
-            </div>
-          </div>
-        )}
+        {/* 29 Sep 2026, Bala's review: the detail-rows box that used to live here (additional
+            windows, court, players, paid) is removed -- every window's time, the court, and the
+            paid amount now render directly in the banner above (the screen a guest actually
+            checks first), so this was pure duplication. Player count is no longer shown anywhere
+            on this screen as a result -- flagged, not silently dropped: say if it should come
+            back in the banner too. */}
 
         {/* F-190 Slice 4: real Directions link, reusing BranchAbout.tsx's exact URL pattern and
             its Number.isFinite coordinate-validity check (not a truthy check -- 0/0 is a real
