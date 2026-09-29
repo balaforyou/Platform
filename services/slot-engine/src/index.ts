@@ -61,6 +61,29 @@ function isValidIndianPhone(phone: string): boolean {
   return /^\+91[6-9]\d{9}$/.test(normalized);
 }
 
+/**
+ * Validates and normalizes an optional coPlayers array, shared by every booking-creation route
+ * (POST /bookings, /booking-orders, /bookings/negotiated) that accepts one.
+ *
+ * WHY THIS EXISTS. Flagged by SonarCloud's duplication gate on PR #118: the identical
+ * validate-then-normalize sequence (throw INVALID_PHONE_FORMAT on the first bad number,
+ * otherwise map every entry through normalizePhone) was copy-pasted into all three routes.
+ * Extracted here instead of reworded in place -- same "give the next occurrence somewhere
+ * obvious to go" reasoning as this file's other shared helpers.
+ */
+function validateAndNormalizeCoPlayers(coPlayers: any): string[] {
+  if (!coPlayers || !Array.isArray(coPlayers)) return [];
+  for (const phone of coPlayers) {
+    if (!isValidIndianPhone(phone)) {
+      const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PHONE_FORMAT';
+      throw err;
+    }
+  }
+  return coPlayers.map(normalizePhone);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers: F-010 Time Boundary Alignment Snapping
 // ---------------------------------------------------------------------------
@@ -4010,21 +4033,7 @@ server.post('/bookings', async (request, reply) => {
   } = request.body as any;
   void rest; // suppresses unused-var lint for the spread remainder
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-
-  const normalizedCoPlayers = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayers = validateAndNormalizeCoPlayers(coPlayers);
 
   // F-183 Phase 1: additionalWindowIds lets a guest extend a booking by whole contiguous
   // hours. Combined with windowId and re-sorted server-side below — client-supplied order
@@ -4080,6 +4089,36 @@ server.post('/bookings', async (request, reply) => {
       // Earliest locked window — kept as `window` so every single-window check below
       // (unchanged from before F-183) reads exactly as it did before.
       const window = lockedWindows[0];
+
+      // F-318 (29 Sep 2026): before creating a new chain, check whether this guest already has
+      // an unpaid HELD booking for the EXACT same set of windows in this pool -- most commonly
+      // reached via back-navigation-then-resubmit after doReserve already created a real hold (a
+      // fresh idempotency key per submit means the idempotency-key replay guard at the top of
+      // this route doesn't catch this). Redirect to the existing chain instead of creating a
+      // second, independent one that would double-consume the daily cap (below) and hold court
+      // capacity twice for one intended reservation. Runs after the window locks above, so a
+      // genuine concurrent resubmit for the same windows is naturally serialized by those same
+      // locks -- the second transaction blocks until the first commits, then sees it here.
+      // Deliberately exact-set equality, not "overlapping": a partial-overlap resubmit (guest
+      // originally held 2 windows, now selects only 1 of them) is NOT caught by this check and
+      // creates a new, independent booking -- a stated scope boundary, not a silent gap, since
+      // the daily-cap check below still counts it regardless.
+      const requestedWindowIdSet = new Set(sortedWindowIds);
+      const candidateParents = await tx.booking.findMany({
+        where: { userId, resourcePoolId, status: BookingStatus.HELD, parentBookingId: null },
+        include: { childBookings: { select: { windowId: true } } },
+      });
+      const duplicateParent = candidateParents.find((candidate: any) => {
+        const candidateWindowIds = new Set([candidate.windowId, ...candidate.childBookings.map((c: any) => c.windowId)]);
+        return candidateWindowIds.size === requestedWindowIdSet.size &&
+          [...candidateWindowIds].every((id) => requestedWindowIdSet.has(id));
+      });
+      if (duplicateParent) {
+        return {
+          __f318Duplicate: true,
+          booking: await tx.booking.findUnique({ where: { id: duplicateParent.id }, include: { childBookings: true } }),
+        };
+      }
 
       // 3. Fetch resource pool details.
       const pool = await tx.resourcePool.findUnique({
@@ -4138,17 +4177,15 @@ server.post('/bookings', async (request, reply) => {
         }
       }
 
-      // F-183: Phase 1 only supports contiguous whole-hour extension — each additional
-      // window's start must equal the previous window's end, in the real chronological
-      // order established in step 1 (not the order the caller sent them in).
-      for (let i = 1; i < lockedWindows.length; i++) {
-        if (new Date(lockedWindows[i].startTime).getTime() !== new Date(lockedWindows[i - 1].endTime).getTime()) {
-          const err = new Error('Additional windows must be contiguous with the base booking');
-          (err as any).statusCode = 400;
-          (err as any).code = 'NON_CONTIGUOUS_WINDOWS';
-          throw err;
-        }
-      }
+      // F-317 (29 Sep 2026): the F-183 Phase 1 contiguity requirement (additional windows had
+      // to be back-to-back with the base booking, enforced via NON_CONTIGUOUS_WINDOWS) is
+      // deliberately removed here. Chief decision: reuse this same parent/child chain for
+      // non-contiguous multi-slot guest booking too, superseding POST /booking-orders'
+      // independent-rows model (see that route's own deprecation comment below). Real gaps
+      // between windows are now allowed; MIXED_RESOURCE_POOL above is unchanged and still
+      // requires every window to share one resource pool. Pricing (step 8 below) sums each
+      // window's own independently-resolved rate and was never contiguity-dependent, so no
+      // change was needed there.
 
       // F-183: for FIXED_INSTANCE pools, every window must resolve to the same physical
       // court — a guest extending a booking needs the SAME court, not a different one
@@ -4455,6 +4492,14 @@ server.post('/bookings', async (request, reply) => {
       });
     });
 
+    // F-318: the transaction returns the { __f318Duplicate, booking } sentinel shape when it
+    // found and reused an existing HELD chain instead of creating a new one -- 200, same
+    // convention as the P2002 idempotency-replay catch below, not 201.
+    if (booking && (booking as any).__f318Duplicate) {
+      reply.status(200);
+      return (booking as any).booking;
+    }
+
     reply.status(201);
     return booking;
   } catch (err: any) {
@@ -4472,6 +4517,13 @@ server.post('/bookings', async (request, reply) => {
 });
 
 // ---------------------------------------------------------------------------
+// DEPRECATED as of F-317 (29 Sep 2026) — superseded by F-183 chain reuse for non-contiguous
+// booking (POST /bookings now accepts non-contiguous additionalWindowIds directly). Not wired
+// into any active UI path -- BranchBooking.tsx's multi-select submit now calls POST /bookings.
+// Kept for possible extraction into a generic multi-booking component in a future project, per
+// Chief's explicit instruction not to delete real, shipped, tested F-310 code. The whole-order
+// daily-cap logic inside this route is deprecated along with it.
+//
 // POST /booking-orders — F-310: non-contiguous / cross-pool multi-slot guest booking.
 //
 // Deliberately a separate route from POST /bookings, not a third mode on it. That route's
@@ -4521,20 +4573,7 @@ server.post('/booking-orders', async (request, reply) => {
     throw err;
   }
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-  const normalizedCoPlayers = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayers = validateAndNormalizeCoPlayers(coPlayers);
   const groupSize = 1 + normalizedCoPlayers.length;
 
   // 1. Real chronological order first, same reasoning as POST /bookings (:4011-4014) -- never
@@ -4848,7 +4887,19 @@ server.post('/booking-orders', async (request, reply) => {
     }
   }
 
-  reply.status(held.length > 0 ? 201 : 409);
+  // WHY always 201, even when held.length is 0: the request itself was well-formed (validated
+  // above, before any window was touched) -- a per-window outcome (capacity/blocked/tenant/etc.)
+  // is a normal, expected result this response's own held/rejected split already describes, not
+  // a request error. A non-2xx status here would be actively harmful to the real frontend caller:
+  // responseEnvelopePlugin's preSerialization hook only skips wrapping when the payload already
+  // has a `data` or `error` key -- this plain object gets wrapped as `{ data: {...} }` regardless
+  // of the status code set -- but @badminton/ui-shared's apiRequest() checks response.ok (status
+  // only) and, on a non-2xx response with no `error` key, discards the real body entirely and
+  // throws a generic "An unexpected error occurred" -- exactly the failure mode Phase 2's guest
+  // UI would have silently hit on a fully-rejected order. Caught during Phase 2 integration, not
+  // by the Phase 1 regression suite, which calls this route via raw fetch() and never exercises
+  // apiRequest()'s own success/error branching.
+  reply.status(201);
   return { orderId, held, rejected };
 });
 
@@ -4898,21 +4949,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
     throw err;
   }
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-
-  const normalizedCoPlayersNegotiated = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayersNegotiated = validateAndNormalizeCoPlayers(coPlayers);
 
   try {
     const booking = await prisma.$transaction(async (tx: any) => {

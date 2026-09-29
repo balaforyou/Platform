@@ -42,6 +42,14 @@ const RATE_SOURCE_LABEL: Record<RateSource, string> = {
   default: "the pool's default rate",
 };
 
+// F-318 (29 Sep 2026) secondary fix: a guest who reaches /bookings/:id/pay and taps back loses
+// their multi-select entirely -- this component unmounts on route change and selectedSlots is
+// plain state. Persisted here, keyed by pool+date so a stale selection from a different
+// pool/day is never restored. Additive-only: the real correctness fix (F-318 primary) is the
+// backend's own duplicate-HELD-booking detection in POST /bookings -- this only reduces how
+// often a guest reaches the resubmit path in the first place.
+const PENDING_SELECTION_KEY = 'pending_slot_selection';
+
 export default function BranchBooking() {
   const { tenant } = useTenant();
   const { accessToken, user } = useAuth();
@@ -136,9 +144,16 @@ export default function BranchBooking() {
   // history for the F-numbered rationale behind each piece -- preserved here, not re-derived.
   // -------------------------------------------------------------------------------------------
   const [slots, setSlots] = useState<any[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<any | null>(null);
+  // F-310 Phase 2: replaces the old single selectedSlot + additionalWindowsCount duration-stepper
+  // model. A guest now toggles any number of slots on/off directly, contiguous or not, same-pool
+  // or not (POST /booking-orders imposes no such restriction) -- see toggleSlotSelection below.
+  const [selectedSlots, setSelectedSlots] = useState<any[]>([]);
   const [activePeriod, setActivePeriod] = useState<'morning' | 'afternoon' | 'evening'>('morning');
-  const [additionalWindowsCount, setAdditionalWindowsCount] = useState(0);
+  // F-310 Phase 2: real result of a >1-slot POST /booking-orders call, rendered inline on this
+  // same screen as the "explicit confirm tap" the handover asked for -- which windows actually
+  // held vs. were rejected (and why), before the guest leaves for /bookings/my. Null until a
+  // multi-slot submit has actually happened.
+  const [orderResult, setOrderResult] = useState<{ orderId: string; held: any[]; rejected: { windowId: string; code: string; message: string }[] } | null>(null);
   const [bookingDate, setBookingDate] = useState(() => {
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -150,11 +165,18 @@ export default function BranchBooking() {
   const [submitting, setSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
+  const prevSelectedCountRef = useRef(0);
 
   const [autoAdvanceNotice, setAutoAdvanceNotice] = useState<{ from: string; to: string } | null>(null);
   const autoAdvancedToRef = useRef<string | null>(null);
   const searchRanForRef = useRef<string | null>(null);
   const prevSlotsLoadingRef = useRef(false);
+  // F-318 secondary: guards the write-through effect below from firing on the very first render
+  // (selectedSlots starts at []) before the fetch-slots effect's async restore attempt has run --
+  // without this, the write-through effect sees an empty array first and wipes the saved
+  // selection before it can ever be restored. Set true once the fetch-slots effect has made its
+  // one restore attempt, regardless of whether anything was actually restored.
+  const restoreAttemptedRef = useRef(false);
 
   const [upcomingBooking, setUpcomingBooking] = useState<any | null>(null);
   const [upcomingBranchAbout, setUpcomingBranchAbout] = useState<any>(null);
@@ -203,20 +225,37 @@ export default function BranchBooking() {
   }));
   const visibleSlots = groupedSlots.find((g) => g.key === activePeriod)?.slots ?? [];
 
-  const maxAdditionalAvailable = (slot: any): number => {
-    if (!slot) return 0;
-    const startIndex = sortedSlots.findIndex((s) => s.window.id === slot.window.id);
-    if (startIndex === -1) return 0;
-    let count = 0;
-    for (let i = startIndex + 1; i < sortedSlots.length; i++) {
-      const prevEnd = new Date(sortedSlots[i - 1].window.endTime).getTime();
-      const thisStart = new Date(sortedSlots[i].window.startTime).getTime();
-      if (thisStart !== prevEnd) break;
-      count++;
-    }
-    const ruleMax = pool?.bookingRules?.[0]?.maxAdditionalWindows ?? 1;
-    return Math.min(count, ruleMax);
+  // F-310 Phase 2: toggles a slot in/out of the current multi-select. One function, two entry
+  // points (the grid onClick below and the selected-slots panel's × control), so selection state
+  // can never drift between them.
+  const toggleSlotSelection = (slot: any) => {
+    setSelectedSlots((prev) => {
+      const exists = prev.some((s) => s.window.id === slot.window.id);
+      if (exists) return prev.filter((s) => s.window.id !== slot.window.id);
+      return [...prev, slot];
+    });
+    setOrderResult(null);
+    setBookingError(null);
   };
+
+  // F-318 secondary: write-through persistence for the restore logic in the fetch-slots effect
+  // below. Skipped while poolId/bookingDate aren't known yet, so a selection is never saved
+  // under an incomplete/undefined key.
+  useEffect(() => {
+    if (!poolId || !bookingDate) return;
+    // Skip entirely until the fetch-slots effect below has made its one restore attempt --
+    // otherwise this fires on the very first render (selectedSlots still []) and wipes a saved
+    // selection before it ever gets read back.
+    if (!restoreAttemptedRef.current) return;
+    if (selectedSlots.length === 0) {
+      sessionStorage.removeItem(PENDING_SELECTION_KEY);
+      return;
+    }
+    sessionStorage.setItem(
+      PENDING_SELECTION_KEY,
+      JSON.stringify({ poolId, bookingDate, windowIds: selectedSlots.map((s) => s.window.id) }),
+    );
+  }, [selectedSlots, poolId, bookingDate]);
 
   // 2. Fetch availability slots when date or pool changes
   useEffect(() => {
@@ -227,19 +266,41 @@ export default function BranchBooking() {
       try {
         setSlotsLoading(true);
         setSlots([]);
-        setSelectedSlot(null);
-        setAdditionalWindowsCount(0);
+        setSelectedSlots([]);
+        setOrderResult(null);
         setBookingError(null);
         const res = await apiRequest<any[]>(`/slot-engine/resource-pools/${poolId}/availability?date=${bookingDate}`, {
           token: accessToken,
         });
         if (!isCurrentRequest) return;
-        setSlots(Array.isArray(res) ? res : (res as any)?.data || []);
+        const freshSlots = Array.isArray(res) ? res : (res as any)?.data || [];
+        setSlots(freshSlots);
+
+        // F-318 secondary: restore a selection saved before navigating away (e.g. to /pay), only
+        // if it was saved for this exact pool+date and every named window still appears in this
+        // fresh availability response -- never restore a stale or mismatched selection.
+        try {
+          const raw = sessionStorage.getItem(PENDING_SELECTION_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved?.poolId === poolId && saved?.bookingDate === bookingDate && Array.isArray(saved.windowIds)) {
+              const restored = saved.windowIds
+                .map((id: string) => freshSlots.find((s: any) => s.window.id === id))
+                .filter(Boolean);
+              if (restored.length > 0) setSelectedSlots(restored);
+            }
+          }
+        } catch {
+          // Corrupt/unparseable sessionStorage value -- ignore, selection just stays empty.
+        }
       } catch (err: any) {
         if (!isCurrentRequest) return;
         setBookingError(err.message || 'Failed to fetch availability.');
       } finally {
         if (isCurrentRequest) setSlotsLoading(false);
+        // F-318 secondary: unblock the write-through effect once this attempt is done, success
+        // or failure -- otherwise a failed availability fetch would permanently gate it closed.
+        restoreAttemptedRef.current = true;
       }
     };
 
@@ -300,16 +361,23 @@ export default function BranchBooking() {
   const formatDateReadable = (key: string) =>
     new Date(`${key}T00:00:00`).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 
+  // F-310 Phase 2: keyed on the panel's empty->non-empty transition (0 -> N>0 selected) via a
+  // ref-tracked previous count, not on every selectedSlots change -- a guest toggling a 2nd/3rd
+  // slot on or off (or removing back down to 1 remaining) already has the panel in view, and
+  // re-scrolling on every toggle would be a real, new annoyance the old single-select model
+  // never had.
   useEffect(() => {
     const el = summaryRef.current;
-    if (!selectedSlot || !el) return;
+    const cameFromEmpty = prevSelectedCountRef.current === 0 && selectedSlots.length > 0;
+    prevSelectedCountRef.current = selectedSlots.length;
+    if (!cameFromEmpty || !el) return;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     // 26 Sep 2026 feedback round: 'nearest' only nudged the minimum distance needed -- often just
     // enough to reveal the top of the summary card (Slot/Pricing) while Duration stayed below the
     // fold, confirmed real via Bala's own device report. 'center' reveals the whole (now shorter,
     // Total hidden on mobile below) card in one scroll.
     el.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
-  }, [selectedSlot?.window?.id]);
+  }, [selectedSlots.length]);
 
   const guestOpenWindowDays = pool?.bookingRules?.[0]?.guestOpenWindowDays ?? 7;
   const toDateKey = (d: Date) => {
@@ -354,24 +422,21 @@ export default function BranchBooking() {
     `${formatBranchTime(win.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} - ` +
     `${formatBranchTime(win.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}`;
 
-  const getSelectedChain = (): any[] => {
-    if (!selectedSlot) return [];
-    const startIndex = sortedSlots.findIndex((s) => s.window.id === selectedSlot.window.id);
-    if (startIndex === -1) return [selectedSlot];
-    return sortedSlots.slice(startIndex, startIndex + 1 + additionalWindowsCount);
-  };
-
   // F-239: sums the server-resolved guestPrice (GET /resource-pools/:id/availability) directly
   // -- resolvePrice already bakes in PER_PERSON-vs-FLAT and peak-vs-standard rate resolution, so
   // there is no rate/mode logic left to reimplement here. This is the same number POST /bookings
-  // will actually charge, not a second, independently-computed estimate of it.
+  // (or, for 2+ slots, POST /booking-orders) will actually charge, not a second,
+  // independently-computed estimate of it.
+  //
+  // F-310 Phase 2: each selected slot is priced independently and summed -- no contiguity/chain
+  // assumption, simpler than the old chain-walk this replaces.
   const calculatePrice = () => {
-    if (!pool || !selectedSlot) return 0;
-    return getSelectedChain().reduce((sum, slot) => sum + Number(slot.guestPrice), 0);
+    if (!pool || selectedSlots.length === 0) return 0;
+    return selectedSlots.reduce((sum, slot) => sum + Number(slot.guestPrice), 0);
   };
 
   const handleReserve = async () => {
-    if (!tenant || !branchId || !poolId || !selectedSlot || !user) return;
+    if (!tenant || !branchId || !poolId || !user || selectedSlots.length === 0) return;
 
     // F-235 Slice C: a walk-in-created guest (F-229) has a phone on file but never proved live
     // possession of it. Reserve is the real, single choke point (same one the original design
@@ -384,17 +449,24 @@ export default function BranchBooking() {
     await doReserve();
   };
 
+  // F-317 (29 Sep 2026): single-slot path is unchanged (real e2e specs assert navigation
+  // straight to /bookings/:id/pay off this exact call). The 2+-slot path now also calls
+  // POST /slot-engine/bookings -- F-183's parent/child chain, with NON_CONTIGUOUS_WINDOWS
+  // relaxed server-side, superseding the old POST /booking-orders path (see
+  // reserveViaBookingOrders_DEPRECATED_F317 below, kept but no longer called). One booking, one
+  // payment, one cancellation for the whole selection -- same post-submit navigation as the
+  // single-slot case, no held/rejected banner: a chain-create is one atomic transaction, so a
+  // failure (e.g. a window no longer available) surfaces through the same bookingError state
+  // the single-slot path already uses, not a partial-failure summary.
   const doReserve = async () => {
-    if (!tenant || !branchId || !poolId || !selectedSlot || !user) return;
+    if (!tenant || !branchId || !poolId || !user || selectedSlots.length === 0) return;
 
+    const [firstSlot, ...additionalSlots] = selectedSlots;
     try {
       setSubmitting(true);
       setBookingError(null);
 
       const idempotencyKey = crypto.randomUUID();
-      const additionalWindowIds = getSelectedChain()
-        .slice(1)
-        .map((slot) => slot.window.id);
 
       const booking = await apiRequest<any>('/slot-engine/bookings', {
         method: 'POST',
@@ -404,17 +476,64 @@ export default function BranchBooking() {
           tenantId: tenant.id,
           branchId,
           resourcePoolId: poolId,
-          resourceId: selectedSlot.window.resourceId || null,
-          windowId: selectedSlot.window.id,
+          resourceId: firstSlot.window.resourceId || null,
+          windowId: firstSlot.window.id,
+          additionalWindowIds: additionalSlots.map((slot) => slot.window.id),
           userId: user.userId || user.id,
           coPlayers: [],
-          ...(additionalWindowIds.length > 0 ? { additionalWindowIds } : {}),
         }),
       });
 
+      // F-318 secondary: deliberately NOT cleared here. The whole point of persisting this
+      // selection is the guest hitting the Pay screen's real back arrow (navigate(-1),
+      // BookingPay.tsx) and landing back on /book -- clearing on submit would wipe it at exactly
+      // the moment it's needed, defeating the fix. Safe to leave in place: the primary F-318 fix
+      // (the backend's own duplicate-HELD-booking detection) means resubmitting this exact
+      // selection after a restore harmlessly redirects to this same booking rather than
+      // double-holding. Left to expire naturally (deselection, a different pool/date, or the tab
+      // closing), not on any single navigation event.
       navigate(`/bookings/${booking.id}/pay`);
     } catch (err: any) {
       setBookingError(err.message || 'Failed to reserve slot. Please try another slot.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // DEPRECATED as of F-317 (29 Sep 2026) -- superseded by F-183 chain reuse for non-contiguous
+  // booking (see doReserve above). Not wired into any active UI path -- nothing calls this
+  // function any more. Kept for possible extraction into a generic multi-booking component in a
+  // future project, per Chief's explicit instruction not to delete real, shipped, tested F-310
+  // code. This is the original F-310 Phase 2 >1-slot submit path: POST /booking-orders creates N
+  // independent HELD bookings (no parentBookingId chain) sharing one orderId, and always
+  // responds 201 with the real { orderId, held, rejected } split -- even when every window was
+  // rejected, so apiRequest() never discards this body (see F-312, filed for the underlying
+  // shared-client defect this route's status-code choice works around).
+  // @ts-expect-error -- deliberately unused (deprecated, kept for reference only)
+  const reserveViaBookingOrders_DEPRECATED_F317 = async () => {
+    if (!tenant || !branchId || !poolId || !user || selectedSlots.length === 0) return;
+    try {
+      setSubmitting(true);
+      setBookingError(null);
+      setOrderResult(null);
+
+      const idempotencyKey = crypto.randomUUID();
+      const result = await apiRequest<{ orderId: string; held: any[]; rejected: { windowId: string; code: string; message: string }[] }>(
+        '/slot-engine/booking-orders',
+        {
+          method: 'POST',
+          token: accessToken,
+          headers: { 'idempotency-key': idempotencyKey },
+          body: JSON.stringify({
+            branchId,
+            windowIds: selectedSlots.map((slot) => slot.window.id),
+            coPlayers: [],
+          }),
+        },
+      );
+      setOrderResult(result);
+    } catch (err: any) {
+      setBookingError(err.message || 'Failed to hold these slots. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -664,34 +783,37 @@ export default function BranchBooking() {
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-[7px]">
                     {visibleSlots.map((slot) => {
-                      const isSelected = selectedSlot?.window?.id === slot.window.id;
+                      const isSelected = selectedSlots.some((s) => s.window.id === slot.window.id);
                       const timeRange = formatTimeRange(slot.window);
                       // F-239: server-resolved (GET /resource-pools/:id/availability's guestPrice),
                       // not recomputed from window.price/pool.defaultRate -- matches the real charge.
                       const rate = slot.guestPrice;
                       const totalCapacity = Number(slot.window.capacity) || 0;
                       const remaining = Number(slot.remainingCapacity) || 0;
+                      // F-310 Phase 2: displayed remaining is reduced by 1 while this slot is part
+                      // of the current selection -- a cell this guest has already claimed shouldn't
+                      // still read its pre-selection count. Reverts automatically on deselect since
+                      // this is computed at render time, not stored separately.
+                      const displayedRemaining = remaining - (isSelected ? 1 : 0);
                       const isAlmostFull = totalCapacity > 0 && remaining > 0 && remaining / totalCapacity <= 0.25;
                       const slotState = isSelected ? 'selected' : isAlmostFull ? 'almost-full' : 'available';
 
                       return (
                         <div
                           key={slot.window.id}
-                          onClick={() => {
-                            setSelectedSlot(slot);
-                            setAdditionalWindowsCount(0);
-                            setBookingError(null);
-                          }}
+                          onClick={() => toggleSlotSelection(slot)}
                           className="cursor-pointer border transition-all flex flex-col items-start justify-center gap-0.5 px-2.5 py-2"
                           style={{
                             borderRadius: 'var(--radius-md)',
                             minHeight: '66px',
-                            background: isSelected
-                              ? 'var(--slot-selected-surface)'
-                              : isAlmostFull ? 'var(--slot-almostfull-surface)' : 'var(--slot-available-surface)',
-                            borderColor: isSelected
-                              ? 'var(--slot-selected-border)'
-                              : isAlmostFull ? 'var(--slot-almostfull-border)' : 'var(--slot-available-border)',
+                            // 29 Sep 2026, Bala's review: every non-selected tile shares one
+                            // background/border regardless of remaining capacity -- "X left" vs
+                            // "X courts open" (below) is the only almost-full signal now, not a
+                            // separate tile color. --slot-almostfull-surface/-border are no
+                            // longer read here (kept in index.css, unused) -- only the text color
+                            // still distinguishes the low-capacity case.
+                            background: isSelected ? 'var(--slot-selected-surface)' : 'var(--slot-available-surface)',
+                            borderColor: isSelected ? 'var(--slot-selected-border)' : 'var(--slot-available-border)',
                           }}
                           data-slot-state={slotState}
                           id={`slot-card-${slot.window.id}`}
@@ -714,7 +836,7 @@ export default function BranchBooking() {
                           >
                             {/* F-284: "seats" reads as player-count/shared-table, not remaining
                                 bookable courts in this hour's pool -- a court isn't a seat. */}
-                            {isAlmostFull ? `${slot.remainingCapacity} left` : `${slot.remainingCapacity} courts open`}
+                            {isAlmostFull ? `${displayedRemaining} left` : `${displayedRemaining} courts open`}
                           </span>
                         </div>
                       );
@@ -726,7 +848,7 @@ export default function BranchBooking() {
 
             {/* Right column: Duration & Price Summary */}
             <div className="space-y-6">
-              {selectedSlot ? (
+              {selectedSlots.length > 0 ? (
                 <>
                   <div
                     ref={summaryRef}
@@ -735,75 +857,61 @@ export default function BranchBooking() {
                     style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)', borderRadius: '16px', overflow: 'hidden' }}
                   >
                     <div className="p-5 space-y-0">
-                      <div className="flex justify-between items-center py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-                        <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Slot</span>
-                        <span className="text-[13.5px] font-bold font-mono" style={{ color: 'var(--color-text)' }} id="selected-slot-echo">
-                          {(() => {
-                            const chain = getSelectedChain();
-                            const last = chain[chain.length - 1] ?? selectedSlot;
-                            return `${formatTimeRange(selectedSlot.window).split(' - ')[0]} - ${formatTimeRange(last.window).split(' - ')[1]}`;
-                          })()}
-                        </span>
-                      </div>
-                      <div className="flex flex-col gap-0.5 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)' }}>
-                        <div className="flex justify-between items-center">
-                          <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Pricing</span>
-                          <span className="text-[13.5px] font-bold" style={{ color: 'var(--color-text)' }}>
-                            {(selectedSlot.window.pricingMode || pool.pricingMode || 'FLAT') === 'PER_PERSON'
-                              ? 'Per-person rate multiplication'
-                              : 'Flat booking rate'}
-                          </span>
-                        </div>
-                        {/* F-266: which rate was actually applied (window override / peak /
-                            standard / pool default) -- a different axis from the FLAT/PER_PERSON
-                            label above, shown alongside it rather than replacing it. */}
-                        {selectedSlot.rateSource && (
-                          <div className="flex justify-end">
-                            <span className="text-[11.5px]" style={{ color: 'var(--color-neutral-600)' }}>
-                              at {RATE_SOURCE_LABEL[selectedSlot.rateSource as RateSource] ?? selectedSlot.rateSource}
+                      {/* F-310 Phase 2: one row per selected slot -- time range, its own
+                          server-resolved guestPrice (not a chain sum), and a × that removes it via
+                          the same toggleSlotSelection the grid itself uses, so state can't drift
+                          between the two entry points. Replaces the single-slot "Slot"/"Pricing"
+                          echo + duration stepper this screen used to show. */}
+                      {selectedSlots.map((slot) => (
+                        <div
+                          key={slot.window.id}
+                          className="flex justify-between items-center py-3"
+                          style={{ borderBottom: '1px solid var(--color-neutral-200)' }}
+                          id={`selected-slot-row-${slot.window.id}`}
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-[13.5px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>
+                              {formatTimeRange(slot.window)}
                             </span>
+                            {/* F-266: which rate was actually applied (window override / peak /
+                                standard / pool default). */}
+                            {slot.rateSource && (
+                              <span className="text-[11px]" style={{ color: 'var(--color-neutral-600)' }}>
+                                at {RATE_SOURCE_LABEL[slot.rateSource as RateSource] ?? slot.rateSource}
+                              </span>
+                            )}
                           </div>
-                        )}
-                        {/* 26 Sep 2026 feedback round: static disclaimer, real number confirmed
-                            for JBC's courts -- no per-pool max-players field exists in the schema
-                            (only minOccupancy, a minimum), so this is intentionally static copy,
-                            not data-driven. */}
-                        <div className="flex justify-end">
-                          <span className="text-[11.5px]" style={{ color: 'var(--color-neutral-600)' }}>
-                            Up to 6 players per court
-                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[13.5px] font-bold font-mono" style={{ color: 'var(--color-text)' }}>₹{slot.guestPrice}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleSlotSelection(slot)}
+                              aria-label={`Remove ${formatTimeRange(slot.window)}`}
+                              className="flex items-center justify-center transition-colors"
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '999px',
+                                background: 'var(--color-neutral-200)',
+                                color: 'var(--color-neutral-700)',
+                                border: '1px solid var(--color-neutral-300)',
+                              }}
+                              id={`remove-selected-slot-${slot.window.id}`}
+                            >
+                              ×
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      ))}
 
-                      <div className="flex justify-between items-center py-3">
-                        <span className="text-[13.5px]" style={{ color: 'var(--color-neutral-700)' }}>Duration</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setAdditionalWindowsCount((c) => Math.max(0, c - 1))}
-                            disabled={additionalWindowsCount === 0}
-                            className="h-[52px] w-[52px] rounded-2xl font-bold text-lg disabled:opacity-40 disabled:cursor-not-allowed"
-                            style={{ border: '1px solid var(--color-neutral-300)', background: 'var(--color-neutral-100)', color: 'var(--color-text)' }}
-                            id="duration-decrement-btn"
-                            aria-label="Decrease duration"
-                          >
-                            −
-                          </button>
-                          <span className="font-mono font-bold w-16 text-center text-[15px]" style={{ color: 'var(--color-text)' }} id="duration-display">
-                            {additionalWindowsCount + 1} hr{additionalWindowsCount + 1 > 1 ? 's' : ''}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setAdditionalWindowsCount((c) => Math.min(maxAdditionalAvailable(selectedSlot), c + 1))}
-                            disabled={additionalWindowsCount >= maxAdditionalAvailable(selectedSlot)}
-                            className="h-[52px] w-[52px] rounded-2xl font-bold text-lg disabled:opacity-40 disabled:cursor-not-allowed"
-                            style={{ border: '1px solid var(--color-neutral-300)', background: 'var(--color-neutral-100)', color: 'var(--color-text)' }}
-                            id="duration-increment-btn"
-                            aria-label="Increase duration"
-                          >
-                            +
-                          </button>
-                        </div>
+                      {/* 26 Sep 2026 feedback round: static disclaimer, real number confirmed
+                          for JBC's courts -- no per-pool max-players field exists in the schema
+                          (only minOccupancy, a minimum), so this is intentionally static copy,
+                          not data-driven. */}
+                      <div className="flex justify-end py-2">
+                        <span className="text-[11.5px]" style={{ color: 'var(--color-neutral-600)' }}>
+                          Up to 6 players per court
+                        </span>
                       </div>
 
                       {/* 26 Sep 2026 feedback round: the sticky footer's own TOTAL block below is
@@ -825,6 +933,42 @@ export default function BranchBooking() {
                     {/* 26 Sep 2026 feedback round: cancellation policy moved to Review & Pay
                         (BookingPay.tsx), per Bala's call -- this screen keeps only the real
                         duration/pricing summary. */}
+
+                    {/* DEPRECATED as of F-317 (29 Sep 2026) -- superseded by F-183 chain reuse.
+                        doReserve's 2+-slot path no longer calls POST /booking-orders (see
+                        reserveViaBookingOrders_DEPRECATED_F317, kept but never called), so
+                        orderResult is never set from any live path any more and this block is
+                        permanently dead. Kept, not deleted, alongside the deprecated function it
+                        renders, per Chief's explicit instruction not to delete real, shipped,
+                        tested F-310 code.
+                        F-310 Phase 2: real held/rejected split from POST /booking-orders, rendered
+                        inline on this same screen -- the "explicit confirm tap" the handover asked
+                        for, without a new route or a combined payment step. Only ever set on the
+                        2+-slot path; the single-slot path navigates away on success and never
+                        touches this state. */}
+                    {orderResult && (
+                      <div
+                        className="p-4 space-y-2 text-xs"
+                        style={{ background: 'var(--color-accent-100)', borderTop: '1px solid var(--color-accent-300)' }}
+                        id="order-result-banner"
+                      >
+                        <p className="font-bold" style={{ color: 'var(--color-text)' }}>
+                          {orderResult.held.length} of {selectedSlots.length} slot(s) held
+                        </p>
+                        {orderResult.rejected.length > 0 && (
+                          <ul className="space-y-1" style={{ color: 'var(--color-destructive)' }}>
+                            {orderResult.rejected.map((r) => {
+                              const rejectedSlot = selectedSlots.find((s) => s.window.id === r.windowId);
+                              return (
+                                <li key={r.windowId}>
+                                  {rejectedSlot ? formatTimeRange(rejectedSlot.window) : r.windowId}: {r.message}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    )}
 
                     {bookingError && (
                       <div
@@ -872,21 +1016,33 @@ export default function BranchBooking() {
                           ₹{calculatePrice()}
                         </div>
                       </div>
-                      <button
-                        onClick={handleReserve}
-                        disabled={submitting}
-                        className={primaryReserveBtn}
-                        id="reserve-court-btn"
-                      >
-                        {submitting ? (
-                          <>
-                            <LoadingState variant="inline" />
-                            <span>Processing Hold...</span>
-                          </>
-                        ) : (
-                          <span>Review and Book</span>
-                        )}
-                      </button>
+                      {orderResult ? (
+                        <button
+                          onClick={() => navigate('/bookings/my')}
+                          className={primaryReserveBtn}
+                          id="continue-to-my-bookings-btn"
+                        >
+                          <span>Continue to My Bookings</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleReserve}
+                          disabled={submitting}
+                          className={primaryReserveBtn}
+                          id="reserve-court-btn"
+                        >
+                          {submitting ? (
+                            <>
+                              <LoadingState variant="inline" />
+                              <span>Processing Hold...</span>
+                            </>
+                          ) : selectedSlots.length > 1 ? (
+                            <span>Review and Book {selectedSlots.length} Slots</span>
+                          ) : (
+                            <span>Review and Book</span>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="sm:hidden" style={{ height: '108px' }} />
@@ -910,7 +1066,7 @@ export default function BranchBooking() {
                     color: 'var(--color-neutral-600)',
                   }}
                 >
-                  Select an availability slot to display duration and pricing details.
+                  Select one or more availability slots to display pricing details.
                 </div>
               )}
             </div>

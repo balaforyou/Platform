@@ -2304,3 +2304,130 @@ unilaterally. Phase 2 (guest-facing UI in `CourtBooking.tsx`/`BookingConfirmatio
 `booking-orders.regression.ts`, 8 sections, 123/123 full suite green.
 Confirmed-ID: F-310
 Confirmed: 27 Sep 2026
+
+### bookings-route-missing-tenant-isolation-on-window-ids
+Batch: slot-engine, 28 Sep 2026
+Surfaced: during F-310's Codacy-driven fix pass on `POST /booking-orders`; Chief-assigned same day.
+Description: `POST /bookings` (the F-183 route) never validates that a caller-supplied
+`resourcePoolId`/`windowId` belongs to the caller's own JWT `tenantId` -- the identical class of gap
+Codacy's automated PR review caught and F-310 fixed on the new `POST /booking-orders` route. Pre-
+existing, not introduced by F-310. Not yet triaged for real exploitability/severity -- same
+discipline as every other tenant-isolation finding in this register (F-277/F-295/F-299 class):
+confirm real scope before a severity call, not just "the check is structurally missing."
+Confirmed-ID: F-311
+Confirmed: 28 Sep 2026
+
+### apirequest-discards-response-body-on-non-2xx-status
+Batch: guest-member-pwa (shared client), 28 Sep 2026
+Surfaced: while building F-310 Phase 1's evidence for a fully-rejected `POST /booking-orders`
+order; Chief-assigned same day.
+Description: `@badminton/ui-shared`'s `apiRequest()` discards the response body on ANY non-2xx HTTP
+status, even when the body carries real structured data the caller needs -- it only skips this when
+the body is shaped `{ error: {...} }`. Surfaced concretely by `POST /booking-orders` originally
+replying `409` with a real `{ orderId, held: [], rejected }` body on a fully-rejected order; worked
+around locally by always replying `201` instead (a request-shape decision on that one route, not a
+client fix), which leaves the generalizable defect in the shared client for the next endpoint that
+legitimately wants a structured body alongside a non-2xx status. Pre-existing, not introduced by
+F-310. Not yet triaged for severity -- needs real investigation of every current `apiRequest()`
+caller across both PWAs before deciding whether to fix now or bundle into later hardening.
+Confirmed-ID: F-312
+Confirmed: 28 Sep 2026
+
+### missing-dockerignore-and-incomplete-node-service-build-steps
+Batch: repo-root / deploy/gcp-vm, 28 Sep 2026
+Surfaced: while trying to run the real Caddy-fronted e2e stack for PR #116's own
+verification; Chief-assigned same day.
+Description: No `.dockerignore` exists anywhere in this repo -- Docker's build context
+therefore includes every `node_modules` tree, and a broken symlink under
+`apps/admin-v2/node_modules/@radix-ui/react-dropdown-menu` (real, reproduced locally)
+crashes the context upload outright. Fixing that surfaced a second, same-shaped gap:
+`deploy/gcp-vm/Dockerfile.node-service` builds `shared-types`/`shared-middleware`/`database`
+explicitly but had no build step for `@badminton/test-harness` (every service's
+`src/regression/*.ts` imports it, compiled as ordinary source) or `@badminton/job-scheduler`
+(a real runtime dependency of `slot-engine/src/index.ts`) -- both silently rode along as an
+already-built host `dist` inside `COPY packages ./packages`, invisible only because nothing
+had ever excluded it. Pre-existing, not introduced by F-310.
+Resolution: root `.dockerignore` added; `Dockerfile.node-service` given explicit build steps
+for both packages, same pattern as the three already built there. Verified via a genuinely
+cleared build cache (`docker builder prune -a -f`, 7.5GB reclaimed) followed by a clean build
+of all 7 shipped images via the real `deploy/gcp-vm/docker-compose.yml` +
+`docker-compose.gcp-verify.yml` + `deploy/gcp-vm/.env` (from the committed `.env.ci`, matching
+CI's own `integration` job) -- all 7 succeeded with zero errors.
+Confirmed-ID: F-313
+Confirmed: 28 Sep 2026
+
+### multislot-order-separate-checkouts-friction
+Batch: guest-member-pwa, 28 Sep 2026
+Surfaced: live manual F-310 testing (Bala's 3-slot order, `BK-8275B7BF`/`BK-C157FE00`/`BK-78D24C8B`); Chief-assigned same day.
+Description: Booking a non-contiguous multi-slot order (F-310) required N separate Razorpay
+checkouts, one per held slot -- the direct, correctly-implemented consequence of F-310 Phase 2's
+own deliberate design choice ("pay each slot individually via existing BookingPay.tsx") rather
+than a regression. Felt as real friction only once tested live.
+Resolution: Superseded by F-317, which eliminates the root cause (F-310's independent-rows
+model) by reusing F-183's single-booking chain instead of adding combined-order payment on top
+of the existing architecture. No separate fix landed under this ID.
+Confirmed-ID: F-316
+Confirmed: 29 Sep 2026
+
+### noncontiguous-booking-collapsed-into-f183-chain
+Batch: services/slot-engine, apps/guest-member-pwa, 28-29 Sep 2026
+Surfaced: Chief decision reversing F-310 Phase 1/2's architecture call in light of F-316's
+real-world cost (`claude/chief-decision-f317-single-booking-noncontiguous-supersedes-booking-orders.md`);
+Chief-assigned same day.
+Description: Non-contiguous multi-slot guest booking used a new, independent mechanism
+(`POST /booking-orders`, `orderId`-linked top-level rows, no `parentBookingId` chain) instead of
+reusing F-183's existing, already-hardened parent/child chain.
+Resolution: Relaxed `NON_CONTIGUOUS_WINDOWS` in `POST /bookings`, kept `MIXED_RESOURCE_POOL`
+unchanged -- a non-contiguous, same-pool selection is now a real F-183 chain (one parent, one
+price, one PaymentIntent, cascade-cancel/cascade-confirm reused unmodified).
+`BranchBooking.tsx`'s multi-select submit now calls `POST /bookings` directly, navigating
+identically to the single-slot path. `POST /booking-orders`, its daily-cap logic, `orderId`,
+and the old multi-slot submit logic are kept, not deleted -- each carrying a dated F-317
+deprecation comment. Real evidence: cascade-cancel/cascade-confirm re-proven live against real
+JBC data (DB read-back); adversarial pricing (real peak+standard rate sum across a genuine gap)
+proven exactly correct (Rs 1000) both in a rewritten regression test and live; BookingHistory.tsx
+renders the resulting chain correctly via existing F-187 code with zero new UI work. Full
+regression suite 124/124 sections passed, rebuilt from dist.
+Confirmed-ID: F-317
+Confirmed: 29 Sep 2026
+
+### duplicate-held-booking-on-back-navigation-resubmit
+Batch: services/slot-engine, apps/guest-member-pwa, 29 Sep 2026
+Surfaced: PR #118 review, a guest reaching /pay then navigating back and resubmitting the same
+selection; Chief-assigned same day.
+Description: A guest who reaches /pay after a real hold and navigates back, then resubmits the
+same selection, created a second independent HELD booking -- a fresh idempotency key per submit
+bypasses the existing idempotency-key replay guard. Reproduced live before any fix: two real
+submits, two real HELD rows for the same guest/window, DB read-back.
+Resolution: POST /bookings now detects an existing unpaid HELD booking for the same guest + exact
+window set (checked after the existing window locks, so a genuine concurrent resubmit is
+naturally serialized by those same locks) and returns it (200) instead of creating a duplicate.
+Bundled sessionStorage persistence for BranchBooking.tsx's slot selection reduces how often a
+guest reaches the resubmit path at all -- two real bugs in that secondary fix (a write-through/
+restore race, and clearing the selection on successful submit) were caught and fixed during live
+verification against the Pay screen's real back arrow. Real evidence: pre-fix duplicate
+reproduced live, post-fix collapse to one chain confirmed live and via two new regression tests;
+a pre-existing concurrency test's reuse of one user across two of three concurrent requests was
+corrected to a genuinely distinct third guest. Re-verified against the real post-#118-merge main.
+126/126 regression sections pass.
+Confirmed-ID: F-318
+Confirmed: 29 Sep 2026
+
+### almostfull-slot-tile-dark-mode-color-bug
+Batch: apps/guest-member-pwa, 29 Sep 2026
+Surfaced: Bala asking for F-318's dark-mode screenshots to also be checked in light mode; the
+washed-out "1 left" tile color turned out to be a real, separate, pre-existing bug. Chief-assigned
+same day.
+Description: --slot-almostfull-surface/-border/-text (index.css) had no dark-mode override at
+all -- the fourth instance of a bug class this same file has already fixed three times. Confirmed
+via git blame to predate every change this session (last touched 19 Aug 2026), not a regression.
+Resolution: Mapped the three tokens onto the existing dual-mode --color-accent-2-* gold ramp
+(deliberately not tenant-derived, the correct property for a warning color) instead of inventing
+new hex values, applied to all three token-definition sites. A second design decision from the
+same review pass: BranchBooking.tsx's slot tiles no longer distinguish "almost full" by
+background/border color at all -- every non-selected tile shares one background, with the
+existing "X left" text as the only signal; the tokens stay defined, unused by this component, kept
+rather than deleted. Real evidence: before/after screenshots in both themes on the real PR branch
+(fresh off the real post-#118-merge main). Whole-app typecheck and build clean.
+Confirmed-ID: F-319
+Confirmed: 29 Sep 2026

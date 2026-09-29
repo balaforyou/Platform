@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference, formatBranchTime, formatWindowRangesLabel } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
@@ -84,9 +84,30 @@ export default function BookingHistory() {
       // when the booking was MADE, not the slot's own date) -- descending by the real slot
       // date/time, latest first, per Bala's explicit call. Same pattern as main.tsx's own
       // upcomingSlots sort, reversed comparator.
-      const sorted = (res || [])
-        .slice()
-        .sort((a: any, b: any) => new Date(b.window.startTime).getTime() - new Date(a.window.startTime).getTime());
+      //
+      // F-310 Phase 2: bookings sharing a non-null orderId (one POST /booking-orders call) are
+      // additionally kept adjacent -- sorted first by each GROUP's own representative date (the
+      // latest startTime among its members, so the group's overall recency still matches the
+      // existing latest-first convention), then members within a group ordered earliest-first
+      // (how a guest thinks about "their session": 9am before 6pm). A lone booking (no orderId,
+      // or the only surviving member of one) is its own one-member group and sorts exactly as
+      // before -- purely additive, no change to the single-booking case.
+      const all = res || [];
+      const groups = new Map<string, any[]>();
+      for (const booking of all) {
+        const key = booking.orderId || `__solo_${booking.id}`;
+        const list = groups.get(key) || [];
+        list.push(booking);
+        groups.set(key, list);
+      }
+      const sorted = Array.from(groups.values())
+        .map((members) => members.slice().sort((a, b) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime()))
+        .sort((a, b) => {
+          const latestA = Math.max(...a.map((m) => new Date(m.window.startTime).getTime()));
+          const latestB = Math.max(...b.map((m) => new Date(m.window.startTime).getTime()));
+          return latestB - latestA;
+        })
+        .flat();
       setBookings(sorted);
     } catch (err: any) {
       setError(err.message || 'Failed to load booking history.');
@@ -304,15 +325,45 @@ export default function BookingHistory() {
         </div>
       ) : (
         <div className="space-y-4">
-          {bookings.map((booking) => {
-            const about = branchAboutById[booking.branchId];
-            const st = formatBranchTime(booking.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' });
-            const et = formatBranchTime(booking.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' });
-            const sDate = formatBranchTime(booking.window.startTime, about?.timezone, { weekday: 'short', month: 'short', day: 'numeric' });
+          {/* DEPRECATED as of F-317 (29 Sep 2026) -- superseded by F-183 chain reuse for
+              non-contiguous booking (BranchBooking.tsx's multi-select now creates a real
+              parentBookingId chain via POST /bookings, never a new orderId). No new booking sets
+              orderId any more, so this block has nothing left to group going forward -- kept,
+              not deleted, since real F-310 UAT rows already carry orderId and this still renders
+              them correctly. The childBookings-based rendering a few lines below (F-187) needs no
+              change: it already displays any chain, contiguous or not.
+              F-310 Phase 2: minimal, additive grouping -- a shared heading over adjacent cards
+              when 2+ bookings share an orderId (already sorted adjacent above), otherwise nothing
+              changes. Computed once per render, not per-booking state, since it's purely derived
+              from the already-fetched `bookings` list. */}
+          {(() => {
+            const groupSizes = new Map<string, number>();
+            for (const b of bookings) {
+              if (b.orderId) groupSizes.set(b.orderId, (groupSizes.get(b.orderId) || 0) + 1);
+            }
+            const seenOrderIds = new Set<string>();
+            return bookings.map((booking) => {
+              const about = branchAboutById[booking.branchId];
+              const st = formatBranchTime(booking.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' });
+              const et = formatBranchTime(booking.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' });
+              const sDate = formatBranchTime(booking.window.startTime, about?.timezone, { weekday: 'short', month: 'short', day: 'numeric' });
 
-            return (
-              <div
-                key={booking.id}
+              const groupSize = booking.orderId ? groupSizes.get(booking.orderId) || 0 : 0;
+              const isGroupStart = groupSize > 1 && !seenOrderIds.has(booking.orderId);
+              if (groupSize > 1) seenOrderIds.add(booking.orderId);
+
+              return (
+              <div key={booking.id} className="contents">
+                {isGroupStart && (
+                  <div
+                    className="text-[11px] font-bold uppercase tracking-wide px-1"
+                    style={{ color: 'var(--color-neutral-600)' }}
+                    id={`order-group-heading-${booking.orderId}`}
+                  >
+                    Order of {groupSize}
+                  </div>
+                )}
+                <div
                 className="rounded-2xl p-6 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between gap-6"
                 style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }}
                 id={`booking-card-${booking.id}`}
@@ -362,15 +413,7 @@ export default function BookingHistory() {
                             the first hour here despite paying for all of them. */}
                         {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
                           <div id={`booking-additional-windows-${booking.id}`}>
-                            {booking.childBookings
-                              .slice()
-                              .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                              .map((child: any) => (
-                                <div key={child.id}>
-                                  + {formatBranchTime(child.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
-                                  {formatBranchTime(child.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              ))}
+                            {formatWindowRangesLabel(booking.childBookings, about?.timezone)}
                           </div>
                         )}
                       </div>
@@ -492,8 +535,10 @@ export default function BookingHistory() {
                   )}
                 </div>
               </div>
-            );
-          })}
+              </div>
+              );
+            });
+          })()}
         </div>
       )}
 

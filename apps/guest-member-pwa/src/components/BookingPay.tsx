@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference, formatBranchTime, formatWindowRangesLabel } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { MapPin, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
 import LoadingState from './ui/LoadingState';
@@ -438,15 +438,7 @@ export default function BookingPay() {
                 decision on courtSlotIndex display, not this slice's. */}
             {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
               <div id="pay-additional-windows" className="text-[12.5px]" style={{ color: 'var(--color-neutral-700)' }}>
-                {booking.childBookings
-                  .slice()
-                  .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                  .map((child: any) => (
-                    <div key={child.id}>
-                      + {formatBranchTime(child.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
-                      {formatBranchTime(child.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  ))}
+                {formatWindowRangesLabel(booking.childBookings, branchAbout?.timezone)}
               </div>
             )}
           </div>

@@ -38,10 +38,11 @@ export async function findOrCreateMemberUser(
   if (existing) {
     // F-248: same `??`-merge persistence F-219 already proved for the admin pipeline -- a
     // guest/member's real Google name/photo was never captured on this path at all, on either
-    // the create branch below or here. No dev-token bypass exists on this route (F-228 Decision
-    // 3 -- real verification only, unlike admin's dev-admin-token- path), so unlike F-219 there's
-    // no skip guard to mirror; gating on the identity actually carrying a claim is enough to
-    // avoid a no-op write on every login.
+    // the create branch below or here. A dev-token bypass now exists on this route too
+    // (GUEST_DEV_LOGIN=true, dev-guest-token- prefix, local-only -- see index.ts's
+    // /auth/google/verify), same shape as admin's dev-admin-token- path, but its synthesized
+    // identity never carries name/picture, so this stays a no-op write on a dev-login re-hit
+    // the same as it is for any other identity with no claim to merge.
     if (!identity.name && !identity.picture) return { user: existing, isNewSignup: false };
     const updated = await prisma.user.update({
       where: { id: existing.id },

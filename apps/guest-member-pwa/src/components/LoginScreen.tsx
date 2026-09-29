@@ -19,6 +19,8 @@ export default function LoginScreen() {
   }, [isAuthenticated, navigate]);
 
   const [error, setError] = useState<string | null>(null);
+  const [devEmail, setDevEmail] = useState('');
+  const [devBusy, setDevBusy] = useState(false);
 
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
@@ -31,6 +33,23 @@ export default function LoginScreen() {
       // Navigation happens via the isAuthenticated effect above once `user` updates.
     } catch (err: any) {
       setError(err.message || 'Google sign-in failed. Please try again.');
+    }
+  };
+
+  // Local-dev-only bypass (identity-auth's GUEST_DEV_LOGIN flag) -- same shape as admin-v2's own
+  // dev sign-in (src/screens/LoginScreen.tsx). Compiled out of every production build since this
+  // whole block is import.meta.env.DEV-gated below; even if GUEST_DEV_LOGIN were somehow left on
+  // in a real deploy, this button would not exist to call it.
+  const onDevSignIn = async () => {
+    if (!tenant) return;
+    try {
+      setError(null);
+      setDevBusy(true);
+      await verifyGoogleCall(`dev-guest-token-${devEmail}`, tenant.id, setSession);
+    } catch (err: any) {
+      setError(err.message || 'Dev sign-in failed.');
+    } finally {
+      setDevBusy(false);
     }
   };
 
@@ -187,6 +206,37 @@ export default function LoginScreen() {
             <span>We'll confirm a few details before your first booking.</span>
           </div>
         </div>
+
+        {import.meta.env.DEV && (
+          <div
+            className="flex flex-col gap-2.5"
+            style={{ marginTop: '4px', paddingTop: '16px', borderTop: '1px dashed var(--color-neutral-300)' }}
+          >
+            <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--color-neutral-600)' }}>
+              DEV SIGN-IN (no Google)
+            </span>
+            <input
+              type="email"
+              value={devEmail}
+              onChange={(e) => setDevEmail(e.target.value)}
+              placeholder="test@example.com"
+              autoComplete="off"
+              className="w-full px-3 py-2.5 text-sm"
+              style={{ border: '1px solid var(--color-neutral-300)', borderRadius: '10px', background: '#fff', color: 'var(--color-text)' }}
+              id="dev-signin-email"
+            />
+            <button
+              type="button"
+              onClick={onDevSignIn}
+              disabled={devBusy || !devEmail}
+              className="w-full py-2.5 text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ border: '1px solid var(--color-neutral-300)', background: 'var(--color-neutral-100)', color: 'var(--color-text)' }}
+              id="dev-signin-btn"
+            >
+              {devBusy ? 'Signing in…' : 'Dev sign-in'}
+            </button>
+          </div>
+        )}
 
         <div className="mt-auto" style={{ fontSize: '11.5px', lineHeight: 1.55, color: 'var(--color-neutral-700)' }}>
           By continuing you accept the court rules and cancellation policy.
