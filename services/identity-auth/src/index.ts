@@ -698,20 +698,38 @@ server.post('/auth/google/verify', async (request, reply) => {
     throw err;
   }
 
-  // Real Google ID token verification. No mock fallback in any environment (F-228 Decision 3).
+  // Real Google ID token verification (F-228 Decision 3), with one narrow, opt-in exception:
+  // a dev-only bypass for local testing, same shape as /auth/admin/google/verify's own
+  // dev-admin-token- path below. Gated on its OWN flag (GUEST_DEV_LOGIN=true), NOT
+  // ADMIN_DEV_LOGIN and NOT NODE_ENV -- the deployed demo runs NODE_ENV=development for an
+  // unrelated reason (guest OTP's fixed 123456 code), and that must not also unlock this.
+  // Default-off, fail-closed: an unset flag 403s even a correctly-shaped sentinel token.
   let identity: VerifiedGoogleIdentity;
-  try {
-    identity = await verifyGoogleIdToken(googleIdToken, {
-      jwks: googleRemoteJwks(),
-      clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
-    });
-  } catch (e) {
-    if (e instanceof GoogleTokenError) {
-      reply.status(e.statusCode);
-      (e as any).code = e.code;
+  if (googleIdToken.startsWith('dev-guest-token-')) {
+    if (process.env.GUEST_DEV_LOGIN !== 'true') {
+      reply.status(403);
+      const err = new Error('Dev guest login is not enabled in this environment');
+      (err as any).statusCode = 403;
+      (err as any).code = 'DEV_LOGIN_DISABLED';
+      throw err;
+    }
+    const email = googleIdToken.replace('dev-guest-token-', '').toLowerCase();
+    identity = { email, googleId: `dev-guest-${email}` };
+    server.log.warn(`[DEV GUEST LOGIN] Google verification bypassed for ${email}`);
+  } else {
+    try {
+      identity = await verifyGoogleIdToken(googleIdToken, {
+        jwks: googleRemoteJwks(),
+        clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+      });
+    } catch (e) {
+      if (e instanceof GoogleTokenError) {
+        reply.status(e.statusCode);
+        (e as any).code = e.code;
+        throw e;
+      }
       throw e;
     }
-    throw e;
   }
 
   // Find-or-create: a brand-new Google identity gets a GUEST row instead of being rejected

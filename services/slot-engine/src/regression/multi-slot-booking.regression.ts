@@ -509,32 +509,81 @@ export const multiSlotBookingSections: Section<SlotEngineContext>[] = [
   },
 
   {
-    name: 'F-183: a non-contiguous additional window returns 400 NON_CONTIGUOUS_WINDOWS',
+    // F-317 (29 Sep 2026): supersedes the old F-183 Phase 1 test of the same scenario, which
+    // asserted 400 NON_CONTIGUOUS_WINDOWS -- that check was deliberately removed (see
+    // index.ts's own F-317 comment at the old check's former location). A real gap between
+    // windows, same pool, is now a legal chain. This test proves both halves of the F-317
+    // decision at once: (1) the chain is created correctly (parent + child, real
+    // parentBookingId, child price null) despite the gap, and (2) pricing is adversarially
+    // correct -- one standard-rate window and one peak-rate window, real gap between them, sum
+    // must equal the exact total of each window's own correctly-resolved rate, proving the
+    // parent's price is a true per-window sum (index.ts:4346's resolvedPrice reduce) and never
+    // a span/duration-based calculation that a contiguity-agnostic path could get wrong.
+    name: 'F-317: a genuinely non-contiguous, same-pool chain is created (real gap, standard+peak rate sum, real parentBookingId)',
     async run() {
       const { pool, windows } = await createPooledPoolWithWindows({
         hours: 2,
         maxAdditionalWindows: 1,
-        gapBeforeLastHour: true, // second window starts 2 hours after the first, not 1
+        gapBeforeLastHour: true, // second window starts 2 hours after the first, not 1 -- a real gap
       });
-      const res = await inspect(
-        await fetch(`${baseUrl}/bookings`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${guestToken('f183-noncontiguous-user')}`,
-            'idempotency-key': 'f183-noncontiguous-key',
+
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const peakStart = new Date(windows[1].startTime);
+      const peakH = peakStart.getUTCHours();
+
+      try {
+        // Only windows[1]'s hour falls inside the peak window; windows[0] resolves standard.
+        await db.branch.update({
+          where: { id: BRANCH_ID },
+          data: {
+            guestStandardRate: 400,
+            guestPeakRate: 600,
+            guestPeakWindows: [{ start: `${pad(peakH)}:00`, end: `${pad(peakH + 1)}:00` }],
           },
-          body: JSON.stringify({
-            branchId: BRANCH_ID,
-            resourcePoolId: pool.id,
-            windowId: windows[0].id,
-            additionalWindowIds: [windows[1].id],
+        });
+
+        const res = await inspect(
+          await fetch(`${baseUrl}/bookings`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${guestToken('f317-noncontiguous-user')}`,
+              'idempotency-key': `f317-noncontiguous-key-${Date.now()}`,
+            },
+            body: JSON.stringify({
+              branchId: BRANCH_ID,
+              resourcePoolId: pool.id,
+              windowId: windows[0].id,
+              additionalWindowIds: [windows[1].id],
+            }),
           }),
-        }),
-      );
-      console.log('F183_EVIDENCE non_contiguous', JSON.stringify({ status: res.status, code: res.json?.error?.code }));
-      if (res.status !== 400 || res.json?.error?.code !== 'NON_CONTIGUOUS_WINDOWS') {
-        throw new Error(`Expected 400 NON_CONTIGUOUS_WINDOWS, got ${res.status}: ${res.raw}`);
+        );
+        if (res.status !== 201) {
+          throw new Error(`Expected 201 (non-contiguous chain now legal), got ${res.status}: ${res.raw}`);
+        }
+        const parent = res.json?.data ?? res.json;
+        console.log('F317_EVIDENCE noncontiguous_chain', JSON.stringify({ status: res.status, price: parent.price, childBookings: parent.childBookings }));
+        if (Number(parent.price) !== 1000) {
+          throw new Error(`Expected parent price = 400 (standard) + 600 (peak) = 1000 exactly, got ${parent.price}`);
+        }
+        const child = Array.isArray(parent.childBookings) ? parent.childBookings[0] : null;
+        if (!child || child.parentBookingId !== parent.id) {
+          throw new Error(`Expected one child with parentBookingId=${parent.id}, got ${JSON.stringify(parent.childBookings)}`);
+        }
+        if (child.price !== null) {
+          throw new Error(`Expected child.price to remain null (only the parent is billable), got ${child.price}`);
+        }
+
+        // Real DB read-back, not just trusting the HTTP response body.
+        const childRow = await db.booking.findUnique({ where: { id: child.id } });
+        if (childRow?.parentBookingId !== parent.id || childRow?.price !== null) {
+          throw new Error(`DB read-back mismatch: parentBookingId=${childRow?.parentBookingId}, price=${childRow?.price}`);
+        }
+      } finally {
+        await db.branch.update({
+          where: { id: BRANCH_ID },
+          data: { guestStandardRate: null, guestPeakRate: null, guestPeakWindows: [] },
+        });
       }
     },
   },

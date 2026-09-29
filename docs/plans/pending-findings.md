@@ -2355,3 +2355,38 @@ of all 7 shipped images via the real `deploy/gcp-vm/docker-compose.yml` +
 CI's own `integration` job) -- all 7 succeeded with zero errors.
 Confirmed-ID: F-313
 Confirmed: 28 Sep 2026
+
+### multislot-order-separate-checkouts-friction
+Batch: guest-member-pwa, 28 Sep 2026
+Surfaced: live manual F-310 testing (Bala's 3-slot order, `BK-8275B7BF`/`BK-C157FE00`/`BK-78D24C8B`); Chief-assigned same day.
+Description: Booking a non-contiguous multi-slot order (F-310) required N separate Razorpay
+checkouts, one per held slot -- the direct, correctly-implemented consequence of F-310 Phase 2's
+own deliberate design choice ("pay each slot individually via existing BookingPay.tsx") rather
+than a regression. Felt as real friction only once tested live.
+Resolution: Superseded by F-317, which eliminates the root cause (F-310's independent-rows
+model) by reusing F-183's single-booking chain instead of adding combined-order payment on top
+of the existing architecture. No separate fix landed under this ID.
+Confirmed-ID: F-316
+Confirmed: 29 Sep 2026
+
+### noncontiguous-booking-collapsed-into-f183-chain
+Batch: services/slot-engine, apps/guest-member-pwa, 28-29 Sep 2026
+Surfaced: Chief decision reversing F-310 Phase 1/2's architecture call in light of F-316's
+real-world cost (`claude/chief-decision-f317-single-booking-noncontiguous-supersedes-booking-orders.md`);
+Chief-assigned same day.
+Description: Non-contiguous multi-slot guest booking used a new, independent mechanism
+(`POST /booking-orders`, `orderId`-linked top-level rows, no `parentBookingId` chain) instead of
+reusing F-183's existing, already-hardened parent/child chain.
+Resolution: Relaxed `NON_CONTIGUOUS_WINDOWS` in `POST /bookings`, kept `MIXED_RESOURCE_POOL`
+unchanged -- a non-contiguous, same-pool selection is now a real F-183 chain (one parent, one
+price, one PaymentIntent, cascade-cancel/cascade-confirm reused unmodified).
+`BranchBooking.tsx`'s multi-select submit now calls `POST /bookings` directly, navigating
+identically to the single-slot path. `POST /booking-orders`, its daily-cap logic, `orderId`,
+and the old multi-slot submit logic are kept, not deleted -- each carrying a dated F-317
+deprecation comment. Real evidence: cascade-cancel/cascade-confirm re-proven live against real
+JBC data (DB read-back); adversarial pricing (real peak+standard rate sum across a genuine gap)
+proven exactly correct (Rs 1000) both in a rewritten regression test and live; BookingHistory.tsx
+renders the resulting chain correctly via existing F-187 code with zero new UI work. Full
+regression suite 124/124 sections passed, rebuilt from dist.
+Confirmed-ID: F-317
+Confirmed: 29 Sep 2026

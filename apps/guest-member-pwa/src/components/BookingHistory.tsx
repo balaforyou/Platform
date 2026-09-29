@@ -325,7 +325,14 @@ export default function BookingHistory() {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* F-310 Phase 2: minimal, additive grouping -- a shared heading over adjacent cards
+          {/* DEPRECATED as of F-317 (29 Sep 2026) -- superseded by F-183 chain reuse for
+              non-contiguous booking (BranchBooking.tsx's multi-select now creates a real
+              parentBookingId chain via POST /bookings, never a new orderId). No new booking sets
+              orderId any more, so this block has nothing left to group going forward -- kept,
+              not deleted, since real F-310 UAT rows already carry orderId and this still renders
+              them correctly. The childBookings-based rendering a few lines below (F-187) needs no
+              change: it already displays any chain, contiguous or not.
+              F-310 Phase 2: minimal, additive grouping -- a shared heading over adjacent cards
               when 2+ bookings share an orderId (already sorted adjacent above), otherwise nothing
               changes. Computed once per render, not per-booking state, since it's purely derived
               from the already-fetched `bookings` list. */}
