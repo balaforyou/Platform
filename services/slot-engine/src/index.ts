@@ -61,6 +61,29 @@ function isValidIndianPhone(phone: string): boolean {
   return /^\+91[6-9]\d{9}$/.test(normalized);
 }
 
+/**
+ * Validates and normalizes an optional coPlayers array, shared by every booking-creation route
+ * (POST /bookings, /booking-orders, /bookings/negotiated) that accepts one.
+ *
+ * WHY THIS EXISTS. Flagged by SonarCloud's duplication gate on PR #118: the identical
+ * validate-then-normalize sequence (throw INVALID_PHONE_FORMAT on the first bad number,
+ * otherwise map every entry through normalizePhone) was copy-pasted into all three routes.
+ * Extracted here instead of reworded in place -- same "give the next occurrence somewhere
+ * obvious to go" reasoning as this file's other shared helpers.
+ */
+function validateAndNormalizeCoPlayers(coPlayers: any): string[] {
+  if (!coPlayers || !Array.isArray(coPlayers)) return [];
+  for (const phone of coPlayers) {
+    if (!isValidIndianPhone(phone)) {
+      const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
+      (err as any).statusCode = 400;
+      (err as any).code = 'INVALID_PHONE_FORMAT';
+      throw err;
+    }
+  }
+  return coPlayers.map(normalizePhone);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers: F-010 Time Boundary Alignment Snapping
 // ---------------------------------------------------------------------------
@@ -4010,21 +4033,7 @@ server.post('/bookings', async (request, reply) => {
   } = request.body as any;
   void rest; // suppresses unused-var lint for the spread remainder
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-
-  const normalizedCoPlayers = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayers = validateAndNormalizeCoPlayers(coPlayers);
 
   // F-183 Phase 1: additionalWindowIds lets a guest extend a booking by whole contiguous
   // hours. Combined with windowId and re-sorted server-side below — client-supplied order
@@ -4526,20 +4535,7 @@ server.post('/booking-orders', async (request, reply) => {
     throw err;
   }
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-  const normalizedCoPlayers = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayers = validateAndNormalizeCoPlayers(coPlayers);
   const groupSize = 1 + normalizedCoPlayers.length;
 
   // 1. Real chronological order first, same reasoning as POST /bookings (:4011-4014) -- never
@@ -4915,21 +4911,7 @@ server.post('/bookings/negotiated', async (request, reply) => {
     throw err;
   }
 
-  if (coPlayers && Array.isArray(coPlayers)) {
-    for (const phone of coPlayers) {
-      if (!isValidIndianPhone(phone)) {
-        reply.status(400);
-        const err = new Error(`Invalid co-player phone number format: ${phone}. Must be a valid 10-digit Indian mobile number.`);
-        (err as any).statusCode = 400;
-        (err as any).code = 'INVALID_PHONE_FORMAT';
-        throw err;
-      }
-    }
-  }
-
-  const normalizedCoPlayersNegotiated = coPlayers && Array.isArray(coPlayers)
-    ? coPlayers.map(normalizePhone)
-    : [];
+  const normalizedCoPlayersNegotiated = validateAndNormalizeCoPlayers(coPlayers);
 
   try {
     const booking = await prisma.$transaction(async (tx: any) => {

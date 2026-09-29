@@ -39,6 +39,39 @@ export interface VerifiedGoogleIdentity {
   picture?: string;
 }
 
+/**
+ * Resolves a `dev-<subject>-token-<email>` sentinel into a synthesized `VerifiedGoogleIdentity`,
+ * gated on its own opt-in env flag -- shared by both `/auth/admin/google/verify`'s
+ * `dev-admin-token-` bypass and `/auth/google/verify`'s `dev-guest-token-` bypass (index.ts).
+ *
+ * WHY THIS EXISTS. Flagged by SonarCloud's duplication gate on PR #118: the two bypasses were
+ * structurally identical (check prefix, gate on flag, derive email, construct identity, log a
+ * warning), differing only in the prefix/flag/label. Extracted here rather than reworded in
+ * place, same "give the next occurrence somewhere obvious to go" reasoning as this module's
+ * other shared exports.
+ *
+ * Returns `null` (not a dev token -- caller falls through to real verification) or throws the
+ * same `403 DEV_LOGIN_DISABLED` both routes already threw individually when the token is
+ * dev-shaped but the flag is off (fail-closed, unchanged behavior).
+ */
+export function resolveDevLoginBypass(
+  googleIdToken: string,
+  opts: { tokenPrefix: string; envFlag: string; subject: string },
+  log: { warn: (msg: string) => void },
+): VerifiedGoogleIdentity | null {
+  if (!googleIdToken.startsWith(opts.tokenPrefix)) return null;
+  if (process.env[opts.envFlag] !== 'true') {
+    const err = new Error(`Dev ${opts.subject} login is not enabled in this environment`);
+    (err as any).statusCode = 403;
+    (err as any).code = 'DEV_LOGIN_DISABLED';
+    throw err;
+  }
+  const email = googleIdToken.replace(opts.tokenPrefix, '').toLowerCase();
+  const identity: VerifiedGoogleIdentity = { email, googleId: `dev-${opts.subject}-${email}` };
+  log.warn(`[DEV ${opts.subject.toUpperCase()} LOGIN] Google verification bypassed for ${email}`);
+  return identity;
+}
+
 export class GoogleTokenError extends Error {
   readonly statusCode = 401;
   readonly code = 'INVALID_GOOGLE_TOKEN';

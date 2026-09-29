@@ -10,6 +10,7 @@ import {
   googleRemoteJwks,
   ADMIN_ROLES,
   GoogleTokenError,
+  resolveDevLoginBypass,
   type VerifiedGoogleIdentity,
 } from './adminGoogleAuth';
 import { findOrCreateMemberUser } from './memberGoogleAuth';
@@ -700,22 +701,19 @@ server.post('/auth/google/verify', async (request, reply) => {
 
   // Real Google ID token verification (F-228 Decision 3), with one narrow, opt-in exception:
   // a dev-only bypass for local testing, same shape as /auth/admin/google/verify's own
-  // dev-admin-token- path below. Gated on its OWN flag (GUEST_DEV_LOGIN=true), NOT
-  // ADMIN_DEV_LOGIN and NOT NODE_ENV -- the deployed demo runs NODE_ENV=development for an
-  // unrelated reason (guest OTP's fixed 123456 code), and that must not also unlock this.
-  // Default-off, fail-closed: an unset flag 403s even a correctly-shaped sentinel token.
+  // dev-admin-token- path below (shared via resolveDevLoginBypass, adminGoogleAuth.ts).
+  // Gated on its OWN flag (GUEST_DEV_LOGIN=true), NOT ADMIN_DEV_LOGIN and NOT NODE_ENV -- the
+  // deployed demo runs NODE_ENV=development for an unrelated reason (guest OTP's fixed 123456
+  // code), and that must not also unlock this. Default-off, fail-closed: an unset flag 403s
+  // even a correctly-shaped sentinel token.
   let identity: VerifiedGoogleIdentity;
-  if (googleIdToken.startsWith('dev-guest-token-')) {
-    if (process.env.GUEST_DEV_LOGIN !== 'true') {
-      reply.status(403);
-      const err = new Error('Dev guest login is not enabled in this environment');
-      (err as any).statusCode = 403;
-      (err as any).code = 'DEV_LOGIN_DISABLED';
-      throw err;
-    }
-    const email = googleIdToken.replace('dev-guest-token-', '').toLowerCase();
-    identity = { email, googleId: `dev-guest-${email}` };
-    server.log.warn(`[DEV GUEST LOGIN] Google verification bypassed for ${email}`);
+  const devIdentity = resolveDevLoginBypass(
+    googleIdToken,
+    { tokenPrefix: 'dev-guest-token-', envFlag: 'GUEST_DEV_LOGIN', subject: 'guest' },
+    server.log,
+  );
+  if (devIdentity) {
+    identity = devIdentity;
   } else {
     try {
       identity = await verifyGoogleIdToken(googleIdToken, {
@@ -885,19 +883,16 @@ server.post('/auth/admin/google/verify', async (request, reply) => {
   // NODE_ENV: the deployed demo runs NODE_ENV=development so guest/member OTP can use the
   // fixed 123456 code, and that guest-side UAT convenience must not also unlock an admin
   // auth bypass. Default-off (absent flag = disabled), fail-closed. Production never
-  // sets it; CI/e2e do.
+  // sets it; CI/e2e do. Shared with the guest bypass above via resolveDevLoginBypass
+  // (adminGoogleAuth.ts).
   let identity: VerifiedGoogleIdentity;
-  if (googleIdToken.startsWith('dev-admin-token-')) {
-    if (process.env.ADMIN_DEV_LOGIN !== 'true') {
-      reply.status(403);
-      const err = new Error('Dev admin login is not enabled in this environment');
-      (err as any).statusCode = 403;
-      (err as any).code = 'DEV_LOGIN_DISABLED';
-      throw err;
-    }
-    const email = googleIdToken.replace('dev-admin-token-', '').toLowerCase();
-    identity = { email, googleId: `dev-admin-${email}` };
-    server.log.warn(`[DEV ADMIN LOGIN] Google verification bypassed for ${email}`);
+  const devIdentity = resolveDevLoginBypass(
+    googleIdToken,
+    { tokenPrefix: 'dev-admin-token-', envFlag: 'ADMIN_DEV_LOGIN', subject: 'admin' },
+    server.log,
+  );
+  if (devIdentity) {
+    identity = devIdentity;
   } else {
     try {
       identity = await verifyGoogleIdToken(googleIdToken, {
