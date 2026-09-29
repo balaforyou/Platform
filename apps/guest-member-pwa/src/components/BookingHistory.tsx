@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference, formatBranchTime, formatWindowRangesLabel } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
@@ -413,13 +413,7 @@ export default function BookingHistory() {
                             the first hour here despite paying for all of them. */}
                         {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
                           <div id={`booking-additional-windows-${booking.id}`}>
-                            {booking.childBookings
-                              .slice()
-                              .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                              .map((child: any) =>
-                                `${formatBranchTime(child.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })} - ${formatBranchTime(child.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })}`,
-                              )
-                              .join(', ')}
+                            {formatWindowRangesLabel(booking.childBookings, about?.timezone)}
                           </div>
                         )}
                       </div>

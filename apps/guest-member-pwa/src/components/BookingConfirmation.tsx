@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiRequest, formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
+import { apiRequest, formatBookingReference, formatBranchTime, formatWindowRangesLabel } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { CheckCircle, AlertCircle, Activity, ArrowRight, Navigation, Download } from 'lucide-react';
 import { describeCourtAssignment } from '../lib/courtLabel';
@@ -122,14 +122,12 @@ export default function BookingConfirmation() {
   // booking's extra hour(s) were invisible unless the guest scrolled to the detail box below.
   // Every window (base + childBookings, F-187) now renders here, comma-joined chronologically,
   // same formatting the detail rows below already used for the child-only list.
-  const allWindows = booking?.window
-    ? [{ window: booking.window }, ...(Array.isArray(booking.childBookings) ? booking.childBookings : [])]
-        .slice()
-        .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-    : [];
-  const allTimesLabel = allWindows
-    .map((w: any) => `${formatBranchTime(w.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} - ${formatBranchTime(w.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}`)
-    .join(', ');
+  const allTimesLabel = booking?.window
+    ? formatWindowRangesLabel(
+        [{ window: booking.window }, ...(Array.isArray(booking.childBookings) ? booking.childBookings : [])],
+        branchAbout?.timezone,
+      )
+    : '';
   const courtLabel = booking ? describeCourtAssignment(booking.resource?.name, booking.resourceId, booking.courtSlotIndex) : null;
 
   return (
