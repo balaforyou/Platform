@@ -238,16 +238,14 @@ export default function BookingConfirmation() {
                 each with its own window — without this, a guest who booked 2+ hours would see
                 only the first hour despite paying for all of them. */}
             {Array.isArray(booking.childBookings) && booking.childBookings.length > 0 && (
-              <div id="confirmation-additional-windows" className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-neutral-200)', color: 'var(--color-neutral-700)' }}>
+              <div id="confirmation-additional-windows" className="px-4 py-3 text-[12.5px]" style={{ borderBottom: '1px solid var(--color-neutral-200)', color: 'var(--color-neutral-700)' }}>
                 {booking.childBookings
                   .slice()
                   .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                  .map((child: any) => (
-                    <div key={child.id} className="text-[12.5px]">
-                      + {formatBranchTime(child.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
-                      {formatBranchTime(child.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  ))}
+                  .map((child: any) =>
+                    `${formatBranchTime(child.window.startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} - ${formatBranchTime(child.window.endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}`,
+                  )
+                  .join(', ')}
               </div>
             )}
             {/* F-189: the assigned court. Real Resource name (F-205) when one was assigned;

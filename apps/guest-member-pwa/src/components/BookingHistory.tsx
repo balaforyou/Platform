@@ -416,12 +416,10 @@ export default function BookingHistory() {
                             {booking.childBookings
                               .slice()
                               .sort((a: any, b: any) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime())
-                              .map((child: any) => (
-                                <div key={child.id}>
-                                  + {formatBranchTime(child.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })} -{' '}
-                                  {formatBranchTime(child.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              ))}
+                              .map((child: any) =>
+                                `${formatBranchTime(child.window.startTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })} - ${formatBranchTime(child.window.endTime, about?.timezone, { hour: '2-digit', minute: '2-digit' })}`,
+                              )
+                              .join(', ')}
                           </div>
                         )}
                       </div>
