@@ -4090,6 +4090,36 @@ server.post('/bookings', async (request, reply) => {
       // (unchanged from before F-183) reads exactly as it did before.
       const window = lockedWindows[0];
 
+      // F-318 (29 Sep 2026): before creating a new chain, check whether this guest already has
+      // an unpaid HELD booking for the EXACT same set of windows in this pool -- most commonly
+      // reached via back-navigation-then-resubmit after doReserve already created a real hold (a
+      // fresh idempotency key per submit means the idempotency-key replay guard at the top of
+      // this route doesn't catch this). Redirect to the existing chain instead of creating a
+      // second, independent one that would double-consume the daily cap (below) and hold court
+      // capacity twice for one intended reservation. Runs after the window locks above, so a
+      // genuine concurrent resubmit for the same windows is naturally serialized by those same
+      // locks -- the second transaction blocks until the first commits, then sees it here.
+      // Deliberately exact-set equality, not "overlapping": a partial-overlap resubmit (guest
+      // originally held 2 windows, now selects only 1 of them) is NOT caught by this check and
+      // creates a new, independent booking -- a stated scope boundary, not a silent gap, since
+      // the daily-cap check below still counts it regardless.
+      const requestedWindowIdSet = new Set(sortedWindowIds);
+      const candidateParents = await tx.booking.findMany({
+        where: { userId, resourcePoolId, status: BookingStatus.HELD, parentBookingId: null },
+        include: { childBookings: { select: { windowId: true } } },
+      });
+      const duplicateParent = candidateParents.find((candidate: any) => {
+        const candidateWindowIds = new Set([candidate.windowId, ...candidate.childBookings.map((c: any) => c.windowId)]);
+        return candidateWindowIds.size === requestedWindowIdSet.size &&
+          [...candidateWindowIds].every((id) => requestedWindowIdSet.has(id));
+      });
+      if (duplicateParent) {
+        return {
+          __f318Duplicate: true,
+          booking: await tx.booking.findUnique({ where: { id: duplicateParent.id }, include: { childBookings: true } }),
+        };
+      }
+
       // 3. Fetch resource pool details.
       const pool = await tx.resourcePool.findUnique({
         where: { id: resourcePoolId },
@@ -4461,6 +4491,14 @@ server.post('/bookings', async (request, reply) => {
         include: { childBookings: true },
       });
     });
+
+    // F-318: the transaction returns the { __f318Duplicate, booking } sentinel shape when it
+    // found and reused an existing HELD chain instead of creating a new one -- 200, same
+    // convention as the P2002 idempotency-replay catch below, not 201.
+    if (booking && (booking as any).__f318Duplicate) {
+      reply.status(200);
+      return (booking as any).booking;
+    }
 
     reply.status(201);
     return booking;

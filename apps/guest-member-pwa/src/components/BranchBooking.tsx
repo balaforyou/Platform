@@ -42,6 +42,14 @@ const RATE_SOURCE_LABEL: Record<RateSource, string> = {
   default: "the pool's default rate",
 };
 
+// F-318 (29 Sep 2026) secondary fix: a guest who reaches /bookings/:id/pay and taps back loses
+// their multi-select entirely -- this component unmounts on route change and selectedSlots is
+// plain state. Persisted here, keyed by pool+date so a stale selection from a different
+// pool/day is never restored. Additive-only: the real correctness fix (F-318 primary) is the
+// backend's own duplicate-HELD-booking detection in POST /bookings -- this only reduces how
+// often a guest reaches the resubmit path in the first place.
+const PENDING_SELECTION_KEY = 'pending_slot_selection';
+
 export default function BranchBooking() {
   const { tenant } = useTenant();
   const { accessToken, user } = useAuth();
@@ -163,6 +171,12 @@ export default function BranchBooking() {
   const autoAdvancedToRef = useRef<string | null>(null);
   const searchRanForRef = useRef<string | null>(null);
   const prevSlotsLoadingRef = useRef(false);
+  // F-318 secondary: guards the write-through effect below from firing on the very first render
+  // (selectedSlots starts at []) before the fetch-slots effect's async restore attempt has run --
+  // without this, the write-through effect sees an empty array first and wipes the saved
+  // selection before it can ever be restored. Set true once the fetch-slots effect has made its
+  // one restore attempt, regardless of whether anything was actually restored.
+  const restoreAttemptedRef = useRef(false);
 
   const [upcomingBooking, setUpcomingBooking] = useState<any | null>(null);
   const [upcomingBranchAbout, setUpcomingBranchAbout] = useState<any>(null);
@@ -224,6 +238,25 @@ export default function BranchBooking() {
     setBookingError(null);
   };
 
+  // F-318 secondary: write-through persistence for the restore logic in the fetch-slots effect
+  // below. Skipped while poolId/bookingDate aren't known yet, so a selection is never saved
+  // under an incomplete/undefined key.
+  useEffect(() => {
+    if (!poolId || !bookingDate) return;
+    // Skip entirely until the fetch-slots effect below has made its one restore attempt --
+    // otherwise this fires on the very first render (selectedSlots still []) and wipes a saved
+    // selection before it ever gets read back.
+    if (!restoreAttemptedRef.current) return;
+    if (selectedSlots.length === 0) {
+      sessionStorage.removeItem(PENDING_SELECTION_KEY);
+      return;
+    }
+    sessionStorage.setItem(
+      PENDING_SELECTION_KEY,
+      JSON.stringify({ poolId, bookingDate, windowIds: selectedSlots.map((s) => s.window.id) }),
+    );
+  }, [selectedSlots, poolId, bookingDate]);
+
   // 2. Fetch availability slots when date or pool changes
   useEffect(() => {
     if (!poolId || !bookingDate) return;
@@ -240,12 +273,34 @@ export default function BranchBooking() {
           token: accessToken,
         });
         if (!isCurrentRequest) return;
-        setSlots(Array.isArray(res) ? res : (res as any)?.data || []);
+        const freshSlots = Array.isArray(res) ? res : (res as any)?.data || [];
+        setSlots(freshSlots);
+
+        // F-318 secondary: restore a selection saved before navigating away (e.g. to /pay), only
+        // if it was saved for this exact pool+date and every named window still appears in this
+        // fresh availability response -- never restore a stale or mismatched selection.
+        try {
+          const raw = sessionStorage.getItem(PENDING_SELECTION_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved?.poolId === poolId && saved?.bookingDate === bookingDate && Array.isArray(saved.windowIds)) {
+              const restored = saved.windowIds
+                .map((id: string) => freshSlots.find((s: any) => s.window.id === id))
+                .filter(Boolean);
+              if (restored.length > 0) setSelectedSlots(restored);
+            }
+          }
+        } catch {
+          // Corrupt/unparseable sessionStorage value -- ignore, selection just stays empty.
+        }
       } catch (err: any) {
         if (!isCurrentRequest) return;
         setBookingError(err.message || 'Failed to fetch availability.');
       } finally {
         if (isCurrentRequest) setSlotsLoading(false);
+        // F-318 secondary: unblock the write-through effect once this attempt is done, success
+        // or failure -- otherwise a failed availability fetch would permanently gate it closed.
+        restoreAttemptedRef.current = true;
       }
     };
 
@@ -429,6 +484,14 @@ export default function BranchBooking() {
         }),
       });
 
+      // F-318 secondary: deliberately NOT cleared here. The whole point of persisting this
+      // selection is the guest hitting the Pay screen's real back arrow (navigate(-1),
+      // BookingPay.tsx) and landing back on /book -- clearing on submit would wipe it at exactly
+      // the moment it's needed, defeating the fix. Safe to leave in place: the primary F-318 fix
+      // (the backend's own duplicate-HELD-booking detection) means resubmitting this exact
+      // selection after a restore harmlessly redirects to this same booking rather than
+      // double-holding. Left to expire naturally (deselection, a different pool/date, or the tab
+      // closing), not on any single navigation event.
       navigate(`/bookings/${booking.id}/pay`);
     } catch (err: any) {
       setBookingError(err.message || 'Failed to reserve slot. Please try another slot.');
