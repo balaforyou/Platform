@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node ../../scripts/inject-push-sw-handler.mjs --dist dist/sw.js --title Slotflow --icon /logo.png",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

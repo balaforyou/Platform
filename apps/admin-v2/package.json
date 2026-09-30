@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5175 --strictPort",
-    "build": "tsc && vite build && node scripts/stamp-sw.mjs",
+    "build": "tsc && vite build && node scripts/stamp-sw.mjs && node ../../scripts/inject-push-sw-handler.mjs --dist dist/sw.js --title \"Slotflow Admin\" --icon /icon-192.png",
     "preview": "vite preview",
     "seed:admin": "dotenv -e ../../.env -- node tests/seed-admin-v2-data.mjs",
     "test": "vitest run",
