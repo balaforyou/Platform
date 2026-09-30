@@ -33,6 +33,7 @@ const EVENT_TITLES: Record<string, string> = {
   slot_release_reminder: 'Slot Release Reminder',
   subscription_charge_failed: 'Payment Failed',
   low_occupancy_alert: 'Low Occupancy Alert',
+  guest_booking_reminder: 'Your Match Is Coming Up',
 };
 
 export class StaleTokenError extends Error {

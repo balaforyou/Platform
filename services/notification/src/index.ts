@@ -41,7 +41,11 @@ async function requireInternalOrUserJwt(request: any, reply: any): Promise<void>
 //      and to override per-tenant in a future iteration.
 // ============================================================
 const CHANNEL_POLICY: Record<string, string[]> = {
-  booking_confirmed:             ['push_or_sms'],
+  // F-321: was ['push_or_sms'] but never actually dispatched by anything until F-321 wired it
+  // to the real payment-confirm chokepoint. Push-only for launch, per Bala's call -- SMS is
+  // deliberately deferred, not implemented; add 'sms' back here once that's ready, no other
+  // code change needed.
+  booking_confirmed:             ['push'],
   refund_processed:              ['push_or_sms'],
   tournament_fixture_scheduled:  ['push_or_sms'],
   slot_release_reminder:         ['sms', 'push'],        // both — time-critical, cannot rely on push alone
@@ -55,6 +59,9 @@ const CHANNEL_POLICY: Record<string, string[]> = {
   // member's assignment in that batch unrenewed. Same dual-channel rationale as
   // low_occupancy_alert/subscription_charge_failed.
   batch_renewal_reminder:        ['push', 'sms'],
+  // F-322: 3-hours-before-slot reminder for guest bookings. Push-only for launch, same
+  // SMS-deferred treatment as booking_confirmed above.
+  guest_booking_reminder:        ['push'],
 };
 
 // ============================================================

@@ -2453,3 +2453,42 @@ only for a real two-window Rs 800 chain booking, post-fix Time: "09:00 AM - 10:0
 receipt on a multi-window chain confirmed fixed the same way. Whole-app typecheck and build clean.
 Confirmed-ID: F-320
 Confirmed: 30 Sep 2026
+
+### booking-confirmed-notification-wired-to-real-payment-confirm
+Batch: services/slot-engine, services/notification, 30 Sep 2026
+Surfaced: Bala asked directly whether a notification goes out once a guest's booking payment
+completes. Chief-assigned alongside F-322 at plan-mode review.
+Description: booking_confirmed was dead config -- defined in notification's CHANNEL_POLICY map and
+firebase.ts's title map, but grepped slot-engine/payment and confirmed zero real callers anywhere.
+A guest completing payment got no notification at all beyond what was on-screen.
+Resolution: wired into the one real shared chokepoint for every payment-driven HELD->CONFIRMED
+transition, POST /bookings/:id/confirm, reached by the real Razorpay webhook, verifyPaymentHandler,
+and F-229's manual cash/upi_qr walk-in paths. Fired non-blocking so a notification-service outage
+can never delay or fail a payment confirmation. The one path that bypasses the route
+(paymentConfirmReconciliationJob) got the identical call added explicitly. Channel changed from
+push_or_sms to push -- SMS deliberately deferred. Real evidence: a real guest booking driven
+through the real dev-mock-Razorpay webhook path produced a real NotificationRequest row
+(channel: push, status: sent) with no delay to the on-screen confirmation. New regression coverage
+in both services' own suites. Full 5-service regression green.
+Confirmed-ID: F-321
+Confirmed: 30 Sep 2026
+
+### guest-booking-3h-before-slot-reminder
+Batch: services/slot-engine, services/notification, 30 Sep 2026
+Surfaced: same conversation as F-321 -- Bala asked whether a reminder could fire 3 hours before a
+guest's booked slot. Chief-assigned alongside F-321.
+Description: no reminder existed for a guest's own upcoming booking anywhere in the system --
+every existing event type either fires at the moment of its own trigger or is member-side only.
+Not literally F-111 or F-112 (both still Open, both a different shape).
+Resolution: new guest_booking_reminder F-044 scheduler job, same claimDispatch/markDispatched/
+failDispatch dedup mechanism the existing jobs already use, precedent mirrored from
+slot_release_reminder's reminderTime/cutoffTime check. Scoped to guest bookings only
+(isMemberBooking: false) per Bala's call. Fires once per booking when now is between
+window.startTime - 3h and window.startTime, self-healing a missed tick, never firing after a slot
+has started. intervalSeconds: 300. Channel push-only, same SMS-deferred treatment as F-321. Real
+evidence: a real dev-stack tick against a real CONFIRMED guest booking produced a real SENT
+ScheduledJobDispatch row and a real sent NotificationRequest in one tick; a second consecutive real
+tick reprocessed all in-window candidates and dispatched zero (genuine dedup). New regression
+coverage proves dedup/self-healing/scope-exclusion deterministically.
+Confirmed-ID: F-322
+Confirmed: 30 Sep 2026
