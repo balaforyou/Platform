@@ -2431,3 +2431,25 @@ rather than deleted. Real evidence: before/after screenshots in both themes on t
 (fresh off the real post-#118-merge main). Whole-app typecheck and build clean.
 Confirmed-ID: F-319
 Confirmed: 29 Sep 2026
+
+### receipt-pdf-multislot-time-row-drops-windows
+Batch: apps/guest-member-pwa, 30 Sep 2026
+Surfaced: Bala reviewing a real downloaded booking receipt PDF, asking whether a multi-slot/
+multi-court booking would render correctly. Chief-assigned same day.
+Description: buildBookingRows (receipt.ts) built the Time row from booking.window alone, never
+reading booking.childBookings -- a multi-window chain booking's PDF receipt silently dropped every
+window after the first, while Amount Paid (F-317's resolvedPrice) correctly showed the full chain
+total. A related premise from the initial relay -- that court can differ per window within one
+chain -- was independently checked and corrected before the fix: slot-engine computes one
+assignPooledCourt result per chain and reuses it for every window; the Court row was already
+correct and stayed untouched.
+Resolution: Time row now uses formatWindowRangesLabel([{window: booking.window}, ...childBookings],
+...), the identical helper/call shape BookingConfirmation.tsx/BookingPay.tsx/BookingHistory.tsx
+already use -- no backend change. Both downloadBookingReceipt and downloadCancellationReceipt share
+this helper and are both fixed. Real evidence: actual downloaded PDF byte content (Tj text-draw
+operators extracted directly from the PDF stream) confirmed pre-fix Time: "09:00 AM - 10:00 AM"
+only for a real two-window Rs 800 chain booking, post-fix Time: "09:00 AM - 10:00 AM, 10:00 AM -
+11:00 AM" for a fresh equivalent chain; single-window receipt confirmed unchanged; cancellation
+receipt on a multi-window chain confirmed fixed the same way. Whole-app typecheck and build clean.
+Confirmed-ID: F-320
+Confirmed: 30 Sep 2026
