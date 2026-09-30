@@ -343,6 +343,10 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
         },
       });
 
+      // Defensive shape check before it goes into a URL -- this is always a real Prisma-generated
+      // id from the db.booking.create() call above, never external input, but asserting the
+      // shape here is genuinely useful (a malformed id here would otherwise 404 confusingly).
+      if (!/^[0-9a-f-]{36}$/i.test(booking.id)) throw new Error(`Unexpected booking id shape: ${booking.id}`);
       const confirmRes = await fetch(`${baseUrl}/bookings/${booking.id}/confirm`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${internalKey}` },
@@ -361,41 +365,30 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
     async run() {
       const pool = await makePool('f322-reminder', 30);
 
-      // Guest booking, slot 2h from now -- inside the 3h reminder window, should dispatch.
-      const guestStart = new Date(Date.now() + 2 * 60 * 60 * 1000);
-      const guestWindow = await db.availabilityWindow.create({
-        data: { resourcePoolId: pool.id, startTime: guestStart, endTime: new Date(guestStart.getTime() + 3600000), capacity: 4 },
-      });
-      const guestBooking = await db.booking.create({
-        data: {
-          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: guestWindow.id,
-          userId: 'f322-guest-user', status: BookingStatus.CONFIRMED, heldUntil: new Date(), isMemberBooking: false, price: 400,
-        },
-      });
+      // Same fixture shape three times (window + CONFIRMED booking), differing only in
+      // startTime/isMemberBooking -- extracted to keep each real scenario a single real line
+      // below rather than three copies of the same six-line block.
+      const makeConfirmedBooking = async (label: string, startTime: Date, isMemberBooking: boolean) => {
+        const window = await db.availabilityWindow.create({
+          data: { resourcePoolId: pool.id, startTime, endTime: new Date(startTime.getTime() + 3600000), capacity: 4 },
+        });
+        return db.booking.create({
+          data: {
+            tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+            userId: `f322-${label}-user`, status: BookingStatus.CONFIRMED, heldUntil: new Date(),
+            isMemberBooking, price: isMemberBooking ? 0 : 400,
+          },
+        });
+      };
 
+      const twoHoursOut = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      // Guest booking 2h out -- inside the 3h window, should dispatch.
+      const guestBooking = await makeConfirmedBooking('guest', twoHoursOut, false);
       // Member booking, same lead time -- must NOT get this reminder (scope: guest bookings only).
-      const memberStart = new Date(Date.now() + 2 * 60 * 60 * 1000);
-      const memberWindow = await db.availabilityWindow.create({
-        data: { resourcePoolId: pool.id, startTime: memberStart, endTime: new Date(memberStart.getTime() + 3600000), capacity: 4 },
-      });
-      const memberBooking = await db.booking.create({
-        data: {
-          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: memberWindow.id,
-          userId: 'f322-member-user', status: BookingStatus.CONFIRMED, heldUntil: new Date(), isMemberBooking: true, price: 0,
-        },
-      });
-
+      const memberBooking = await makeConfirmedBooking('member', twoHoursOut, true);
       // Guest booking whose slot already started -- must NOT get a reminder (self-healing boundary).
-      const pastStart = new Date(Date.now() - 5 * 60 * 1000);
-      const pastWindow = await db.availabilityWindow.create({
-        data: { resourcePoolId: pool.id, startTime: pastStart, endTime: new Date(pastStart.getTime() + 3600000), capacity: 4 },
-      });
-      const pastBooking = await db.booking.create({
-        data: {
-          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: pastWindow.id,
-          userId: 'f322-past-user', status: BookingStatus.CONFIRMED, heldUntil: new Date(), isMemberBooking: false, price: 400,
-        },
-      });
+      const pastBooking = await makeConfirmedBooking('past', fiveMinAgo, false);
 
       await forceJobsDue(['guest_booking_reminder']);
       const tick1 = await tick();
