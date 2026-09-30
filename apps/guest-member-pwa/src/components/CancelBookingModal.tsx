@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiRequest, useTenant } from '@badminton/ui-shared';
 import { useAuth } from '@badminton/ui-shared';
-import { ShieldAlert, X, Download, CheckCircle } from 'lucide-react';
+import { ShieldAlert, X, Download, CheckCircle, Activity } from 'lucide-react';
 import LoadingState from './ui/LoadingState';
 
 interface CancelBookingModalProps {
@@ -32,6 +32,10 @@ export default function CancelBookingModal({ bookingId, booking, branchAbout, on
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Follow-up to F-236: the PDF render (jsPDF, ~230KB gzip dynamic import) is real, visible
+  // work with no feedback today -- same spinner-in-button pattern BookingHistory.tsx's own
+  // Receipt button already has.
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   // F-235 Slice G: once cancellation actually succeeds, hold the modal open one more beat to
   // offer the new PDF receipt (design brief §0.6) rather than closing immediately -- onSuccess()
   // (which refreshes the list and flips the status badge to Cancelled) still fires right away.
@@ -141,15 +145,20 @@ export default function CancelBookingModal({ bookingId, booking, branchAbout, on
               <button
                 type="button"
                 id="download-cancellation-receipt-btn"
-                onClick={() => {
-                  import('../lib/receipt').then(({ downloadCancellationReceipt }) => {
-                    downloadCancellationReceipt(booking, branchAbout, preview, tenant?.appName || tenant?.name);
-                  });
+                disabled={isDownloadingReceipt}
+                onClick={async () => {
+                  setIsDownloadingReceipt(true);
+                  try {
+                    const { downloadCancellationReceipt } = await import('../lib/receipt');
+                    await downloadCancellationReceipt(booking, branchAbout, preview, tenant?.appName || tenant?.name);
+                  } finally {
+                    setIsDownloadingReceipt(false);
+                  }
                 }}
-                className="w-full py-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 disabled:opacity-60"
                 style={{ background: 'var(--color-accent-400)', color: 'var(--color-neutral-900)' }}
               >
-                <Download className="h-4 w-4" />
+                {isDownloadingReceipt ? <Activity className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 <span>Download Cancellation Receipt (PDF)</span>
               </button>
             )}

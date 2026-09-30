@@ -148,36 +148,10 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(fetch(request).catch(() => offlineResponse(request)));
 });
 
-/* ── F-044 Phase B: client-side notification half, ready ahead of any backend push ── */
-
-self.addEventListener('push', (event) => {
-  let payload = { title: 'Slotflow Admin', body: 'You have a new notification.', data: {} };
-  if (event.data) {
-    try {
-      payload = { ...payload, ...event.data.json() };
-    } catch {
-      payload.body = event.data.text();
-    }
-  }
-  event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      data: payload.data || {},
-    }),
-  );
-});
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || '/';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if (client.url.includes(target) && 'focus' in client) return client.focus();
-      }
-      return self.clients.openWindow(target);
-    }),
-  );
-});
+/* ── F-044 Phase B: client-side notification half, ready ahead of any backend push ──
+   The real push/notificationclick handler lives in scripts/shared-sw-push-handler.js (one
+   source, not duplicated across apps -- SonarCloud flagged this exact block as 45.5%
+   duplication when guest-member-pwa's own copy was added by F-323/F-236). This marker is
+   replaced with the real code in dist/sw.js at build time by
+   scripts/inject-push-sw-handler.mjs (mirrors stamp-sw.mjs's __BUILD_SHA__ pattern below). */
+/* __PUSH_NOTIFICATION_HANDLER__ */

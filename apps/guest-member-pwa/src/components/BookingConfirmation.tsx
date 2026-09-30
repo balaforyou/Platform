@@ -17,6 +17,10 @@ export default function BookingConfirmation() {
   const [branchAbout, setBranchAbout] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Follow-up to F-236: the PDF render (jsPDF + html2canvas) is real, visible work with no
+  // feedback today -- a guest clicking this had no idea it was doing anything until the file
+  // appeared. Same spinner-in-button pattern BookingHistory.tsx's own Receipt button already has.
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
 
   // Poll for CONFIRMED status (since webhook capture is asynchronous in background)
   useEffect(() => {
@@ -220,18 +224,23 @@ export default function BookingConfirmation() {
           <button
             type="button"
             id="download-receipt-btn"
-            onClick={() => {
+            disabled={isDownloadingReceipt}
+            onClick={async () => {
               // Dynamic import: jsPDF and its optional html2canvas/canvg dependencies (~230KB
               // gzip) only load once a guest actually clicks this, not for every guest who
               // reaches the confirmation screen.
-              import('../lib/receipt').then(({ downloadBookingReceipt }) => {
-                downloadBookingReceipt(booking, branchAbout, tenant?.appName || tenant?.name);
-              });
+              setIsDownloadingReceipt(true);
+              try {
+                const { downloadBookingReceipt } = await import('../lib/receipt');
+                await downloadBookingReceipt(booking, branchAbout, tenant?.appName || tenant?.name);
+              } finally {
+                setIsDownloadingReceipt(false);
+              }
             }}
-            className="w-full min-h-[50px] flex items-center justify-center gap-2 font-bold text-[14px]"
+            className="w-full min-h-[50px] flex items-center justify-center gap-2 font-bold text-[14px] disabled:opacity-60"
             style={{ background: 'var(--color-accent-400)', color: 'var(--color-neutral-900)', border: 'none', borderRadius: '14px' }}
           >
-            <Download className="h-4 w-4" />
+            {isDownloadingReceipt ? <Activity className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             <span>Download Receipt (PDF)</span>
           </button>
         )}

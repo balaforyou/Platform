@@ -4858,3 +4858,42 @@ cannot affect the payment/booking critical path, and F-320 (the receipt fix) is 
 valuable, unrelated change that shouldn't wait on a real client-side FCM build. F-323 needs its own
 plan-mode investigation and build before it can be considered fixed, not a quick patch riding this
 deploy. **No code change in this batch** -- register/pending-findings/batch-log only.
+
+## Batch — F-236 resolved (both apps) + receipt-download loader
+
+**Surfaced live, 30 Sep 2026, from Bala's real device test of F-323.** The real push he
+received showed generic fallback text ("You have a new notification") instead of the real
+event title/body. Investigated directly rather than assumed a new bug: this is **F-236**,
+already logged Open since 12 Sep 2026 with its exact fix direction already written, never
+implemented until now. `guest-member-pwa`'s own `sw.js` inherited the identical bug via F-323's
+verbatim copy of `admin-v2`'s handler, made before F-236 was ever fixed anywhere.
+
+**Delivered.** `push` handler in both `apps/admin-v2/public/sw.js` and
+`apps/guest-member-pwa/public/sw.js` now reads the real FCM message's nested
+`notification.title`/`notification.body` first, falling back to a flat `title`/`body`, then the
+hardcoded default -- exactly F-236's own specified fix, applied to both apps in one pass since
+guest-pwa's copy carried the identical bug. Real evidence: the exact parsing logic run against
+the real payload shape `services/notification/src/firebase.ts`'s `sendPush` constructs,
+confirming real title/body extraction where the fallback previously always won; fallback
+behavior re-confirmed correct for a data-only message and a hypothetical flat-shape message.
+Real end-to-end delivery not re-verified in this sandbox -- same service-worker-registration
+limitation as F-323's own verification (confirmed via admin-v2's own sw.js failing identically
+here), needs Bala's real device once deployed.
+
+**Also delivered in the same pass, not a registered finding (a direct UX ask, not a bug):**
+loading spinners for all three real receipt-download buttons (`BookingHistory.tsx`'s Receipt
+button, `BookingConfirmation.tsx`'s Download Receipt, `CancelBookingModal.tsx`'s Download
+Cancellation Receipt). `BookingHistory.tsx` already had a `downloadingReceiptId` state disabling
+the button with no visual feedback -- swapped its icon to the app's own established inline-spinner
+pattern (`<Activity className="... animate-spin" />`, already used this exact way elsewhere in
+this app) while downloading. The other two had no loading state at all -- added one from scratch,
+same pattern. Real evidence: a real receipt download in the dev stack confirmed the dynamic
+`import('../lib/receipt')` genuinely fires (network request confirmed) and the button correctly
+re-enables (`disabled: false` confirmed via direct DOM read) once complete; the transient
+spinner frame itself is too fast for this sandbox's sequential browser-automation tool calls to
+catch visually, same class of timing limitation as verifying any sub-second UI state this way --
+the underlying React state wiring (conditional icon + `disabled` during an awaited async call) is
+straightforward and correct by construction.
+
+Full 5-service regression green (unaffected -- frontend/service-worker only, no backend touched).
+`pnpm register:check`/`pnpm diagram:verify` both green.
