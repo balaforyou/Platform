@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Home as HomeIcon, CalendarCheck2, User as UserIcon } from 'lucide-react';
 import { useAuth } from '@badminton/ui-shared';
 import AccountSheet from './ui/AccountSheet';
 import Avatar from './ui/Avatar';
 import PwaInstallPrompt from './PwaInstallPrompt';
+import { currentPermission, requestAndRegisterPushToken } from '../lib/firebase';
 import './Shell.css';
 
 interface NavItem {
@@ -41,12 +42,25 @@ function isActive(pathname: string, matchPaths: string[]): boolean {
 // canary (member-self-confirm.spec.ts, f041-verification.spec.ts) that clicks #logout-btn today.
 export default function Shell() {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const [accountOpen, setAccountOpen] = useState(false);
   // F-248: real Google name/photo, falling back to the generic icon when neither exists (a
   // phone-only guest who never signed in with Google) -- same fallback-chain precedent
   // admin-v2's AppShell.tsx already established for F-219.
   const avatarName = user?.displayName || user?.name || user?.email || null;
+
+  // F-323: if permission was already granted in a prior session, silently re-register on load.
+  // Same idempotent-upsert reasoning as admin-v2's AppShell.tsx:39-48 (the modular Firebase SDK
+  // has no onTokenRefresh event; POST /devices/register's upsert on the unique token covers
+  // token rotation regardless). Shell wraps every protected route, unlike MainDashboard which
+  // unmounts on navigation, so this is the one place that actually runs on every real session.
+  useEffect(() => {
+    if (currentPermission() === 'granted' && user?.userId) {
+      requestAndRegisterPushToken(user.userId, accessToken).catch((err) => {
+        console.error('Silent push token re-registration failed:', err);
+      });
+    }
+  }, [user?.userId]);
 
   return (
     <div className="gpwa-shell">

@@ -35,6 +35,15 @@ ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
 ARG VITE_FIREBASE_VAPID_KEY
 ENV VITE_FIREBASE_VAPID_KEY=$VITE_FIREBASE_VAPID_KEY
 
+# F-323: guest-member-pwa registered as its own Web App (Bala's call, Option A) under the SAME
+# Firebase project as admin-v2 above -- apiKey/authDomain/projectId/storageBucket/
+# messagingSenderId/vapidKey are all project-level and correctly shared as-is; only appId differs
+# per Web App registration. Docker ENV has no "previous value" to restore once overwritten, so
+# admin-v2's real appId is captured under its own name here, before VITE_FIREBASE_APP_ID gets
+# temporarily repointed at guest-pwa's value for its own build line below.
+ENV VITE_ADMIN_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
+ARG VITE_GUEST_FIREBASE_APP_ID
+
 # F-077: the SHA this bundle was built from, emitted as a static asset per app below.
 ARG GIT_SHA=unknown
 
@@ -45,7 +54,11 @@ COPY apps ./apps
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @badminton/shared-types run build
 RUN pnpm --filter @badminton/ui-shared run build
+# F-323: guest-pwa's own appId for the duration of its build only.
+ENV VITE_FIREBASE_APP_ID=$VITE_GUEST_FIREBASE_APP_ID
 RUN pnpm --filter @badminton/guest-member-pwa run build
+# Reset to admin-v2's real appId (captured above) before its own build below.
+ENV VITE_FIREBASE_APP_ID=$VITE_ADMIN_FIREBASE_APP_ID
 RUN pnpm --filter @badminton/admin-web run build
 # GIT_SHA passed as env (not just the ARG) so admin-v2's scripts/stamp-sw.mjs bakes the
 # same SHA into dist/sw.js's cache name that the version.json line below stamps — one

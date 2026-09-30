@@ -180,6 +180,9 @@ services:
         VITE_FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID}
         VITE_FIREBASE_APP_ID: ${FIREBASE_APP_ID}
         VITE_FIREBASE_VAPID_KEY: ${FIREBASE_VAPID_KEY}
+        # F-323: guest-member-pwa's own Web App registration under the same Firebase project
+        # (Bala's call, Option A) -- separate appId, same project-level config above.
+        VITE_GUEST_FIREBASE_APP_ID: ${GUEST_FIREBASE_APP_ID}
         GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     ports:
