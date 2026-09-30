@@ -50,6 +50,9 @@ ARG GIT_SHA=unknown
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY packages ./packages
 COPY apps ./apps
+# F-236 dup-fix: guest-member-pwa/admin-v2's build scripts call ../../scripts/inject-push-sw-handler.mjs
+# (root-level, shared between the two apps) -- must be present in the image for that build step.
+COPY scripts ./scripts
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @badminton/shared-types run build
