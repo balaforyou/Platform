@@ -5135,18 +5135,43 @@ server.post('/bookings/:id/confirm', async (request, reply) => {
     throw new Error('Only held bookings can be confirmed');
   }
 
-  return await prisma.$transaction(async (tx: any) => {
-    const updated = await tx.booking.update({
+  const updated = await prisma.$transaction(async (tx: any) => {
+    const result = await tx.booking.update({
       where: { id },
       data: { status: BookingStatus.CONFIRMED },
+      include: { window: true, resourcePool: true },
     });
     // F-183: cascade the identical transition to every child, atomically with the parent.
     await tx.booking.updateMany({
       where: { parentBookingId: id },
       data: { status: BookingStatus.CONFIRMED },
     });
-    return updated;
+    return result;
   });
+
+  // F-321: fire the payment-confirmed notification. Only ever reached via the real
+  // transaction above -- the idempotent early-return for an already-CONFIRMED booking
+  // sits before this point, so a webhook retry (or any other repeat call) never double-fires
+  // this. Deliberately NOT awaited: this route sits on the real Razorpay webhook/verify-payment
+  // path, and a notification-service outage must never delay or fail a payment confirmation.
+  // Same fire-and-forget principle resolveAndQueue itself already uses internally (setImmediate).
+  fetch(`${notificationUrl}/notifications/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+    body: JSON.stringify({
+      tenantId: updated.tenantId,
+      recipient: updated.userId,
+      event_type: 'booking_confirmed',
+      variables: {
+        bookingId: updated.id,
+        startTime: updated.window.startTime,
+        poolName: updated.resourcePool.name,
+        price: updated.price,
+      },
+    }),
+  }).catch((e: any) => server.log.warn(`booking_confirmed notification failed for booking ${id}: ${e?.message ?? e}`));
+
+  return updated;
 });
 
 // Check-in (CONFIRMED → CHECKED_IN).
@@ -7075,7 +7100,10 @@ const paymentConfirmReconciliationJob: JobDefinition = {
     let processed = 0;
     let recovered = 0;
     for (const intent of stuckCandidates) {
-      const booking = await prisma.booking.findUnique({ where: { id: intent.referenceId } });
+      const booking = await prisma.booking.findUnique({
+        where: { id: intent.referenceId },
+        include: { window: true, resourcePool: true },
+      });
       // Only a genuinely stuck HELD booking is this job's business -- CONFIRMED means already
       // fine, CANCELLED/RELEASED_NO_SHOW means the booking is no longer valid and
       // force-confirming it would be wrong (a separate financial-reconciliation question, out
@@ -7101,6 +7129,24 @@ const paymentConfirmReconciliationJob: JobDefinition = {
           await tx.booking.update({ where: { id: booking.id }, data: { status: BookingStatus.CONFIRMED } });
           await tx.booking.updateMany({ where: { parentBookingId: booking.id }, data: { status: BookingStatus.CONFIRMED } });
         });
+        // F-321: this job is the one real path that bypasses /bookings/:id/confirm's own
+        // notification fire (see comment there) -- reused inline for the same reason the
+        // rest of this job is inline, not a second delivery mechanism.
+        fetch(`${notificationUrl}/notifications/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+          body: JSON.stringify({
+            tenantId: booking.tenantId,
+            recipient: booking.userId,
+            event_type: 'booking_confirmed',
+            variables: {
+              bookingId: booking.id,
+              startTime: booking.window.startTime,
+              poolName: booking.resourcePool.name,
+              price: booking.price,
+            },
+          }),
+        }).catch((e: any) => server.log.warn(`booking_confirmed notification failed for booking ${booking.id}: ${e?.message ?? e}`));
         await ctx.store.markDispatched('payment_confirm_reconciliation', intent.id);
         recovered++;
       } catch (e: any) {
@@ -7111,9 +7157,77 @@ const paymentConfirmReconciliationJob: JobDefinition = {
   },
 };
 
+// F-322: 3-hours-before-slot reminder for guest (non-member) bookings. Member bookings are
+// deliberately excluded -- they already have their own attendance-confirmation reminder
+// (slot_release_reminder above), a different concern (confirm-or-lose-the-slot, not "your
+// match is soon"). 300s cadence, coarser than held_booking_expiry's 60s: a few minutes of
+// slack on a 3-hour lead time is irrelevant, and it halves unnecessary DB polling.
+const guestBookingReminderJob: JobDefinition = {
+  name: 'guest_booking_reminder',
+  schedule: { everySeconds: 300 },
+  minimumViableWindowSeconds: 600,
+  async handler(ctx) {
+    const now = ctx.now;
+    const threeHoursFromNow = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+
+    const candidates = await prisma.booking.findMany({
+      where: {
+        status: BookingStatus.CONFIRMED,
+        isMemberBooking: false,
+        parentBookingId: null,
+        window: { startTime: { gte: now, lte: threeHoursFromNow } },
+      },
+      include: { window: true, resourcePool: true },
+    });
+
+    let processed = 0;
+    let remindersDispatched = 0;
+    for (const booking of candidates) {
+      processed++;
+      const startTime = booking.window.startTime;
+      const reminderTime = new Date(startTime.getTime() - 3 * 60 * 60 * 1000);
+      // Same reminderTime/cutoffTime shape as slot_release_reminder above: fire anytime from
+      // reminderTime up to the slot actually starting (self-heals a missed tick), never after
+      // the slot has begun (a downed job never sends a stale reminder for a match already
+      // underway).
+      if (now < reminderTime || now >= startTime) continue;
+
+      const claimed = await ctx.store.claimDispatch('guest_booking_reminder', {
+        dedupKey: booking.id,
+        tenantId: booking.tenantId,
+        subjectId: booking.userId,
+        occurrenceAt: startTime,
+      });
+      if (!claimed) continue;
+
+      try {
+        await fetch(`${notificationUrl}/notifications/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${internalKey}` },
+          body: JSON.stringify({
+            tenantId: booking.tenantId,
+            recipient: booking.userId,
+            event_type: 'guest_booking_reminder',
+            variables: {
+              bookingId: booking.id,
+              startTime,
+              poolName: booking.resourcePool.name,
+            },
+          }),
+        });
+        await ctx.store.markDispatched('guest_booking_reminder', booking.id);
+        remindersDispatched++;
+      } catch (e: any) {
+        await ctx.store.failDispatch('guest_booking_reminder', booking.id, String(e?.message ?? e));
+      }
+    }
+    return { processed, remindersDispatched };
+  },
+};
+
 const jobScheduler = createScheduler({
   store: createSqlScheduledJobStore(new PrismaSqlExecutor(prisma)),
-  jobs: [heldBookingExpiryJob, memberAssignmentSweepJob, batchRenewalReminderJob, paymentConfirmReconciliationJob],
+  jobs: [heldBookingExpiryJob, memberAssignmentSweepJob, batchRenewalReminderJob, paymentConfirmReconciliationJob, guestBookingReminderJob],
 });
 
 const SCHEDULED_JOB_SEEDS: { name: string; intervalSeconds: number }[] = [
@@ -7121,6 +7235,7 @@ const SCHEDULED_JOB_SEEDS: { name: string; intervalSeconds: number }[] = [
   { name: 'member_assignment_sweep', intervalSeconds: 60 },
   { name: 'batch_renewal_reminder', intervalSeconds: 3600 },
   { name: 'payment_confirm_reconciliation', intervalSeconds: 60 },
+  { name: 'guest_booking_reminder', intervalSeconds: 300 },
 ];
 
 // Idempotent -- safe to call on every startup. A missing row (first deploy, or one deleted by

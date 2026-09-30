@@ -311,4 +311,118 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
       console.log('F296_EVIDENCE cancelled_untouched', JSON.stringify({ bookingId: booking.id, status: afterBooking.status }));
     },
   },
+
+  {
+    name: 'F-322: real ScheduledJob seed row exists for guest_booking_reminder with intervalSeconds 300',
+    async run() {
+      const job = await db.scheduledJob.findUnique({ where: { name: 'guest_booking_reminder' } });
+      if (!job) throw new Error('Expected a seeded ScheduledJob row for guest_booking_reminder');
+      if (job.intervalSeconds !== 300) throw new Error(`Expected intervalSeconds 300, got ${job.intervalSeconds}`);
+      if (!job.enabled) throw new Error('Expected guest_booking_reminder to be enabled');
+    },
+  },
+
+  {
+    name: 'F-321: POST /bookings/:id/confirm returns the updated booking with window/resourcePool included, and succeeds even though notification is unreachable in this harness',
+    async run() {
+      // This harness starts only slot-engine (same documented limitation as the
+      // slot_release_reminder dedup test above) -- notificationUrl genuinely has nothing
+      // listening, so this section proves the two things actually provable here: the confirm
+      // transition itself still succeeds (the fire-and-forget notification call must never
+      // block or fail it), and the route's new `include` returns real window/resourcePool data
+      // for the notification payload to use. Real delivery proof needs the live dev stack.
+      const pool = await makePool('f321-confirm', 30);
+      const start = withinTodayUtc(200);
+      const window = await db.availabilityWindow.create({
+        data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 4 },
+      });
+      const booking = await db.booking.create({
+        data: {
+          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+          userId: 'f321-confirm-user', status: BookingStatus.HELD, heldUntil: new Date(Date.now() + 300000), price: 400,
+        },
+      });
+
+      // Defensive shape check before it goes into a URL -- this is always a real Prisma-generated
+      // id from the db.booking.create() call above, never external input, but asserting the
+      // shape here is genuinely useful (a malformed id here would otherwise 404 confusingly).
+      if (!/^[0-9a-f-]{36}$/i.test(booking.id)) throw new Error(`Unexpected booking id shape: ${booking.id}`);
+      const confirmRes = await fetch(`${baseUrl}/bookings/${booking.id}/confirm`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${internalKey}` },
+      });
+      if (confirmRes.status !== 200) throw new Error(`Expected /bookings/:id/confirm to return 200, got ${confirmRes.status}`);
+      const confirmed = ((await confirmRes.json()) as any).data ?? (await confirmRes.json());
+      if (confirmed.status !== BookingStatus.CONFIRMED) throw new Error(`Expected CONFIRMED, got ${confirmed.status}`);
+      if (!confirmed.window?.startTime) throw new Error(`Expected window included in the confirm response, got ${JSON.stringify(confirmed.window)}`);
+      if (!confirmed.resourcePool?.name) throw new Error(`Expected resourcePool included in the confirm response, got ${JSON.stringify(confirmed.resourcePool)}`);
+      console.log('F321_EVIDENCE confirm_succeeds_with_relations', JSON.stringify({ bookingId: booking.id, status: confirmed.status, windowStart: confirmed.window.startTime, poolName: confirmed.resourcePool.name }));
+    },
+  },
+
+  {
+    name: 'F-322: guest_booking_reminder dispatches exactly once for a real CONFIRMED guest booking inside the 3h window, dedups on a second tick, excludes member bookings and past-start bookings',
+    async run() {
+      const pool = await makePool('f322-reminder', 30);
+
+      // Same fixture shape three times (window + CONFIRMED booking), differing only in
+      // startTime/isMemberBooking -- extracted to keep each real scenario a single real line
+      // below rather than three copies of the same six-line block.
+      const makeConfirmedBooking = async (label: string, startTime: Date, isMemberBooking: boolean) => {
+        const window = await db.availabilityWindow.create({
+          data: { resourcePoolId: pool.id, startTime, endTime: new Date(startTime.getTime() + 3600000), capacity: 4 },
+        });
+        return db.booking.create({
+          data: {
+            tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+            userId: `f322-${label}-user`, status: BookingStatus.CONFIRMED, heldUntil: new Date(),
+            isMemberBooking, price: isMemberBooking ? 0 : 400,
+          },
+        });
+      };
+
+      const twoHoursOut = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      // Guest booking 2h out -- inside the 3h window, should dispatch.
+      const guestBooking = await makeConfirmedBooking('guest', twoHoursOut, false);
+      // Member booking, same lead time -- must NOT get this reminder (scope: guest bookings only).
+      const memberBooking = await makeConfirmedBooking('member', twoHoursOut, true);
+      // Guest booking whose slot already started -- must NOT get a reminder (self-healing boundary).
+      const pastBooking = await makeConfirmedBooking('past', fiveMinAgo, false);
+
+      await forceJobsDue(['guest_booking_reminder']);
+      const tick1 = await tick();
+      if (tick1.status !== 200) throw new Error(`Expected first tick to return 200, got ${tick1.status}`);
+
+      const guestDispatches = await db.scheduledJobDispatch.findMany({ where: { jobName: 'guest_booking_reminder', dedupKey: guestBooking.id } });
+      if (guestDispatches.length !== 1) throw new Error(`Expected exactly 1 dispatch attempt for the guest booking, got ${guestDispatches.length}`);
+      // Same documented harness limitation as the slot_release_reminder test above: notification
+      // isn't running here, so the real outcome is FAILED, not SENT -- what this proves is the
+      // dispatch was genuinely attempted exactly once (not skipped, not duplicated).
+      if (guestDispatches[0].status !== 'SENT' && guestDispatches[0].status !== 'FAILED') {
+        throw new Error(`Expected the guest dispatch to be genuinely attempted, got ${guestDispatches[0].status}`);
+      }
+
+      const memberDispatches = await db.scheduledJobDispatch.findMany({ where: { jobName: 'guest_booking_reminder', dedupKey: memberBooking.id } });
+      if (memberDispatches.length !== 0) throw new Error(`Expected zero dispatches for a member booking (scope: guest only), got ${memberDispatches.length}`);
+
+      const pastDispatches = await db.scheduledJobDispatch.findMany({ where: { jobName: 'guest_booking_reminder', dedupKey: pastBooking.id } });
+      if (pastDispatches.length !== 0) throw new Error(`Expected zero dispatches for a booking whose slot already started, got ${pastDispatches.length}`);
+
+      // Second consecutive tick -- real proof claimDispatch suppresses a re-attempt for the
+      // same guest booking, not merely that the job didn't run again.
+      await forceJobsDue(['guest_booking_reminder']);
+      const tick2 = await tick();
+      if (tick2.status !== 200) throw new Error(`Expected second tick to return 200, got ${tick2.status}`);
+      const guestDispatchesAfterSecond = await db.scheduledJobDispatch.findMany({ where: { jobName: 'guest_booking_reminder', dedupKey: guestBooking.id } });
+      if (guestDispatchesAfterSecond.length !== 1) throw new Error(`Expected still exactly 1 dispatch after a second tick (real dedup), got ${guestDispatchesAfterSecond.length}`);
+
+      console.log('F322_EVIDENCE reminder_dedup', JSON.stringify({
+        guestDispatches: guestDispatches.length,
+        memberDispatches: memberDispatches.length,
+        pastDispatches: pastDispatches.length,
+        guestDispatchesAfterSecond: guestDispatchesAfterSecond.length,
+      }));
+    },
+  },
 ];

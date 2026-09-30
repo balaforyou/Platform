@@ -36,13 +36,16 @@ export const dispatchAndRoutingSections: Section<NotificationContext>[] = [
       });
       assert(regRes.ok, `Device register should succeed, got ${regRes.status}`);
 
+      // F-321: was booking_confirmed, which is now push-only (not push_or_sms) -- switched to
+      // refund_processed, still genuinely push_or_sms, so this test keeps exercising the
+      // fallback rule its own name/description claims, not booking_confirmed's new fixed policy.
       const sendRes = await fetch(`${notificationUrl}/notifications/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({
           tenantId: ctx.tenantId,
           recipient: ctx.userId,
-          event_type: 'booking_confirmed',
+          event_type: 'refund_processed',
           variables: { bookingId: 'bk-test-001' },
         }),
       });
@@ -146,6 +149,95 @@ export const dispatchAndRoutingSections: Section<NotificationContext>[] = [
       const paymentHealth = await fetch(`${paymentUrl}/health`);
       assert(paymentHealth.ok, `Payment service should be healthy, got ${paymentHealth.status}`);
       console.log(`Payment service health: ${paymentHealth.status}`);
+    },
+  },
+
+  {
+    // F-321: booking_confirmed is now push-only, not push_or_sms -- proven by a recipient with
+    // NO device token queuing zero requests (a push_or_sms policy would fall back to sms here).
+    name: 'F-321: booking_confirmed is push-only (no device token -> zero requests, no sms fallback)',
+    async run(ctx) {
+      const sendRes = await fetch(`${notificationUrl}/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({
+          tenantId: ctx.tenantId,
+          recipient: 'f321-no-device-token-user',
+          event_type: 'booking_confirmed',
+          variables: { bookingId: 'bk-f321-test' },
+        }),
+      });
+      assert(sendRes.status === 202, `Expected 202, got ${sendRes.status}`);
+      const sendBody = (await sendRes.json()) as any;
+      const requests = sendBody.data?.requests ?? sendBody.requests;
+      assert(requests.length === 0, `Expected zero requests (no push token, no sms fallback), got ${requests.length}`);
+
+      // Now register a device token for a FRESH, isolated UUID recipient and confirm it DOES
+      // dispatch via push. Deliberately not ctx.userId: sections share DB state, and ctx.userId
+      // already has device tokens registered by earlier sections in this same run, which would
+      // make an "exactly one" assertion fail for accumulation reasons, not policy reasons.
+      const freshRecipient = '11111111-2222-3333-4444-f32100000001';
+      const regRes = await fetch(`${notificationUrl}/devices/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({ userId: freshRecipient, token: 'fcm-f321-test-token' }),
+      });
+      assert(regRes.ok, `Device register should succeed, got ${regRes.status}`);
+
+      const sendRes2 = await fetch(`${notificationUrl}/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({
+          tenantId: ctx.tenantId,
+          recipient: freshRecipient,
+          event_type: 'booking_confirmed',
+          variables: { bookingId: 'bk-f321-test-2', startTime: new Date().toISOString(), poolName: 'Test Pool', price: 400 },
+        }),
+      });
+      const sendBody2 = (await sendRes2.json()) as any;
+      const requests2 = sendBody2.data?.requests ?? sendBody2.requests;
+      assert(requests2.length === 1 && requests2[0].channel === 'push', 'Expected exactly one push request with a real device token');
+
+      await processQueue();
+      const sentRecord = await db.notificationRequest.findUnique({ where: { id: requests2[0].id } });
+      assert(sentRecord?.status === 'sent', `Expected status=sent, got ${sentRecord?.status}`);
+      console.log('F-321 booking_confirmed push-only dispatch confirmed:', JSON.stringify({ noTokenRequests: requests.length, withTokenChannel: requests2[0].channel, status: sentRecord?.status }));
+    },
+  },
+
+  {
+    // F-322: same push-only policy for the new 3h-before-slot guest reminder.
+    name: 'F-322: guest_booking_reminder is push-only',
+    async run(ctx) {
+      // Fresh, isolated UUID recipient -- same reasoning as F-321's test above: sections share
+      // DB state, so ctx.userId already carries device tokens from earlier sections.
+      const freshRecipient = '11111111-2222-3333-4444-f32200000001';
+      const regRes = await fetch(`${notificationUrl}/devices/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({ userId: freshRecipient, token: 'fcm-f322-test-token' }),
+      });
+      assert(regRes.ok, `Device register should succeed, got ${regRes.status}`);
+
+      const sendRes = await fetch(`${notificationUrl}/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
+        body: JSON.stringify({
+          tenantId: ctx.tenantId,
+          recipient: freshRecipient,
+          event_type: 'guest_booking_reminder',
+          variables: { bookingId: 'bk-f322-test', startTime: new Date().toISOString(), poolName: 'Test Pool' },
+        }),
+      });
+      assert(sendRes.status === 202, `Expected 202, got ${sendRes.status}`);
+      const sendBody = (await sendRes.json()) as any;
+      const requests = sendBody.data?.requests ?? sendBody.requests;
+      assert(requests.length === 1 && requests[0].channel === 'push', `Expected exactly one push request, got ${JSON.stringify(requests)}`);
+
+      await processQueue();
+      const sentRecord = await db.notificationRequest.findUnique({ where: { id: requests[0].id } });
+      assert(sentRecord?.status === 'sent', `Expected status=sent, got ${sentRecord?.status}`);
+      console.log('F-322 guest_booking_reminder push-only dispatch confirmed:', JSON.stringify({ channel: requests[0].channel, status: sentRecord?.status }));
     },
   },
 ];
