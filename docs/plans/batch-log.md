@@ -4809,3 +4809,52 @@ overlapping files with F-317/F-318/F-319.
   advanced by Batch 4.** Confirmed against the register: **0 of 36 grouped findings are Resolved.**
   Batch 1 predates that document and covered findings it lists under "Cleared before grouping", so no
   group was consumed by it.
+
+## Batch — F-323/F-324: guest-pwa has no FCM push client; DeviceToken upsert has no user isolation
+
+**Surfaced live, 30 Sep 2026, during F-321/F-322's post-merge deploy pre-flight.** Bala reported a
+real `booking_confirmed` push landing in admin-v2 instead of guest-member-pwa, with all reminders
+stopping once admin-v2 was uninstalled. Investigated directly by Bala/Chief rather than assumed a
+deploy/environment glitch, and described for Chief to assign per standard process (rule 5).
+
+**Root cause, confirmed via direct code read, not reasoning:** `apps/guest-member-pwa` has zero
+Firebase/FCM client integration anywhere -- no `firebase.ts`, no `POST /devices/register` call
+anywhere in the app, and `public/sw.js` has no `push`/`notification` event listener at all. F-321/
+F-322's backend dispatch is real and correct (confirmed live in production: 4 `NotificationRequest`
+rows, `channel: push, status: sent`), but there is no client-side path for a real guest to ever
+receive one. The specific symptom (landing in admin-v2) is explained by Bala being the tenant's
+single Owner/Member account -- his real guest bookings share `userId` with his already-registered
+admin-v2 device token, so the backend's dispatch is correct but the only receiver on that device is
+the wrong app.
+
+**Chief-assigned, split per rule 9 into two findings, not one:**
+- **F-323 (primary, severe):** guest-member-pwa needs its own real FCM client -- push-permission
+  opt-in UI, a real `/devices/register` call under the guest's own session, and an actual `push`
+  handler in its service worker. Without this, F-321/F-322 dispatch correctly but reach zero real
+  guests today.
+- **F-324 (secondary, real but distinct):** `DeviceToken.token`'s upsert is keyed on the raw token
+  string alone (`@unique`, no `userId`), so a second app or user registering the same physical
+  token silently reassigns it away from whoever had it -- the mechanism that let admin-v2's
+  registration absorb a notification meant for a different logical context.
+
+**Register correction, per this project's dated-note convention (never silently edit a landed
+Resolution):** F-321 and F-322's rows both got a **30 Sep 2026 note appended to their Description
+column** (Resolution is overwritten on every edit, per root `CLAUDE.md`'s own documented trap --
+a dated correction belongs in Description, matching the F-156 precedent) -- both explicitly now
+say "Delivered (backend dispatch only)" pending F-323. Neither row's original Resolution text was
+rewritten; both stay accurate as backend-dispatch claims, just no longer implying real guest
+delivery.
+
+**`pnpm register:check` and `pnpm diagram:verify` both green** after the edit (296 rows, Open 119/
+Resolved 177, all 67 tags agree). `docs/plans/pending-findings.md` carries both `Confirmed-ID`
+entries.
+
+**Deploy interaction -- Chief decision, not yet actioned by Claude Code:** F-323/F-324 do **not**
+block the already-prepped F-320/F-321/F-322 production promotion (`claude/chief-handover-gcp-
+deploy-f320-f321-f322-30sep.md`, target `41e1a768283eb7f9cdf435b202e6ae16d28c4fd8`). F-321/F-322's
+backend dispatch is inert-but-harmless for any guest without admin-v2 on the same device (same
+"gated-off, not broken" class as F-197's pre-credential push rollout), fires non-blocking and
+cannot affect the payment/booking critical path, and F-320 (the receipt fix) is an independently
+valuable, unrelated change that shouldn't wait on a real client-side FCM build. F-323 needs its own
+plan-mode investigation and build before it can be considered fixed, not a quick patch riding this
+deploy. **No code change in this batch** -- register/pending-findings/batch-log only.

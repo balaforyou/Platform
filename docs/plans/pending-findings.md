@@ -2492,3 +2492,47 @@ tick reprocessed all in-window candidates and dispatched zero (genuine dedup). N
 coverage proves dedup/self-healing/scope-exclusion deterministically.
 Confirmed-ID: F-322
 Confirmed: 30 Sep 2026
+
+### guest-pwa-has-no-fcm-push-client
+Batch: guest-member-pwa (client), notification (upstream dispatch), 30 Sep 2026
+Surfaced: live -- Bala reported a booking_confirmed push landing in admin-v2 instead of
+guest-member-pwa, with all reminders stopping once admin-v2 was uninstalled. Investigated
+directly rather than assumed; Chief-assigned alongside F-324 (primary half of a two-part split
+from one investigation, rule 9).
+Description: F-321/F-322's push notifications are real and correctly dispatched server-side, but
+guest-member-pwa has no client-side infrastructure to ever receive one. apps/guest-member-pwa has
+zero Firebase/FCM integration anywhere -- no firebase.ts (admin-v2 has one, guest-pwa doesn't), no
+call to POST /devices/register anywhere in the app, and its own public/sw.js has no push/
+notification event listener at all (grepped, zero matches) -- it registers a generic service
+worker purely for PWA install/offline caching. There is no client-side path for a real guest to
+ever be prompted for push permission or register a device token. Symptom mechanism: Bala is the
+tenant's single Owner/Member account, already had admin-v2 installed with a device token
+registered under his own User.id; a real guest booking under that same account has
+booking.userId identical to that id, so the backend correctly dispatched to admin-v2's token --
+which is the only service worker on that device capable of handling a push event at all, and
+doesn't know what a booking_confirmed payload is. Real severity: for any guest who isn't also the
+tenant owner with admin-v2 installed on the same device, F-321/F-322 dispatch correctly and are
+marked sent at the FCM layer, but have no real device to land on at all -- zero actual guests
+receive these today. A real gap in F-321/F-322's own delivery, not a deployment/environment
+issue: their original live-fire proof registered device tokens by calling /devices/register
+directly via API, proving backend dispatch works but masking that no real client path exists for
+a guest to ever get a token -- a scope gap in the original investigation.
+Confirmed-ID: F-323
+Confirmed: 30 Sep 2026
+
+### devicetoken-upsert-by-token-only-no-user-isolation
+Batch: notification, packages/database (schema), 30 Sep 2026
+Surfaced: same investigation as F-323, surfaced alongside it; Chief-assigned same day. Secondary
+half of the two-part split (rule 9) -- separable from F-323's client-build work.
+Description: DeviceToken.token is globally @unique (packages/database/prisma/schema.prisma), and
+POST /devices/register (services/notification/src/index.ts) does
+prisma.deviceToken.upsert({ where: { token }, ... }) -- keyed purely on the raw token string, with
+no userId in the uniqueness. Whoever registers a given physical token last silently reassigns
+that row's ownership away from whoever had it before, with no isolation between different users
+or different apps sharing the same physical device -- confirmed as the mechanism that let
+admin-v2's own registration (under Bala's User.id) silently receive a notification addressed to
+that same id from a completely different logical context (a guest booking). A second app, or a
+second real user on a shared/kiosk device, registering the same token would silently steal it
+from whoever had it, with nothing to detect or prevent it.
+Confirmed-ID: F-324
+Confirmed: 30 Sep 2026
