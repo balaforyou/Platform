@@ -4740,6 +4740,67 @@ Both caught by reproducing Bala's exact reported repro path (the Pay screen's re
 
 **Close-out:** No register rows touched by this entry -- F-310/F-313/F-317/F-318/F-319 were all already accurately Resolved at merge time with no disclosed "needs a real production pass" gap the way F-308/F-309 had, so there is nothing to convert here, unlike two days ago. This entry exists purely to close rule 7 (pushed and independently verified) and rule 11 (report back to Chief) for the deployment itself. Production confirmed live on `52d7af5d6dfc1dc8dd1299b5efa4038064c91881` -- the last SHA this file documents as deployed. Awaiting the Technical Lead thread's independent re-verification per the handover's own process before this promotion is treated as fully signed off.
 
+## Batch — F-320: PDF receipt's Time row drops chain windows
+
+**Spotted by Bala** reviewing a real downloaded booking receipt PDF, asking whether a multi-slot/
+multi-court booking would render correctly. Chief-assigned same day.
+
+**Real correction made mid-investigation, flagged plainly rather than let stand:** the initial relay
+claimed the court can differ per window within one chain, citing `assignPooledCourt(sibling,
+active)` at `slot-engine/index.ts:5872` -- Chief's own independent read initially confirmed the same
+line. Both readings were wrong: line 5872 is inside `tryRelocateBooking` (F-207.2), which moves a
+single existing booking to a *different resource pool entirely* -- unrelated to how windows within
+one chain get their court. The real chain-creation path (`index.ts:4406-4487`) computes a single
+`assignPooledCourt(pool, active)` result once per chain (unioning active bookings across every
+window in the request) and reuses that same `resourceId`/`courtSlotIndex` for the parent and every
+child. Confirmed live twice on the real JBC dev stack: two independently reproduced multi-window
+chains both landed on one shared court across all their windows, even when a second chain
+deliberately had a different court pre-occupied for one of its two windows. Chief independently
+re-verified this reading against `origin/main` before the plan was written. This is the same
+self-detected-contradiction discipline the project runs on -- caught and corrected rather than
+letting an earlier "confirmed" read stand.
+
+**Root cause, scope corrected accordingly:** `buildBookingRows` (`apps/guest-member-pwa/src/lib/
+receipt.ts`) built the "Time" row from `booking.window` alone, never reading `booking.
+childBookings` -- a multi-window chain booking's (F-183/F-317) PDF receipt silently dropped every
+window after the first, while "Amount Paid" (F-317's `resolvedPrice`) correctly showed the full
+chain total, making the receipt actively misleading (one listed hour, full two-slot price). The
+"Court" row showing one court for the whole chain was already correct given the corrected premise
+above, so it and `describeCourtAssignment` stayed untouched -- F-263's territory, out of scope here
+per rule 9.
+
+**Fast plan-mode cycle:** Time row now uses `formatWindowRangesLabel([{ window: booking.window },
+...booking.childBookings], ...)`, the identical helper/call shape `BookingConfirmation.tsx`/
+`BookingPay.tsx`/`BookingHistory.tsx` already use for this exact purpose -- no backend change,
+`childBookings` was already present on every `booking` object passed into these functions today.
+
+**Blast radius:** `buildBookingRows` is shared by both PDF generators in `receipt.ts` --
+`downloadBookingReceipt` (`BookingConfirmation.tsx`, `BookingHistory.tsx`) and
+`downloadCancellationReceipt` (`CancelBookingModal.tsx`, `BookingHistory.tsx`) -- both fixed by this
+one change. No other consumers of `buildBookingRows` exist (confirmed via full-repo grep).
+
+**Real evidence, byte-level, not a build-succeeded assumption:** the actual downloaded PDF's raw
+content was read directly rather than trusted from the on-screen confirmation or the code alone --
+`URL.createObjectURL` was monkey-patched to capture the real `Blob` jsPDF hands the browser, and its
+raw PDF bytes parsed for `Tj` text-draw operators (the literal strings jsPDF drew onto the page).
+Pre-fix: a real two-window chain (`BK-D5566F28`, 09:00-10:00 + 10:00-11:00, Court 2, Rs 800)
+downloaded with `Time: "09:00 AM - 10:00 AM"` only -- the second window silently gone, `Amount Paid:
+Rs. 800` unaffected. Post-fix, three cases: (1) a fresh equivalent chain (`BK-4A4F68EF`) downloaded
+with `Time: "09:00 AM - 10:00 AM, 10:00 AM - 11:00 AM"`, both windows present, comma-joined,
+matching the on-screen format exactly; (2) a single-window booking (`BK-EDFE1152`) downloaded with
+`Time: "11:00 AM - 12:00 PM"`, byte-for-byte identical in shape to the pre-fix single-window format
+-- no regression; (3) cancelling the fixed multi-window chain and downloading its cancellation
+receipt showed the same corrected two-window Time string, confirming the shared-helper fix covers
+both PDF generators. Whole-app typecheck and build clean, twice (once pre-branch-split on the
+original working tree, once re-verified on the real PR branch fresh off `origin/main`'s real
+post-PR-#121 tip).
+
+**Close-out:** F-320 register row added directly as Resolved; `pending-findings.md`'s
+`Confirmed-ID: F-320` entry added in the same pass; decision doc archived to
+`docs/plans/chief-archive/f320-receipt-multislot-time-fix.md`. `pnpm register:check` and
+`pnpm diagram:verify` to be confirmed green before push. Separate PR -- no shared root cause or
+overlapping files with F-317/F-318/F-319.
+
 ## Queued, not yet batched
 
 - **F-088 parts (1), (3), (4)** — deliberately held for its own dedicated session, not queued alongside

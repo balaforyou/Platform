@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { formatBookingReference, formatBranchTime } from '@badminton/ui-shared';
+import { formatBookingReference, formatBranchTime, formatWindowRangesLabel } from '@badminton/ui-shared';
 import { describeCourtAssignment } from './courtLabel';
 
 // F-235 Slice F / design brief §0.6: client-side PDF receipt, generated entirely from data
@@ -9,7 +9,6 @@ import { describeCourtAssignment } from './courtLabel';
 function buildBookingRows(booking: any, branchAbout: any): [string, string][] {
   const court = describeCourtAssignment(booking.resource?.name, booking.resourceId, booking.courtSlotIndex) ?? 'Not yet assigned';
   const startTime = booking.window?.startTime;
-  const endTime = booking.window?.endTime;
   return [
     ['Booking Reference', formatBookingReference(booking.id)],
     ['Status', String(booking.status || '')],
@@ -19,9 +18,13 @@ function buildBookingRows(booking: any, branchAbout: any): [string, string][] {
     ],
     [
       'Time',
-      startTime && endTime
-        ? `${formatBranchTime(startTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })} - ${formatBranchTime(endTime, branchAbout?.timezone, { hour: '2-digit', minute: '2-digit' })}`
-        : '—',
+      // F-320: every window in the chain (base + childBookings, F-187), comma-joined -- same
+      // helper and shape BookingConfirmation.tsx/BookingPay.tsx/BookingHistory.tsx already use,
+      // so a multi-slot booking's receipt no longer silently drops every window past the first.
+      formatWindowRangesLabel(
+        [{ window: booking.window }, ...(Array.isArray(booking.childBookings) ? booking.childBookings : [])],
+        branchAbout?.timezone,
+      ) || '—',
     ],
     ['Venue', branchAbout?.name || '—'],
     ['Court', court],
