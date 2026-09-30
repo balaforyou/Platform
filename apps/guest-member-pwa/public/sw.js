@@ -23,12 +23,25 @@ self.addEventListener('fetch', (event) => {
  * built, same as admin-v2's own "no backend trigger yet" state when this was first added there. */
 
 self.addEventListener('push', (event) => {
-  let payload = { title: 'Slotflow', body: 'You have a new notification.', data: {} };
+  const fallback = { title: 'Slotflow', body: 'You have a new notification.', data: {} };
+  let payload = fallback;
   if (event.data) {
     try {
-      payload = { ...payload, ...event.data.json() };
+      // F-236: the real FCM message (services/notification/src/firebase.ts's sendPush) nests
+      // title/body under a `notification` key on the wire -- a flat spread merge here (this
+      // file's own original F-323 port of admin-v2's handler) never overwrote the hardcoded
+      // fallback above, so a real push showed generic text regardless of the real event.
+      // Confirmed live: Bala's real booking_confirmed push read "You have a new notification"
+      // instead of the real title/body. Read the nested shape first, falling back to a flat
+      // title/body, then the hardcoded default.
+      const raw = event.data.json();
+      payload = {
+        title: raw.notification?.title ?? raw.title ?? fallback.title,
+        body: raw.notification?.body ?? raw.body ?? fallback.body,
+        data: raw.data ?? fallback.data,
+      };
     } catch {
-      payload.body = event.data.text();
+      payload = { ...fallback, body: event.data.text() };
     }
   }
   event.waitUntil(

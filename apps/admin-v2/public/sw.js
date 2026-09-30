@@ -151,12 +151,23 @@ self.addEventListener('fetch', (event) => {
 /* ── F-044 Phase B: client-side notification half, ready ahead of any backend push ── */
 
 self.addEventListener('push', (event) => {
-  let payload = { title: 'Slotflow Admin', body: 'You have a new notification.', data: {} };
+  const fallback = { title: 'Slotflow Admin', body: 'You have a new notification.', data: {} };
+  let payload = fallback;
   if (event.data) {
     try {
-      payload = { ...payload, ...event.data.json() };
+      // F-236: the real FCM message (services/notification/src/firebase.ts's sendPush) nests
+      // title/body under a `notification` key on the wire -- a flat spread merge here never
+      // overwrote the hardcoded fallback above, so every real push showed generic text
+      // regardless of the real event. Read the nested shape first, falling back to a flat
+      // title/body (in case a future sender ever sends one directly), then the hardcoded default.
+      const raw = event.data.json();
+      payload = {
+        title: raw.notification?.title ?? raw.title ?? fallback.title,
+        body: raw.notification?.body ?? raw.body ?? fallback.body,
+        data: raw.data ?? fallback.data,
+      };
     } catch {
-      payload.body = event.data.text();
+      payload = { ...fallback, body: event.data.text() };
     }
   }
   event.waitUntil(

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest, formatBookingReference, formatBranchTime, formatWindowRangesLabel } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
-import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download } from 'lucide-react';
+import { Calendar, Clock, Hash, MapPin, Users, HelpCircle, Navigation, Download, Activity } from 'lucide-react';
 import CancelBookingModal from './CancelBookingModal';
 import ConfirmDialog from './ui/ConfirmDialog';
 import LoadingState from './ui/LoadingState';
@@ -523,7 +523,11 @@ export default function BookingHistory() {
                         style={{ background: 'var(--color-neutral-200)', color: 'var(--color-neutral-700)', border: '1px solid var(--color-neutral-300)' }}
                         id={`download-receipt-btn-${booking.id}`}
                       >
-                        <Download className="h-3.5 w-3.5" />
+                        {downloadingReceiptId === booking.id ? (
+                          <Activity className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        )}
                         <span>Receipt</span>
                       </button>
                     )}
