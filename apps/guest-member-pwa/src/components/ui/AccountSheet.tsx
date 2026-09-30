@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Sun, Moon, Monitor, LogOut, X } from 'lucide-react';
+import { Sun, Moon, Monitor, LogOut, X, Bell, BellOff } from 'lucide-react';
 import { useAuth } from '@badminton/ui-shared';
 import { applyTheme, getStoredTheme, setStoredTheme, type Theme } from '../../lib/theme';
+import { currentPermission, requestAndRegisterPushToken, type PushOptInResult } from '../../lib/firebase';
 import Avatar from './Avatar';
 import './AccountSheet.css';
 
@@ -18,14 +19,27 @@ type ThemeChoice = Theme | 'system';
 // circle, rather than a header toggle like admin-v2's (guest-pwa has bottom-nav chrome, not
 // header chrome). Also carries the logout button, moved here from Layout()'s current header.
 export default function AccountSheet({ open, onOpenChange }: AccountSheetProps) {
-  const { user, logout } = useAuth();
+  const { user, accessToken, logout } = useAuth();
   const [choice, setChoice] = useState<ThemeChoice>(() => getStoredTheme() ?? 'system');
+  // F-323: explicit opt-in control -- Shell.tsx's own useEffect handles the silent re-register
+  // once already granted, this is the first-time ask plus the real three-state display.
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>(
+    currentPermission(),
+  );
 
   const handleChoice = (next: ThemeChoice) => {
     setChoice(next);
     const stored = next === 'system' ? null : next;
     setStoredTheme(stored);
     applyTheme(stored);
+  };
+
+  const handleEnableNotifications = async () => {
+    if (!user?.userId) return;
+    const result: PushOptInResult = await requestAndRegisterPushToken(user.userId, accessToken).catch(
+      () => 'unsupported' as PushOptInResult,
+    );
+    setPushPermission(result === 'unsupported' ? 'unsupported' : Notification.permission);
   };
 
   return (
@@ -79,6 +93,36 @@ export default function AccountSheet({ open, onOpenChange }: AccountSheetProps) 
               </span>
             </div>
           </div>
+
+          {pushPermission !== 'unsupported' && (
+            <>
+              <div className="gpwa-account-sheet__section-label">Notifications</div>
+              <div className="gpwa-account-sheet__profile">
+                <div className="gpwa-account-sheet__profile-row">
+                  <span>Push notifications</span>
+                  {pushPermission === 'denied' ? (
+                    <span className="gpwa-account-sheet__profile-value" style={{ opacity: 0.6 }}>
+                      Blocked in browser settings
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      id="enable-notifications-btn"
+                      onClick={() => {
+                        if (pushPermission !== 'granted') handleEnableNotifications();
+                      }}
+                      disabled={pushPermission === 'granted'}
+                      className="gpwa-account-sheet__profile-value gpwa-account-sheet__profile-value--accent"
+                      style={{ background: 'none', border: 'none', padding: 0, display: 'flex', alignItems: 'center', gap: '6px', cursor: pushPermission === 'granted' ? 'default' : 'pointer' }}
+                    >
+                      {pushPermission === 'granted' ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+                      {pushPermission === 'granted' ? 'Enabled' : 'Enable'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="gpwa-account-sheet__section-label">Appearance</div>
           <div className="gpwa-account-sheet__segmented" role="radiogroup" aria-label="Theme">

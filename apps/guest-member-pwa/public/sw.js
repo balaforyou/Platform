@@ -15,3 +15,41 @@ self.addEventListener('fetch', (event) => {
   // Pass-through fetch handler is enough to pass PWA audits.
   event.respondWith(fetch(event.request));
 });
+
+/* F-323: client-side push half, ported from apps/admin-v2/public/sw.js -- generic and
+ * copy-paste-ready except the fallback title (this app has no admin-only "Slotflow Admin"
+ * default). No backend push payload carries data.url yet (confirmed: resolveAndQueue's
+ * NotificationRequest has no such field) -- notificationclick falls back to '/' until that's
+ * built, same as admin-v2's own "no backend trigger yet" state when this was first added there. */
+
+self.addEventListener('push', (event) => {
+  let payload = { title: 'Slotflow', body: 'You have a new notification.', data: {} };
+  if (event.data) {
+    try {
+      payload = { ...payload, ...event.data.json() };
+    } catch {
+      payload.body = event.data.text();
+    }
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: '/logo.png',
+      badge: '/logo.png',
+      data: payload.data || {},
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(target) && 'focus' in client) return client.focus();
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});
