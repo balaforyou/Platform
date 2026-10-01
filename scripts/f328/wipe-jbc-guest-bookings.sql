@@ -6,7 +6,8 @@
 --   (commit=true  = real run: same output, then COMMIT -- only if every assertion below passed.)
 -- Optional variables:
 --   -v include_member=true   also deletes isMemberBooking rows. DO NOT use for F-328 (Bala: guest only).
---   -v expected_bookings=N   abort unless exactly N bookings are in scope (pass the number Bala approved).
+--   -v expected_bookings=N   abort unless exactly N bookings are in scope. REQUIRED when commit=true (the real run
+--                            aborts before any delete if it is missing); take N from the commit=false rehearsal.
 --
 -- Scope: bookings of the tenant's branches with isMemberBooking = false, plus every child of a
 -- chain parent in that set (parentBookingId, recursive), plus the rows that hang off them:
@@ -30,7 +31,15 @@ SET LOCAL statement_timeout = '300s';
 \echo === F-328 wipe: tenant :tenant_subdomain, include_member=:include_member, commit=:commit ===
 
 -- psql does not substitute :variables inside $$ bodies, so DO blocks read these via current_setting().
-SELECT set_config('f328.include_member', :'include_member', true), set_config('f328.expected_bookings', :'expected_bookings', true);
+SELECT set_config('f328.include_member', :'include_member', true), set_config('f328.expected_bookings', :'expected_bookings', true), set_config('f328.commit', :'commit', true);
+
+-- Commit guard (PR #129 review, fix 1): a real run must carry the count Bala approved. Runs before
+-- any delete. commit=false (rehearsal) is unaffected and needs no count.
+DO $$ BEGIN
+  IF current_setting('f328.commit')::boolean AND current_setting('f328.expected_bookings')::bigint < 0 THEN
+    RAISE EXCEPTION 'F-328: commit=true requires -v expected_bookings=<approved count>. Get the count from the commit=false rehearsal: the "PLAN: rows to delete" Booking row.';
+  END IF;
+END $$;
 
 CREATE TEMP TABLE f328_tenant ON COMMIT DROP AS
   SELECT id FROM "Tenant" WHERE subdomain = :'tenant_subdomain';
