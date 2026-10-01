@@ -683,6 +683,23 @@ function MainDashboard() {
                         {badge.label}
                       </span>
                     </div>
+                    {/* F-331: which venue this booking is at. The title above is the pool name with the
+                        venue prefix stripped ("Main Courts"), so on its own it never says where. Same
+                        source and behaviour as BookingHistory.tsx's venue line (F-190 Slice 5): this
+                        booking's OWN branch via branchAboutById[b.branchId], and absent until that
+                        fetch resolves -- never a wrong or fabricated name. One line, truncated with
+                        a title attribute, so a long tenant venue name can't wrap the card. The row's
+                        height (one 12px text line = 16px) is reserved while the branch fetch is
+                        pending: measured with a slowed /about, the line appearing otherwise grew each
+                        card by 18px and pushed the date badge / court box (and every card below) down. */}
+                    <div className="mt-0.5 pl-7 flex items-center gap-1 min-w-0 min-h-4 text-xs" style={{ color: 'var(--color-neutral-700)' }} data-testid="upcoming-venue-name">
+                      {about?.name && (
+                        <>
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          <span className="truncate" title={about.name}>{about.name}</span>
+                        </>
+                      )}
+                    </div>
                     <div className="mt-0.5 pl-7 text-xs font-mono font-semibold" style={{ color: 'var(--color-text)' }}>
                       {formatBranchTime(startIso, timezone, { hour: '2-digit', minute: '2-digit' })}
                       {' '}<span style={{ color: 'var(--color-neutral-600)' }}>–</span>{' '}
