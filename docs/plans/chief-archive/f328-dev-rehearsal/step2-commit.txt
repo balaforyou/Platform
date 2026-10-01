@@ -1,0 +1,132 @@
+Pager usage is off.
+BEGIN
+SET
+SET
+=== F-328 wipe: tenant jbc, include_member=false, commit=true ===
+ set_config | set_config | set_config 
+------------+------------+------------
+ false      | 93         | true
+(1 row)
+
+DO
+SELECT 1
+DO
+SELECT 2
+-- branches in scope (expect the two JBC branches):
+                  id                  |               name                
+--------------------------------------+-----------------------------------
+ abdd89f9-4ae3-43f2-8d22-d78f2fa1d09e | JBC – New Japan Badminton Court
+ 6c9c1e5e-d692-4957-960c-e5287f8c2d12 | Japan Badminton Court, Coimbatore
+(2 rows)
+
+DO
+SELECT 93
+SELECT 60
+DO
+-- "nothing real since today" check (show Bala before the production run):
+                     item                      |          value          
+-----------------------------------------------+-------------------------
+ MAX(createdAt) in-scope bookings              | 2026-10-01 07:27:17.809
+ MAX(createdAt) any JBC booking (incl. member) | 2026-10-01 07:27:17.809
+ MAX(createdAt) JBC PaymentIntent              | 2026-10-01 07:27:27.68
+ in-scope bookings created in last 24h         | 2
+(4 rows)
+
+-- chain payment matching (F-317): in-scope intents by whether referenceId is a parent or a child:
+        reference_kind         | intents 
+-------------------------------+---------
+ chain parent / single booking |      60
+(1 row)
+
+-- orphan intents (JBC guest_booking intents whose booking row no longer exists; LEFT ALONE, listed only):
+ orphan_intents 
+----------------
+             12
+(1 row)
+
+-- intents referencing a member booking or a booking outside scope (LEFT ALONE):
+ intents_left_alone 
+--------------------
+                  0
+(1 row)
+
+CREATE TABLE
+CREATE FUNCTION
+ f328_snapshot 
+---------------
+ 
+(1 row)
+
+SELECT 7
+-- PLAN: rows to delete
+                         tbl                         | n  
+-----------------------------------------------------+----
+ Booking                                             | 93
+ BookingPlayer                                       |  2
+ NotificationRequest                                 |  0
+ PaymentIntent                                       | 60
+ Refund                                              |  3
+ ScheduledJobDispatch:guest_booking_reminder         |  3
+ ScheduledJobDispatch:payment_confirm_reconciliation |  0
+(7 rows)
+
+-- booking split of what is in scope (guest vs member):
+ bucket | count 
+--------+-------
+ guest  |    93
+(1 row)
+
+-- booking-event notifications with no bookingId in variables (LEFT ALONE):
+ eventType | count 
+-----------+-------
+(0 rows)
+
+CREATE TABLE
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+ f328_snapshot 
+---------------
+ 
+(1 row)
+
+DO
+=== RESULT: deleted rows per table ===
+                         tbl                         | n  
+-----------------------------------------------------+----
+ Booking                                             | 93
+ BookingPlayer                                       |  2
+ NotificationRequest                                 |  0
+ PaymentIntent                                       | 60
+ Refund                                              |  3
+ ScheduledJobDispatch:guest_booking_reminder         |  3
+ ScheduledJobDispatch:payment_confirm_reconciliation |  0
+(7 rows)
+
+=== per-table counts, before vs after (changed rows only; everything else asserted identical) ===
+         tbl          |              tenant_id               |         bucket         | before | after 
+----------------------+--------------------------------------+------------------------+--------+-------
+ Booking              | 51f4f7e8-b14f-4ab0-bcfd-688d5c27d045 | guest                  |     93 |     0
+ BookingPlayer        | -                                    | all                    |      4 |     2
+ PaymentIntent        | 51f4f7e8-b14f-4ab0-bcfd-688d5c27d045 | guest_booking          |     72 |    12
+ Refund               | -                                    | all                    |      4 |     1
+ ScheduledJobDispatch | 51f4f7e8-b14f-4ab0-bcfd-688d5c27d045 | guest_booking_reminder |      3 |     0
+(5 rows)
+
+=== full per-tenant Booking / PaymentIntent counts, before vs after (other tenants must be identical) ===
+      tbl      |              tenant_id               |        bucket        | before | after 
+---------------+--------------------------------------+----------------------+--------+-------
+ Booking       | 11111111-1111-1111-1111-111111111111 | guest                |     81 |    81
+ Booking       | 51f4f7e8-b14f-4ab0-bcfd-688d5c27d045 | guest                |     93 |     0
+ PaymentIntent | 11111111-1111-1111-1111-111111111111 | guest_booking        |     18 |    18
+ PaymentIntent | 11111111-1111-1111-1111-111111111111 | subscription_billing |      1 |     1
+ PaymentIntent | 51f4f7e8-b14f-4ab0-bcfd-688d5c27d045 | guest_booking        |     72 |    12
+ PaymentIntent | a7ec7935-ae4c-4107-b397-86518fd49623 | guest_booking        |      2 |     2
+(6 rows)
+
+=== COMMIT ===
+COMMIT

@@ -17,7 +17,14 @@
     "guest booking UI for the MVP, so every guest booking sends groupSize 1 with no UI path to",
     "raise it. With minOccupancy 2 the server rejected every guest booking with 400",
     "INVALID_GROUP_SIZE. Do NOT raise this back to 2 until F-114's per-pool enforceMinOccupancy",
-    "toggle exists, or until co-players return to the booking UI."
+    "toggle exists, or until co-players return to the booking UI.",
+    "",
+    "Venue names (F-328, 1 Oct 2026): branches are \"JBC Old Court\" (was \"Japan Badminton Court, Coimbatore\") and",
+    "\"JBC New Court\" (was \"JBC – New Japan Badminton Court\", en dash). Each pool name keeps its branch name as a",
+    "plain-hyphen prefix (\"<branch> - Main Courts\") so the guest PWA's displayPoolNameHome/displayPoolName and",
+    "admin-v2's normalizeDashes keep stripping it and the UI reads \"Main Courts\". provision-tenant.mjs matches",
+    "branches by exact name, so a re-run against a database still holding the OLD names creates a duplicate branch",
+    "and pool (F-329) -- run scripts/f328/rename-jbc-venues.mjs first. Addresses are deliberately unchanged."
   ],
   "tenant": {
     "name": "Japan Badminton Court",
@@ -28,14 +35,14 @@
   },
   "branches": [
     {
-      "name": "Japan Badminton Court, Coimbatore",
+      "name": "JBC Old Court",
       "address": "Japan Badminton Court, Coimbatore, Tamil Nadu, India",
       "latitude": 11.0375013,
       "longitude": 76.9330389,
       "googlePlaceId": "ChIJDeozArlYqDsRUA0SRJPRn1E",
       "timezone": "UTC",
       "pool": {
-        "name": "Japan Badminton Court, Coimbatore - Main Courts",
+        "name": "JBC Old Court - Main Courts",
         "allocationMode": "POOLED",
         "capacity": 4,
         "minOccupancy": 1,
@@ -60,14 +67,14 @@
       }
     },
     {
-      "name": "JBC – New Japan Badminton Court",
+      "name": "JBC New Court",
       "address": "New Japan Badminton Court, Coimbatore, Tamil Nadu, India",
       "latitude": 11.0394243,
       "longitude": 76.9322431,
       "googlePlaceId": "ChIJkUmLcoxZqDsRyCfPwg5PQrM",
       "timezone": "UTC",
       "pool": {
-        "name": "JBC - New Japan Badminton Court - Main Courts",
+        "name": "JBC New Court - Main Courts",
         "allocationMode": "POOLED",
         "capacity": 3,
         "minOccupancy": 1,

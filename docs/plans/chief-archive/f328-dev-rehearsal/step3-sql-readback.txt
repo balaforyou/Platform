@@ -1,0 +1,34 @@
+# step 3 SQL read-back on badminton_db after the rename (re-captured after the push of 69c3f08; same result as the in-run read-back)
+
+                  id                  |     name      
+--------------------------------------+---------------
+ abdd89f9-4ae3-43f2-8d22-d78f2fa1d09e | JBC New Court
+ 6c9c1e5e-d692-4957-960c-e5287f8c2d12 | JBC Old Court
+(2 rows)
+
+                  id                  |            name             
+--------------------------------------+-----------------------------
+ d3c81e3b-0340-4c0b-a1e2-002472a17def | JBC New Court - Main Courts
+ ba1d1433-feee-4116-8888-8ad9d8fba99b | JBC Old Court - Main Courts
+(2 rows)
+
+                  id                  |         name          |   appName    
+--------------------------------------+-----------------------+--------------
+ e5f9db40-b6fd-47d7-be6c-9d4f16d6f851 | Badminton Club        | Club App
+ 11111111-1111-1111-1111-111111111111 | Elite Court Rentals   | Elite Courts
+ 51f4f7e8-b14f-4ab0-bcfd-688d5c27d045 | Japan Badminton Court | JBC Courts
+(3 rows)
+
+# nothing else changed: Branch/ResourcePool (excl. name, updatedAt) and Tenant hashes identical to the pre-rename dump restore; all 31 table row counts unchanged
+Branch|5|99717027037d1cbeb1cbbbf3c751ac41
+ResourcePool|376|d8477ab481cc5efd8a4aeec50c310fbf
+Tenant|3|63a94e36d75f3eb163c446f6979f56b2
+# names that differ vs the pre-rename restore (only the 4 intended renames):
+< Branch|6c9c1e5e-d692-4957-960c-e5287f8c2d12|Japan Badminton Court, Coimbatore
+< Branch|abdd89f9-4ae3-43f2-8d22-d78f2fa1d09e|JBC – New Japan Badminton Court
+> Branch|6c9c1e5e-d692-4957-960c-e5287f8c2d12|JBC Old Court
+> Branch|abdd89f9-4ae3-43f2-8d22-d78f2fa1d09e|JBC New Court
+< Pool|ba1d1433-feee-4116-8888-8ad9d8fba99b|Japan Badminton Court, Coimbatore - Main Courts
+> Pool|ba1d1433-feee-4116-8888-8ad9d8fba99b|JBC Old Court - Main Courts
+< Pool|d3c81e3b-0340-4c0b-a1e2-002472a17def|JBC - New Japan Badminton Court - Main Courts
+> Pool|d3c81e3b-0340-4c0b-a1e2-002472a17def|JBC New Court - Main Courts
