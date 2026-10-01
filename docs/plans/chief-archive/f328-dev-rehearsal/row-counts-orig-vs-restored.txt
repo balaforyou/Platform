@@ -1,0 +1,34 @@
+# row counts per public table: badminton_db (orig) vs badminton_restore_check (restored from the Gate 0 dump); diff output was empty (identical)
+# table|rows
+AuthSession|292
+AvailabilityOverride|1
+AvailabilityPattern|2
+AvailabilityWindow|1561
+BlockedWindow|9
+Booking|174
+BookingPlayer|4
+BookingRule|303
+Branch|5
+DeviceToken|4
+GenerationLock|1794
+Group|0
+MemberGroupAssignment|0
+ModuleEntitlement|2
+NotificationRequest|77
+NotificationTemplate|1
+OtpRequest|18
+PaymentIntent|93
+PendingInvite|2
+Refund|4
+Resource|180
+ResourcePool|376
+RoleAssignment|6
+ScheduledJob|5
+ScheduledJobDispatch|6
+Subscription|1
+Tenant|3
+User|67
+WebAuthnCredential|2
+WebhookEvent|56
+_prisma_migrations|31
+# verified: counts-orig.txt == counts-restore.txt

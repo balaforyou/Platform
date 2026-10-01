@@ -1,0 +1,4 @@
+dump:        f328-predump-20261001-143218.dump
+size bytes:  318018
+tables in dump: 31   live public tables: 31   TABLE DATA entries: 31
+OK: dump verified. Copy it off the VM and report path + size to Bala before Gate 1.
