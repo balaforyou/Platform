@@ -182,6 +182,33 @@ function displayPoolNameHome(poolName: string, branchName?: string | null): stri
   return normalizedPool.startsWith(prefix) ? poolName.slice(prefix.length) : poolName;
 }
 
+// 1 Oct 2026: small inline shuttlecock mark for the Current Bookings card (no icon asset exists
+// in the repo and lucide has no shuttlecock). currentColor-only, so it follows theme tokens.
+function ShuttlecockMark() {
+  return (
+    <svg
+      className="shrink-0"
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ color: 'var(--color-neutral-700)' }}
+    >
+      <g transform="rotate(-30 12 12)">
+        <circle cx="12" cy="19" r="3" fill="currentColor" stroke="none" />
+        <path d="M9.5 17 6.5 4M12 16V3M14.5 17 17.5 4" />
+        <path d="M6.3 4c3.4-2 8-2 11.4 0" />
+        <path d="M8 10c2.6 1.4 5.4 1.4 8 0" />
+      </g>
+    </svg>
+  );
+}
+
 /**
  * Main dashboard screen loaded when authenticated.
  */
@@ -619,67 +646,97 @@ function MainDashboard() {
               const timezone = branchAboutById[b.branchId]?.timezone;
               const badge = upcomingBadge(b.status);
               const about = branchAboutById[b.branchId];
+              // 1 Oct 2026 card redesign: weekday/day/month come from the booking's own start in
+              // the branch timezone (a booking crossing midnight/month shows its START date).
+              const startIso = b.window.startTime;
+              const weekday = formatBranchTime(startIso, timezone, { weekday: 'short' });
+              const dayOfMonth = formatBranchTime(startIso, timezone, { day: 'numeric' });
+              const month = formatBranchTime(startIso, timezone, { month: 'short' });
+              // Court box (Chief sign-off 1 Oct 2026, correction 1): describeCourtAssignment-style
+              // labels are the raw Resource name and real names are mixed. A purely numeric label
+              // ("6") renders "Court: 6"; any other label ("Court 1", "Court A") is shown
+              // unchanged with no prefix; no label hides the box.
+              const courtLabel: string | null = b.resource?.name ? String(b.resource.name).trim() || null : null;
+              const courtIsNumeric = courtLabel !== null && /^\d+$/.test(courtLabel);
               return (
                 <div
                   key={b.id}
                   id={`upcoming-slot-${b.id}`}
-                  className="rounded-xl p-3 space-y-1"
+                  className="rounded-2xl p-3 flex flex-col gap-2"
                   style={{ background: 'var(--color-neutral-100)', border: '1px solid var(--color-neutral-300)' }}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    {/* 26 Sep 2026 feedback round, Option C (Bala's call): deduped pool name here
-                        too (same displayPoolNameHome logic as Slot & Time Selection's real fix)
-                        so row 1 never competes with the badge, and the court number moved to the
-                        time row below instead of living here -- both real fixes for the same
-                        underlying bug (a long real pool name, e.g. JBC's actual "JBC - New Japan
-                        Badminton Court - Main Courts", swallowed the court number on a real
-                        narrow mobile device, confirmed via Bala's own device screenshot). */}
-                    <span className="text-xs font-bold truncate min-w-0 flex-1" style={{ color: 'var(--color-text)' }}>
-                      {displayPoolNameHome(b.window.resourcePool?.name || 'Court booking', about?.name)}
-                    </span>
-                    <span className="shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border" style={badge.style}>
-                      {badge.label}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-[11px] font-mono font-bold" style={{ color: 'var(--color-text)' }}>
-                      {formatBranchTime(b.window.startTime, timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
-                      {' · '}
-                      {formatBranchTime(b.window.startTime, timezone, { hour: '2-digit', minute: '2-digit' })}
-                      {' - '}
+                  <div>
+                    <div className="flex items-start justify-between gap-2 min-w-0">
+                      {/* Deduped pool name, wraps to up to 3 lines (never truncated) so the court
+                          number -- now in its own box below -- can't be swallowed by a long real
+                          pool name (26 Sep 2026 Option C bug, Bala's device screenshot). */}
+                      <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                        <ShuttlecockMark />
+                        <span
+                          className="text-[15px] font-bold leading-tight min-w-0 line-clamp-3"
+                          style={{ color: 'var(--color-text)' }}
+                        >
+                          {displayPoolNameHome(b.window.resourcePool?.name || 'Court booking', about?.name)}
+                        </span>
+                      </div>
+                      <span className="shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border-[1.5px] whitespace-nowrap" style={badge.style}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 pl-7 text-xs font-mono font-semibold" style={{ color: 'var(--color-text)' }}>
+                      {formatBranchTime(startIso, timezone, { hour: '2-digit', minute: '2-digit' })}
+                      {' '}<span style={{ color: 'var(--color-neutral-600)' }}>–</span>{' '}
                       {formatBranchTime(b.window.endTime, timezone, { hour: '2-digit', minute: '2-digit' })}
-                      {b.resource?.name ? ` · ${b.resource.name}` : ''}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {/* F-247: same real Directions link BookingHistory.tsx already has --
-                          branchAboutById already carries the coordinates, only the render was
-                          missing here. */}
-                      {about && hasCoordinates(about) && (
-                        <a
-                          href={`https://www.google.com/maps/dir/?api=1&destination=${about.latitude},${about.longitude}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Directions"
-                          className="inline-flex items-center"
-                          style={{ color: 'var(--color-accent-700)' }}
-                        >
-                          <Navigation className="h-3.5 w-3.5" />
-                        </a>
-                      )}
-                      {/* F-242: a HELD row here had no way to complete payment without an extra
-                          navigation to My Bookings first -- same pay-now-btn pattern
-                          BookingHistory.tsx already uses. */}
-                      {b.status === 'HELD' && (
-                        <Link
-                          to={`/bookings/${b.id}/pay`}
-                          className="text-[11px] font-semibold px-2.5 py-1 rounded-lg shrink-0"
-                          style={{ background: 'var(--color-accent-700)', color: 'var(--color-accent-100)' }}
-                          id={`pay-now-btn-${b.id}`}
-                        >
-                          Pay Now
-                        </Link>
-                      )}
+                  </div>
+                  <div className="flex items-stretch gap-2">
+                    <div
+                      className="shrink-0 w-[50px] min-h-[44px] flex flex-col items-center justify-center rounded-[10px] py-1"
+                      style={{ background: 'var(--color-neutral-200)', border: '1px solid var(--color-neutral-300)' }}
+                      data-testid="upcoming-date-badge"
+                    >
+                      <small className="text-[9px] font-bold tracking-widest uppercase" style={{ color: 'var(--color-neutral-600)' }}>{weekday}</small>
+                      <b className="text-[17px] leading-[1.1]" style={{ color: 'var(--color-text)' }}>{dayOfMonth}</b>
+                      <small className="text-[9px] font-bold tracking-widest uppercase" style={{ color: 'var(--color-accent-700)' }}>{month}</small>
                     </div>
+                    {courtLabel ? (
+                      <div
+                        className="flex-1 min-w-0 min-h-[44px] flex items-center gap-1.5 px-3 rounded-[10px] text-[13px]"
+                        style={{ background: 'var(--color-neutral-200)', border: '1px solid var(--color-neutral-300)', color: 'var(--color-neutral-700)' }}
+                        id={`upcoming-court-${b.id}`}
+                      >
+                        {courtIsNumeric ? (
+                          <>Court: <b className="text-xl truncate" style={{ color: 'var(--color-text)' }}>{courtLabel}</b></>
+                        ) : (
+                          <b className="text-[15px] truncate" style={{ color: 'var(--color-text)' }}>{courtLabel}</b>
+                        )}
+                      </div>
+                    ) : <div className="flex-1" />}
+                    {/* F-242: Pay Now inline for HELD (same pay-now-btn pattern as BookingHistory). */}
+                    {b.status === 'HELD' && (
+                      <Link
+                        to={`/bookings/${b.id}/pay`}
+                        className="shrink-0 self-center inline-flex items-center min-h-[44px] text-xs font-bold px-3.5 rounded-[10px]"
+                        style={{ background: 'var(--color-accent-700)', color: 'var(--slot-selected-label)' }}
+                        id={`pay-now-btn-${b.id}`}
+                      >
+                        Pay Now
+                      </Link>
+                    )}
+                    {/* F-247: Directions, gated on real coordinates. */}
+                    {about && hasCoordinates(about) && (
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${about.latitude},${about.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Directions"
+                        aria-label="Directions"
+                        className="shrink-0 w-11 min-h-[44px] flex items-center justify-center rounded-[10px]"
+                        style={{ color: 'var(--color-accent-700)' }}
+                      >
+                        <Navigation className="h-6 w-6" />
+                      </a>
+                    )}
                   </div>
                 </div>
               );
