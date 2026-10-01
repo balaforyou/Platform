@@ -4897,3 +4897,25 @@ straightforward and correct by construction.
 
 Full 5-service regression green (unaffected -- frontend/service-worker only, no backend touched).
 `pnpm register:check`/`pnpm diagram:verify` both green.
+
+## Batch — F-328/F-329 opened: JBC venue rename + guest test-booking wipe (scripts written; not yet run) + Current Bookings card redesign (Part A)
+
+**1 Oct 2026. Opened, not closed.** F-328 and F-329 are logged Open in the register (IDs assigned by Chief,
+`Confirmed-ID` entries in `pending-findings.md`); F-328 flips to Resolved only after the production rename and
+wipe are read back from the live database.
+
+**Part A (no finding): Home "Current Bookings" card redesign** in `apps/guest-member-pwa/src/main.tsx`: small
+inline-SVG shuttlecock, outlined status pill, single stacked WED/30/SEP date badge (branch-timezone start date),
+court box (numeric label -> "Court: 6"; any other label unchanged, no prefix; none -> box hidden), Directions
+and Pay Now kept. All ids unchanged; no Playwright spec referenced them. Whole-app typecheck/build clean.
+Browser screenshots and the Playwright re-run are pending (need the dev stack on Bala's machine).
+
+**Part B scripts (`scripts/f328/`)**: `rename-jbc-venues.mjs` (existing PATCH endpoints, dry-run default,
+idempotent), `wipe-jbc-guest-bookings.sql` (single transaction, guest only, `commit=false` rehearsal mode,
+assertions for deleted==planned / other tenants / kept tables), `RUNBOOK.md`; `scripts/tenants/jbc.json`
+updated to the new names. Rehearsed: wipe against a seeded scratch Postgres (rollback persists nothing, wrong
+`expected_bookings` aborts, commit deletes exactly the planned rows, re-run finds 0); rename against a mock of
+the two services. **Neither has run against dev or production yet.** Gates: 0 dump, 1 production rename,
+2 production wipe.
+
+Approved plan archived at `docs/plans/chief-archive/f328-jbc-venue-rename-and-booking-wipe.md`.

@@ -2536,3 +2536,17 @@ second real user on a shared/kiosk device, registering the same token would sile
 from whoever had it, with nothing to detect or prevent it.
 Confirmed-ID: F-324
 Confirmed: 30 Sep 2026
+
+### venue-rename-and-test-booking-wipe
+Batch: guest-member-pwa data / scripts, 1 Oct 2026
+Surfaced: Bala, 1 Oct 2026, alongside the Current Bookings card redesign; Chief-assigned same day.
+Description: Venue rename to "JBC Old Court" / "JBC New Court" (branches and their pools, kept as a matching prefix so `displayPoolNameHome`/`displayPoolName`/`normalizeDashes` keep stripping it) plus a one-time wipe of guest test bookings for the JBC tenant. Source: `claude/claude-code-handover-current-bookings-card-redesign-1oct.md` Part B and the Chief sign-off. Resolved only after a production read-back.
+Confirmed-ID: F-328
+Confirmed: 1 Oct 2026
+
+### provision-tenant-not-idempotent-for-pools
+Batch: scripts, 1 Oct 2026
+Surfaced: found during F-328's plan; Chief-assigned same day.
+Description: `scripts/provision-tenant.mjs` finds an existing branch by exact `name` but creates pools with a plain `POST /resource-pools`, so re-provisioning an existing tenant duplicates pools, and after F-328's rename a re-run against any stale seed would create a second branch and pool. Pre-existing, found during F-328's plan. Low severity (provisioning is run by hand); not fixed by F-328.
+Confirmed-ID: F-329
+Confirmed: 1 Oct 2026
