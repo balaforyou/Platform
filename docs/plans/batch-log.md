@@ -4898,6 +4898,80 @@ straightforward and correct by construction.
 Full 5-service regression green (unaffected -- frontend/service-worker only, no backend touched).
 `pnpm register:check`/`pnpm diagram:verify` both green.
 
+## Batch -- SonarCloud duplication fix, a Dockerfile build bug caught by CI, and production deploy
+
+**SonarCloud duplication fix (PR #126, commit `81b9be4`).** The F-236 batch above's own fix
+tripped SonarCloud's quality gate: 45.5% duplication on new code, because the near-identical
+`push`/`notificationclick` block now existed in both apps' `sw.js` verbatim. Bala's call: fix it
+properly rather than override the gate. Extracted the real handler into a new
+`scripts/shared-sw-push-handler.js` (single source, two placeholders for the only two things
+that differ per app -- fallback title, icon path), replaced each app's `public/sw.js` copy with a
+marker comment, and added `scripts/inject-push-sw-handler.mjs` to substitute the real code into
+`dist/sw.js` at build time -- mirrors `apps/admin-v2/scripts/stamp-sw.mjs`'s existing
+`__BUILD_SHA__` pattern exactly, since Vite copies `public/*` verbatim with no transform pass
+reaching it, and SonarCloud scans checked-in source, not `dist/`. Caught and fixed a self-found
+bug mid-implementation: the first injector version did a blind global substitution across the
+whole fragment file, including its own header prose (which names the placeholder tokens as
+text) -- fixed by adding a code-start marker so only the real code, not the header, gets
+substituted and shipped. Verified via real rebuilds of both apps (`dist/sw.js` read directly,
+correct per-app title/icon, no mangled text) and a full regression run; one unrelated pre-
+existing failure (**F-269**, inventory grid rendering) confirmed pre-existing by stashing this
+change entirely and re-running the identical test against the unmodified branch tip -- fails
+identically either way, not a regression from this work.
+
+**A real production-blocking bug this batch introduced, caught by CI on `main` after merge, not
+by this session's own pre-merge verification.** PR #126 merged clean (`c8f8128`), but CI's real
+Docker build of the shipped stack then failed: `Cannot find module
+'/app/scripts/inject-push-sw-handler.mjs'`. Root cause: `deploy/gcp-vm/Dockerfile.caddy-static`'s
+build stage never `COPY`'d the new root-level `scripts/` directory into the image, so the two
+apps' build scripts couldn't resolve `../../scripts/inject-push-sw-handler.mjs` inside the
+container -- the only place this could ever break, and exactly the place this session's own
+verification never checked. This session's local verification ran a full `pnpm` build with the
+entire repo checked out, so the relative path resolved by coincidence; the real Docker `COPY`
+context was never exercised before merge. Same class of trap this project has hit before
+(verify against the built artifact, not a convenient stand-in for it) -- flagged plainly as a gap
+in this session's own PR #126 sign-off, not something Bala alone should have had to catch.
+**Fix (PR #127, commit `2c6c5c0`):** added `COPY scripts ./scripts` to
+`Dockerfile.caddy-static`; confirmed `Dockerfile.node-service` (backend services only) has no
+dependency on this script and needs no equivalent change. A real local Docker build of the full
+Dockerfile timed out on a slow npm registry fetch in this sandbox (unrelated to the fix -- the
+same `pnpm install` step would time out either way, never reaching the actually-fixed step), so
+verified instead with a fast targeted build isolating the exact failure mode: `COPY`ing
+`packages`/`apps`/`scripts` in the same order as the real Dockerfile, then running
+`require.resolve('../../scripts/inject-push-sw-handler.mjs')` from inside both apps' own
+directories -- both resolve cleanly. Real end-to-end proof came from PR #127's own CI run on the
+actual `docker compose build` step, which went green.
+
+**Production deploy of `94995e8` (main after PR #127).** First `promote.sh` attempt hit a dropped
+SSH/IAP tunnel mid-image-pull, then a transient `P1001` DB-unreachable error during the F-077
+migrate guard. The guard's own safety design worked as intended: it aborted cleanly, explicitly
+refusing to touch the database or bring anything up ("The database was NOT touched. Nothing has
+been brought up."). Confirmed production fully untouched (same 7 containers, same uptimes, same
+old SHA still live) before retrying. Re-ran `promote.sh` detached (`nohup`) so a dropped tunnel
+couldn't interrupt it again; this run completed cleanly -- migrate guard passed (no pending
+migrations), all 6 services recreated, `verify-deployment.mjs` confirmed all 7 components at
+`94995e8c7ab0`, superseded `f795307` images pruned. Independently re-verified (not just trusting
+the script's own log): live `curl` against `jbc.elitecourts.duckdns.org`,
+`courtowner1.elitecourts.duckdns.org`, and `admin.elitecourts.duckdns.org` all report the new SHA;
+HTTPS genuinely live, not falling back to HTTP-only.
+
+**Real live-fire guest-booking check on the deployed production stack, Bala's own device.** A
+real guest booking was created, paid for via real Razorpay checkout (test keys), and confirmed.
+The real payment-confirmed push arrived showing the correct title/body -- live field confirmation
+that F-236's fix (above) actually works, not just in tests -- and tapping the notification
+correctly navigated to the real booking-confirmation screen, confirming the shared
+`notificationclick` handler's deep-link/focus logic too. This closes F-236's own previously-open
+"needs Bala's real device once deployed" verification caveat; see the dated correction added to
+F-236's register row (Description column, never Resolution, per this project's own
+never-silently-edit-a-landed-Resolution convention). A test booking created in this sandbox's own
+browser-automation pass during the same check auto-expired via the existing HELD-booking sweep
+job with no manual cleanup needed -- no stray unpaid booking left in production data. Real card
+entry / Razorpay checkout completion was correctly not attempted from this sandbox on the live
+production domain (out of scope for this session's own action boundary -- test-mode or not, only
+a local dev host qualifies for that exception); Bala completed that step himself.
+
+`pnpm register:check`/`pnpm diagram:verify` both green after the F-236 row's dated correction.
+
 ## Batch — F-328/F-329 opened: JBC venue rename + guest test-booking wipe (scripts written; not yet run) + Current Bookings card redesign (Part A)
 
 **1 Oct 2026. Opened, not closed.** F-328 and F-329 are logged Open in the register (IDs assigned by Chief,
