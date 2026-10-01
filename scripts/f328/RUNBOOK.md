@@ -34,6 +34,8 @@ the dump off the VM.
 
 ## Gate 1 — rename
 
+The script validates both base URLs against a **fixed allowlist in code** before the key is read into a header (no override flag, no env switch): `http://localhost|127.0.0.1:<port>`, `http://tenant-management:3003` / `http://slot-engine:3001` (each only for its own service), and `https://jbc.elitecourts.duckdns.org/api/tenant` / `/api/slot-engine` (exact path). Anything else aborts with exit 2. Check it without any network call or key: `node scripts/f328/rename-jbc-venues.mjs --self-test` (all 20 cases must pass).
+
 Reaches the services through Caddy's HTTPS routes (`/api/tenant/*` → `tenant-management:3003`, `/api/slot-engine/*` →
 `slot-engine:3001`, prefix stripped), with the internal key from the environment — never as an argument.
 

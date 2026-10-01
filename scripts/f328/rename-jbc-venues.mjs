@@ -6,8 +6,9 @@
  *   node scripts/f328/rename-jbc-venues.mjs            # dry run (default): prints before + planned, writes nothing
  *   node scripts/f328/rename-jbc-venues.mjs --apply    # performs the renames, then reads everything back
  *
- * Env (same as provision-tenant.mjs): TENANT_SERVICE_URL (default :3003), SLOT_ENGINE_URL (default
- * :3001), INTERNAL_SERVICE_KEY. Optional --subdomain (default jbc).
+ * Env: TENANT_SERVICE_URL (default http://localhost:3003), SLOT_ENGINE_URL (default http://localhost:3001),
+ * INTERNAL_SERVICE_KEY. Optional --subdomain (default jbc). Both URLs must pass the fixed allowlist in
+ * validateBaseUrl (no override flag); `--self-test` runs the allowlist cases with no network call.
  *
  * Mapping (Bala, 1 Oct 2026):
  *   "Japan Badminton Court, Coimbatore"  -> "JBC Old Court"   pool -> "JBC Old Court - Main Courts"
@@ -19,15 +20,89 @@
  * matched by their exact old (or new) name; anything unexpected aborts BEFORE any write.
  */
 import { argv, env } from 'node:process';
+import { pathToFileURL } from 'node:url';
+
+// Base-URL allowlist (PR #129 review). INTERNAL_SERVICE_KEY is sent as a Bearer token to whatever base URL
+// is configured, so each URL is validated against a FIXED allowlist, in code, before the key is ever read
+// into a header. There is deliberately no override flag and no env switch: neither can be trusted.
+// Each kind is valid only for its own service (the tenant URL cannot point at slot-engine, and vice versa).
+const PROD_HOST = 'jbc.elitecourts.duckdns.org';
+const ALLOWED = {
+  tenant: { prodPath: '/api/tenant', composeOrigin: 'http://tenant-management:3003' },
+  slot: { prodPath: '/api/slot-engine', composeOrigin: 'http://slot-engine:3001' },
+};
+/** Returns the canonical base URL (no trailing slash) or throws. Pure: no network, no env. */
+export function validateBaseUrl(kind, raw) {
+  const rule = ALLOWED[kind];
+  if (!rule) throw new Error(`unknown service kind ${JSON.stringify(kind)}`);
+  const bad = (why) => new Error(`${kind} base URL ${JSON.stringify(raw)} rejected: ${why}. Allowed: http://localhost:<port>, http://127.0.0.1:<port>, ${rule.composeOrigin}, https://${PROD_HOST}${rule.prodPath}`);
+  let u;
+  try { u = new URL(raw); } catch { throw bad('not a valid URL'); }
+  if (u.username || u.password) throw bad('userinfo is not allowed');
+  if (u.search || u.hash) throw bad('query or fragment is not allowed');
+  const path = u.pathname === '/' ? '' : u.pathname;
+  if ((u.hostname === 'localhost' || u.hostname === '127.0.0.1') && u.protocol === 'http:') {
+    if (path) throw bad('loopback URLs take no path');
+    return u.origin;
+  }
+  if (u.origin === rule.composeOrigin) {
+    if (path) throw bad('compose-internal URLs take no path');
+    return u.origin;
+  }
+  if (u.protocol === 'https:' && u.hostname === PROD_HOST && u.port === '') {
+    if (path !== rule.prodPath) throw bad(`path must be exactly ${rule.prodPath}`);
+    return `${u.origin}${path}`;
+  }
+  throw bad('host/scheme is not on the allowlist');
+}
+
+const SELF_TEST_CASES = [
+  // [kind, url, shouldPass]
+  ['tenant', 'http://localhost:3003', true],
+  ['slot', 'http://127.0.0.1:3001/', true],
+  ['tenant', 'http://tenant-management:3003', true],
+  ['slot', 'http://slot-engine:3001', true],
+  ['tenant', `https://${PROD_HOST}/api/tenant`, true],
+  ['slot', `https://${PROD_HOST}/api/slot-engine`, true],
+  ['tenant', `https://${PROD_HOST}.evil.com/api/tenant`, false],
+  ['tenant', `http://${PROD_HOST}/api/tenant`, false],
+  ['tenant', `https://${PROD_HOST}/api/slot-engine`, false],
+  ['slot', `https://${PROD_HOST}/api/tenant`, false],
+  ['tenant', `https://${PROD_HOST}/api/tenant/`, false],
+  ['tenant', 'https://evil.example.com/api/tenant', false],
+  ['tenant', `https://user:pass@${PROD_HOST}/api/tenant`, false],
+  ['tenant', 'http://localhost@evil.com:3003', false],
+  ['tenant', 'http://localhost:3003?x=1', false],
+  ['tenant', 'http://slot-engine:3001', false],
+  ['slot', 'http://tenant-management:3003', false],
+  ['tenant', 'http://tenant-management:3003/x', false],
+  ['tenant', 'ftp://localhost:3003', false],
+  ['tenant', 'not a url', false],
+];
+function selfTest() {
+  let failed = 0;
+  for (const [kind, url, shouldPass] of SELF_TEST_CASES) {
+    let outcome; try { outcome = `accepted -> ${validateBaseUrl(kind, url)}`; } catch (e) { outcome = `rejected (${e.message.split(' rejected: ')[1]?.split('. Allowed')[0] ?? e.message})`; }
+    const passed = outcome.startsWith('accepted') === shouldPass;
+    if (!passed) failed++;
+    console.log(`${passed ? 'PASS' : 'FAIL'}  [${kind}] ${url}  =>  ${outcome}`);
+  }
+  console.log(`\n${SELF_TEST_CASES.length - failed}/${SELF_TEST_CASES.length} self-test cases behaved as expected (no network call made)`);
+  process.exitCode = failed ? 1 : 0;
+}
 
 const arg = (n, d) => { const i = argv.indexOf(n); return i > -1 && argv[i + 1] ? argv[i + 1] : d; };
 const APPLY = argv.includes('--apply');
 const SUBDOMAIN = arg('--subdomain', 'jbc');
-const TENANT_URL = env.TENANT_SERVICE_URL || 'http://localhost:3003';
-const SLOT_URL = env.SLOT_ENGINE_URL || 'http://localhost:3001';
-const KEY = env.INTERNAL_SERVICE_KEY;
-if (!KEY) { console.error('INTERNAL_SERVICE_KEY is required (no test-key fallback: this can run against production).'); process.exit(2); }
-const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` };
+let TENANT_URL; let SLOT_URL; let H;
+function configure() {
+  // Order matters: validate the URLs FIRST, only then read the key into a header.
+  TENANT_URL = validateBaseUrl('tenant', env.TENANT_SERVICE_URL || 'http://localhost:3003');
+  SLOT_URL = validateBaseUrl('slot', env.SLOT_ENGINE_URL || 'http://localhost:3001');
+  const KEY = env.INTERNAL_SERVICE_KEY;
+  if (!KEY) { throw new Error('INTERNAL_SERVICE_KEY is required (no test-key fallback: this can run against production).'); }
+  H = { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` };
+}
 
 const MAP = [
   { oldName: 'Japan Badminton Court, Coimbatore', newName: 'JBC Old Court', newPool: 'JBC Old Court - Main Courts' },
@@ -56,6 +131,7 @@ const show = (label, snap) => {
 };
 
 async function main() {
+  configure();
   console.log(`F-328 venue rename for tenant "${SUBDOMAIN}" @ ${TENANT_URL} / ${SLOT_URL}${APPLY ? '' : '   [DRY RUN -- pass --apply to write]'}`);
   const tenant = await fetch(`${TENANT_URL}/tenants/by-subdomain/${SUBDOMAIN}`).then((r) => (r.ok ? r.json() : null));
   const t = tenant?.data ?? tenant;
@@ -96,4 +172,7 @@ async function main() {
   }
   console.log('\nRead-back OK. Also confirm directly in SQL: SELECT id,name FROM "Branch" WHERE "tenantId"=<tenant>; SELECT id,name FROM "ResourcePool" WHERE "tenantId"=<tenant>;');
 }
-main().catch((e) => { console.error(`\nrename-jbc-venues failed: ${e.message}`); process.exitCode = 1; });
+if (import.meta.url === pathToFileURL(argv[1]).href) {
+  if (argv.includes('--self-test')) selfTest();
+  else main().catch((e) => { console.error(`\nrename-jbc-venues failed: ${e.message}`); process.exitCode = e.message.includes('rejected:') || e.message.includes('INTERNAL_SERVICE_KEY') ? 2 : 1; });
+}
