@@ -1,0 +1,22 @@
+F-328 venue rename for tenant "jbc" @ http://tenant-management:3003 / http://slot-engine:3001
+tenant 51f4f7e8-b14f-4ab0-bcfd-688d5c27d045  name="Japan Badminton Court"  appName="JBC Courts"  (neither is changed)
+
+BEFORE
+  branch 6c9c1e5e-d692-4957-960c-e5287f8c2d12  "Japan Badminton Court, Coimbatore"
+    pool ba1d1433-feee-4116-8888-8ad9d8fba99b  "Japan Badminton Court, Coimbatore - Main Courts"
+  branch abdd89f9-4ae3-43f2-8d22-d78f2fa1d09e  "JBC – New Japan Badminton Court"
+    pool d3c81e3b-0340-4c0b-a1e2-002472a17def  "JBC - New Japan Badminton Court - Main Courts"
+
+PLAN
+  branch 6c9c1e5e-d692-4957-960c-e5287f8c2d12: "Japan Badminton Court, Coimbatore" -> "JBC Old Court"
+  pool   ba1d1433-feee-4116-8888-8ad9d8fba99b: "Japan Badminton Court, Coimbatore - Main Courts" -> "JBC Old Court - Main Courts"
+  branch abdd89f9-4ae3-43f2-8d22-d78f2fa1d09e: "JBC – New Japan Badminton Court" -> "JBC New Court"
+  pool   d3c81e3b-0340-4c0b-a1e2-002472a17def: "JBC - New Japan Badminton Court - Main Courts" -> "JBC New Court - Main Courts"
+
+AFTER (read back from the live services)
+  branch 6c9c1e5e-d692-4957-960c-e5287f8c2d12  "JBC Old Court"
+    pool ba1d1433-feee-4116-8888-8ad9d8fba99b  "JBC Old Court - Main Courts"
+  branch abdd89f9-4ae3-43f2-8d22-d78f2fa1d09e  "JBC New Court"
+    pool d3c81e3b-0340-4c0b-a1e2-002472a17def  "JBC New Court - Main Courts"
+
+Read-back OK. Also confirm directly in SQL: SELECT id,name FROM "Branch" WHERE "tenantId"=<tenant>; SELECT id,name FROM "ResourcePool" WHERE "tenantId"=<tenant>;
