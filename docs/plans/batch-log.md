@@ -4970,6 +4970,10 @@ entry / Razorpay checkout completion was correctly not attempted from this sandb
 production domain (out of scope for this session's own action boundary -- test-mode or not, only
 a local dev host qualifies for that exception); Bala completed that step himself.
 
+**Correction 2 Oct 2026 (PR #128 wording).** The note above that tapping the notification "correctly navigated to the real booking-confirmation screen" overstated what was
+verified. A tap focuses an already-open window as-is, and opens the app at Home when it is closed; click-through to the booking is not implemented (no URL in the push payload,
+F-327). The matching dated correction is in the Description column of F-236's register row. The original text above is left as written.
+
 `pnpm register:check`/`pnpm diagram:verify` both green after the F-236 row's dated correction.
 
 ## Batch — F-328/F-329 opened: JBC venue rename + guest test-booking wipe (scripts written; not yet run) + Current Bookings card redesign (Part A)
@@ -4993,3 +4997,34 @@ the two services. **Neither has run against dev or production yet.** Gates: 0 du
 2 production wipe.
 
 Approved plan archived at `docs/plans/chief-archive/f328-jbc-venue-rename-and-booking-wipe.md`.
+
+## Batch -- F-328 closed on production; F-331 shipped; F-330 and F-331 logged
+
+**1 Oct 2026.** F-328 flips to Resolved in the register (see its Resolution cell); F-330 and F-331 are logged Open
+(IDs assigned by Chief, `Confirmed-ID` entries in `pending-findings.md`).
+
+**F-328, production, each step on Bala's explicit go.** `promote.sh 919cf84e053d78c6d2d3f5e72d52737a3b78b6c4` (PR #129; `main` CI green first;
+`/version.json` on `jbc.`, `courtowner1.` and the root host; `verify-deployment` 7/7; no pending migrations of 30; Postgres not recreated).
+Gate 0 dump (`prod-dump-verify.sh`, 31/31/31). F-329 preflight: exactly 1 pool on each JBC branch, branch names as in dev. Rename dry-run then `--apply`
+through the Caddy HTTPS route (the first real test of that path), SQL read-back: 2 branches and 2 pools carry the new names. Wipe rehearsal, a fresh
+dump (`f328-predump-20261001-134727.dump`, 129,004 bytes, SHA-256 `4b542203e3ba3ea85ddbc0d0b5256d20549dcb5ff9909753d5b9a958d8f5dc82`) and a fresh
+rehearsal (76 guest bookings, 61 intents, 15 notifications, 3 reminder dispatches), then `commit 76` detached: committed, post-wipe rehearsal 0 everywhere,
+`courtowner1` unchanged at 5 / 1 / 5, JBC 0 bookings with 2 branches, 2 pools and 34 users, 0 orphan intents. **Bala confirmed in writing on 1 Oct 2026
+that all 76 bookings were test data**, after the rehearsal showed 10 bookings under 24 hours old (latest 13:34 UTC that day) and 6 captured `cash_` intents;
+the card payment mode was Razorpay test (`rzp_test_`). Evidence: `docs/plans/chief-archive/f328-dev-rehearsal/`. The dev rehearsal ran against a restored
+copy (`badminton_restore_check`, dropped after merge) for the wipe and against `badminton_db` for the rename.
+
+**F-331 (Home card venue name), shipped.** PR #130, one file, +17 lines, merged as `92cfa4c`; `main` CI run 36877545275 green before the promote;
+`promote.sh 92cfa4cf0e1511b8f4e24bd8f87ac39616d6b11f`, 7/7. Dev verification and the layout-shift measurement are in the PR body. **Still open: Bala's
+real-device check on a fresh production booking** -- F-331 stays Open until then.
+
+**Surfaced, not fixed here.** (a) Claude Code's read of `POST /bookings` at `92cfa4c` found no check that the pool belongs to the token's tenant;
+that is already F-311 (Open, not yet triaged). (b) `?tenant=` is honoured in all builds, not only dev (`packages/ui-shared/src/context/TenantContext.tsx`);
+read-only check found no data exposure (`/bookings/my` is scoped by the token's `userId`, the refresh cookie is host-only) -- Chief's call whether it becomes a finding.
+(c) Hardcoded Razorpay test fallbacks in `services/payment/src/index.ts`: F-330. (d) Dev-only: `jbc.localhost` resolves to `courtowner1` because
+`TenantContext` skips the subdomain when the last host label is `localhost`; tested with `?tenant=jbc`.
+
+**Logged in the same docs PR on Chief's text:** F-325 (check-in offered at the wrong times, Medium), F-326 (push not delivered when the PWA is swiped away, Medium), F-327 (tapping a push does not open the booking, Low-Medium) and F-332 (`?tenant=` honoured in all builds, Low, provisional), all Open and not fixed; plus the dated F-236 / PR #128
+wording correction above. F-325 to F-327 carry no recorded assignment date in `pending-findings.md` (assigned between F-324 and F-328; logged 2 Oct 2026). Open follow-ups: `shellcheck_SC2028` on `prod-wipe.sh:18` (optional, own commit),
+Codacy's SSRF false positive at `rename-jbc-venues.mjs:113` (Bala's call to dismiss), the Codacy medium list (not reviewed). The F-328 dump stays on the VM
+and locally until Bala says to release it.
