@@ -2550,3 +2550,10 @@ Surfaced: found during F-328's plan; Chief-assigned same day.
 Description: `scripts/provision-tenant.mjs` finds an existing branch by exact `name` but creates pools with a plain `POST /resource-pools`, so re-provisioning an existing tenant duplicates pools, and after F-328's rename a re-run against any stale seed would create a second branch and pool. Pre-existing, found during F-328's plan. Low severity (provisioning is run by hand); not fixed by F-328.
 Confirmed-ID: F-329
 Confirmed: 1 Oct 2026
+
+### home-card-title-shows-pool-name-not-venue
+Batch: guest-member-pwa, 5 Oct 2026
+Surfaced: Bala's device, 5 Oct 2026, while checking F-331; assigned by Chief.
+Description: On the Home Current Bookings card the title is the pool name stripped of its venue prefix ('Main Courts'), which Bala does not want shown; the venue name becomes the title and the pool name is dropped from the card. Found 5 Oct 2026 on Bala's device while checking F-331. F-331 is not reopened (resolved on Bala's device evidence, 5 Oct).
+Confirmed-ID: F-333
+Confirmed: assigned by Chief 5 Oct 2026, logged 7 Oct 2026
