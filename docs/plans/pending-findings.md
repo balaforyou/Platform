@@ -2619,3 +2619,10 @@ Surfaced: Bala's device, 7 Oct 2026 (screenshot of the notification shade); assi
 Description: Push notifications for a tenant guest show the Elite Courts platform logo as the large icon instead of the tenant's logo. `icon` and `badge` are hardcoded to the build-time `/logo.png` in `scripts/shared-sw-push-handler.js:48-49`, shared by every tenant host, and the server sends no icon. The small "JBC Courts" header comes from the manifest and is unaffected. Found 7 Oct 2026 on Bala's device.
 Confirmed-ID: F-334
 Confirmed: assigned by Chief 7 Oct 2026, logged 7 Oct 2026
+
+### upcoming-booking-bar-on-book-screen-has-no-label
+Batch: guest-member-pwa, 7 Oct 2026
+Surfaced: Bala's device, 7 Oct 2026 (screenshot of `/book`, Android, JBC); assigned by Chief.
+Description: On the guest `/book` screen (`BranchBooking.tsx`) a green bar above the date ribbon shows only a weekday and time ("Thu 6:00 AM") with no label. It is the guest's own soonest upcoming booking in a different pool from the one open (`BranchBooking.tsx:196-205`, rendered at `:657-665`), so it can read as an availability hint for the current venue. Unlabeled since the F-235 `/book` Slice A screen (`832cfc6`); not touched by the 67ddcb8 promote. Found 7 Oct 2026 on Bala's device.
+Confirmed-ID: F-335
+Confirmed: assigned by Chief 7 Oct 2026, logged 7 Oct 2026
