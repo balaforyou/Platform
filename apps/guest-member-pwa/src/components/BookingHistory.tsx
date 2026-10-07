@@ -7,6 +7,7 @@ import CancelBookingModal from './CancelBookingModal';
 import ConfirmDialog from './ui/ConfirmDialog';
 import LoadingState from './ui/LoadingState';
 import { describeCourtAssignment } from '../lib/courtLabel';
+import { SHOW_CHECK_IN } from '../lib/featureFlags';
 
 export default function BookingHistory() {
   const { accessToken } = useAuth();
@@ -288,7 +289,9 @@ export default function BookingHistory() {
             History
           </h2>
           <p className="text-xs" style={{ color: 'var(--color-neutral-600)' }}>
-            Manage your scheduled court matches, complete checkout, check-in, or request cancellations.
+            {SHOW_CHECK_IN
+              ? 'Manage your scheduled court matches, complete checkout, check-in, or request cancellations.'
+              : 'Manage your scheduled court matches, complete checkout, or request cancellations.'}
           </p>
         </div>
         <Link
@@ -488,7 +491,8 @@ export default function BookingHistory() {
                         step (resolves F-093's open half) instead of firing check-in on the raw
                         tap -- the actual POST now happens in handleConfirmCheckIn, only after the
                         guest explicitly acknowledges the dialog's forfeits-refund copy below. */}
-                    {isCheckInOpen(booking) && (
+                    {/* F-325: hidden while SHOW_CHECK_IN is false (lib/featureFlags.ts). */}
+                    {SHOW_CHECK_IN && isCheckInOpen(booking) && (
                       <button
                         onClick={() => { setCheckInError(null); setCheckInTarget(booking); }}
                         className="py-2 px-4 text-xs font-semibold rounded-xl transition-all shadow-lg"

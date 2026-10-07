@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { SHOW_CHECK_IN } from '../src/lib/featureFlags';
 import { execSync } from 'child_process';
 
 test.describe('Guest Booking Flow E2E', () => {
@@ -150,12 +151,22 @@ test.describe('Guest Booking Flow E2E', () => {
     await page.click('#view-my-bookings-confirmation-btn');
     await expect(page).toHaveURL('/bookings/my');
     
-    // Self Check-in -- F-235 Slice G: now a real two-step confirm (resolves F-093's open half),
-    // not a single tap. Open the confirm dialog, then confirm.
-    await page.click('[id^="check-in-btn-"]');
-    await expect(page.locator('text=Confirm you\'re here')).toBeVisible();
-    await page.click('#confirm-check-in-btn');
-    await expect(page.locator('text=Checked In')).toBeVisible();
-    console.log('[ASSERT SUCCESS] Verified self check-in confirm step triggers status update to Checked In.');
+    // F-325 (re-scoped, 8 Oct 2026): the guest "I'm Here" check-in is hidden behind SHOW_CHECK_IN
+    // (src/lib/featureFlags.ts). This spec follows the flag so flipping it back needs no spec edit.
+    if (SHOW_CHECK_IN) {
+      // Self Check-in -- F-235 Slice G: now a real two-step confirm (resolves F-093's open half),
+      // not a single tap. Open the confirm dialog, then confirm.
+      await page.click('[id^="check-in-btn-"]');
+      await expect(page.locator('text=Confirm you\'re here')).toBeVisible();
+      await page.click('#confirm-check-in-btn');
+      await expect(page.locator('text=Checked In')).toBeVisible();
+      console.log('[ASSERT SUCCESS] Verified self check-in confirm step triggers status update to Checked In.');
+    } else {
+      // Wait for the list to render (the booking shows its Confirmed pill), then assert no check-in
+      // action is offered, even for a same-day slot inside the old 2-hour window.
+      await expect(page.getByText('Confirmed').first()).toBeVisible();
+      await expect(page.locator('[id^="check-in-btn-"]')).toHaveCount(0);
+      console.log('[ASSERT SUCCESS] Verified the I\'m Here check-in is hidden (SHOW_CHECK_IN is false).');
+    }
   });
 });
