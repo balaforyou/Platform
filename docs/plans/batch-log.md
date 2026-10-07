@@ -5102,3 +5102,29 @@ Docs only. No code, no deploy. Follows the close-out of the `9fea0f5` promote (#
 
 **Register:** `pnpm register:check` PASS (305 rows; Open 124, Resolved 181). `pnpm diagram:verify` PASS. No CRLF in the edited files.
 No new finding IDs were created. Merge needs Chief's sign-off and Bala's explicit go.
+
+---
+
+## Batch -- F-334: push notification icon follows the tenant logo (PR #136, draft)
+
+**7 Oct 2026. Opened, not closed.** F-334 (Low, assigned by Chief 7 Oct 2026, Open) is the large icon on guest push notifications: it was the build-time Elite Courts `/logo.png` for every tenant.
+Option B (Chief's ruling): the page records the tenant logo and the shared service-worker handler reads it. Plan and rulings archived at `docs/plans/chief-archive/f334-push-icon-tenant-logo.md`.
+
+**Change (guest app and the shared handler only; PR #136, draft, never marked ready):**
+- **S1 (`dc5e62c`):** `lib/pushBranding.ts` + `PushBrandingSync.tsx` + a one-line mount in `main.tsx`. Writes `{icon}` to the Cache API (`tenant-branding-v1`, `/__tenant-branding.json`) only for a host-resolved tenant;
+  a `?tenant=` override, the dev-default tenant or a subdomain that is not the host's records nothing and clears any earlier entry. Only http(s) logos. 23 unit tests.
+- **S2 (`72eef16`):** `scripts/shared-sw-push-handler.js` reads that record for `icon` (same-origin http(s) only) and falls back to the build-time default. `badge`, `notificationclick`, the injector, the notification
+  service, `sendPush` and admin-v2 are untouched. 27 handler tests run the real injector and execute the result in a `node:vm` sandbox; mutation-checked (original handler fails 5, dropping the origin check fails 2, reusing the icon as the badge fails 1).
+- **S4:** the F-334 register row (Open), the Confirmed-ID entry, this entry, the archived plan, and a code comment on the `PushBrandingSync` guard.
+
+**Live-fire (S3), real Chromium, real service worker, push delivered through CDP `ServiceWorker.deliverPushMessage` with the exact nested shape `sendPush` produces: 13/13 pass.**
+Before (true `origin/main` build `ad4dfac`): icon and badge both `/logo.png`. After: jbc shows `/logo-jbc.png` (badge `/logo.png`); a second tenant on its own origin shows its own logo; cache cleared, corrupt record, a record naming
+another host, tenant never resolving, a `?tenant=` load (fresh profile, and after a normal load which it clears), the dev-default host, and a tenant with no logo all show the default; a changed tenant logo is followed on the next open;
+the admin-v2 build keeps `/icon-192.png`. **Not provable locally:** real FCM delivery (needs the Firebase credentials) and how Android renders the icon, the status-bar badge and the app-name header.
+
+**Rulings (Chief, 7 Oct 2026):** a logo on an external host falls back to the default (kept per the plan; recorded as a known limitation, today every `tenant.logo` is a same-origin relative path); the host-label rule stays duplicated
+in the guest app rather than moving to `ui-shared` (the equality check fails closed, covered by tests); local full regression not needed (backend untouched; CI's `regression` job covers it). Codacy's AI review: the high-risk
+`if (!tenant) return` comment does not reproduce (`TenantProvider` never mounts children without a tenant, `TenantContext.tsx:192-201`); the guard stays and now carries a comment saying why; the medium and low comments stay as is.
+
+**Owed before F-334 can close:** merge, then `promote.sh <merged SHA>` (each needs Bala's explicit go), then a real-device check on a fresh app open: a real push on jbc and on courtowner1; and a read of `courtowner1`'s `Tenant.logo` in the database.
+F-327 (`notificationclick`) touches the same handler file and starts only after #136 merges.
