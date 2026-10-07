@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiRequest, branchHour, formatBranchTime } from '@badminton/ui-shared';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { Calendar, ArrowLeft, Info, ShieldAlert, ChevronDown } from 'lucide-react';
@@ -50,6 +50,19 @@ const RATE_SOURCE_LABEL: Record<RateSource, string> = {
 // often a guest reaches the resubmit path in the first place.
 const PENDING_SELECTION_KEY = 'pending_slot_selection';
 
+// F-335: a stored branch time zone is only usable if Intl accepts it. The bar below shows a time ONLY
+// for a known zone -- never through formatBranchTime's silent UTC fallback, which is wrong for
+// Asia/Kolkata (JBC): a 6:00 AM IST booking would read 12:30 AM until the zone arrives.
+function isKnownTimeZone(tz: unknown): tz is string {
+  if (typeof tz !== 'string' || !tz.trim()) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz.trim() });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function BranchBooking() {
   const { tenant } = useTenant();
   const { accessToken, user } = useAuth();
@@ -63,6 +76,9 @@ export default function BranchBooking() {
   // -------------------------------------------------------------------------------------------
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(() => localStorage.getItem('selected_branch_id'));
   const [branchAbout, setBranchAbout] = useState<any>(null);
+  // F-335: the /about payload has no id, so record which branch the current `branchAbout` (or its
+  // failure) belongs to. The bar below reads it only when this matches, never a previous venue's.
+  const [branchAboutFor, setBranchAboutFor] = useState<string | null>(null);
   const [venueSheetOpen, setVenueSheetOpen] = useState(false);
   const [aboutSheetOpen, setAboutSheetOpen] = useState(false);
   // F-235 Slice C: phone-re-verify gate at Reserve, for a walk-in-created guest (F-229) whose
@@ -90,9 +106,23 @@ export default function BranchBooking() {
   // one component instead of two separately-routed screens that each fetched this independently.
   useEffect(() => {
     if (!selectedBranchId) return;
+    // F-335: a response for a branch the guest has since left must not land (it would pair a
+    // previous venue's about with the new selection).
+    let isCurrentRequest = true;
     apiRequest<any>(`/tenant/branches/${selectedBranchId}/about`, { token: accessToken })
-      .then(setBranchAbout)
-      .catch(() => setBranchAbout(null));
+      .then((res) => {
+        if (!isCurrentRequest) return;
+        setBranchAbout(res);
+        setBranchAboutFor(selectedBranchId);
+      })
+      .catch(() => {
+        if (!isCurrentRequest) return;
+        setBranchAbout(null);
+        setBranchAboutFor(selectedBranchId);
+      });
+    return () => {
+      isCurrentRequest = false;
+    };
   }, [selectedBranchId, accessToken]);
 
   const handleSelectBranch = (branch: Branch) => {
@@ -178,32 +208,90 @@ export default function BranchBooking() {
   // one restore attempt, regardless of whether anything was actually restored.
   const restoreAttemptedRef = useRef(false);
 
-  const [upcomingBooking, setUpcomingBooking] = useState<any | null>(null);
-  const [upcomingBranchAbout, setUpcomingBranchAbout] = useState<any>(null);
+  // F-335: the soonest upcoming booking in a DIFFERENT pool from the one open, kept together with the
+  // pool it was computed for. Only a result for the pool open right now is ever shown (a pool still
+  // unknown shows nothing), so neither a stale response nor the pre-pool request can put a booking
+  // from the current pool in the bar.
+  const [upcomingResult, setUpcomingResult] = useState<{ poolId: string; booking: any | null } | null>(null);
+  const upcomingBooking = poolId && upcomingResult?.poolId === poolId ? upcomingResult.booking : null;
+
+  // F-335: the bar's venue, keyed by branch id -- never one copied value that a different branch's
+  // booking could inherit (the old single copied value showed the PREVIOUS venue's name and time
+  // zone while a lookup was pending or after it failed). Same branch as the screen: branchAbout,
+  // valid only while branchAboutFor says it belongs to that branch. Other branch: fetched once per
+  // id below; a lookup that settles without a result is recorded so the bar can tell failed from pending.
+  const [upcomingAboutById, setUpcomingAboutById] = useState<Record<string, any>>({});
+  const [upcomingAboutSettledEmpty, setUpcomingAboutSettledEmpty] = useState<Record<string, true>>({});
+  const upcomingAboutRequestedRef = useRef<Set<string>>(new Set());
+  const upcomingBranchId: string | null = upcomingBooking?.branchId ?? null;
+  const upcomingIsHere = !!upcomingBranchId && upcomingBranchId === branchId;
+  const upcomingAbout = !upcomingBranchId
+    ? null
+    : upcomingIsHere
+      ? (branchAboutFor === upcomingBranchId ? branchAbout : null)
+      : (upcomingAboutById[upcomingBranchId] ?? null);
+  const upcomingAboutSettled = !upcomingBranchId
+    ? false
+    : upcomingIsHere
+      ? branchAboutFor === upcomingBranchId
+      : !!upcomingAboutById[upcomingBranchId] || !!upcomingAboutSettledEmpty[upcomingBranchId];
+  const upcomingVenueState: 'loaded' | 'pending' | 'unavailable' = upcomingAbout
+    ? 'loaded'
+    : upcomingAboutSettled
+      ? 'unavailable'
+      : 'pending';
+
+  // Label, venue and time. The time needs a KNOWN zone (no UTC fallback); pending and failed show
+  // only the label. A name that is missing or blank is left out, never replaced by a placeholder.
+  const upcomingBarText = (() => {
+    if (!upcomingBooking) return '';
+    const venueName = typeof upcomingAbout?.name === 'string' ? upcomingAbout.name.trim() : '';
+    const zone = isKnownTimeZone(upcomingAbout?.timezone) ? upcomingAbout.timezone.trim() : null;
+    const startIso = upcomingBooking.window.startTime;
+    const when = zone
+      ? `${formatBranchTime(startIso, zone, { weekday: 'short' })} ${formatBranchTime(startIso, zone, { hour: 'numeric', minute: '2-digit' })}`
+      : '';
+    // A non-breaking space before each separator keeps the dot on the line it ends: a wrap never
+    // starts a line with a dangling "\u00b7".
+    return ['Your next booking', venueName, when].filter(Boolean).join('\u00a0\u00b7 ');
+  })();
 
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!upcomingBooking?.branchId) { setUpcomingBranchAbout(null); return; }
-    if (upcomingBooking.branchId === branchId) { setUpcomingBranchAbout(branchAbout); return; }
-    apiRequest<any>(`/tenant/branches/${upcomingBooking.branchId}/about`, { token: accessToken })
-      .then(setUpcomingBranchAbout)
-      .catch(() => {});
-  }, [upcomingBooking?.branchId, branchId, branchAbout, accessToken]);
+    if (!upcomingBranchId || upcomingIsHere) return;
+    if (upcomingAboutRequestedRef.current.has(upcomingBranchId)) return;
+    upcomingAboutRequestedRef.current.add(upcomingBranchId);
+    const id = upcomingBranchId;
+    // Results are keyed by id, so a response can never land on the wrong branch; no cancellation needed.
+    apiRequest<any>(`/tenant/branches/${id}/about`, { token: accessToken })
+      .then((res) => {
+        if (res) setUpcomingAboutById((prev) => ({ ...prev, [id]: res }));
+        else setUpcomingAboutSettledEmpty((prev) => ({ ...prev, [id]: true }));
+      })
+      .catch(() => setUpcomingAboutSettledEmpty((prev) => ({ ...prev, [id]: true })));
+  }, [upcomingBranchId, upcomingIsHere, accessToken]);
 
   useEffect(() => {
-    if (!accessToken) return;
+    // F-335: no request until the pool is known (the "another pool" filter is meaningless without
+    // it), and a response for a pool the guest has since left is ignored.
+    if (!accessToken || !poolId) return;
+    let isCurrentRequest = true;
     apiRequest<any[]>('/slot-engine/bookings/my', { token: accessToken })
       .then((res) => {
+        if (!isCurrentRequest) return;
         const list = Array.isArray(res) ? res : [];
         const next = list
           .filter((b) => b?.window?.startTime && ['HELD', 'CONFIRMED', 'CHECKED_IN'].includes(b.status))
           .filter((b) => new Date(b.window.startTime).getTime() > Date.now())
           .filter((b) => b.resourcePoolId !== poolId)
           .sort((a, b) => new Date(a.window.startTime).getTime() - new Date(b.window.startTime).getTime());
-        setUpcomingBooking(next[0] ?? null);
+        setUpcomingResult({ poolId, booking: next[0] ?? null });
       })
       .catch(() => {});
+    return () => {
+      isCurrentRequest = false;
+    };
   }, [accessToken, poolId]);
 
   // F-187: Morning/Afternoon/Evening buckets, half-open ranges so every slot lands in exactly
@@ -655,12 +743,31 @@ export default function BranchBooking() {
                   removed alongside this block. */}
 
               {upcomingBooking && (
-                <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3 mb-3" style={{ background: 'var(--color-accent-200)' }}>
+                <div
+                  data-testid="upcoming-booking-bar"
+                  data-venue-state={upcomingVenueState}
+                  className="flex items-center gap-3 rounded-2xl px-3.5 py-3 mb-3"
+                  style={{ background: 'var(--color-accent-200)' }}
+                >
                   <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--color-accent-600)' }} />
-                  <div className="flex-1 text-[12.5px] font-semibold" style={{ color: 'var(--color-accent-800)' }}>
-                    {formatBranchTime(upcomingBooking.window.startTime, upcomingBranchAbout?.timezone, { weekday: 'short' })}{' '}
-                    {formatBranchTime(upcomingBooking.window.startTime, upcomingBranchAbout?.timezone, { hour: 'numeric', minute: '2-digit' })}
+                  {/* F-335: label, venue and time wrap to two lines then clamp (the F-333 pattern); while the
+                      venue is pending the second line is reserved so it does not jump on arrival, and the
+                      reservation is released as soon as the lookup loads or fails. */}
+                  <div
+                    className="flex-1 min-w-0 text-[12.5px] font-semibold leading-snug line-clamp-2"
+                    style={{ color: 'var(--color-accent-800)', minHeight: upcomingVenueState === 'pending' ? '2.75em' : undefined }}
+                    title={upcomingBarText}
+                  >
+                    {upcomingBarText}
                   </div>
+                  {/* 44px tap target without a taller bar: the hit area is an invisible extension of the link. */}
+                  <Link
+                    to="/bookings/my"
+                    className="shrink-0 relative text-[12px] font-bold before:content-[''] before:absolute before:-inset-x-2 before:-inset-y-[14px]"
+                    style={{ color: 'var(--color-accent-700)' }}
+                  >
+                    Manage
+                  </Link>
                 </div>
               )}
 
