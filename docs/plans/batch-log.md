@@ -5088,3 +5088,17 @@ F-333 moves to Resolved on that evidence in a small docs PR; F-325 stays Open at
 - SonarCloud posted an unexplained "The last analysis has failed" comment on #132 while its check run on the real head `7eb3397` was green; Chief ruled it non-blocking. The dashboard was not inspected.
 - `scripts/tenants/jbc.json` and `scripts/f328/rename-jbc-venues.mjs` still mention `displayPoolNameHome` in explanatory comments (shipped F-328 files, left alone on purpose).
 - #133's e2e coverage: `guest-booking.spec.ts` follows the flag in both states, but the e2e journey itself was not run by Claude Code (needs the e2e database); the 12 before/after/restore screenshots stay in the session scratchpad, not in the repo.
+
+---
+
+## Batch -- F-333 moved to Resolved on Bala's device check; F-325 device-check note (docs only)
+
+Docs only. No code, no deploy. Follows the close-out of the `9fea0f5` promote (#134, merged `89d381e`).
+
+**Bala's real-device check (7 Oct 2026), as he reported it:** Android, JBC host, checked on both the Home "Current Bookings" card and the History screen.
+- **F-333:** the venue name shows as the card title, with no "Main Courts" flash. **F-333 moved Open to Resolved** (Resolved 7 Oct 2026), original Description text kept, dated update note added.
+  **Not covered:** no `courtowner1` device check, and no long-name device check.
+- **F-325:** Bala reports no "I'm Here" button on either screen. A dated note was added to the Description column only. **F-325 stays Open at Low** (the backend `POST /bookings/:id/check-in` still has no time gate; reopen the UI side when check-in gets real logic).
+
+**Register:** `pnpm register:check` PASS (305 rows; Open 124, Resolved 181). `pnpm diagram:verify` PASS. No CRLF in the edited files.
+No new finding IDs were created. Merge needs Chief's sign-off and Bala's explicit go.
