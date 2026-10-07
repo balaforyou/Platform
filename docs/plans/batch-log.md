@@ -5163,3 +5163,42 @@ Merge needs Chief's sign-off and Bala's explicit go.
 - `Tenant.logo`: `jbc` `/logo-jbc.png`, `courtowner1` `/logo.png` (the same image as the default push icon, so F-334 changes nothing visible for `courtowner1`).
 - The `courtowner1` database logo check listed above as still open is therefore done. A dated note is on F-334's row (Description), and one on F-234's row records that JBC is no longer `UTC`; F-234's original text is untouched.
 - The JBC time zone matters for F-335: the `/book` bar must never format a time with the UTC fallback. That rule is Chief's, in the F-335 plan rulings.
+
+---
+
+## Batch -- F-335: label the "next booking" bar on /book (PR #138, draft)
+
+**7 Oct 2026. Opened, not closed.** F-335 (Low, Open): the green bar above the date ribbon on `/book` showed only a weekday and time, so a guest could read their own booking at the other venue as an availability hint.
+Plan approved by Chief with rulings (archived at `docs/plans/chief-archive/f335-book-next-booking-label.md`). `BranchBooking.tsx` only; the Home card, F-333, F-334, `CourtBooking.tsx` and F-327 are untouched.
+
+**Change:** the bar reads "Your next booking · {venue} · {Thu 6:00 AM}" with a Manage link to `/bookings/my`.
+- **Venue and time zone are keyed by branch id** and derived at render (the F-333 pattern). The old single copied value showed the previous venue's zone while a lookup was pending, and forever if it failed.
+- **No time without a known IANA zone, and no UTC fallback.** The production read of 7 Oct 2026 shows both JBC branches are `Asia/Kolkata` (the three `courtowner1` branches are `UTC`), so the fallback reads 12:30 AM for a 6:00 AM booking.
+  Pending and failed lookups show only "Your next booking" and Manage; the second line is reserved only while pending.
+- **The stale-response guard rides with F-335** (Chief's ruling): it protects the bar's own "another pool only" rule, so it is not logged as an adjacent finding. No `/bookings/my` request until the pool is known; the result is kept with the pool
+  it was computed for; a response for a pool the guest has left is ignored. The branch-about effect also ignores responses for a branch the guest left, and `branchAboutFor` records which branch the current `branchAbout` belongs to.
+- Two-line clamp with a `title`; Manage keeps a 44px tap target through an invisible hit area (no taller bar); Manage is `accent-700` because the pair measures 5.13:1 (JBC) and 5.56:1 (`courtowner1`) on `accent-200`, both over 4.5:1
+  (the `accent-800` fallback was only for a pair under 4.5:1). Test hooks: `data-testid="upcoming-booking-bar"`, `data-venue-state`.
+
+**Time-zone data found while checking whether the screen already carries it (Chief asked):** only the `Branch.timezone` column holds it. `/bookings/my` returns the window, pool, resource, players and child windows with no branch relation and no
+time zone (a booking carries only a scalar `branchId`). `GET /tenants/:id/branches` returns whole Branch rows, so it does carry `timezone` for every branch of the tenant; the per-branch `/about` call the plan uses carries it and the name.
+`/about` was kept as approved; the branch list is a possible one-request alternative.
+
+**Live-fire (real Chromium, real component and services, scratch DB with the JBC branches set to `Asia/Kolkata`; before = `main`; 10 scenarios, 0 errors on the final build):**
+- **Wrong time on `main`:** with only the New Court booking (the real JBC case) the bar read "Thu 12:30 AM" for the whole 4 s lookup, and permanently when the lookup failed. After: label only while pending; then the right venue and time.
+- **Stale venue (case 6):** switching venue while the bar shows, `main` formatted the Old Court booking with the previous venue's zone for the whole lookup (forever on failure); a scratch build of the new label on the old state showed the previous venue's **name**.
+  After: pending shows the label only, loaded shows the correct venue and time, failed shows the label only.
+- **Stale response:** on `main`, a request made before the pool is known flashed the current pool's own booking ("Thu 1:00 AM") for 3 s, and a late first response overwrote the newer, correct result and stayed. After: neither; chip toggling with
+  an out-of-order response ends on the right booking.
+- Same venue, other pool: shows this venue's name with no extra `/about` request. No bar when the only other booking is in the current pool or there are none. Manage navigates to `/bookings/my`.
+- Height: pending 58.4 px to loaded 58.4 px (no jump at 390 px); failed releases to 42 px. Manage hit area about 46 px high and 8 px beyond the link horizontally. Contrast numbers above are identical in light and dark (the accent ramp is inline per tenant).
+- **Not provable locally:** a real device and production venue names. Not run: the guest e2e suite (needs the e2e database; already partly red and time-of-day dependent).
+
+**For Chief, surfaced and not decided:** a very long venue name (59 characters at 360px) pushes the time past the two-line clamp (the full text is in the `title`); a layout that keeps the time visible (label first line, venue truncating beside the time on the
+second) is a small change if wanted. The wrap of the single string can also split a venue name across two lines ("JBC New / Court"); a non-breaking separator keeps the dot on the line it ends.
+
+**Surfaced, not fixed, not numbered:** the same UTC-fallback pattern exists wherever `formatBranchTime` is handed a time zone that may not be loaded yet: `BookingConfirmation.tsx:123`, `BookingPay.tsx:429-431`, `BranchBooking.tsx:422-423` (slot times),
+`BookingHistory.tsx:350-352` and the Home card in `main.tsx`. Whether each renders before the zone arrives was not checked.
+**History check (read-only, no rows changed):** the `Asia/Kolkata` flip was F-088 Stage 2 part 3 (Batch 64, with F-100). The DB flip landed ahead of part 4's deploy, which merged as `0bd53b3` (PR #51) on 19 Sep 2026; the register has F-088 and F-100 Resolved on 20 Sep. F-234 (12 Sep) predates the flip, so its "both `UTC`" statement was true when written.
+
+**CI:** reported on the PR. Merge needs Chief's sign-off after the live-fire and Bala's explicit go.
