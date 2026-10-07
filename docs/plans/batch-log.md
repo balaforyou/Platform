@@ -5084,9 +5084,7 @@ F-333 moves to Resolved on that evidence in a small docs PR; F-325 stays Open at
 
 **Surfaced, not fixed here (Chief's call; none is numbered):**
 - `TenantContext.tsx`: the `parts[1] === 'localhost'` branch is unreachable, so `jbc.localhost` resolves the default tenant `courtowner1` in dev (use `?tenant=jbc`). Related to F-332 (`?tenant=` honoured in all builds).
-- The VM's `.env` has the `FIREBASE_*` variables unset (the compose output warns that each defaults to a blank string on every command). Not investigated; it may relate to the push-client findings F-323 and F-326.
+- The compose output on the VM suggests the `FIREBASE_*` variables are unset (each warns that it defaults to a blank string, on every command); the `.env` itself was not inspected. It may relate to the push-client findings F-323 and F-326.
 - SonarCloud posted an unexplained "The last analysis has failed" comment on #132 while its check run on the real head `7eb3397` was green; Chief ruled it non-blocking. The dashboard was not inspected.
 - `scripts/tenants/jbc.json` and `scripts/f328/rename-jbc-venues.mjs` still mention `displayPoolNameHome` in explanatory comments (shipped F-328 files, left alone on purpose).
 - #133's e2e coverage: `guest-booking.spec.ts` follows the flag in both states, but the e2e journey itself was not run by Claude Code (needs the e2e database); the 12 before/after/restore screenshots stay in the session scratchpad, not in the repo.
-
-**Process note:** the F-325 draft PR was opened on an ambiguous "raise a draft PR"; Chief's rule stands (a clear go before any push; ask when the wording is ambiguous).
