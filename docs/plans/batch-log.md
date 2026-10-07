@@ -5051,3 +5051,42 @@ The e2e journey was not run (needs the e2e database; the suite is already partly
 
 **CI on `78b95c7`:** `checks`, `regression`, Codacy (0 issues) and SonarCloud (Quality Gate passed, 0 new issues, 0 hotspots) all passed; `integration` skipped.
 Merge, `promote.sh <merged SHA>` and the production check each need Bala's explicit go.
+
+## Batch -- Production promote of `9fea0f5` (F-333 and F-325 live; F-331 resolved, F-325 re-scoped) and close-out
+
+**7 Oct 2026. Promoted and verified; two real-device checks still owed (below).** Promote run by Bala from his Windows machine over the IAP tunnel
+(`promote.sh 9fea0f598131a3810d3628b0decefc72a031d2bd` on the VM). Claude Code drafted the commands and reviewed the logs; it has no VM access and ran nothing there.
+
+**What shipped, in merge order (all on `main`):**
+- **#131** (`3dae519`), docs: F-328 closed on production; F-325 to F-327 assignment dates corrected to "assigned by Chief 30 Sep 2026"; F-331 moved to Resolved on Bala's 5 Oct
+  real-device screenshot; F-330 and F-332 logged. Docs only, no deploy impact.
+- **#132** (`ec75b33`), **F-333**: the Home Current Bookings card title is now the booking's own venue name (two-line clamp, reserved placeholder while the branch fetch is pending,
+  pool-name fallback only if it settles without a name). `displayPoolNameHome` and `normalizeDashesHome` were deleted (Chief's ruling: an identity function on the fallback path).
+- **#133** (`9fea0f5`, the promoted SHA), **F-325 re-scoped**: the guest "I'm Here" check-in is hidden behind one constant, `SHOW_CHECK_IN = false` (`apps/guest-member-pwa/src/lib/featureFlags.ts`);
+  the History subtitle and the phone-verify line follow it. Backend `POST /bookings/:id/check-in`, admin apps and the CHECKED_IN pill are untouched. F-325 stays Open at Low (Medium to Low, confirmed by Chief).
+
+**CI on the final merged SHA `9fea0f5` (Actions run #492):** `checks` (lint, typecheck, `register:check`, `diagram:verify`), `regression` (5 services) and `integration` all succeeded.
+`integration` built and started the shipped stack, `verify-deployment` passed for all 6 components at the built SHA, and all 7 images were pushed (movable and immutable tags).
+Its e2e step is marked non-blocking; it completed, and its pass/fail counts were not reviewed here.
+
+**Promote log (VM):** the 7 `:<svc>-9fea0f5...` images pulled; the F-077 guard reported the image matches the deploy target; 30 migrations found, **none pending**;
+the six long-running services were recreated (`migrate` and `postgres` excluded, so the live database was not bounced; Postgres uptime unchanged at 5 weeks);
+the Caddy HTTP-fallback check returned 0; the first checks saw "connection refused" and four 502s while the stack came up, and every endpoint answered after about 21 s;
+`verify-deployment.mjs https://elitecourts.duckdns.org 9fea0f598131a3810d3628b0decefc72a031d2bd` reported **all 7 components PASS at `9fea0f598131`**
+(slot-engine, identity-auth, tenant-management, payment, notification, guest-pwa, admin-v2). A rollback snapshot (`gcp-vm-<svc>:rollback` plus `*.rollback` config) was taken first;
+rollback is `promote.sh 9fea0f598131a3810d3628b0decefc72a031d2bd --rollback`. The previous generation's images were pruned (keep current plus one prior).
+
+**Per-host `/version.json` (Bala, 7 Oct 2026):** `jbc.elitecourts.duckdns.org`, `courtowner1.elitecourts.duckdns.org` and `admin.elitecourts.duckdns.org` all return `{"sha":"9fea0f598131a3810d3628b0decefc72a031d2bd"}`.
+
+**Register state, deliberately unchanged by this entry:** F-333 and F-325 stay **Open**. **Owed:** Bala's real-device check on a fresh, hard-refreshed app. (1) F-333: a real booking's Home card
+shows the venue name as its title, with no "Main Courts" and no separate pin line. (2) F-325: History shows no "I'm Here" on a same-day booking, and an already-CHECKED_IN booking still shows its pill.
+F-333 moves to Resolved on that evidence in a small docs PR; F-325 stays Open at Low until check-in gets real logic.
+
+**Surfaced, not fixed here (Chief's call; none is numbered):**
+- `TenantContext.tsx`: the `parts[1] === 'localhost'` branch is unreachable, so `jbc.localhost` resolves the default tenant `courtowner1` in dev (use `?tenant=jbc`). Related to F-332 (`?tenant=` honoured in all builds).
+- The VM's `.env` has the `FIREBASE_*` variables unset (the compose output warns that each defaults to a blank string on every command). Not investigated; it may relate to the push-client findings F-323 and F-326.
+- SonarCloud posted an unexplained "The last analysis has failed" comment on #132 while its check run on the real head `7eb3397` was green; Chief ruled it non-blocking. The dashboard was not inspected.
+- `scripts/tenants/jbc.json` and `scripts/f328/rename-jbc-venues.mjs` still mention `displayPoolNameHome` in explanatory comments (shipped F-328 files, left alone on purpose).
+- #133's e2e coverage: `guest-booking.spec.ts` follows the flag in both states, but the e2e journey itself was not run by Claude Code (needs the e2e database); the 12 before/after/restore screenshots stay in the session scratchpad, not in the repo.
+
+**Process note:** the F-325 draft PR was opened on an ambiguous "raise a draft PR"; Chief's rule stands (a clear go before any push; ask when the wording is ambiguous).
