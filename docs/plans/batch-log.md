@@ -5128,3 +5128,32 @@ in the guest app rather than moving to `ui-shared` (the equality check fails clo
 
 **Owed before F-334 can close:** merge, then `promote.sh <merged SHA>` (each needs Bala's explicit go), then a real-device check on a fresh app open: a real push on jbc and on courtowner1; and a read of `courtowner1`'s `Tenant.logo` in the database.
 F-327 (`notificationclick`) touches the same handler file and starts only after #136 merges.
+
+---
+
+## Batch -- Production promote of `67ddcb8` (F-334 live); F-334 Resolved; F-335 logged (docs only)
+
+**7 Oct 2026. Docs only: no code, no deploy.** Closes out the promote of `67ddcb8a872d457debb4a597688ca3837fbc4612` (PR #136, merged as `67ddcb8`) and moves the register to match.
+
+**What shipped:** #136, **F-334**: the guest push notification's large icon follows the tenant logo (guest app records its host-resolved tenant logo in the Cache API; the shared service-worker handler reads it, with the build-time icon as the fallback).
+`badge`, `notificationclick`, the notification service, `sendPush`, the injector and admin-v2 are untouched.
+
+**CI on the merged SHA `67ddcb8` (Actions run #501):** success.
+
+**Promote log (VM, run by Bala from Windows over IAP):** the 7 `:<svc>-67ddcb8...` images pulled; `docker-compose.yml` and the Caddyfile already current (no topology change); the F-077 guard reported the image matches the deploy target;
+30 migrations found, **none pending**; the six long-running services recreated (`migrate` and `postgres` excluded; Postgres uptime unchanged at 6 weeks); a connection refusal and five 502s while the stack came up, every endpoint answering after about 21 s;
+Caddy HTTP-fallback check `0`; `verify-deployment.mjs https://elitecourts.duckdns.org 67ddcb8a872d457debb4a597688ca3837fbc4612` reported **all 7 components PASS at `67ddcb8a872d`**; the superseded `92cfa4c` generation was pruned (`9fea0f5` kept as the prior generation).
+Rollback is `promote.sh 67ddcb8a872d457debb4a597688ca3837fbc4612 --rollback`.
+
+**Per-host `/version.json` (output pasted by Bala):** `jbc.elitecourts.duckdns.org`, `courtowner1.elitecourts.duckdns.org` and `admin.elitecourts.duckdns.org` all return `{"sha":"67ddcb8a872d457debb4a597688ca3837fbc4612"}`.
+
+**Register (this PR):**
+- **F-334: Open to Resolved** (7 Oct 2026). Original Description kept, dated update note added. Resolution: Bala reported on a real Android device (JBC host) that the notification's large icon is the JBC logo.
+  **Not covered:** no `courtowner1` device check; no production database check of `courtowner1`'s `tenant.logo` (still owed, a read-only job for a session with VM access); the status-bar badge glyph was not assessed (`badge` is unchanged; any alpha-mask question is a separate observation, not part of F-334).
+- **F-335: logged Open (Low).** The green "Thu 6:00 AM" bar on `/book` has no label (`BranchBooking.tsx:196-205`, `:657-665`); unlabeled since `832cfc6`, not touched by this promote; no earlier fix is documented in the repo. Fix ruled by Chief (label with venue, Manage link); a plan comes separately, nothing is implemented here.
+
+**Counts:** `pnpm register:check` PASS (307 rows; Open 125, Resolved 182). `pnpm diagram:verify` PASS. No CRLF in the edited files.
+
+**Surfaced, not fixed:** the VM compose output still warns that the seven `FIREBASE_*` variables are unset on every command (unchanged by this promote; the `.env` itself was not inspected). Push delivery works in production regardless (Bala's device screenshot of a real push is the source of F-334).
+**Still open, not part of this:** the `courtowner1` database logo check, the tracker refresh (read-only reconciliation first), F-326 behind the VM `.env` Firebase check; F-327 (`notificationclick`, same handler file) stays on hold until Bala asks.
+Merge needs Chief's sign-off and Bala's explicit go.
