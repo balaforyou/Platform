@@ -2550,3 +2550,58 @@ Surfaced: found during F-328's plan; Chief-assigned same day.
 Description: `scripts/provision-tenant.mjs` finds an existing branch by exact `name` but creates pools with a plain `POST /resource-pools`, so re-provisioning an existing tenant duplicates pools, and after F-328's rename a re-run against any stale seed would create a second branch and pool. Pre-existing, found during F-328's plan. Low severity (provisioning is run by hand); not fixed by F-328.
 Confirmed-ID: F-329
 Confirmed: 1 Oct 2026
+
+### razorpay-key-fallback-hardcoded-test-credentials
+Batch: payment, 1 Oct 2026
+Surfaced: Claude Code, 1 Oct 2026, during F-328's production payment-mode check; Chief-assigned same day.
+Description: `services/payment/src/index.ts` (lines 11, 12 and 347) falls back to a hardcoded Razorpay test key ID and secret when
+`RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are empty. Production does not use the fallback today (env values set and different from the literals;
+production runs in test mode), but the fallback fails open: a missing or misspelled variable after a move to live keys would silently use the test account.
+Severity Low. Direction (not now): remove the fallbacks and fail at startup when the variables are missing; key rotation depends on which Razorpay account
+the test key belongs to. Not part of F-328.
+Confirmed-ID: F-330
+Confirmed: 1 Oct 2026
+
+### home-card-shows-no-venue-name
+Batch: guest-member-pwa, 1 Oct 2026
+Surfaced: Bala, 1 Oct 2026, after F-328's production wipe ("the badge still shows main court"); Chief-assigned same day.
+Description: the redesigned Home "Current Bookings" card shows only the pool name with the venue prefix stripped ("Main Courts"), so it never says which
+venue a booking is at. Design assumption (venue visible elsewhere on Home) disproved by real use. Severity Low-Medium. Implemented as a one-line venue row
+(PR #130, merged as `92cfa4c`, live in production); stays Open until Bala's real-device check on a fresh production booking.
+Confirmed-ID: F-331
+Confirmed: 1 Oct 2026
+### check-in-offered-at-wrong-times-no-time-gate
+Batch: guest-member-pwa and slot-engine, 30 Sep 2026
+Surfaced: Bala's real use, 30 Sep 2026 (10:30 PM, History still offered "I'm Here" for morning slots); logged 2 Oct 2026 on Chief's text.
+Description: `isCheckInOpen` (`BookingHistory.tsx`, line 230) is `sameDay && diffHours <= 2` with no lower bound, and `POST /bookings/:id/check-in`
+(`services/slot-engine/src/index.ts`, line 5195) has no time comparison, so a check-in can be recorded at any hour. Severity Medium. Direction (not done):
+gate both sides on a window around the slot start, reusing `isCancelable`'s shape (F-245); fix UI and backend together.
+Confirmed-ID: F-325
+Confirmed: assigned by Chief 30 Sep 2026; logged 2 Oct 2026
+
+### push-not-delivered-when-pwa-swiped-away
+Batch: notification, 30 Sep 2026
+Surfaced: Bala's device, 30 Sep 2026; logged 2 Oct 2026 on Chief's text.
+Description: confirmation and reminder pushes arrive while the app is open and not after it is swiped away. Cause unconfirmed. `sendPush`
+(`services/notification/src/firebase.ts`, line 47) sends `notification` and `data` with no `webpush`/`android` priority or TTL. Decision (Bala, 30 Sep 2026): set high
+priority and a TTL server-side; users cannot be asked to grant unrestricted battery permission; fallback channel deferred (MSG91 SMS waits for a paying client, a free
+Telegram bot needs its own discovery pass). Severity Medium. Needs a live-fire test on a swiped-away app after the change.
+Confirmed-ID: F-326
+Confirmed: assigned by Chief 30 Sep 2026; logged 2 Oct 2026
+
+### tapping-push-does-not-open-the-booking
+Batch: notification and shared service worker, 30 Sep 2026
+Surfaced: Bala's device, 30 Sep 2026 (app closed, tap opens Home); logged 2 Oct 2026 on Chief's text.
+Description: the push payload has no `data.url` and the `notificationclick` handler (`scripts/shared-sw-push-handler.js`, line 57) falls back to `'/'`: it focuses an
+already-open window and otherwise opens Home. Severity Low-Medium. Direction (not done): add a booking URL to the payload and navigate to it, reusing the existing route.
+Confirmed-ID: F-327
+Confirmed: assigned by Chief 30 Sep 2026; logged 2 Oct 2026
+
+### tenant-query-param-honoured-in-all-builds
+Batch: ui-shared and guest-member-pwa, 1 Oct 2026
+Surfaced: Claude Code, 1 Oct 2026, during F-331's verification; Chief-assigned same day, provisional.
+Description: `TenantContext.tsx` (lines 126-131) applies `?tenant=<subdomain>` in all builds. Not a data leak (`/bookings/my` is scoped by the token's `userId`; refresh cookie is
+host-only). The override also changes the tenant ID used for the branch list and for OTP/Google login and registration; the booking request body's `tenantId` is ignored server-side.
+Severity Low, provisional; Chief to confirm. Not fixed.
+Confirmed-ID: F-332
+Confirmed: 1 Oct 2026
