@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth, useTenant } from '@badminton/ui-shared';
 import { requestOtp, attachPhone } from '../lib/auth';
 import ConfirmDialog from './ui/ConfirmDialog';
+import { SHOW_CHECK_IN } from '../lib/featureFlags';
 
 interface VerifyPhoneDialogProps {
   open: boolean;
@@ -104,7 +105,9 @@ export default function VerifyPhoneDialog({ open, onOpenChange, phone, onVerifie
               // prefixed); in entry mode it's the raw digits just typed below.
               `Enter the code we sent by SMS to ${isEntryMode ? `+91 ${effectivePhone}` : effectivePhone}.`
             ) : isEntryMode ? (
-              'We use your phone number for booking confirmations and court check-in.'
+              (SHOW_CHECK_IN
+                ? 'We use your phone number for booking confirmations and court check-in.'
+                : 'We use your phone number for booking confirmations.')
             ) : (
               `We need to confirm ${phone} is really yours before this booking. This only takes a moment.`
             )}
