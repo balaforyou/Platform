@@ -25,10 +25,9 @@ Unlabeled since the F-235 `/book` Slice A screen (`832cfc6`); no earlier fix is 
 - State: `upcomingResult` keeps `{ poolId, booking }`; the bar uses it only when `poolId` matches the pool open now. No `/bookings/my` request until the pool is known; a response for a pool the guest has left
   is ignored. `branchAboutFor` records which branch the current `branchAbout` (or its failure) belongs to (the `/about` payload has no id), and the branch-about effect ignores responses for a branch the guest left.
   Other-branch venues are fetched once per id into `upcomingAboutById`; a lookup that settles without a result is recorded in `upcomingAboutSettledEmpty`.
-- Render: `data-testid="upcoming-booking-bar"` and `data-venue-state="loaded|pending|unavailable"`; one text string clamped to two lines with a `title`; Manage with an invisible hit area; `isKnownTimeZone` gates the time.
+- Layout ruling (Chief, 7 Oct 2026, after the long-name finding): two lines as above.
+- Render: `data-testid="upcoming-booking-bar"` and `data-venue-state="loaded|pending|unavailable"`; line 1 is the label and Manage, line 2 is the venue (truncates) and the time (never shrinks), with a `title` carrying the full text; Manage with an invisible hit area; `isKnownTimeZone` gates the time.
 
 ## Known limitations / for later
-- A very long venue name (about 59 characters at 360px) pushes the time past the two-line clamp; the full text is in the `title`. A layout that keeps the time visible (label on the first line, venue truncating beside the
-  time on the second) would be a small layout change, left for Chief to rule.
-- The same UTC-fallback pattern exists wherever `formatBranchTime` is handed a time zone that may not be loaded yet (listed in the batch-log; whether each renders before the zone arrives was not checked); surfaced, not fixed here.
+- The same UTC-fallback pattern exists wherever `formatBranchTime` is handed a time zone that may not be loaded yet. A live audit (every `/about` delayed) showed it on History, the Home card, the confirmation screen and the `/book` slot grid; the rest were confirmed by code read. Listed in the batch-log; surfaced, not fixed here.
 - Not provable locally: a real device and production venue names.

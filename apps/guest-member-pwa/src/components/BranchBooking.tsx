@@ -241,20 +241,16 @@ export default function BranchBooking() {
       ? 'unavailable'
       : 'pending';
 
-  // Label, venue and time. The time needs a KNOWN zone (no UTC fallback); pending and failed show
-  // only the label. A name that is missing or blank is left out, never replaced by a placeholder.
-  const upcomingBarText = (() => {
-    if (!upcomingBooking) return '';
-    const venueName = typeof upcomingAbout?.name === 'string' ? upcomingAbout.name.trim() : '';
-    const zone = isKnownTimeZone(upcomingAbout?.timezone) ? upcomingAbout.timezone.trim() : null;
-    const startIso = upcomingBooking.window.startTime;
-    const when = zone
-      ? `${formatBranchTime(startIso, zone, { weekday: 'short' })} ${formatBranchTime(startIso, zone, { hour: 'numeric', minute: '2-digit' })}`
+  // Venue and time for the bar's second line. The time needs a KNOWN zone (no UTC fallback); pending
+  // and failed lookups show only the label line. A name that is missing or blank is left out, never
+  // replaced by a placeholder.
+  const upcomingBarVenue = typeof upcomingAbout?.name === 'string' ? upcomingAbout.name.trim() : '';
+  const upcomingBarZone = isKnownTimeZone(upcomingAbout?.timezone) ? upcomingAbout.timezone.trim() : null;
+  const upcomingBarWhen =
+    upcomingBooking && upcomingBarZone
+      ? `${formatBranchTime(upcomingBooking.window.startTime, upcomingBarZone, { weekday: 'short' })} ${formatBranchTime(upcomingBooking.window.startTime, upcomingBarZone, { hour: 'numeric', minute: '2-digit' })}`
       : '';
-    // A non-breaking space before each separator keeps the dot on the line it ends: a wrap never
-    // starts a line with a dangling "\u00b7".
-    return ['Your next booking', venueName, when].filter(Boolean).join('\u00a0\u00b7 ');
-  })();
+  const upcomingBarTitle = ['Your next booking', upcomingBarVenue, upcomingBarWhen].filter(Boolean).join(' \u00b7 ');
 
   const dateInputRef = useRef<HTMLInputElement>(null);
 
@@ -746,28 +742,39 @@ export default function BranchBooking() {
                 <div
                   data-testid="upcoming-booking-bar"
                   data-venue-state={upcomingVenueState}
-                  className="flex items-center gap-3 rounded-2xl px-3.5 py-3 mb-3"
+                  className="flex items-start gap-3 rounded-2xl px-3.5 py-3 mb-3"
                   style={{ background: 'var(--color-accent-200)' }}
                 >
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--color-accent-600)' }} />
-                  {/* F-335: label, venue and time wrap to two lines then clamp (the F-333 pattern); while the
-                      venue is pending the second line is reserved so it does not jump on arrival, and the
-                      reservation is released as soon as the lookup loads or fails. */}
+                  <span className="h-2 w-2 rounded-full shrink-0 mt-[5px]" style={{ background: 'var(--color-accent-600)' }} />
+                  {/* F-335 (Chief's layout ruling): line 1 is the label and Manage; line 2 is the venue, which
+                      truncates with an ellipsis, then the time, which never shrinks or wraps, so a long
+                      venue name can never push the time out of view. While the venue is pending the second
+                      line is reserved so the bar does not jump when it arrives; the reservation is released
+                      as soon as the lookup loads or fails. The full text is in the title attribute. */}
                   <div
-                    className="flex-1 min-w-0 text-[12.5px] font-semibold leading-snug line-clamp-2"
+                    className="flex-1 min-w-0 text-[12.5px] font-semibold leading-snug"
                     style={{ color: 'var(--color-accent-800)', minHeight: upcomingVenueState === 'pending' ? '2.75em' : undefined }}
-                    title={upcomingBarText}
+                    title={upcomingBarTitle}
                   >
-                    {upcomingBarText}
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate">Your next booking</span>
+                      {/* 44px tap target without a taller bar: the hit area is an invisible extension of the link. */}
+                      <Link
+                        to="/bookings/my"
+                        className="shrink-0 relative text-[12px] font-bold before:content-[''] before:absolute before:-inset-x-2 before:-inset-y-[14px]"
+                        style={{ color: 'var(--color-accent-700)' }}
+                      >
+                        Manage
+                      </Link>
+                    </div>
+                    {(upcomingBarVenue || upcomingBarWhen) && (
+                      <div className="flex min-w-0 items-baseline">
+                        {upcomingBarVenue && <span className="min-w-0 truncate">{upcomingBarVenue}</span>}
+                        {upcomingBarVenue && upcomingBarWhen && <span className="shrink-0 whitespace-pre">{'\u00a0\u00b7\u00a0'}</span>}
+                        {upcomingBarWhen && <span className="shrink-0 whitespace-nowrap">{upcomingBarWhen}</span>}
+                      </div>
+                    )}
                   </div>
-                  {/* 44px tap target without a taller bar: the hit area is an invisible extension of the link. */}
-                  <Link
-                    to="/bookings/my"
-                    className="shrink-0 relative text-[12px] font-bold before:content-[''] before:absolute before:-inset-x-2 before:-inset-y-[14px]"
-                    style={{ color: 'var(--color-accent-700)' }}
-                  >
-                    Manage
-                  </Link>
                 </div>
               )}
 
