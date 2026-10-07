@@ -168,20 +168,6 @@ function TenantResolveError({ message }: { message: string }) {
   );
 }
 
-// 26 Sep 2026 feedback round: same dedup logic as BranchBooking.tsx's displayPoolName (real
-// seed data embeds the venue name inside the pool's own name, e.g. JBC's real
-// "JBC - New Japan Badminton Court - Main Courts") -- duplicated rather than shared, same
-// tradeoff already taken for formatCancellationPolicy/lib/courtLabel.ts in this app. Branch
-// names use different dash characters in the same position across JBC's two real branches
-// (one plain hyphen, one en-dash) -- normalized before comparing, not an exact string match.
-const normalizeDashesHome = (s: string): string => s.replace(/[–—]/g, '-');
-function displayPoolNameHome(poolName: string, branchName?: string | null): string {
-  if (!branchName) return poolName;
-  const prefix = `${normalizeDashesHome(branchName)} - `;
-  const normalizedPool = normalizeDashesHome(poolName);
-  return normalizedPool.startsWith(prefix) ? poolName.slice(prefix.length) : poolName;
-}
-
 // 1 Oct 2026: small inline shuttlecock mark for the Current Bookings card (no icon asset exists
 // in the repo and lucide has no shuttlecock). currentColor-only, so it follows theme tokens.
 function ShuttlecockMark() {
@@ -236,6 +222,11 @@ function MainDashboard() {
   // F-234: the upcoming-slots card can span more than one branch, so this needs the dedup-map
   // shape (mirroring BookingHistory.tsx's branchAboutById exactly) rather than a single fetch.
   const [branchAboutById, setBranchAboutById] = useState<Record<string, any>>({});
+  // F-333: branchAboutById alone cannot tell "still loading" from "failed" -- a success stores the
+  // key, a failure stores nothing (the .catch below swallows it), so absent means either. The card
+  // title needs the difference: while loading it shows an empty reserved line, only a SETTLED
+  // failure may fall back to the pool name. Keyed by branch id; cleared again on a later success.
+  const [branchAboutSettledEmpty, setBranchAboutSettledEmpty] = useState<Record<string, true>>({});
 
   const memberSession = memberSessions.find((s) => s?.assignmentId === activeAssignmentId) ?? null;
 
@@ -316,11 +307,23 @@ function MainDashboard() {
     missingIds.forEach((branchId) => {
       apiRequest<any>(`/tenant/branches/${branchId}/about`, { token: accessToken })
         .then((res) => {
-          if (isMounted && res) {
+          if (!isMounted) return;
+          if (res) {
             setBranchAboutById((prev) => ({ ...prev, [branchId]: res }));
+            setBranchAboutSettledEmpty((prev) => {
+              if (!(branchId in prev)) return prev;
+              const { [branchId]: _cleared, ...rest } = prev;
+              return rest;
+            });
+          } else {
+            setBranchAboutSettledEmpty((prev) => ({ ...prev, [branchId]: true }));
           }
         })
-        .catch(() => { /* leave this branch's timezone absent — formatBranchTime falls back to UTC */ });
+        .catch(() => {
+          // leave this branch's timezone absent — formatBranchTime falls back to UTC. F-333: also
+          // record that the fetch SETTLED without a result, so the card title can fall back.
+          if (isMounted) setBranchAboutSettledEmpty((prev) => ({ ...prev, [branchId]: true }));
+        });
     });
 
     return () => { isMounted = false; };
@@ -646,6 +649,16 @@ function MainDashboard() {
               const timezone = branchAboutById[b.branchId]?.timezone;
               const badge = upcomingBadge(b.status);
               const about = branchAboutById[b.branchId];
+              // F-333 title (Option A): the booking's OWN venue name. Three states, never a pool name
+              // while loading: 'venue' (about.name present), 'loading' (fetch still pending -> an
+              // empty line that reserves the title's height), 'fallback' (fetch settled without a
+              // name, or the booking has no branchId -> the pool name, so a card is never blank for
+              // good).
+              const venueName: string | null = typeof about?.name === 'string' && about.name.trim() ? about.name.trim() : null;
+              const aboutSettled = !b.branchId || b.branchId in branchAboutById || !!branchAboutSettledEmpty[b.branchId];
+              const titleState: 'venue' | 'loading' | 'fallback' = venueName ? 'venue' : aboutSettled ? 'fallback' : 'loading';
+              const titleText: string | null = venueName
+                ?? (aboutSettled ? (b.window.resourcePool?.name || 'Court booking') : null);
               // 1 Oct 2026 card redesign: weekday/day/month come from the booking's own start in
               // the branch timezone (a booking crossing midnight/month shows its START date).
               const startIso = b.window.startTime;
@@ -667,38 +680,32 @@ function MainDashboard() {
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2 min-w-0">
-                      {/* Deduped pool name, wraps to up to 3 lines (never truncated) so the court
-                          number -- now in its own box below -- can't be swallowed by a long real
-                          pool name (26 Sep 2026 Option C bug, Bala's device screenshot). */}
+                      {/* F-333: the title is the venue name (see titleState above). Wraps to two lines
+                          then truncates with an ellipsis (full name in the title attribute), min-w-0 so
+                          the status pill and the court box below can never be pushed or clipped by a
+                          long venue name. min-h reserves one 15px/leading-tight line while loading so
+                          the card does not jump when the name arrives. */}
                       <div className="flex items-start gap-1.5 min-w-0 flex-1">
                         <ShuttlecockMark />
                         <span
-                          className="text-[15px] font-bold leading-tight min-w-0 line-clamp-3"
+                          className="text-[15px] font-bold leading-tight min-w-0 min-h-[1.25em] line-clamp-2"
                           style={{ color: 'var(--color-text)' }}
+                          title={titleText ?? undefined}
+                          data-testid="upcoming-venue-name"
+                          data-title-state={titleState}
                         >
-                          {displayPoolNameHome(b.window.resourcePool?.name || 'Court booking', about?.name)}
+                          {titleText ?? (
+                            <span
+                              aria-hidden="true"
+                              className="inline-block h-3.5 w-28 max-w-full rounded align-middle animate-pulse motion-reduce:animate-none"
+                              style={{ background: 'var(--color-neutral-300)' }}
+                            />
+                          )}
                         </span>
                       </div>
                       <span className="shrink-0 text-[10px] font-bold font-mono uppercase px-2 py-0.5 rounded-full border-[1.5px] whitespace-nowrap" style={badge.style}>
                         {badge.label}
                       </span>
-                    </div>
-                    {/* F-331: which venue this booking is at. The title above is the pool name with the
-                        venue prefix stripped ("Main Courts"), so on its own it never says where. Same
-                        source and behaviour as BookingHistory.tsx's venue line (F-190 Slice 5): this
-                        booking's OWN branch via branchAboutById[b.branchId], and absent until that
-                        fetch resolves -- never a wrong or fabricated name. One line, truncated with
-                        a title attribute, so a long tenant venue name can't wrap the card. The row's
-                        height (one 12px text line = 16px) is reserved while the branch fetch is
-                        pending: measured with a slowed /about, the line appearing otherwise grew each
-                        card by 18px and pushed the date badge / court box (and every card below) down. */}
-                    <div className="mt-0.5 pl-7 flex items-center gap-1 min-w-0 min-h-4 text-xs" style={{ color: 'var(--color-neutral-700)' }} data-testid="upcoming-venue-name">
-                      {about?.name && (
-                        <>
-                          <MapPin className="h-3 w-3 shrink-0" />
-                          <span className="truncate" title={about.name}>{about.name}</span>
-                        </>
-                      )}
                     </div>
                     <div className="mt-0.5 pl-7 text-xs font-mono font-semibold" style={{ color: 'var(--color-text)' }}>
                       {formatBranchTime(startIso, timezone, { hour: '2-digit', minute: '2-digit' })}

@@ -1,0 +1,93 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>F-333 card mockup</title><style>
+  /* Tokens mirror apps/guest-member-pwa/src/index.css (warm neutrals, real values). The accent ramp is an
+     approximation of what generateAccentRamp('#166534') produces for JBC -- the real build reads the live ramp. */
+  :root {
+    --color-bg:#f8fafc; --color-text:#201e1d;
+    --n100:#f9f4ed; --n200:#eee7db; --n300:#dcd3c4; --n400:#c0b6a5; --n600:#82796a; --n700:#645c50; --n900:#2e2b25;
+    --a100:#e7f3ea; --a200:#c9e4d0; --a300:#9fcdac; --a700:#166534; --a800:#0f4a26;
+    --a2-100:#fcf5e5; --a2-300:#f3cf85; --a2-600:#9b7200;
+    --radius-card:16px; --radius-sm:8px;
+    --shadow-md:0 3px 10px rgba(46,43,37,.16);
+    --font-heading:'Inter',system-ui,sans-serif; --font-body:'Figtree','Inter',system-ui,sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --color-bg:#16140f; --color-text:#f0e9dc;
+    --n100:#201d17; --n200:#2a261e; --n300:#3a3527; --n400:#55503d; --n600:#a39a84; --n700:#c0b6a5; --n900:#f0e9dc;
+    --a100:#12301c; --a200:#1b4a2b; --a300:#2c7a45; --a700:#6fd08c; --a800:#a5e3b8;
+    --a2-100:#2b2310; --a2-300:#6b5410; --a2-600:#e6ad02;
+    --shadow-md:0 3px 10px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);padding:20px 16px 48px;display:flex;flex-direction:column;align-items:center}
+  .frame{width:100%;max-width:390px}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;font-size:12px;color:var(--n600)}
+  .bar button{font:inherit;border:1px solid var(--n300);background:var(--n100);color:var(--color-text);padding:6px 12px;border-radius:999px;cursor:pointer}
+  .sec-head{display:flex;justify-content:space-between;align-items:baseline;margin:6px 2px 12px}
+  .sec-head h3{margin:0;font-family:var(--font-heading);font-weight:500;font-size:19px;letter-spacing:-.01em}
+  .sec-head a{font-size:12px;font-weight:700;color:var(--a700);text-decoration:none}
+  .list{display:flex;flex-direction:column;gap:12px}
+
+  .bk{position:relative;display:grid;grid-template-columns:1fr;gap:2px;padding:12px 14px 12px 14px;border-radius:var(--radius-card);
+      background:linear-gradient(180deg,var(--n100),color-mix(in srgb,var(--n100) 82%,var(--n200)));
+      border:1px solid var(--n300);box-shadow:var(--shadow-md);overflow:hidden}
+  .bk::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.55)}
+  :root[data-theme="dark"] .bk::after{box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+  .nm{display:flex;align-items:flex-start;gap:6px;min-width:0;flex:1}
+  .cork{flex:none;width:22px;height:22px;margin-top:-1px}
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-width:0}
+  .pool{font-family:var(--font-heading);font-weight:700;font-size:15px;line-height:1.25;letter-spacing:-.005em;
+        display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-width:0}
+  .pill{flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+        padding:3px 9px;border-radius:999px;border:1.5px solid var(--a800);color:var(--a800);background:transparent;white-space:nowrap}
+  .pill.held{border-color:var(--a2-600);color:var(--a2-600);background:var(--a2-100)}
+  .pill.in{background:var(--a100);border-color:var(--a300)}
+  .when{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:600;color:var(--color-text);margin-top:2px}
+  .when span{color:var(--n600);font-weight:500}
+  .row{display:flex;align-items:stretch;gap:8px;margin-top:8px}
+  .when{padding-left:28px}
+  .chip{flex:none;width:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;border:1px solid var(--n300);background:var(--n200);padding:5px 0;gap:0}
+  .chip small{font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--n600)}
+  .chip small.m{color:var(--a700)}
+  .chip b{font-family:var(--font-heading);font-size:17px;line-height:1.1}
+  .court{flex:1;display:flex;align-items:center;gap:6px;padding:0 12px;border-radius:10px;border:1px solid var(--n300);background:var(--n200);font-size:13px;color:var(--n700)}
+  .court b{font-family:var(--font-heading);font-size:20px;color:var(--color-text);margin-left:2px}
+  .dir{flex:none;width:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;color:var(--a700);text-decoration:none;
+       border:1px solid transparent}
+  .dir:hover{background:var(--a100);border-color:var(--a200)}
+  .dir svg{width:26px;height:26px}
+  .pay{flex:none;align-self:center;font-size:12px;font-weight:700;padding:9px 14px;border-radius:10px;background:var(--a700);color:var(--a100);text-decoration:none;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+  :root[data-theme="dark"] .pay{color:#0b2315}
+  .note{margin-top:22px;font-size:11.5px;line-height:1.55;color:var(--n600);max-width:390px}
+  .note b{color:var(--color-text)}
+
+.cols{display:flex;gap:14px;max-width:880px;margin:0 auto}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.col h4{margin:0 0 2px;font-family:var(--font-heading);font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--n600)}
+.sub{display:flex;align-items:center;gap:4px;padding-left:28px;margin-top:2px;font-size:12px;color:var(--n700);min-width:0}
+.sub span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body{align-items:stretch}
+.hd{max-width:880px;margin:0 auto 14px;display:flex;justify-content:space-between;align-items:center;width:100%}
+.hd h3{margin:0;font-family:var(--font-heading);font-weight:500;font-size:19px}
+.hd button{font:inherit;font-size:12px;border:1px solid var(--n300);background:var(--n100);color:var(--color-text);padding:6px 12px;border-radius:999px;cursor:pointer}
+.note{max-width:880px;margin:20px auto 0}
+.pool{-webkit-line-clamp:2}
+.bk>div{min-width:0}
+.top .nm{min-width:0}
+</style></head><body>
+<div class="hd"><h3>Current Bookings — today vs F-333 (Option A)</h3><button id="t">Toggle dark</button></div>
+<div class="cols"><div class="col"><h4>Live today</h4><article class="bk"><div><div class="top"><div class="nm"><svg class="cork" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--n700)"><g transform="rotate(-30 12 12)"><circle cx="12" cy="19" r="3" fill="currentColor" stroke="none"/><path d="M9.5 17 6.5 4M12 16V3M14.5 17 17.5 4"/><path d="M6.3 4c3.4-2 8-2 11.4 0"/><path d="M8 10c2.6 1.4 5.4 1.4 8 0"/></g></svg><div class="pool">Main Courts</div></div><span class="pill ">Confirmed</span></div>
+<div class="sub"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>JBC New Court</span></div><div class="when">07:00 AM <span>–</span> 08:00 AM</div></div>
+<div class="row"><div class="chip"><small>FRI</small><b>2</b><small class="m">OCT</small></div><div class="court">Court: <b>5</b></div><a class="dir" href="#" aria-label="Directions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l7 3 3 7L21 3Z"/><path d="m10 13.5 4-4"/></svg></a></div></article><article class="bk"><div><div class="top"><div class="nm"><svg class="cork" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--n700)"><g transform="rotate(-30 12 12)"><circle cx="12" cy="19" r="3" fill="currentColor" stroke="none"/><path d="M9.5 17 6.5 4M12 16V3M14.5 17 17.5 4"/><path d="M6.3 4c3.4-2 8-2 11.4 0"/><path d="M8 10c2.6 1.4 5.4 1.4 8 0"/></g></svg><div class="pool">Main Courts</div></div><span class="pill held">Payment pending</span></div>
+<div class="sub"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>JBC Old Court</span></div><div class="when">06:00 PM <span>–</span> 08:00 PM</div></div>
+<div class="row"><div class="chip"><small>SAT</small><b>3</b><small class="m">OCT</small></div><div class="court">Court: <b>1</b></div><a class="pay" href="#">Pay Now</a><a class="dir" href="#" aria-label="Directions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l7 3 3 7L21 3Z"/><path d="m10 13.5 4-4"/></svg></a></div></article><article class="bk"><div><div class="top"><div class="nm"><svg class="cork" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--n700)"><g transform="rotate(-30 12 12)"><circle cx="12" cy="19" r="3" fill="currentColor" stroke="none"/><path d="M9.5 17 6.5 4M12 16V3M14.5 17 17.5 4"/><path d="M6.3 4c3.4-2 8-2 11.4 0"/><path d="M8 10c2.6 1.4 5.4 1.4 8 0"/></g></svg><div class="pool">Main Courts</div></div><span class="pill in">Checked in</span></div>
+<div class="sub"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>Coimbatore Main Arena and Sports Academy, Race Course Road</span></div><div class="when">09:00 PM <span>–</span> 10:00 PM</div></div>
+<div class="row"><div class="chip"><small>FRI</small><b>2</b><small class="m">OCT</small></div><div class="court">Court: <b>A</b></div><a class="dir" href="#" aria-label="Directions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l7 3 3 7L21 3Z"/><path d="m10 13.5 4-4"/></svg></a></div></article></div><div class="col"><h4>Proposed (F-333)</h4><article class="bk"><div><div class="top"><div class="nm"><svg class="cork" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--n700)"><g transform="rotate(-30 12 12)"><circle cx="12" cy="19" r="3" fill="currentColor" stroke="none"/><path d="M9.5 17 6.5 4M12 16V3M14.5 17 17.5 4"/><path d="M6.3 4c3.4-2 8-2 11.4 0"/><path d="M8 10c2.6 1.4 5.4 1.4 8 0"/></g></svg><div class="pool">JBC New Court</div></div><span class="pill ">Confirmed</span></div>
+<div class="when">07:00 AM <span>–</span> 08:00 AM</div></div>
+<div class="row"><div class="chip"><small>FRI</small><b>2</b><small class="m">OCT</small></div><div class="court">Court: <b>5</b></div><a class="dir" href="#" aria-label="Directions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l7 3 3 7L21 3Z"/><path d="m10 13.5 4-4"/></svg></a></div></article><article class="bk"><div><div class="top"><div class="nm"><svg class="cork" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--n700)"><g transform="rotate(-30 12 12)"><circle cx="12" cy="19" r="3" fill="currentColor" stroke="none"/><path d="M9.5 17 6.5 4M12 16V3M14.5 17 17.5 4"/><path d="M6.3 4c3.4-2 8-2 11.4 0"/><path d="M8 10c2.6 1.4 5.4 1.4 8 0"/></g></svg><div class="pool">JBC Old Court</div></div><span class="pill held">Payment pending</span></div>
+<div class="when">06:00 PM <span>–</span> 08:00 PM</div></div>
+<div class="row"><div class="chip"><small>SAT</small><b>3</b><small class="m">OCT</small></div><div class="court">Court: <b>1</b></div><a class="pay" href="#">Pay Now</a><a class="dir" href="#" aria-label="Directions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l7 3 3 7L21 3Z"/><path d="m10 13.5 4-4"/></svg></a></div></article><article class="bk"><div><div class="top"><div class="nm"><svg class="cork" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--n700)"><g transform="rotate(-30 12 12)"><circle cx="12" cy="19" r="3" fill="currentColor" stroke="none"/><path d="M9.5 17 6.5 4M12 16V3M14.5 17 17.5 4"/><path d="M6.3 4c3.4-2 8-2 11.4 0"/><path d="M8 10c2.6 1.4 5.4 1.4 8 0"/></g></svg><div class="pool">Coimbatore Main Arena and Sports Academy, Race Course Road</div></div><span class="pill in">Checked in</span></div>
+<div class="when">09:00 PM <span>–</span> 10:00 PM</div></div>
+<div class="row"><div class="chip"><small>FRI</small><b>2</b><small class="m">OCT</small></div><div class="court">Court: <b>A</b></div><a class="dir" href="#" aria-label="Directions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l7 3 3 7L21 3Z"/><path d="m10 13.5 4-4"/></svg></a></div></article></div></div>
+<p class="note"><b>What changes:</b> the venue name becomes the card title (next to the shuttlecock) and the separate pin line and the "Main Courts" title are dropped. Time, date badge, court box, Pay Now and Directions are untouched. The third card is a deliberately long venue name: it wraps to two lines and clamps, so the status pill and court box are never pushed. Cards show the 3 real states: Confirmed, Payment pending (Pay Now beside Directions, as today), Checked in.</p>
+<script>document.getElementById('t').onclick=function(){var r=document.documentElement;r.setAttribute('data-theme',r.getAttribute('data-theme')==='dark'?'light':'dark')}</script></body></html>

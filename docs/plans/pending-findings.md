@@ -2605,3 +2605,10 @@ host-only). The override also changes the tenant ID used for the branch list and
 Severity Low, provisional; Chief to confirm. Not fixed.
 Confirmed-ID: F-332
 Confirmed: 1 Oct 2026
+
+### home-card-title-shows-pool-name-not-venue
+Batch: guest-member-pwa, 5 Oct 2026
+Surfaced: Bala's device, 5 Oct 2026, while checking F-331; assigned by Chief.
+Description: On the Home Current Bookings card the title is the pool name stripped of its venue prefix ('Main Courts'), which Bala does not want shown; the venue name becomes the title and the pool name is dropped from the card. Found 5 Oct 2026 on Bala's device while checking F-331. F-331 is not reopened (resolved on Bala's device evidence, 5 Oct).
+Confirmed-ID: F-333
+Confirmed: assigned by Chief 5 Oct 2026, logged 7 Oct 2026
