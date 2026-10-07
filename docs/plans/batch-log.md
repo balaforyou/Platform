@@ -5157,3 +5157,9 @@ Rollback is `promote.sh 67ddcb8a872d457debb4a597688ca3837fbc4612 --rollback`.
 **Surfaced, not fixed:** the VM compose output still warns that the seven `FIREBASE_*` variables are unset on every command (unchanged by this promote; the `.env` itself was not inspected). Push delivery works in production regardless (Bala's device screenshot of a real push is the source of F-334).
 **Still open, not part of this:** the `courtowner1` database logo check, the tracker refresh (read-only reconciliation first), F-326 behind the VM `.env` Firebase check; F-327 (`notificationclick`, same handler file) stays on hold until Bala asks.
 Merge needs Chief's sign-off and Bala's explicit go.
+
+**Production read-only VM query (run by Bala, 7 Oct 2026, after the promote; nothing was written):**
+- `Branch.timezone`: `jbc` JBC New Court **Asia/Kolkata**, JBC Old Court **Asia/Kolkata**; `courtowner1` Coimbatore Main Arena, Peelamedu Shuttle Hub and RS Puram Indoor Courts all `UTC`.
+- `Tenant.logo`: `jbc` `/logo-jbc.png`, `courtowner1` `/logo.png` (the same image as the default push icon, so F-334 changes nothing visible for `courtowner1`).
+- The `courtowner1` database logo check listed above as still open is therefore done. A dated note is on F-334's row (Description), and one on F-234's row records that JBC is no longer `UTC`; F-234's original text is untouched.
+- The JBC time zone matters for F-335: the `/book` bar must never format a time with the UTC fallback. That rule is Chief's, in the F-335 plan rulings.
