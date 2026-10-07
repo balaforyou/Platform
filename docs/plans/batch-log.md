@@ -5150,7 +5150,7 @@ Rollback is `promote.sh 67ddcb8a872d457debb4a597688ca3837fbc4612 --rollback`.
 **Register (this PR):**
 - **F-334: Open to Resolved** (7 Oct 2026). Original Description kept, dated update note added. Resolution: Bala reported on a real Android device (JBC host) that the notification's large icon is the JBC logo.
   **Not covered:** no `courtowner1` device check; no production database check of `courtowner1`'s `tenant.logo` (still owed, a read-only job for a session with VM access); the status-bar badge glyph was not assessed (`badge` is unchanged; any alpha-mask question is a separate observation, not part of F-334).
-- **F-335: logged Open (Low).** The green "Thu 6:00 AM" bar on `/book` has no label (`BranchBooking.tsx:196-205`, `:657-665`); unlabeled since `832cfc6`, not touched by this promote; no earlier fix is documented in the repo. Fix ruled by Chief (label with venue, Manage link); a plan comes separately, nothing is implemented here.
+- **F-335: logged Open (Low).** The green "Thu 6:00 AM" bar on `/book` has no label (`BranchBooking.tsx:196-205`, `:657-665`); unlabeled since `832cfc6`, not touched by this promote; no earlier fix is documented in the repo. The verified case (the Old Court screen showing the 6 AM Thursday booking at New Court) was confirmed by Bala. Fix ruled by Chief (label with venue, Manage link); a plan comes separately, nothing is implemented here.
 
 **Counts:** `pnpm register:check` PASS (307 rows; Open 125, Resolved 182). `pnpm diagram:verify` PASS. No CRLF in the edited files.
 
