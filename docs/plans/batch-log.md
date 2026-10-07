@@ -5030,3 +5030,24 @@ Codacy's SSRF false positive at `rename-jbc-venues.mjs:113` (Bala's call to dism
 and locally until Bala says to release it.
 
 **Correction, 7 Oct 2026 (F-325 to F-327 assignment date).** The date that was missing above came from Chief's thread: F-325, F-326 and F-327 were assigned by Chief on 30 Sep 2026. The `Confirmed:` lines in `pending-findings.md` now read "assigned by Chief 30 Sep 2026; logged 2 Oct 2026". The earlier sentence is left as written. **F-331 moved to Resolved (7 Oct 2026)** on Bala's real-device screenshot of 5 Oct 2026 (the "JBC New Court" venue line visible on a real production booking, "Main Courts" title above it, time and court below); nothing beyond that screenshot is claimed.
+
+## Batch -- F-325 re-scoped: guest "I'm Here" check-in hidden behind SHOW_CHECK_IN (PR #133, draft)
+
+**7 Oct 2026. Opened, not closed.** Chief's handover of 8 Oct 2026 (archived verbatim at `docs/plans/chief-archive/f325-hide-guest-checkin.md`),
+Option B decided by Bala: no business logic is attached to check-in, so the guest action is hidden. F-325 is **re-scoped, not fixed**: it stays Open at Low
+(Medium to Low, confirmed by Chief), no new ID. The dated note is in F-325's Description column.
+
+**Change (guest app only, PR #133):** one constant, `SHOW_CHECK_IN = false` (new `apps/guest-member-pwa/src/lib/featureFlags.ts`; the app had no flag precedent).
+`BookingHistory.tsx` shows the button only when `SHOW_CHECK_IN && isCheckInOpen(booking)`; the handler, state and confirm dialog stay, so flipping the constant restores everything.
+The History subtitle and the phone-verify line follow the same constant. `guest-booking.spec.ts` follows the flag in both states. Already-CHECKED_IN bookings keep their pill.
+
+**Callers (rule 4):** `POST /bookings/:id/check-in` is called only by the guest `BookingHistory` and two slot-engine regression cases (`multi-slot-booking.regression.ts`).
+**No admin app calls it** (the handover assumed a staff check-in; there is none; admin-v2 only displays CHECKED_IN). Backend, admin apps and the regression are untouched.
+The backend still has no time gate; nothing in the guest app reaches it. Side effect: the guest keeps the cancel option on a same-day booking.
+
+**Evidence (local native stack, headless Chromium, browser clock fixed at 06:30 UTC):** before 2 "I'm Here" buttons on History, after 0, with the flag flipped back 2 again and a click opens
+"Confirm you're here"; the Home card never had one; the CHECKED IN pill is intact in all three; light and dark. Typecheck, build and 4 unit tests clean; `pnpm diagram:verify` PASS.
+The e2e journey was not run (needs the e2e database; the suite is already partly red and time-of-day dependent). Screenshots stay in the session scratchpad, not in the repo.
+
+**CI on `78b95c7`:** `checks`, `regression`, Codacy (0 issues) and SonarCloud (Quality Gate passed, 0 new issues, 0 hotspots) all passed; `integration` skipped.
+Merge, `promote.sh <merged SHA>` and the production check each need Bala's explicit go.
