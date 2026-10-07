@@ -2577,7 +2577,7 @@ Description: `isCheckInOpen` (`BookingHistory.tsx`, line 230) is `sameDay && dif
 (`services/slot-engine/src/index.ts`, line 5195) has no time comparison, so a check-in can be recorded at any hour. Severity Medium. Direction (not done):
 gate both sides on a window around the slot start, reusing `isCancelable`'s shape (F-245); fix UI and backend together.
 Confirmed-ID: F-325
-Confirmed: assigned by Chief between F-324 (30 Sep 2026) and F-328 (1 Oct 2026); exact date not recorded at assignment; logged 2 Oct 2026
+Confirmed: assigned by Chief 30 Sep 2026; logged 2 Oct 2026
 
 ### push-not-delivered-when-pwa-swiped-away
 Batch: notification, 30 Sep 2026
@@ -2587,7 +2587,7 @@ Description: confirmation and reminder pushes arrive while the app is open and n
 priority and a TTL server-side; users cannot be asked to grant unrestricted battery permission; fallback channel deferred (MSG91 SMS waits for a paying client, a free
 Telegram bot needs its own discovery pass). Severity Medium. Needs a live-fire test on a swiped-away app after the change.
 Confirmed-ID: F-326
-Confirmed: assigned by Chief between F-324 (30 Sep 2026) and F-328 (1 Oct 2026); exact date not recorded at assignment; logged 2 Oct 2026
+Confirmed: assigned by Chief 30 Sep 2026; logged 2 Oct 2026
 
 ### tapping-push-does-not-open-the-booking
 Batch: notification and shared service worker, 30 Sep 2026
@@ -2595,7 +2595,7 @@ Surfaced: Bala's device, 30 Sep 2026 (app closed, tap opens Home); logged 2 Oct 
 Description: the push payload has no `data.url` and the `notificationclick` handler (`scripts/shared-sw-push-handler.js`, line 57) falls back to `'/'`: it focuses an
 already-open window and otherwise opens Home. Severity Low-Medium. Direction (not done): add a booking URL to the payload and navigate to it, reusing the existing route.
 Confirmed-ID: F-327
-Confirmed: assigned by Chief between F-324 (30 Sep 2026) and F-328 (1 Oct 2026); exact date not recorded at assignment; logged 2 Oct 2026
+Confirmed: assigned by Chief 30 Sep 2026; logged 2 Oct 2026
 
 ### tenant-query-param-honoured-in-all-builds
 Batch: ui-shared and guest-member-pwa, 1 Oct 2026

@@ -5028,3 +5028,5 @@ read-only check found no data exposure (`/bookings/my` is scoped by the token's 
 wording correction above. F-325 to F-327 carry no recorded assignment date in `pending-findings.md` (assigned between F-324 and F-328; logged 2 Oct 2026). Open follow-ups: `shellcheck_SC2028` on `prod-wipe.sh:18` (optional, own commit),
 Codacy's SSRF false positive at `rename-jbc-venues.mjs:113` (Bala's call to dismiss), the Codacy medium list (not reviewed). The F-328 dump stays on the VM
 and locally until Bala says to release it.
+
+**Correction, 7 Oct 2026 (F-325 to F-327 assignment date).** The date that was missing above came from Chief's thread: F-325, F-326 and F-327 were assigned by Chief on 30 Sep 2026. The `Confirmed:` lines in `pending-findings.md` now read "assigned by Chief 30 Sep 2026; logged 2 Oct 2026". The earlier sentence is left as written. **F-331 moved to Resolved (7 Oct 2026)** on Bala's real-device screenshot of 5 Oct 2026 (the "JBC New Court" venue line visible on a real production booking, "Main Courts" title above it, time and court below); nothing beyond that screenshot is claimed.
