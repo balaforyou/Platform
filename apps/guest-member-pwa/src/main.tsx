@@ -14,6 +14,7 @@ import BookingPay from './components/BookingPay';
 import BookingHistory from './components/BookingHistory';
 import BookingConfirmation from './components/BookingConfirmation';
 import Shell from './components/Shell';
+import { PushBrandingSync } from './components/PushBrandingSync';
 import LoadingState from './components/ui/LoadingState';
 import { AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Clock, MapPin, Navigation, Feather, Calendar } from 'lucide-react';
 import './index.css';
@@ -957,6 +958,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         // --color-accent-emphasis text against. Computed per-tenant, see TenantContext.tsx.
         emphasisBackgrounds={{ dark: '#201d17' }}
       >
+        <PushBrandingSync />
         <AuthProvider>
           <BrowserRouter>
             <AppRoutes />
