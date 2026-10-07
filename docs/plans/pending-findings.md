@@ -2605,6 +2605,7 @@ host-only). The override also changes the tenant ID used for the branch list and
 Severity Low, provisional; Chief to confirm. Not fixed.
 Confirmed-ID: F-332
 Confirmed: 1 Oct 2026
+
 ### home-card-title-shows-pool-name-not-venue
 Batch: guest-member-pwa, 5 Oct 2026
 Surfaced: Bala's device, 5 Oct 2026, while checking F-331; assigned by Chief.
