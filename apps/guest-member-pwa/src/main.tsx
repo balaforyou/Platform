@@ -168,24 +168,6 @@ function TenantResolveError({ message }: { message: string }) {
   );
 }
 
-// 26 Sep 2026 feedback round: same dedup logic as BranchBooking.tsx's displayPoolName (real
-// seed data embeds the venue name inside the pool's own name, e.g. JBC's real
-// "JBC - New Japan Badminton Court - Main Courts") -- duplicated rather than shared, same
-// tradeoff already taken for formatCancellationPolicy/lib/courtLabel.ts in this app. Branch
-// names use different dash characters in the same position across JBC's two real branches
-// (one plain hyphen, one en-dash) -- normalized before comparing, not an exact string match.
-// F-333: the Home card title is now the venue name; this helper is kept ONLY on the settled-failure
-// fallback path (never shown while the fetch is still pending). NOTE: it can only strip a prefix when
-// it is given a branch name, and on that path the branch name is exactly what failed to load, so there
-// it returns the pool name unchanged ("JBC New Court - Main Courts"). Verified in the browser.
-const normalizeDashesHome = (s: string): string => s.replace(/[–—]/g, '-');
-function displayPoolNameHome(poolName: string, branchName?: string | null): string {
-  if (!branchName) return poolName;
-  const prefix = `${normalizeDashesHome(branchName)} - `;
-  const normalizedPool = normalizeDashesHome(poolName);
-  return normalizedPool.startsWith(prefix) ? poolName.slice(prefix.length) : poolName;
-}
-
 // 1 Oct 2026: small inline shuttlecock mark for the Current Bookings card (no icon asset exists
 // in the repo and lucide has no shuttlecock). currentColor-only, so it follows theme tokens.
 function ShuttlecockMark() {
@@ -670,13 +652,13 @@ function MainDashboard() {
               // F-333 title (Option A): the booking's OWN venue name. Three states, never a pool name
               // while loading: 'venue' (about.name present), 'loading' (fetch still pending -> an
               // empty line that reserves the title's height), 'fallback' (fetch settled without a
-              // name, or the booking has no branchId -> the pool name, unstripped because the branch
-              // name needed to strip it is what is missing, so a card is never blank for good).
+              // name, or the booking has no branchId -> the pool name, so a card is never blank for
+              // good).
               const venueName: string | null = typeof about?.name === 'string' && about.name.trim() ? about.name.trim() : null;
               const aboutSettled = !b.branchId || b.branchId in branchAboutById || !!branchAboutSettledEmpty[b.branchId];
               const titleState: 'venue' | 'loading' | 'fallback' = venueName ? 'venue' : aboutSettled ? 'fallback' : 'loading';
               const titleText: string | null = venueName
-                ?? (aboutSettled ? displayPoolNameHome(b.window.resourcePool?.name || 'Court booking', about?.name) : null);
+                ?? (aboutSettled ? (b.window.resourcePool?.name || 'Court booking') : null);
               // 1 Oct 2026 card redesign: weekday/day/month come from the booking's own start in
               // the branch timezone (a booking crossing midnight/month shows its START date).
               const startIso = b.window.startTime;
