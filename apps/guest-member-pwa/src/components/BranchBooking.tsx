@@ -50,6 +50,23 @@ const RATE_SOURCE_LABEL: Record<RateSource, string> = {
 // often a guest reaches the resubmit path in the first place.
 const PENDING_SELECTION_KEY = 'pending_slot_selection';
 
+// F-339: "today" for the date picker -- the browser's local calendar date. This is the original
+// useState initialiser, extracted unchanged so a venue switch can put the picker back on the same value.
+function todayKey(): string {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// F-339: F-212's two auto-advance guards are keyed by pool AND date. A date alone let a date one venue
+// had already advanced to count as "already searched" for the next venue. Takes real strings only, so a
+// pool that is still loading (null) can never produce a key.
+function searchKey(poolId: string, date: string): string {
+  return `${poolId}|${date}`;
+}
+
 // F-335: a stored branch time zone is only usable if Intl accepts it. The bar below shows a time ONLY
 // for a known zone -- never through formatBranchTime's silent UTC fallback, which is wrong for
 // Asia/Kolkata (JBC): a 6:00 AM IST booking would read 12:30 AM until the zone arrives.
@@ -126,6 +143,12 @@ export default function BranchBooking() {
   }, [selectedBranchId, accessToken]);
 
   const handleSelectBranch = (branch: Branch) => {
+    if (branch.id !== selectedBranchId) {
+      resetAutoAdvance();
+      // Same reset the pools effect does after the next render, done in the same batch so the old pool is never
+      // fetched for one render with the reset date.
+      setSelectedPoolId(null);
+    }
     setSelectedBranchId(branch.id);
     localStorage.setItem('selected_branch_id', branch.id);
     setVenueSheetOpen(false);
@@ -184,13 +207,7 @@ export default function BranchBooking() {
   // held vs. were rejected (and why), before the guest leaves for /bookings/my. Null until a
   // multi-slot submit has actually happened.
   const [orderResult, setOrderResult] = useState<{ orderId: string; held: any[]; rejected: { windowId: string; code: string; message: string }[] } | null>(null);
-  const [bookingDate, setBookingDate] = useState(() => {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  });
+  const [bookingDate, setBookingDate] = useState(todayKey);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
@@ -198,6 +215,7 @@ export default function BranchBooking() {
   const prevSelectedCountRef = useRef(0);
 
   const [autoAdvanceNotice, setAutoAdvanceNotice] = useState<{ from: string; to: string } | null>(null);
+  // F-339: both hold a searchKey(poolId, date), not a bare date.
   const autoAdvancedToRef = useRef<string | null>(null);
   const searchRanForRef = useRef<string | null>(null);
   const prevSlotsLoadingRef = useRef(false);
@@ -408,9 +426,10 @@ export default function BranchBooking() {
     prevSlotsLoadingRef.current = slotsLoading;
     if (!justFinished || slots.length > 0) return;
     if (!poolId || !bookingDate) return;
-    if (autoAdvancedToRef.current === bookingDate) return;
-    if (searchRanForRef.current === bookingDate) return;
-    searchRanForRef.current = bookingDate;
+    const key = searchKey(poolId, bookingDate);
+    if (autoAdvancedToRef.current === key) return;
+    if (searchRanForRef.current === key) return;
+    searchRanForRef.current = key;
 
     let cancelled = false;
     (async () => {
@@ -422,7 +441,7 @@ export default function BranchBooking() {
         if (cancelled) return;
         const nextDate = (res as any)?.data?.date ?? (res as any)?.date ?? null;
         if (nextDate && nextDate !== bookingDate) {
-          autoAdvancedToRef.current = nextDate;
+          autoAdvancedToRef.current = searchKey(poolId, nextDate);
           setAutoAdvanceNotice({ from: bookingDate, to: nextDate });
           setBookingDate(nextDate);
         }
@@ -434,6 +453,17 @@ export default function BranchBooking() {
       cancelled = true;
     };
   }, [slots, slotsLoading, bookingDate, poolId, accessToken]);
+
+  // F-339: called when the guest changes venue or pool. Drops the notice and both guards so the new pool
+  // gets its own F-212 search, and puts an AUTO-ADVANCED date back on today (the advance was the old pool's
+  // answer, not the guest's choice). A date the guest picked by hand is kept.
+  const resetAutoAdvance = () => {
+    const wasAutoAdvanced = poolId !== null && autoAdvancedToRef.current === searchKey(poolId, bookingDate);
+    autoAdvancedToRef.current = null;
+    searchRanForRef.current = null;
+    setAutoAdvanceNotice(null);
+    if (wasAutoAdvanced) setBookingDate(todayKey());
+  };
 
   const pickDate = (d: string) => {
     autoAdvancedToRef.current = null;
@@ -701,7 +731,10 @@ export default function BranchBooking() {
               className="gpwa-branchbooking__pool-chip"
               data-active={p.id === selectedPoolId}
               id={`court-pool-card-${p.id}`}
-              onClick={() => setSelectedPoolId(p.id)}
+              onClick={() => {
+                if (p.id !== selectedPoolId) resetAutoAdvance();
+                setSelectedPoolId(p.id);
+              }}
             >
               {p.name}
             </button>

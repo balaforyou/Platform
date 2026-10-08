@@ -5224,3 +5224,26 @@ F-336 (Medium, provisional), F-337 (Low, provisional), F-338 (Medium, provisiona
 - **F-338:** receipt PDFs downloaded before the zone loads carry `Time 12:30 AM - 01:30 AM` and `Venue —`. Live for History and the confirmation screen; the cancellation receipt by code read only.
 - **F-339:** after a venue's empty day auto-advances the date, switching venue keeps the date and the no-slots message. Code read only; F-335's diff does not touch it.
 **Not done here:** no fix and no code for any of the four; F-336, F-337, F-338 and F-339 each get their own plan-mode kickoff.
+
+## Batch -- F-339: a venue or pool switch no longer keeps the auto-advanced date (draft PR)
+
+**8 Oct 2026. Opened, not closed.** F-339 (Low, Open): on `/book`, after one venue's empty day auto-advanced the date (F-212), switching to the other venue kept that date and showed "No slots available on this date". Plan approved by Chief 8 Oct 2026 with three additions; Bala's go received. Archived at `docs/plans/chief-archive/f339-venue-switch-stale-date.md`. `BranchBooking.tsx` only; `CourtBooking.tsx` (dead, unrouted copy of the refs), the backend and F-336/F-338 are untouched.
+
+**Change:** `autoAdvancedToRef` and `searchRanForRef` hold `${poolId}|${date}` (one `searchKey(poolId, date)` helper that takes real strings only, so a pool still loading can never produce a key); one `resetAutoAdvance()` is called from `handleSelectBranch` (when the venue really changes; it also clears the selected pool in the same batch) and from the pool chip's `onClick` (when the pool really changes). It clears both refs and the notice, and puts an auto-advanced date back on today; a hand-picked date is kept.
+`todayKey()` is the old `bookingDate` initialiser extracted unchanged.
+**Time zone of "today" (Chief's addition 1):** the initialiser is **browser-local** (`getFullYear`/`getMonth`/`getDate`), not the branch zone. Left as it is. **Adjacent observation for the F-336 family, not fixed here:** a guest whose browser zone differs from the branch's can open `/book` on a different calendar day from the branch's.
+
+**Live-fire (real Chromium, real component and services, scratch database; empty day = whole-day `BlockedWindow`; browser clock fixed to 9 Oct 2026; BEFORE = a `67ddcb8` build, AFTER = this branch). Requests are the availability and next-available calls recorded after the switch:**
+- **S1 (Bala's case, New Court empty today, Old Court empty tomorrow):** BEFORE stuck on "No slots available on this date" with only `OC availability 2026-10-10`; AFTER Old Court shows its 35 slots for 9 Oct, no notice, `OC availability 2026-10-09` only.
+- **S2:** BEFORE carried the notice "showing the next available date, Sat, Oct 10" over although Old Court has slots today; AFTER no notice. **S3 and S5 (reverse direction):** BEFORE stuck; AFTER the new venue's slots for today.
+- **S4 (control, first venue has slots today):** identical on both builds: availability, next-available, then the next date, with the notice.
+- **S6 (both venues empty today):** BEFORE stuck; AFTER the date resets to 9 Oct, Old Court's own search runs (`OC next-from 2026-10-09`) and advances to 11 Oct with the notice.
+- **S7 (hand-picked date, then a venue switch to an empty day) and S12 (Chief's addition 2, pre-fix control on `67ddcb8`):** picking an empty date by hand on the SAME venue already triggers the advance today (`NC avail 12 | NC next-from 12 | NC avail 13`), so S7's keyed search is existing F-212 behaviour, not a change; S7 is identical on both builds.
+- **S8 (pool chips, main pool empty today, annex has slots today only):** BEFORE stuck on the annex; AFTER the annex's 8 slots for 9 Oct. **S9 (back and forth) and S10 (New Court's next-available delayed 3.5 s, switch before it returns):** AFTER no advance is applied to Old Court; each visit searches once per pool and date.
+- **Key assertion (Chief's addition 3):** over the request logs of S1 to S10 and Z, no availability or next-available request carries a pool segment that is not a UUID (no `null`, no `undefined`), and no (pool, date) pair is searched twice within one visit.
+- **S11 (F-318 selection restore after a reload):** selected before and selected after on both builds; unchanged.
+- **Z (Chief's addition 1, browser zone `America/Los_Angeles`, where local today is 8 Oct while UTC today is 9 Oct):** the first request is `NC avail 2026-10-08` on both builds (the extraction behaves identically), and after the switch AFTER requests `OC avail 2026-10-08`, the same local today.
+- **Checks:** typecheck clean, 54 unit tests pass, lint 0 errors, build ok. Not provable locally: a real device.
+**Not run:** the guest e2e suite (needs the e2e database).
+
+**CI:** reported on the PR. Merge needs Chief's sign-off after the live-fire and Bala's explicit go; F-339 stays Open until Bala's device check.
