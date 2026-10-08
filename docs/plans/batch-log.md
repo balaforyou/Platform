@@ -5247,3 +5247,17 @@ F-336 (Medium, provisional), F-337 (Low, provisional), F-338 (Medium, provisiona
 **Not run:** the guest e2e suite (needs the e2e database).
 
 **CI:** reported on the PR. Merge needs Chief's sign-off after the live-fire and Bala's explicit go; F-339 stays Open until Bala's device check.
+
+## Batch -- F-337 band correction; F-335 quote source (docs only)
+
+**8 Oct 2026. Docs only: no code, no deploy.** Chief's go for a docs-only PR after the F-337 plan review. Two dated corrections in the register; no row added, moved or renumbered.
+- **F-337 (Open):** the failure band is corrected to 21:00-24:00 UTC (about 02:30-05:30 IST) as a dated correction in the Description; the original 21:30 figure is left as written. The OTP exclusion is recorded as a method artefact, not a finding. Chief's rulings are recorded on the row: fix shape B with C in two steps, test code only, a unit test of the zone choice at all 24 UTC hours including the wrap-around; implementation not started.
+- **F-335 (Resolved):** a dated correction in the Description points to the source of the quoted words in the Resolution (Bala's own messages to Claude Code on 8 Oct 2026). The Resolution is unchanged.
+
+**How the band was measured (read-only, local, nothing deployed).** `faketime` (libfaketime 0.9.10) was installed locally; a second Postgres 16 cluster on port 5433 ran with `LD_PRELOAD` and a fixed offset (`FAKETIME=+Ns`, `FAKETIME_NO_CACHE=1`) in its environment file, and `pnpm test:regression` ran under the same `LD_PRELOAD` and offset, so Postgres, the five services and the test process shared one shifted clock. Scratch database `badminton_db_test`, since dropped, with the F-101 guard satisfied. Full 5-service runs (sections passed: identity-auth, tenant-management, slot-engine, payment, notification):
+- real clock (12:22 UTC): 17/17, 11/11, 129/129, 28/28, 13/13. 09:26: the same. 20:30: slot-engine 129/129, payment 28/28 (identity-auth 16/17, the OTP artefact below).
+- 21:15: slot-engine 128/129 (`F-133B §6`). 21:45: 127/129 (adds `F-207.2` capacity guard). 22:10: slot-engine 122/129 and payment 27/28 (`F-276`). 23:30: slot-engine 118/129 and payment 27/28. 00:30 next day: 129/129 and 28/28.
+- Fine scan (single suites): slot-engine 20:45 129/129; 21:00, 21:05, 21:10 128/129; 23:58 110/129. Payment 21:55 28/28; 22:00, 22:05, 23:58 27/28. Both pass at 00:00.
+- **Artefact, excluded:** identity-auth `OTP rate-limiting & cooldown` fails at +60 s, +1 h and +8 h and passes at 0 and -1 h; not time-of-day, not caused by any fixture helper.
+- Superseded method: the first F-337 evidence used a node-only Date shim with the database on the real clock; it also produced two `F-133D` failures at every shifted time, which the whole-stack clock removes.
+**Not done here:** the F-337 fix. Bala's "go F-337 implementation" is awaited.
