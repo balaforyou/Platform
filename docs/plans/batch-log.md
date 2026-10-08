@@ -5202,3 +5202,25 @@ and receipts (`lib/receipt.ts:17,24`; `BookingHistory.handleDownloadReceipt` can
 **History check (read-only, no rows changed):** the `Asia/Kolkata` flip was F-088 Stage 2 part 3 (Batch 64, with F-100). The DB flip landed ahead of part 4's deploy, which merged as `0bd53b3` (PR #51) on 19 Sep 2026; the register has F-088 and F-100 Resolved on 20 Sep. F-234 (12 Sep) predates the flip, so its "both `UTC`" statement was true when written.
 
 **CI:** reported on the PR. Merge needs Chief's sign-off after the live-fire and Bala's explicit go.
+
+**Correction 8 Oct 2026 (supersedes the heading's "draft" and the "Opened, not closed" and "Merge needs..." lines above, which were true when written):** PR #138 was marked ready and merged as `7d50b59`; `main` CI run 509 on that SHA was green (`checks`, `regression`, `integration`, the 7 images pushed to Docker Hub). Closed out in the entry for the F-335 close-out below.
+
+## Batch -- F-335 close-out (merged, promoted, Resolved); F-336 to F-339 logged (docs only)
+
+**8 Oct 2026. Docs only: no code, no deploy.** Closes out F-335 and logs four findings that came out of its audit and device check.
+
+**F-335 merged and promoted.** #138 was merged as `7d50b590a9209111cc89f3794d0a6f01e9ae9f5b` (merge commit). `main` CI run 509 on that SHA: `checks`, `regression` and `integration` all green; the 7 images were pushed to Docker Hub (`:<svc>` and `:<svc>-7d50b590...`).
+**Promote log (VM, run by Bala from Windows over IAP, 8 Oct 2026, about 09:50-09:53 UTC):** the 7 `:<svc>-7d50b590...` images pulled; `docker-compose.yml` and the Caddyfile already current (no topology change); the F-077 guard reported the image matches the deploy target;
+30 migrations found, none pending; the six long-running services recreated (`migrate` and `postgres` excluded; Postgres uptime unchanged at 6 weeks); a connection refusal and six 502s while the stack came up, every endpoint answering after about 24 s;
+Caddy HTTP-fallback check `0`; `verify-deployment.mjs https://elitecourts.duckdns.org 7d50b590a9209111cc89f3794d0a6f01e9ae9f5b` reported **all 7 components PASS at `7d50b590a920`**; the superseded `9fea0f5` generation was pruned (`67ddcb8` kept as the prior generation).
+Rollback is `promote.sh 7d50b590a9209111cc89f3794d0a6f01e9ae9f5b --rollback`, which restores the `67ddcb8` images and config. The compose output showed blank-default warnings for the `FIREBASE_*` variables; whether they are new was not established, and they belong to the parked F-326 VM `.env` check.
+**Per-host `/version.json` (output pasted by Bala):** `jbc.elitecourts.duckdns.org`, `courtowner1.elitecourts.duckdns.org` and `admin.elitecourts.duckdns.org` all return `{"sha":"7d50b590a9209111cc89f3794d0a6f01e9ae9f5b"}`.
+**Device check (Bala, 8 Oct 2026):** Android, JBC, `/book` at Old Court and at New Court: "Android testing looks fine"; no wrong time flash while loading. Not covered by a device check: a long venue name and `courtowner1`.
+
+**Register (this PR):** F-335 moves from Open to Resolved (resolved 8 Oct 2026), original Description kept, with a dated update and a dated correction that supersedes the 7 Oct note reading "implemented in draft PR #138 ... (not merged or deployed)" and "Stays Open until Bala's device check".
+F-336 (Medium, provisional), F-337 (Low, provisional), F-338 (Medium, provisional) and F-339 (Low, provisional) are logged Open, each with a Confirmed-ID entry in `docs/plans/pending-findings.md`. Chief assigned the four IDs; **the F-337, F-338 and F-339 row text was drafted by Claude Code from its own reports** (Chief supplied no text for them) and the number-to-finding mapping was inferred from Chief's messages, so Chief confirms both before the PR is marked ready.
+- **F-336:** the branch time zone arrives after booking times render (UTC fallback). Evidence: History, Home, confirmation and the `/book` period counts live on 7 Oct; `BookingPay` and the member-session card live on 8 Oct (`02:30 AM - 03:30 AM` then `08:00 AM - 09:00 AM`; `07:30 AM` then `01:00 PM`; scratch database, JBC at `Asia/Kolkata`, `/about` delayed 4.5 s, build `7d50b59`).
+- **F-337:** `regression` fails between about 21:30 and 24:00 UTC. Reproduced for slot-engine with a shifted clock; payment by code read and the CI log.
+- **F-338:** receipt PDFs downloaded before the zone loads carry `Time 12:30 AM - 01:30 AM` and `Venue —`. Live for History and the confirmation screen; the cancellation receipt by code read only.
+- **F-339:** after a venue's empty day auto-advances the date, switching venue keeps the date and the no-slots message. Code read only; F-335's diff does not touch it.
+**Not done here:** no fix and no code for any of the four; F-336, F-337, F-338 and F-339 each get their own plan-mode kickoff.
