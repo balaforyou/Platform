@@ -5163,3 +5163,42 @@ Merge needs Chief's sign-off and Bala's explicit go.
 - `Tenant.logo`: `jbc` `/logo-jbc.png`, `courtowner1` `/logo.png` (the same image as the default push icon, so F-334 changes nothing visible for `courtowner1`).
 - The `courtowner1` database logo check listed above as still open is therefore done. A dated note is on F-334's row (Description), and one on F-234's row records that JBC is no longer `UTC`; F-234's original text is untouched.
 - The JBC time zone matters for F-335: the `/book` bar must never format a time with the UTC fallback. That rule is Chief's, in the F-335 plan rulings.
+
+---
+
+## Batch -- F-335: label the "next booking" bar on /book (PR #138, draft)
+
+**7 Oct 2026. Opened, not closed.** F-335 (Low, Open): the green bar above the date ribbon on `/book` showed only a weekday and time, so a guest could read their own booking at the other venue as an availability hint.
+Plan approved by Chief with rulings (archived at `docs/plans/chief-archive/f335-book-next-booking-label.md`). `BranchBooking.tsx` only; the Home card, F-333, F-334, `CourtBooking.tsx` and F-327 are untouched.
+
+**Change:** the bar reads "Your next booking · {venue} · {Thu 6:00 AM}" with a Manage link to `/bookings/my`, laid out on two lines (Chief's layout ruling): line 1 is the label and Manage; line 2 is the venue, which truncates with an ellipsis, then the time, which never shrinks or wraps.
+- **Venue and time zone are keyed by branch id** and derived at render (the F-333 pattern). The old single copied value showed the previous venue's zone while a lookup was pending, and forever if it failed.
+- **No time without a known IANA zone, and no UTC fallback.** The production read of 7 Oct 2026 shows both JBC branches are `Asia/Kolkata` (the three `courtowner1` branches are `UTC`), so the fallback reads 12:30 AM for a 6:00 AM booking.
+  Pending and failed lookups show only "Your next booking" and Manage; the second line is reserved only while pending.
+- **The stale-response guard rides with F-335** (Chief's ruling): it protects the bar's own "another pool only" rule, so it is not logged as an adjacent finding. No `/bookings/my` request until the pool is known; the result is kept with the pool
+  it was computed for; a response for a pool the guest has left is ignored. The branch-about effect also ignores responses for a branch the guest left, and `branchAboutFor` records which branch the current `branchAbout` belongs to.
+- The full text is in the `title`; Manage keeps a 44px tap target through an invisible hit area (no taller bar); Manage is `accent-700` because the pair measures 5.13:1 (JBC) and 5.56:1 (`courtowner1`) on `accent-200`, both over 4.5:1
+  (the `accent-800` fallback was only for a pair under 4.5:1). Test hooks: `data-testid="upcoming-booking-bar"`, `data-venue-state`.
+
+**Time-zone data found while checking whether the screen already carries it (Chief asked):** only the `Branch.timezone` column holds it. `/bookings/my` returns the window, pool, resource, players and child windows with no branch relation and no
+time zone (a booking carries only a scalar `branchId`). `GET /tenants/:id/branches` returns whole Branch rows, so it does carry `timezone` for every branch of the tenant; the per-branch `/about` call the plan uses carries it and the name.
+`/about` was kept as approved; the branch list is a possible one-request alternative.
+
+**Live-fire (real Chromium, real component and services, scratch DB with the JBC branches set to `Asia/Kolkata`; before = `main`; 10 scenarios, 0 errors, re-run on the two-line layout):**
+- **Wrong time on `main`:** with only the New Court booking (the real JBC case) the bar read "Thu 12:30 AM" for the whole 4 s lookup, and permanently when the lookup failed. After: label only while pending; then the right venue and time.
+- **Stale venue (case 6):** switching venue while the bar shows, `main` formatted the Old Court booking with the previous venue's zone for the whole lookup (forever on failure); a scratch build of the new label on the old state showed the previous venue's **name**.
+  After: pending shows the label only, loaded shows the correct venue and time, failed shows the label only.
+- **Stale response:** on `main`, a request made before the pool is known flashed the current pool's own booking ("Thu 1:00 AM") for 3 s, and a late first response overwrote the newer, correct result and stayed. After: neither; chip toggling with
+  an out-of-order response ends on the right booking.
+- Same venue, other pool: shows this venue's name with no extra `/about` request. No bar when the only other booking is in the current pool or there are none. Manage navigates to `/bookings/my`.
+- **Layout:** long venue ("Coimbatore Main Arena and Sports Academy, Race Course Road") truncates at 360 px (bar 328 px) and 390 px (bar 358 px) with the time fully visible (88 px, never clipped) and no overlap with Manage; the short venue does not truncate.
+- Height: pending 58.4 px to loaded 58.4 px (no jump at 390 px); failed releases to 41 px. Manage hit area about 46 px high and 8 px beyond the link horizontally. Contrast numbers above are identical in light and dark (the accent ramp is inline per tenant).
+- **Not provable locally:** a real device and production venue names. Not run: the guest e2e suite (needs the e2e database; already partly red and time-of-day dependent).
+
+**Surfaced, not fixed, not numbered (read-only audit of the other `formatBranchTime` call sites, 7 Oct 2026):** each passes a time zone that is `undefined` until the branch's `/about` arrives, and `formatBranchTime` then falls back to UTC.
+Live check with every `/about` delayed 3.5 s, JBC branches `Asia/Kolkata`, a 6:00 AM IST booking: **History card** "12:30 AM - 01:30 AM" for 3.5 s, then "06:00 AM - 07:00 AM"; **Home card** "12:30 AM" then "06:00 AM"; **Booking confirmation** "12:30 AM" then "06:00 AM";
+**`/book` slot grid** period counts Morning 18 / Afternoon 9 / Evening 5, then 10 / 10 / 12 (the `branchHour` bucketing and the slot labels at `BranchBooking.tsx:308,506-507`). Confirmed by code read only, not run: `BookingPay.tsx:429-431,441`, the member-session card `main.tsx:420,481-482`,
+and receipts (`lib/receipt.ts:17,24`; `BookingHistory.handleDownloadReceipt` can pass an absent about, so a UTC time could be baked into a PDF). Dead code: `CourtBooking.tsx:134,335-336,514-515`. Admin-v2 uses its own helpers and was not audited. All of these share one cause and a likely one fix (hold the time until the zone is known, or take it from the branch list); no code was changed.
+**History check (read-only, no rows changed):** the `Asia/Kolkata` flip was F-088 Stage 2 part 3 (Batch 64, with F-100). The DB flip landed ahead of part 4's deploy, which merged as `0bd53b3` (PR #51) on 19 Sep 2026; the register has F-088 and F-100 Resolved on 20 Sep. F-234 (12 Sep) predates the flip, so its "both `UTC`" statement was true when written.
+
+**CI:** reported on the PR. Merge needs Chief's sign-off after the live-fire and Bala's explicit go.
