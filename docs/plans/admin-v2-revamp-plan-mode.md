@@ -5,6 +5,7 @@ been run** (scratch database, no product code; archive `docs/plans/chief-archive
 rulings on D2 / D4 / D6–D13 are recorded. Revision 2 (earlier 12 Oct): D1 keep the signed rule with a preview;
 Q5 strict "before"; batch shape = a mix by courts-per-batch. Plan review signed off in principle at `3e79083`.
 **Stopped at the decision gate: no SB, S2 or S3 design is final until Chief has read the Spike (§5).**
+*(Dated note, 12 Oct 2026: Bala's addendum — a member in many batches, one deposit per member, pause and cancel per batch membership — is recorded in §1 and as D14–D16; C-16 is resolved into a requirement. Earlier text is left as written.)*
 **Companion documents:** `docs/discovery/admin-v2-revamp.md` (business discovery, B1–B16, final Q1–Q8,
 the evidence behind every claim here) · `docs/plans/chief-archive/admin-v2-combined-mockup.html` (the
 acceptance reference; **all names, numbers and revenue in it are fake and stay in that file only**).
@@ -109,6 +110,29 @@ deadline is a **computed last day of the month**; "31 Oct" in the mockup is a pl
   on `main` confirmed (§9); one read-only VM query for Bala (§11).
 - **Provisional finding IDs** F-340 to F-343 from Chief; see §9 (rows go in as a separate docs-only PR).
 
+**Rulings recorded 12 Oct 2026 (fourth pass — Bala's addendum, members in many batches):**
+
+- **R1 / D14 — a member can join any number of batches**, including several on one day, and pays for each. The
+  "one assignment per member per pool" rule is lifted (see C-16) and replaced by an **overlap guard** with a clear
+  error message. Different hours on the same day are fine.
+- **R2 / D15 — deposit once per member**, collected with the first month, refunded when the last batch ends.
+- **R3 / D16 — pause and cancellation per batch membership**; the 30-day notice and the pause run per batch.
+- **What changes in the plans (recorded here; designed in the SB and S1 plan documents, not here):**
+  1. *SB and S3:* the overlap guard replaces the uniqueness rule; Create batch and Add member show the member's
+     other batches; seat counts and the min / max rules are **per batch** (one member counts once in each).
+  2. *Attendance:* `POST /member/today-assignment/confirm` is singular and takes one `assignmentId`; behaviour with
+     several assignments on one day is to be checked; the existing `member-multi-batch-attendance` regression
+     fixture is to be read and reported (what it covers, what it does not); the member app must list and confirm
+     each batch separately.
+  3. *Dues (S4a):* the ledger is keyed **per member per batch assignment**; opening and carried balances follow
+     the assignment; a member's dues screen groups by batch.
+  4. *Deposit (S4c):* one deposit record per member; refund allowed only when no active batch remains; the
+     deduction note applies to the one deposit.
+  5. *Pause and cancellation (S4c):* hang off the assignment; a cancel request names the batch.
+  6. *Renewals:* the batch-level review stays; a member in three batches appears in three reviews, each with its
+     own untick.
+  7. *Mockup (§10):* "member in multiple batches" joins the required update: member profile, roster, Add member.
+
 **Chief's rules applied:** reuse existing patterns and cite the precedent for each new thing; check real
 callers before changing any route; flag adjacent issues as separate candidates (never bundled); G10
 before anything that depends on it; stop after the plan.
@@ -165,6 +189,9 @@ Additional facts found while verifying (each feeds a slice or a candidate):
 | **D11** | **Court identity under the mix:** which *physical* courts a batch reserves. | **RULED 12 Oct: fixed courts per batch** | SB, S2 | The **owner chooses the courts on creation**; the server **validates them against the pool's courts and against other batches at the same hour** (no court shared on a shared weekday; Σ courts at an hour ≤ pool capacity). `courtsPerBatch` is derived from the chosen set. "Interchangeable on the day" is out. |
 | **D12** | **Capacity model under the mix.** | **TARGET RULED 12 Oct (final only after the Spike — now run, awaiting Chief's read)** | SB | A batch **reserves** `courtsPerBatch` courts of the pool-hour at **batch** level; **member confirmations do not consume guest capacity**; guests are excluded only from reserved courts, so the **remaining courts stay guest-bookable**. Spike P1 / P1b / P2 / P6 are the **RED baselines** SB must turn GREEN. |
 | **D13** | **What the Create-batch preview shows, and who is displaced under partial overlap.** | **ACCEPTED 12 Oct** | S3, SB | Displace **only bookings beyond the remaining capacity**, **latest-booked first**, and **list each** in the preview (guest, date, time, amount, relocate-or-refund). In a **single-pool branch** (JBC's provisioning) nothing can be relocated, so the list is a **refund list** (**P5 probed: 2 CONFIRMED refunded, 1 HELD cancelled, `relocated 0`**; **P6 probed: 2 bookings displaced and refunded although capacity would have allowed both**). **Are displaced guests notified? No — not today** (Spike: the notification service received no send during P5 / P6; the sweep path has no notification call, `cancelBookingCore` `:5334–5427`). They are real customers, so SB / S3 must add one (C-17). Also: a `Refund` row is **bookkeeping only** (`POST /refunds` writes `processed` with no gateway call, payment `:732–739`), so "refund" in the preview means "recorded; the owner returns the money" unless Chief rules otherwise. |
+| **D14** | **A member in many batches** (R1). | **RULED 12 Oct (Bala)** | SB, S3, S4a | Lift `@@unique([userId, resourcePoolId])` and its `409 ASSIGNMENT_ALREADY_EXISTS`; replace it with an **overlap guard** (refuse a join that clashes at the same hour on a shared weekday; other hours on the same day are fine). Seats and min / max count **per batch**. Resolves C-16 into this requirement. |
+| **D15** | **Deposit cardinality** (R2). | **RULED 12 Oct (Bala)** | S4c | **One deposit record per member.** Collected with the first month; refunded only when no active batch remains; the deduction note applies to the one deposit. |
+| **D16** | **Pause and cancellation scope** (R3). | **RULED 12 Oct (Bala)** | S4c | They hang off the **assignment** (batch membership), not the member. A cancel request names the batch; the 30-day notice and the pause run per batch. |
 
 ### Q5 test cases (normative — strict "before", last day inclusive)
 
@@ -827,7 +854,7 @@ The register rows for F-340 to F-343 go in as a **separate docs-only PR** for Ch
 | **C-14** (F-342, provisional) | **The collision preview and the sweep are blunter than the business rule needs:** the preview returns a count only; the sweep displaces **every** active booking in a colliding window (not just the overflow) and, in a single-pool branch, can **never relocate**, so every confirmed booking is refunded. | `scanCollidingBookings` (`:5934`), `runMemberCollisionSweep` (`:5975`), `tryRelocateBooking` (`siblings.length === 0 → false`); `scripts/tenants/jbc.json` one pool per branch. **Probed (Spike P5 / P6).** | SB, S3 (D13) |
 | **C-13** | **Renewal presets are code fixtures** and batch assignments reject `termPreset` — conflicts with B3 and with quarterly / yearly members in batches. | `:5843`, `:6676` | S4a |
 | **C-15** (F-344, provisional) | **A batch queued for next month already withholds today's slot from guests.** `fetchMemberExclusionContext` selects ACTIVE assignments by pool, weekday and time only; it ignores `startDate` / `endDate`. **Probed (Spike P7(ii)):** a batch created on 12 Oct is queued to 1 Nov, its assignment is `ACTIVE` with `startDate 2026-11-01`, and the 12 Oct slot at that hour is missing from guest availability. Member attendance confirm has the same blind spot (`resolveOneTodayMemberAssignment` also checks status only). Bears on D7 ("active = ACTIVE and within term"). | `index.ts:3681–3698`, `:2081–2092`; Spike P7 | SB, S3 (D7) |
-| **C-16** (new, not numbered) | **A member cannot belong to two batches in one pool** (`@@unique([userId, resourcePoolId])` → `409 ASSIGNMENT_ALREADY_EXISTS`, probed P7(i)). Batches are pool-level and JBC has one pool per branch, so a member could not be in both a morning and an evening batch at the same branch. Whether the business wants that is a question for Bala; the schema comment ("a member may hold concurrent ACTIVE assignments across different pools") assumes more pools than JBC has. | schema `MemberGroupAssignment`; `index.ts:6531` error mapping; Spike P7 | SB, S3 (D3) |
+| **C-16** (new, not numbered) | **A member cannot belong to two batches in one pool** (`@@unique([userId, resourcePoolId])` → `409 ASSIGNMENT_ALREADY_EXISTS`, probed P7(i)). Batches are pool-level and JBC has one pool per branch, so a member could not be in both a morning and an evening batch at the same branch. Whether the business wants that is a question for Bala; the schema comment ("a member may hold concurrent ACTIVE assignments across different pools") assumes more pools than JBC has. | schema `MemberGroupAssignment`; `index.ts:6531` error mapping; Spike P7 | SB, S3 (D3) **Dated note, 12 Oct 2026 — RESOLVED INTO A REQUIREMENT.** Bala ruled that a member can join any number of batches (R1 / D14); the pool-level uniqueness rule is to be replaced by an overlap guard. Not a finding; no ID is assigned. The text above is left as written. |
 | **C-17** (F-345, provisional) | **Displaced guests are not notified, and a `Refund` row is bookkeeping only.** The sweep cancels and records a refund with no notification (probed: P5 / P6 produced no send), and `POST /refunds` writes `processed` with no gateway call (code read). Real customers lose a booking without being told. | `cancelBookingCore` `:5334–5427`; payment `:732–739`; notification log in the Spike archive | SB, S3 (D13) |
 
 Already in the register and relevant: **F-108** (payment service exposes no readable data, Open), **F-109**
@@ -850,7 +877,7 @@ with stated deviations**, not the final design:
 **Required step (12 Oct ruling):** an **updated mockup** — the multi-court grid (batches spanning 1–4 courts)
 and the Create-batch form with courts-per-batch and the exact displacement preview — must be produced and
 reviewed **before S2 and S3 are signed off**. It is a separate file; the archived one is left untouched. It
-also needs the notification line from D13 (what a displaced guest is told).
+also needs the notification line from D13 (what a displaced guest is told). *(Dated note, 12 Oct 2026: it must also show **a member in multiple batches** — member profile, roster and Add member — per Bala's addendum.)*
 
 ---
 
