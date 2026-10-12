@@ -5247,3 +5247,16 @@ F-336 (Medium, provisional), F-337 (Low, provisional), F-338 (Medium, provisiona
 **Not run:** the guest e2e suite (needs the e2e database).
 
 **CI:** reported on the PR. Merge needs Chief's sign-off after the live-fire and Bala's explicit go; F-339 stays Open until Bala's device check.
+
+## Batch -- admin-v2 revamp: Spike run, plan revision 3, register rows F-340 to F-343 (docs only)
+
+**12 Oct 2026. Opened, not closed; nothing here is a fix.** Bala's explicit go for the Spike; Chief's rulings relayed 12 Oct. **No product code.** The Spike ran on a throwaway local PostgreSQL 16 (`badminton_db_scratch_spike`, never `badminton_db`) with the five real built services; ports 3001 to 3005 free before and after.
+
+**Spike (archive `docs/plans/chief-archive/admin-v2-spike/`, raw output + commands + probe scripts):** P1 to P6 all confirmed the code-read predictions. P1: 8 members at capacity 4, members 5 to 8 refused `409 MEMBER_SLOT_AT_CAPACITY`. P1b: footprint equals the confirming-member count. P2: one unconfirmed member locks all four courts in the grid and in guest availability. P3: a scoped manager's `POST /bookings/manual` without `releaseGroupId` returned `201` on a member-reserved window. P4: no `Subscription` row gives `409 SUBSCRIPTION_INACTIVE`. P5: single-pool branch, `relocated 0`, both CONFIRMED guest bookings cancelled with refunds recorded. P6: a 2-member batch displaced and refunded both guest bookings although capacity allowed both. P7 (extra): a member cannot join a second batch in one pool; a batch queued for next month already withholds today's slot from guests. Displaced guests are not notified; a `Refund` row is bookkeeping only (no gateway call).
+
+**Plan (`docs/plans/admin-v2-revamp-plan-mode.md`, revision 3):** Spike marked RUN with the results table; D2, D4, D6 to D13 recorded as ruled or accepted; D8 access-token lifetime reported (15 minutes access, 30 days refresh, roles re-read on every refresh) with a money-route re-check proposal; SB rollout and rollback plan added; the updated mockup is now a required step before S2 and S3 sign-off; minimum cut plus S4a; the read-only VM query for D9 written out; new candidates C-15, C-16, C-17 described and not numbered.
+
+**Register (this PR):** F-340 (Medium, probed), F-341 (Medium, described, code-read, not probed), F-342 (Medium, probed) and F-343 (Low, described, code-read, not probed) logged Open, each with a Confirmed-ID entry in `docs/plans/pending-findings.md`. **Chief assigned the four IDs (provisional); the row text was drafted by Claude Code.** Register check done: the highest ID on `main` (`aa18866`) is F-339 and F-340 to F-343 appear nowhere else in `docs/`.
+
+**Reported to Chief:** what landed is the Spike archive, plan revision 3, F-340 to F-343 (Open), and this entry; none of the four findings is Resolved.
+**Not done here:** no SB, S1, S2 or S3 design or code (the decision gate is Chief's), no fix for any finding, no numbering of C-15 to C-17.
