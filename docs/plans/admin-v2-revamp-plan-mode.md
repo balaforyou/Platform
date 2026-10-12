@@ -1,9 +1,10 @@
 # Admin v2 revamp — plan-mode document
 
-**Status:** PLAN ONLY. Nothing is implemented. **Revision 2, 12 Oct 2026:** Bala's rulings recorded (D1
-keep the signed rule with a preview; Q5 strict "before"; batch shape = a mix by courts-per-batch). The three
-documents are committed **docs-only** (no code, no register changes). Awaiting Chief's review and Bala's
-sign-off.
+**Status:** PLAN ONLY. Nothing is implemented. **Revision 3, 12 Oct 2026 (third pass):** the **Spike has
+been run** (scratch database, no product code; archive `docs/plans/chief-archive/admin-v2-spike/`) and Chief's
+rulings on D2 / D4 / D6–D13 are recorded. Revision 2 (earlier 12 Oct): D1 keep the signed rule with a preview;
+Q5 strict "before"; batch shape = a mix by courts-per-batch. Plan review signed off in principle at `3e79083`.
+**Stopped at the decision gate: no SB, S2 or S3 design is final until Chief has read the Spike (§5).**
 **Companion documents:** `docs/discovery/admin-v2-revamp.md` (business discovery, B1–B16, final Q1–Q8,
 the evidence behind every claim here) · `docs/plans/chief-archive/admin-v2-combined-mockup.html` (the
 acceptance reference; **all names, numbers and revenue in it are fake and stay in that file only**).
@@ -13,11 +14,11 @@ acceptance reference; **all names, numbers and revenue in it are fake and stay i
 **No finding IDs are assigned or reserved.** Chief assigns IDs per slice. Existing register findings are
 cited by their real IDs.
 
-**Evidence standard used throughout.** No database or Docker was available in this session, so nothing
-below was probed at runtime. "Verified" means a code read, a grep (negative results included) or an
-existing regression test's recorded behaviour. Anything about runtime behaviour is marked **code-read
-only**, and the plan schedules a live probe where it matters (**the Spike, which is the first act after
-sign-off; it was not run in this session**).
+**Evidence standard used throughout.** "Verified" means a code read, a grep (negative results included) or an
+existing regression test's recorded behaviour; anything about runtime behaviour is marked **code-read only**
+unless it says **probed (Spike)**. **Revision 3:** the Spike (§5) ran on 12 Oct against a throwaway local
+PostgreSQL with the five real built services; where a §2 / §3 / §9 claim was one of its probes the entry now
+says *probed* and cites the probe. Claims the Spike did not touch stay **code-read**.
 
 ---
 
@@ -36,22 +37,30 @@ sign-off; it was not run in this session**).
    - **Batch shape:** a batch is a **mix** — some use 1 court, bigger ones 2–4. A **courts-per-batch**
      setting is added. This is the biggest re-scope: the backend today is **pool-level** (one batch locks
      every court of the pool for that hour), so S2 and S3 now depend on a new backend slice, **SB**.
-3. **What can still resize the plan:**
-   - **Capacity accounting (D2, code-read only).** A confirmed member attendance consumes one unit of
-     window capacity; JBC's pool capacity is 4, a batch can hold 8, and under the mix a batch should consume
-     **its courts**, not its members. The **Spike** probes this on the test database first (§5).
+3. **Spike result (12 Oct, §5):** P1–P6 all **confirmed** the code-read predictions (8-member batch: only 4
+   confirm; one member locks all four courts; the walk-in route has no mandatory guard; the Subscription
+   gate refuses; single-pool collisions refund everything; partial overlap displaces everything). P7 (extra)
+   found two things nobody predicted: **a member cannot belong to two batches in one pool**, and **a batch
+   queued for next month already withholds today's slot from guests** (§9, C-15 / C-16). Displaced guests are
+   **not notified** (C-17).
+4. **What can still resize the plan:**
+   - **Capacity accounting (D2) — Spike-confirmed.** A confirmed member attendance consumes one unit of
+     window capacity; with JBC's pool capacity 4, **members 5–8 of an 8-member batch are refused
+     `409 MEMBER_SLOT_AT_CAPACITY` (P1)**. Under the mix a batch must reserve **its courts**, not charge per
+     member. Target model ruled by Chief / Bala; final after Chief reads the Spike (§5).
    - **The mix vs the pool-level backend (new slice SB).** Without SB a 1-court batch still locks all four
      courts for guests.
    - **The Subscription gate (C-7).** A member can only confirm attendance if an `active` `Subscription`
      row exists and **nothing in the apps or scripts creates one**. Indirect evidence on production is in §2;
      the real answer is a question for Bala. Register **F-108** and **F-109** (both Open) sit on the same gap.
-4. **Order:** **Spike → S1 → SB → S2 → S0 (may overlap S2) → S3 → S4a → S4b → S4c → S5.** S0 (server-side
-   role enforcement) sits before every slice that needs it; **no manager permission toggle ships before it.**
-5. **Minimum-demo cut (§8):** Spike + S1 + SB + S2 + S0 (the part S3 needs) + S3. It cannot show dues, the
-   Pay button, pause, cancellation, deposit or manager-permission toggles. If SB cannot land before the
-   demo, the fallback is a **labelled interim** (pool-level locking) — stated openly, never faked. **The demo
-   date is still open.**
-6. **Risky / backend-heavy parts:** **SB** (re-models what a batch occupies, touching availability, the
+5. **Order:** **Spike (done) → S1 → SB → S2 → S0 (may overlap S2) → S3 → S4a → S4b → S4c → S5.** S0
+   (server-side role enforcement) sits before every slice that needs it; **no manager permission toggle ships
+   before it.** After Chief has read the Spike, S1 (frontend, low risk) can start in parallel with SB design.
+6. **Minimum-demo cut (§8) — demo ruled more than 4 weeks away:** Spike + S1 + SB + S2 + S0 (the part S3
+   needs) + S3 **plus S4a**; S4b, S4c and S5 after the demo unless time allows. It cannot show the Pay button,
+   pause, cancellation, deposit or manager-permission toggles. If SB cannot land before the demo, the
+   fallback is a **labelled interim** (pool-level locking) — stated openly, never faked.
+7. **Risky / backend-heavy parts:** **SB** (re-models what a batch occupies, touching availability, the
    grid, the sweep and capacity), **S4a** (new money ledger), **S4c** (new entities + member app +
    notifications), **S0** (cross-service enforcement).
 
@@ -80,6 +89,25 @@ deadline is a **computed last day of the month**; "31 Oct" in the mockup is a pl
 - **Probe spike first.** The pool-capacity question is more important now. A live probe on the test
   database comes first, with raw output reported before any slice code (§5).
 - **Push:** Bala's go is explicit; documents only.
+
+**Rulings recorded 12 Oct 2026 (third pass — Spike go; plan signed off in principle at `3e79083`):**
+
+- **Spike:** go is explicit; run on a scratch database, never `badminton_db`, no product code, raw output
+  archived, **stop at the decision gate** (done: §5).
+- **D2 / D12 target model:** a batch **reserves its courts at batch level**; member confirmations do **not**
+  consume guest capacity. Final only after Chief reads the Spike.
+- **D4 accepted** (server-side, mandatory for any guest placement onto a member-reserved court; confirmed
+  members only, paused excluded, only after the cutoff; closes C-4). **D6** accepted as proposed. **D7**
+  accepted (membership active = assignment `ACTIVE` and within term; dues never change that; direction for
+  F-109; Chief rules on F-108 / F-109 closure when S4a is planned). **D8** accepted + a requirement (§5 S0).
+  **D9** closed (nothing live; no opening-balances import; to be verified by a read-only query, §11).
+  **D10:** demo more than 4 weeks away → minimum cut plus S4a. **D11:** fixed courts per batch, chosen by
+  the owner at creation. **D13** accepted (displace only the overflow, latest-booked first, each listed;
+  single-pool branches get a refund list; **one line on guest notification, in D13**).
+- **Plan changes required:** SB rollout and rollback plan (§5 SB); an **updated mockup** (multi-court grid +
+  Create-batch displacement preview) is a **required step before S2 and S3 sign-off** (§10); highest F-number
+  on `main` confirmed (§9); one read-only VM query for Bala (§11).
+- **Provisional finding IDs** F-340 to F-343 from Chief; see §9 (rows go in as a separate docs-only PR).
 
 **Chief's rules applied:** reuse existing patterns and cite the precedent for each new thing; check real
 callers before changing any route; flag adjacent issues as separate candidates (never bundled); G10
@@ -125,18 +153,18 @@ Additional facts found while verifying (each feeds a slice or a candidate):
 | # | Decision | Status | Blocks | Recommendation / ruling |
 |---|---|---|---|---|
 | **D1** | **Collision policy for a new batch.** | **RULED 12 Oct** | S3 | **Keep "member contracts always win".** Create batch lists the **exact** guest bookings affected and the owner confirms first. The existing `member-collision-preview` returns only a count (`{ scanned }`), by design (F-207.3 deliberately stops before predicting the outcome), so S3 needs a **richer preview** (D13). |
-| **D2** | **Capacity accounting for member attendance** vs JBC capacity 4, batches up to 8, now also vs **courts-per-batch 1–4**. | **OPEN — probe first** | SB, S3 | Spike P1 / P1b (§5). Hypothesis (code-read): today each confirming member takes one unit, so the 5th member of an 8-member batch is refused at capacity 4, and a batch's footprint is its **member count, not its courts**. Under the mix a batch must consume **its courts**. |
+| **D2** | **Capacity accounting for member attendance** vs JBC capacity 4, batches up to 8, now also vs **courts-per-batch 1–4**. | **TARGET RULED 12 Oct; baseline probed (Spike)** | SB, S3 | **Target:** a batch reserves its courts at batch level; member confirmations do not consume guest capacity (see D12). **Probed baseline:** P1 — 8 members, capacity 4: **members 1–4 confirm, 5–8 get `409 MEMBER_SLOT_AT_CAPACITY`**; P1b — footprint equals the **confirming-member count** (3 members cost 3 units and a walk-in still fits the 4th; two 3-member batches at one hour: 4 of 6 confirm). Final after Chief reads the Spike (§5). |
 | **D3** | **Batch shape.** | **RULED 12 Oct: a mix (1 court; bigger batches 2–4)** | SB, S2, S3 | Add **courts-per-batch** to the batch. The pool-level backend (one batch locks the whole pool-hour) no longer matches the business; **slice SB** re-models the footprint. Fallback: a labelled pool-level interim. |
-| **D4** | **Q7 gating rule.** | open | S2.3 | Threshold in the attendance rules (tenant default, per-batch override); counts confirmed **members only** (paused excluded); placement only **after cutoff**; guard **server-side and mandatory** for any placement onto a member-reserved court (closes C-4). |
+| **D4** | **Q7 gating rule.** | **ACCEPTED 12 Oct** | S2.3 | Guard **server-side and mandatory** for any guest placement onto a member-reserved court (today it is opt-in via `releaseGroupId`; **P3 probed: a scoped manager's `POST /payment/bookings/manual` without it returns `201`**). Counts **confirmed members only**, **paused excluded**, and only **after the cutoff**. Threshold in the attendance rules (tenant default, per-batch override). Closes C-4 (F-340, provisional). |
 | **D5** | **Q5 boundary.** | **RULED 12 Oct: strict "before"** | S4c | Last day = request + 30 days, **inclusive** (the member may attend on it); a month is charged iff its 1st is **strictly before** the last day and after the request month. Test cases below. |
-| **D6** | **Q6 warning rule.** | proposed (Q6 accepted) | S3, S4c | As "Q6 rule" below. |
-| **D7** | **What makes a membership "active"** now that overdue must still attend (B6); what replaces the `Subscription` gate on confirm. | open | S3, S4a | Activeness = assignment `ACTIVE` and within its term dates; the dues ledger never changes it. Replace the gate in `confirm`, `computeBranchMemberAttendance`, release eligibility. Answers register **F-109**'s open decision (billing = owner-recorded + member-initiated pay, **not** autopay-only). |
-| **D8** | **Manager permission model.** | open | S0, S5 | Store in tenant-management beside `RoleAssignment`; services read **claims** (a `caps` claim minted where `GET /users/:id/roles` already feeds every JWT, F-076 path). A grant takes effect at the next token refresh. |
-| **D9** | **Evidence artefacts and opening balances.** | open | S4a | One real artefact per money rule; opening-balances import (precedent: `scripts/tenants/*.json` + `scripts/provision-tenant.mjs`). The F-328 counts suggest there may be **nothing to import** — confirm. |
-| **D10** | **Demo date and demo scope.** | open | order | If the demo needs the money lifecycle, S4a moves into the cut. |
-| **D11** | **Court identity under the mix:** which *physical* courts a batch reserves. | **NEW — open** | SB, S2 | Recommend **explicit courts per batch** (JBC's batches are named by court, e.g. "Court 3 · 7 PM"); `courtsPerBatch` = the count, validated against the pool's courts and against other batches at the same hour. Alternative: count only, courts auto-placed like `assignPooledCourt` does for guests — simpler, but the grid cannot say *which* courts a batch occupies. |
-| **D12** | **Capacity model under the mix.** | **NEW — open (needs Spike)** | SB | Recommended: a batch **reserves** `courtsPerBatch` units of the pool-hour's capacity at **batch** level; **member confirmations do not consume guest capacity**; guests are excluded only from reserved courts, so the **remaining courts stay guest-bookable**. Replaces both "any batch blocks the whole pool-hour" and "each confirming member takes a unit". |
-| **D13** | **What the Create-batch preview shows, and who is displaced under partial overlap.** | **NEW — open** | S3, SB | Today's sweep displaces **every** active booking in the colliding window and, for a branch with a single pool, **can never relocate** (`tryRelocateBooking` needs a sibling POOLED pool in the branch; `scripts/tenants/jbc.json` has one pool per branch) — so every confirmed guest booking would be **refunded in full** and held ones cancelled. Under the mix only bookings **beyond the remaining capacity** need displacing. Preview must list **each** booking (guest, date, time, amount, relocate-or-refund) and say plainly that the relocate / refund split is decided at write time; propose **latest-booked displaced first**. |
+| **D6** | **Q6 warning rule.** | **ACCEPTED 12 Oct, as proposed** | S3, S4c | As "Q6 rule" below. |
+| **D7** | **What makes a membership "active"** now that overdue must still attend (B6); what replaces the `Subscription` gate on confirm. | **ACCEPTED 12 Oct** | S3, S4a | A membership is **active when the assignment is `ACTIVE` and within its term; dues never change that.** The gate in `confirm`, `computeBranchMemberAttendance` and release eligibility is replaced accordingly (**P4 probed: with no `Subscription` row, confirm is refused `409 SUBSCRIPTION_INACTIVE`, 0 bookings written**). Direction for register **F-109** (billing = owner-recorded + member-initiated pay, not autopay-only). **Chief rules on F-108 / F-109 closure when S4a is planned** — not before. |
+| **D8** | **Manager permission model.** | **ACCEPTED 12 Oct, plus a requirement** | S0, S5 | Store in tenant-management beside `RoleAssignment`; services read **claims** (a `caps` claim minted where `GET /users/:id/roles` already feeds every JWT). A grant **or revocation** takes effect only at token refresh. **Requirement: report the access-token lifetime and bound revocation of money permissions** — answered in §5 S0 ("Token lifetime and bounding revocation"). |
+| **D9** | **Evidence artefacts and opening balances.** | **CLOSED 12 Oct (opening balances); artefacts still open** | S4a | Nothing live → **no opening-balances import**. To be **verified by a read-only VM query** (§11, for Bala). One real artefact per money rule is still wanted — **blocking when S4a is planned**. |
+| **D10** | **Demo date and demo scope.** | **RULED 12 Oct: more than 4 weeks away** | order | Plan the **minimum cut plus S4a**; **S4b, S4c and S5 after the demo unless time allows** (§8). |
+| **D11** | **Court identity under the mix:** which *physical* courts a batch reserves. | **RULED 12 Oct: fixed courts per batch** | SB, S2 | The **owner chooses the courts on creation**; the server **validates them against the pool's courts and against other batches at the same hour** (no court shared on a shared weekday; Σ courts at an hour ≤ pool capacity). `courtsPerBatch` is derived from the chosen set. "Interchangeable on the day" is out. |
+| **D12** | **Capacity model under the mix.** | **TARGET RULED 12 Oct (final only after the Spike — now run, awaiting Chief's read)** | SB | A batch **reserves** `courtsPerBatch` courts of the pool-hour at **batch** level; **member confirmations do not consume guest capacity**; guests are excluded only from reserved courts, so the **remaining courts stay guest-bookable**. Spike P1 / P1b / P2 / P6 are the **RED baselines** SB must turn GREEN. |
+| **D13** | **What the Create-batch preview shows, and who is displaced under partial overlap.** | **ACCEPTED 12 Oct** | S3, SB | Displace **only bookings beyond the remaining capacity**, **latest-booked first**, and **list each** in the preview (guest, date, time, amount, relocate-or-refund). In a **single-pool branch** (JBC's provisioning) nothing can be relocated, so the list is a **refund list** (**P5 probed: 2 CONFIRMED refunded, 1 HELD cancelled, `relocated 0`**; **P6 probed: 2 bookings displaced and refunded although capacity would have allowed both**). **Are displaced guests notified? No — not today** (Spike: the notification service received no send during P5 / P6; the sweep path has no notification call, `cancelBookingCore` `:5334–5427`). They are real customers, so SB / S3 must add one (C-17). Also: a `Refund` row is **bookkeeping only** (`POST /refunds` writes `processed` with no gateway call, payment `:732–739`), so "refund" in the preview means "recorded; the owner returns the money" unless Chief rules otherwise. |
 
 ### Q5 test cases (normative — strict "before", last day inclusive)
 
@@ -215,13 +243,14 @@ their **real callers**, precedent, evidence plan and traps. Traps are in §7; sl
 
 ### Spike — evidence before design (no product code; first act after sign-off)
 
-**Status: NOT RUN.** This session had no database service and no Docker. The sandbox does have a PostgreSQL 16
-server binary, `node_modules`, `pnpm` and the `psql` client; the services are **not built** (`dist/` absent).
-So the Spike is runnable here on request, after: start a local Postgres, create `badminton_db_test`, apply
-`prisma migrate deploy`, build `@badminton/database`, `ui-shared` and the services (rebuild-before-test),
-then export `DATABASE_URL` per root `CLAUDE.md` (never `badminton_db`; stop any manual services on 3001–3005).
-Probe scripts are throwaway and live outside the repo; the **raw output is archived** under
-`docs/plans/chief-archive/` (precedent: `f328-dev-rehearsal/`) with the commands that produced it.
+**Status: RUN, 12 Oct 2026, 07:36 UTC (Bala's go).** Against a **throwaway local PostgreSQL 16.15**
+(`badminton_db_scratch_spike`; **not** `badminton_db`, not `badminton_db_test`), schema from `prisma migrate
+deploy`, the five services **rebuilt** from the working tree and run as their real `dist/index.js`, ports
+3001–3005 free before and after. **No product code was written.** The probe scripts are throwaway harness code;
+they and the **raw output** are archived under `docs/plans/chief-archive/admin-v2-spike/` (`README.md` = setup,
+commands and readout; `spike-raw-output.txt` = every request, status, body and SQL read-back; `probes/` =
+the scripts), following the `f328-dev-rehearsal/` precedent. The remainder of this section keeps the original
+spec; the **results table follows it**.
 
 Every probe records: the exact request, HTTP status + body, and a **SQL read-back** (`Booking`,
 `AvailabilityWindow`, `MemberGroupAssignment`) before and after.
@@ -236,9 +265,27 @@ Every probe records: the exact request, HTTP status + body, and a **SQL read-bac
 | **P5 — collision outcome in a single-pool branch (D13)** | One-pool branch, 2 CONFIRMED + 1 HELD guest bookings at hour H inside the guest horizon; create the first assignment | The response `collisionSweep` + rows after | `relocated: 0`; confirmed bookings **cancelled with full refunds**, the held one cancelled (no sibling pool to relocate to). |
 | **P6 — partial overlap (D13)** | Capacity 4, **2** guest bookings at hour H, then create a 2-member batch | Which bookings survive | Today **all** colliding active bookings are displaced (the scan returns every active booking in the window), even though capacity would allow both — the gap D12 / D13 close. |
 
-**Decision gate:** the results go to Chief and Bala **before any SB / S2 / S3 code**. If P1 shows members are
-refused at capacity, SB's capacity redesign is mandatory, not optional. If P2 / P6 confirm the blunt behaviour,
-the labelled interim is the only way to demo before SB lands.
+**Results (all raw output in `docs/plans/chief-archive/admin-v2-spike/spike-raw-output.txt`):**
+
+| Probe | Observed | Verdict |
+|---|---|---|
+| **P1** | 8 members, capacity 4, one window: members 1–4 `201`; **members 5–8 `409 MEMBER_SLOT_AT_CAPACITY`**; 4 `Booking` rows, all `isMemberBooking = t`, court unassigned | **Confirmed** |
+| **P1b-a** | 3-member batch: 3 confirmed, `capacity_consumed 3 of 4`; a negotiated walk-in then succeeds on the 4th unit (`201`, court 1) | **Confirmed**: footprint = confirming members |
+| **P1b-b** | two 3-member batches, same hour, same pool: **4 of 6 confirm**, members 5–6 refused | **Confirmed** |
+| **P2** | one member, **not yet confirmed**: grid **all four courts `member-blocked`** (control before: all `guest-vacant`); availability no longer returns the hour; guest `POST /bookings` → `409 MEMBER_SLOT_RESERVED` | **Confirmed**: one member locks the whole pool-hour from the moment the assignment exists |
+| **P3** | scoped manager, member-reserved window: (a) no `releaseGroupId` → **`201 CONFIRMED`** guest booking, no check; (b) with `releaseGroupId`, member CONFIRMED → `409 RELEASE_NO_LONGER_ELIGIBLE`; (c) control after cutoff, nobody confirmed → `201` | **Confirmed**: C-4 |
+| **P4** | ACTIVE assignment, 0 `Subscription` rows: `GET /member/today-assignment` → `SUBSCRIPTION_INACTIVE`; confirm → `409 SUBSCRIPTION_INACTIVE`; 0 bookings | **Confirmed** |
+| **P5** | single-pool branch, 2 CONFIRMED + 1 HELD guest bookings: preview `{scanned: 3}`; first assignment → `collisionSweep {scanned 3, relocated 0, cancelled 3, failed []}`; both CONFIRMED `CANCELLED` with `refundAmount 100.00`, **2 `Refund` rows `processed`**, HELD cancelled | **Confirmed** |
+| **P6** | capacity 4, 2 guest bookings, 2-member batch: preview `{scanned: 2}`; the first assignment cancelled and refunded **both**; the second found nothing | **Confirmed**: the sweep ignores the remaining capacity |
+| **P7** (extra) | (i) same member, second batch, same pool, different hour → `409 ASSIGNMENT_ALREADY_EXISTS`; (ii) a batch made on a non-1st day is queued to 1 Nov, its assignment is `ACTIVE` with `startDate 2026-11-01`, yet **today's slot at that hour is already missing from guest availability** | **New** (C-15, C-16) |
+
+**What the Spike does not prove:** it used a fresh single-tenant fixture, not JBC data; the seeded payment
+intents are `cash_` refs, so no gateway path was exercised (and `POST /refunds` makes no gateway call at all);
+P7(ii) was observed on availability only.
+
+**Decision gate (reached; stopped here).** The results go to Chief and Bala **before any SB / S2 / S3 design
+is final**. P1 shows members are refused at capacity, so SB's capacity redesign is **mandatory, not optional**.
+P2 / P6 confirm the blunt behaviour, so the labelled interim remains the only way to demo before SB lands.
 
 ### S1 — Role-aware shell + global branch / date context (frontend only)
 
@@ -293,7 +340,8 @@ sold to guests".
 - A **`courtsPerBatch`** value on the batch (integer, 1 to the pool's court count). It is a **different limit
   from seats** (members, min 4 / max 8): *courts* say how much of the pool-hour the batch reserves, *seats*
   say how many people share it.
-- **D11 court identity:** recommended explicit courts per batch (the count is derived and validated).
+- **D11 court identity (ruled): fixed courts per batch, chosen by the owner on creation**; the server validates
+  them against the pool's courts and against other batches at the same hour. The count is derived.
 - **D12 capacity model:** a batch **reserves** its courts at batch level; **member confirmations stop
   consuming guest capacity**; guests are excluded only from the reserved courts, so a 1-court batch leaves
   the other courts bookable. Batch-vs-batch validation at create: Σ courts at the same hour ≤ pool capacity,
@@ -303,6 +351,30 @@ sold to guests".
 - **Fallback (labelled interim, not a design):** store `courtsPerBatch` but keep pool-level locking, so every
   court shows locked at the batch's hour. Honest for a demo only if labelled; it *loses* guest revenue on
   the unreserved courts, so it is not a production position.
+
+**Rollout and rollback (required: SB edits the live guest booking flow on JBC).** `windowBookable` is the one
+bookability function every guest path reads, so a wrong change either hides or **double-sells** a customer's
+court.
+- **Migration is additive and self-defending** (F-067 / F-115 `DO $$` precedent): new nullable column(s) on
+  `Group` for the reserved courts; **nothing is altered, dropped or rewritten**. The F-328 dump showed `Group`
+  0 on 1 Oct (D9's VM query re-confirms), so there is nothing to back-fill; even if rows exist they stay valid.
+- **Default reproduces today.** A batch with **no courts set means "all courts of the pool"**: availability,
+  exclusion, the grid cells and `POST /bookings/negotiated` behave exactly as today, and **nothing changes on
+  JBC until an owner sets courts on a batch**. Proof: the same availability / grid / booking requests are
+  captured **before** and **after** the deploy on a pool with no batches and diffed (**byte-identical**). The
+  one deliberate behaviour change for default batches is for **members**, not guests: confirmations stop
+  consuming capacity, so members 5–8 are no longer refused (a fix; the whole pool-hour is reserved for the
+  batch either way, so what guests see is unchanged).
+- **Order of ship:** (1) deploy migration + code with the new path dormant (no batch has courts); (2) regression
+  green on `badminton_db_test`, Spike probes P1 / P1b / P2 / P6 **RED → GREEN**; (3) per root rule 10, capture
+  the failing "before" on the deployed stack with a **throwaway tenant** (never JBC's data) behind a
+  provisional `-preproof` image, then ship the real SHA; (4) deployed-VM smoke over real HTTPS: a guest
+  booking on an unreserved court succeeds, on a reserved one fails; `deploy:verify`; (5) only then does an
+  owner set courts on a real batch.
+- **Rollback:** redeploy the previous immutable image set with `./deploy/gcp-vm/promote.sh <previous-sha>`. The
+  migration needs **no down-step**: old code ignores the new column. A batch an owner had already given courts
+  then reads as **pool-level** under old code, which errs on the **safe side** (guests see fewer slots; no court
+  is double-sold). No feature flag is proposed; Chief to say if one is wanted for the first JBC week.
 
 **Blast radius (real consumers, found this session).**
 *slot-engine:* `fetchMemberExclusionContext` (`:3681`), `collidesWithMemberAssignment` (`:3709`),
@@ -345,6 +417,9 @@ beside the local one. Rebuild before regression; `badminton_db_test` only; stop 
 (ports); the suites listed above write real rows.
 
 ### S2 — Today (frontend + read endpoints + one server guard)
+
+**Gate (12 Oct ruling): the updated mockup — multi-court grid + Create-batch displacement preview — must exist
+and be reviewed before S2 is signed off** (§10). The archived mockup predates the batch-shape ruling.
 
 **Scope.**
 - **2.1 Grid re-home.** Today = the existing Inventory grid (same 7 cell types, icon-only) + a composed
@@ -417,6 +492,21 @@ member contact details.
 - **Helper:** `requireCapability(auth, cap)` beside `requireOwnerOrInternal` (slot-engine `:305`) and
   tenant-management's `verifyTenantOwnerOrInternal`; internal-key bypass unchanged.
 
+**Token lifetime and bounding revocation of money permissions (D8 requirement).**
+- **Access token: 15 minutes** (`expiresIn: '15m'` at identity-auth `index.ts:563`, `:774`, `:844` and the
+  refresh path `:1258`). **Refresh cookie: 30 days.** Roles are **re-read from tenant-management on every
+  issuance, refresh included** (`issueAccessToken`, `:1223–1243`), and a failed role fetch yields `roles = []`
+  (fail-closed). So today a revoked manager keeps the roles in an already-issued token for **at most 15
+  minutes** and cannot refresh into them.
+- **Proposal.** (1) For ordinary capabilities (attendance, member edits, walk-ins) accept the **15-minute**
+  bound and state it in the UI copy and the doc ("takes effect within 15 minutes"). (2) For **money
+  permissions** (record payment, refunds, deposit) do **not** rely on the claim: the payment-side routes
+  **re-check server-side** at write time with the same internal-key `GET /users/:id/roles` call
+  identity-auth already makes (one extra internal call per money write; volume is low; optional ≤ 30 s cache),
+  so a revocation of a money permission is effective **immediately**, not within 15 minutes. (3) Not
+  recommended: shortening the access token for everyone (multiplies refresh traffic and the F-287 refresh-grace
+  surface across all users for a benefit only the money routes need). Chief to confirm (2) before S0 design.
+
 **Blast radius.** *slot-engine:* `getInternalOrAdminAuth`, `requirePoolScope`, `isAuthorizedForBranch`
 (`:297`), and every route on the matrix — `POST /groups`, `POST|PATCH /member-group-assignments`,
 `POST …/renew`, `POST /resource-pools/:id/windows/:windowId/release`, patterns and overrides (already
@@ -445,6 +535,9 @@ showing a grant taking effect.
 integrity. Pipe-escaping if the register is touched later.
 
 ### S3 — Members core (frontend + backend)
+
+**Gate (12 Oct ruling): the same updated mockup — specifically the Create-batch courts-per-batch field and the
+displacement preview — must exist and be reviewed before S3 is signed off** (§10).
 
 **Scope.**
 - **Members list / profile** (read): search + filters. Needs **names**: `GET /groups/:id/roster` selects
@@ -669,7 +762,9 @@ approved plan into `docs/plans/chief-archive/` in the PR that resolves the findi
 
 **Rough order:** Spike → S1 → **SB** → S2 → S0 (may overlap S2) → S3 → S4a → S4b → S4c → S5.
 
-**Minimum-demo cut = Spike + S1 + SB + S2 + S0 (the part S3 needs) + S3.**
+**Minimum-demo cut (D10, 12 Oct: demo more than 4 weeks away) = Spike + S1 + SB + S2 + S0 (the part S3 needs)
++ S3 + S4a.** S4b, S4c and S5 follow the demo unless time allows. (The bullets below describe the S1–S3 part;
+S4a adds the dues ledger, owner-recorded payments, overdue and the renewals review.)
 - Demonstrates: role-aware navigation and the global branch / date bar (owner, one-branch manager,
   two-branch manager), the composed **Today** (guest + member activity, utilisation, attendance by batch,
   follow-ups for what exists), the grid and walk-ins on laptop and phone with **batches spanning 1–4
@@ -677,16 +772,16 @@ approved plan into `docs/plans/chief-archive/` in the PR that resolves the findi
   courts-per-batch and the exact displacement preview + confirm), **Manage roster / Move**, batches by branch
   and time band, **unlimited attendance history** and per-member history, manager restrictions enforced by
   the server.
-- **Cannot demonstrate** (labelled, not faked): dues and overdue, the member Pay button, pause, cancellation
-  requests, deposit and refund, renewals review, manager-permission toggles, the Managers screen,
-  configurable attendance rules.
+- **Cannot demonstrate** (labelled, not faked): the member Pay button (S4b), pause, cancellation requests,
+  deposit and refund (S4c), manager-permission toggles, the Managers screen, configurable attendance rules
+  (S5). **With S4a in the cut**, dues, overdue and the renewals review are demonstrable.
 - **Honest caveats.** (1) The cut depends on the Spike: if P1 shows members refused at capacity, SB's
   capacity redesign is mandatory. (2) **SB is the largest non-money slice and touches the customer-facing
   guest booking flow**; if it cannot land before the demo, the **labelled pool-level interim** is the only
   alternative and the demo must say so. (3) Nothing is faked: a screen that has no backend is hidden, not
   mocked.
-- **If the demo needs the money lifecycle,** add **S4a** (then S4b) to the cut; S4c and S5 remain post-demo
-  candidates. The demo date (D10) decides this.
+- **S4a is in the cut (D10).** S4b, then S4c and S5, are post-demo candidates that move forward only if time
+  allows. S4a needs one real artefact per money rule from Bala **before it is planned**.
 
 **Risky / backend-heavy, called out plainly:** **SB** (re-models what a batch occupies; guest booking flow on
 the blast radius), **S4a** (a new money ledger — the slice most able to ship a wrong number), **S4c** (new
@@ -696,25 +791,44 @@ entities, two apps, notifications), **S0** (four services, every role-gated rout
 
 ## 9. Candidate findings (described — not numbered; Chief assigns IDs and decides what is bundled)
 
-Evidence is code-read unless stated. Each is kept separate; none is folded into a slice's scope silently.
-**Chief asked to look first at C-4 (the unguarded walk-in route) and C-5 (manager over-privilege).**
+Evidence is code-read unless it says *probed*. Each is kept separate; none is folded into a slice's scope silently.
+
+**Provisional finding IDs from Chief (12 Oct), subject to the register check.** The check is done:
+**the highest F-number on `main` (`aa18866`) is F-339**, and F-340 to F-343 appear nowhere in `docs/`, so they
+are free. They are provisional until Chief confirms them in `docs/plans/pending-findings.md`.
+
+| ID (provisional) | = | Severity | Status of the evidence |
+|---|---|---|---|
+| **F-340** | C-4 — the walk-in route lacks a mandatory member-collision guard | Medium | **probed** (Spike P3) |
+| **F-341** | C-5 — manager over-privilege on batch / member / release routes | Medium | **described, code-read, not probed** (P3 touches only the manual-booking route) |
+| **F-342** | C-14 — collision preview and sweep blunter than the business rule (displaces everything; refunds everything in single-pool branches) | Medium | **probed** (Spike P5 / P6) |
+| **F-343** | C-8 — `duesCollected` in the guest dashboard is guest revenue, misnamed | Low | **described, code-read, not probed** |
+
+**Not findings:** C-1 / C-2 are covered by SB (probed: P1 / P1b / P2); **C-7 attaches to F-109** (probed: P4);
+C-9 / C-12 are S3 scope; C-6 / C-10 / C-11 / C-13 are new capabilities, not defects; **C-3 is closed**. **C-15,
+C-16 and C-17 below are new from the Spike and are described only, not numbered** — Chief assigns any ID.
+
+The register rows for F-340 to F-343 go in as a **separate docs-only PR** for Chief to review before merge.
 
 | Label | Candidate | Evidence | Slice it informs |
 |---|---|---|---|
 | **C-1** | Batches are **pool-level**: a member batch blocks every court of the pool for that hour; the business (**ruled 12 Oct: a mix of 1 to 4 courts per batch**) needs a per-batch court footprint. | slot-engine `:1246–1248` comment; `memberBlocked` applied `:1737`; `Group` / `MemberGroupAssignment` carry `resourcePoolId`, no court; JBC provisioning = one 4-court pool per branch | SB, S2, S3 (D3, D11, D12) |
-| **C-2** | A confirmed member attendance **consumes window capacity per member**, not per batch or per court; JBC capacity 4 vs batches up to 8 — the 5th confirm may fail `MEMBER_SLOT_AT_CAPACITY`. **Not probed — Spike P1 / P1b.** | `:2152`; regression fixtures use capacity 8 (`member-multi-batch-attendance.regression.ts:40`) | SB, S3 (D2, Spike P1 / P1b) |
+| **C-2** | A confirmed member attendance **consumes window capacity per member**, not per batch or per court; JBC capacity 4 vs batches up to 8. **Probed (Spike P1 / P1b): members 5–8 of an 8-member batch are refused `409 MEMBER_SLOT_AT_CAPACITY`.** | `:2152`; regression fixtures use capacity 8 (`member-multi-batch-attendance.regression.ts:40`) | SB, S3 (D2, Spike P1 / P1b) |
 | **C-3** | **Decision conflict — RESOLVED 12 Oct** (no longer a candidate): Q1 "honour" was withdrawn; the signed "member contracts always win" rule stands (D1). Kept here so the history is visible. | §1 dated note; Slice-2 discovery §Priority | S3 |
-| **C-4** | The walk-in route has **no mandatory member-collision guard**: an owner or scoped manager can place a guest onto any member window by omitting `releaseGroupId`. | payment `:1236`; slot-engine `:4914`; Spike P3 to confirm at runtime | S2 (D4) |
-| **C-5** | **Manager over-privilege:** every batch / member / assignment / release / manual-booking route admits the scoped manager; no capability matrix; no list / revoke role routes. | `requirePoolScope` + `getInternalOrAdminAuth` on those routes; only patterns / court-eligibility use `requireOwnerOrInternal` | S0, S5 |
+| **C-4** (F-340, provisional) | The walk-in route has **no mandatory member-collision guard**: an owner or scoped manager can place a guest onto any member window by omitting `releaseGroupId`. **Probed (Spike P3): `201 CONFIRMED` for a scoped manager.** | payment `:1236`; slot-engine `:4914`; Spike P3 | S2 (D4) |
+| **C-5** (F-341, provisional) | **Manager over-privilege:** every batch / member / assignment / release / manual-booking route admits the scoped manager; no capability matrix; no list / revoke role routes. | `requirePoolScope` + `getInternalOrAdminAuth` on those routes; only patterns / court-eligibility use `requireOwnerOrInternal` | S0, S5 |
 | **C-6** | **Seat limits unenforced** (new capability, not a defect): no min / max anywhere; max must be a server refusal. | negative grep | S3 |
-| **C-7** | **Attendance confirmation depends on a `Subscription` row nothing in-app creates**; an added member may be unable to confirm; conflicts with B6. Production practice unverified. | `getActiveSubscription` (`:1986`) used at `:5574 / :5632`; payment `POST /subscriptions` internal-key only, no caller (F-293) | S3, S4a (D7) |
-| **C-8** | `duesCollected` in the guest dashboard is **guest booking revenue** (misnamed) — will mislead once member dues exist. | `:1534–1541`, `:1661` | S2 |
+| **C-7** (attaches to F-109) | **Attendance confirmation depends on a `Subscription` row nothing in-app creates**; an added member may be unable to confirm; conflicts with B6. **Probed (Spike P4).** Production practice unverified. | `getActiveSubscription` (`:1986`) used at `:5574 / :5632`; payment `POST /subscriptions` internal-key only, no caller (F-293) | S3, S4a (D7) |
+| **C-8** (F-343, provisional) | `duesCollected` in the guest dashboard is **guest booking revenue** (misnamed) — will mislead once member dues exist. | `:1534–1541`, `:1661` | S2 |
 | **C-9** | **Roster and attendance reads return phone only, no names** — the members UI needs names. | `computeGroupRoster` selects `{ id, phone }` (`:6320`) | S3 |
 | **C-10** | **No effective-dated rates:** `Group.customRate` is mutable with no history, so "new rate from next month" has no home until a ledger exists. | schema `Group` | S4a |
 | **C-11** | **No scheduled end date:** "end" = `SUSPENDED` + `endDate = now`; the 30-day notice needs a future last day. | F-133 Slice D | S4c |
 | **C-12** | **No route creates a member account from Gmail + phone** (promote needs an existing account; walk-in creates a phone-only guest). | identity-auth `:130 :222 :1458` | S3 |
-| **C-14** | **The collision preview and the sweep are blunter than the business rule needs:** the preview returns a count only; the sweep displaces **every** active booking in a colliding window (not just the overflow) and, in a single-pool branch, can **never relocate**, so every confirmed booking is refunded. | `scanCollidingBookings` (`:5934`), `runMemberCollisionSweep` (`:5975`), `tryRelocateBooking` (`siblings.length === 0 → false`); `scripts/tenants/jbc.json` one pool per branch. Spike P5 / P6 to confirm at runtime | SB, S3 (D13) |
+| **C-14** (F-342, provisional) | **The collision preview and the sweep are blunter than the business rule needs:** the preview returns a count only; the sweep displaces **every** active booking in a colliding window (not just the overflow) and, in a single-pool branch, can **never relocate**, so every confirmed booking is refunded. | `scanCollidingBookings` (`:5934`), `runMemberCollisionSweep` (`:5975`), `tryRelocateBooking` (`siblings.length === 0 → false`); `scripts/tenants/jbc.json` one pool per branch. **Probed (Spike P5 / P6).** | SB, S3 (D13) |
 | **C-13** | **Renewal presets are code fixtures** and batch assignments reject `termPreset` — conflicts with B3 and with quarterly / yearly members in batches. | `:5843`, `:6676` | S4a |
+| **C-15** (new, not numbered) | **A batch queued for next month already withholds today's slot from guests.** `fetchMemberExclusionContext` selects ACTIVE assignments by pool, weekday and time only; it ignores `startDate` / `endDate`. **Probed (Spike P7(ii)):** a batch created on 12 Oct is queued to 1 Nov, its assignment is `ACTIVE` with `startDate 2026-11-01`, and the 12 Oct slot at that hour is missing from guest availability. Member attendance confirm has the same blind spot (`resolveOneTodayMemberAssignment` also checks status only). Bears on D7 ("active = ACTIVE and within term"). | `index.ts:3681–3698`, `:2081–2092`; Spike P7 | SB, S3 (D7) |
+| **C-16** (new, not numbered) | **A member cannot belong to two batches in one pool** (`@@unique([userId, resourcePoolId])` → `409 ASSIGNMENT_ALREADY_EXISTS`, probed P7(i)). Batches are pool-level and JBC has one pool per branch, so a member could not be in both a morning and an evening batch at the same branch. Whether the business wants that is a question for Bala; the schema comment ("a member may hold concurrent ACTIVE assignments across different pools") assumes more pools than JBC has. | schema `MemberGroupAssignment`; `index.ts:6531` error mapping; Spike P7 | SB, S3 (D3) |
+| **C-17** (new, not numbered) | **Displaced guests are not notified, and a `Refund` row is bookkeeping only.** The sweep cancels and records a refund with no notification (probed: P5 / P6 produced no send), and `POST /refunds` writes `processed` with no gateway call (code read). Real customers lose a booking without being told. | `cancelBookingCore` `:5334–5427`; payment `:732–739`; notification log in the Spike archive | SB, S3 (D13) |
 
 Already in the register and relevant: **F-108** (payment service exposes no readable data, Open), **F-109**
 (`Subscription` cannot express when money is due, Open — **Bala's billing-model answers decide its open
@@ -733,28 +847,41 @@ with stated deviations**, not the final design:
   wording — the ruling is the **exact displacement preview + owner confirm** (S3);
 - the plan-amount default discounts and the fixed due window / deposit / notice figures are placeholders;
 - its fake data stays in that file only; nothing in these docs depends on it.
-An updated mockup for the multi-court grid and the new Create-batch preview is a **separate, optional**
-follow-up; the archived file is left untouched.
+**Required step (12 Oct ruling):** an **updated mockup** — the multi-court grid (batches spanning 1–4 courts)
+and the Create-batch form with courts-per-batch and the exact displacement preview — must be produced and
+reviewed **before S2 and S3 are signed off**. It is a separate file; the archived one is left untouched. It
+also needs the notification line from D13 (what a displaced guest is told).
 
 ---
 
 ## 11. What is needed next
 
-1. **Chief:** review the pushed files; resolve or route D2, D4, D6–D13; assign finding IDs per slice and
-   decide what to do with C-1…C-14 and F-108 / F-109 (look first at **C-4** and **C-5**).
-2. **Spike:** on Bala's sign-off (or earlier, on Chief's request) run P1–P6 on the test database and report
-   **raw output before any slice code**. It is feasible in this sandbox (Postgres 16 server binary present,
-   services not yet built); it was **not run** in this session.
-3. **Bala — still open, not blocking the push:**
-   - **One real artefact per money rule** (a receipt, a dues note or a WhatsApp message).
-   - **How members' subscriptions are created in production today.** Code cannot answer it: nothing in the apps
-     or scripts creates one (`POST /payment/subscriptions` is internal-key only with no caller, F-293). The
-     only indirect evidence is the 1 Oct 2026 F-328 dump (`Group` 0, `MemberGroupAssignment` 0, `Subscription`
-     1, the single `subscription_billing` intent looking seeded) — which suggests **no live batches or members
-     yet**. *Question for Bala:* are there any live batches or member assignments on the VM today, and how was
-     the one `Subscription` row created?
-   - **The demo date and what it must show.**
-   - **D11:** are a batch's courts fixed (e.g. "Court 3 and 4") or interchangeable on the day?
-4. **Nothing beyond these documents is built until Bala signs off.**
+1. **Chief:** read the Spike archive (`docs/plans/chief-archive/admin-v2-spike/`) and rule at the **decision
+   gate**: confirm the D2 / D12 target model, the D8 money-route re-check (§5 S0), and what to do with C-15 /
+   C-16 / C-17. **Review the register PR** (F-340 to F-343) before merge.
+2. **Bala — read-only VM query (D9).** Run on the VM from the repo checkout (precedent:
+   `scripts/f328/RUNBOOK.md`, preflight step). It is a **read-only transaction**:
 
-**Documents only. No code. No register changes. No finding IDs assigned.**
+   ```bash
+   docker compose -f deploy/gcp-vm/docker-compose.yml exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X' <<'SQL'
+   BEGIN READ ONLY;
+   SELECT 'Group' AS tbl, count(*) AS n FROM "Group"
+   UNION ALL SELECT 'MemberGroupAssignment', count(*) FROM "MemberGroupAssignment"
+   UNION ALL SELECT 'MemberGroupAssignment ACTIVE', count(*) FROM "MemberGroupAssignment" WHERE status = 'ACTIVE'
+   UNION ALL SELECT 'Subscription', count(*) FROM "Subscription"
+   UNION ALL SELECT 'Subscription active', count(*) FROM "Subscription" WHERE status = 'active';
+   ROLLBACK;
+   SQL
+   ```
+
+   Expected from the 1 Oct dump: `Group` 0, `MemberGroupAssignment` 0, `Subscription` 1. Anything else changes D9 and
+   SB's back-fill assumption — report the output as printed.
+3. **Next slices, in order, once Chief has read the Spike:** **S1 kickoff** (frontend, low risk) may start in
+   parallel with **SB design**; the tracker refresh and the F-336 / F-338 plans are queued behind. **SB design
+   is not final until Chief rules.**
+4. **Bala — still open, not blocking now (blocking when S4a is planned):** **one real artefact per money rule**
+   (a receipt, a dues note or a WhatsApp message); how the one existing `Subscription` row was created;
+   whether a member should be able to belong to two batches at one branch (C-16).
+5. **Nothing beyond these documents, the Spike archive and the register PR is built.**
+
+**Documents only. No product code. Register rows only in the separate docs-only PR, with Chief's provisional IDs.**

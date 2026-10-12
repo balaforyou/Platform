@@ -1,0 +1,482 @@
+Spike run started 2026-10-12T07:36:39.350Z  | DB scratch: badminton_db_scratch_spike | services: slot-engine :3001, payment :3004 (real built dist)
+Anchors: FAR(today)=2026-10-12T12:00:00.000Z  NEAR(today)=2026-10-12T08:00:00.000Z  TOMORROW=2026-10-13T19:00:00.000Z
+
+====================================================================================================
+P1 — 8 members of ONE batch confirm into a capacity-4 window (does the 5th member fail?)
+====================================================================================================
+Fixture: POOLED pool capacity 4 (Court 1-4), window 0d652e48-58cb-441e-b1f6-19173fe494ae @ 2026-10-12T12:00:00.000Z capacity 4, grace 60.
+--- create assignment p1-member-1
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1-member-1","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:39.691Z"}
+RESPONSE 201  {"data":{"id":"0e71807f-a289-4d06-b1a2-51c0620e2962","userId":"p1-member-1","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:39.691Z","endDate":"2026-11-12T07:36:39.691Z","createdAt":"2026-10-12T07:36:39.701Z","updatedAt":"2026-10-12T07:36:39.701Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1-member-2
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1-member-2","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:39.713Z"}
+RESPONSE 201  {"data":{"id":"d6e72ec2-4f7f-44ba-b636-863d3aaf9383","userId":"p1-member-2","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:39.713Z","endDate":"2026-11-12T07:36:39.713Z","createdAt":"2026-10-12T07:36:39.720Z","updatedAt":"2026-10-12T07:36:39.720Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1-member-3
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1-member-3","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:39.732Z"}
+RESPONSE 201  {"data":{"id":"a1709622-5d9f-4956-bdb1-9922b4d260da","userId":"p1-member-3","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:39.732Z","endDate":"2026-11-12T07:36:39.732Z","createdAt":"2026-10-12T07:36:39.738Z","updatedAt":"2026-10-12T07:36:39.738Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1-member-4
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1-member-4","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:39.747Z"}
+RESPONSE 201  {"data":{"id":"6b4e0c75-b03f-466c-aebb-7eb9ded92c4d","userId":"p1-member-4","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:39.747Z","endDate":"2026-11-12T07:36:39.747Z","createdAt":"2026-10-12T07:36:39.753Z","updatedAt":"2026-10-12T07:36:39.753Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1-member-5
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1-member-5","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:39.763Z"}
+RESPONSE 201  {"data":{"id":"f0fb3cca-a54b-48a3-b5b4-3f08034badfd","userId":"p1-member-5","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:39.763Z","endDate":"2026-11-12T07:36:39.763Z","createdAt":"2026-10-12T07:36:39.771Z","updatedAt":"2026-10-12T07:36:39.771Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1-member-6
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1-member-6","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:39.783Z"}
+RESPONSE 201  {"data":{"id":"54f7fbe5-820b-4bfa-acaa-f58dfb0bf54a","userId":"p1-member-6","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:39.783Z","endDate":"2026-11-12T07:36:39.783Z","createdAt":"2026-10-12T07:36:39.789Z","updatedAt":"2026-10-12T07:36:39.789Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1-member-7
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1-member-7","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:39.800Z"}
+RESPONSE 201  {"data":{"id":"d6270b7b-a85a-43ec-a935-bb7fb2aa0cf1","userId":"p1-member-7","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:39.800Z","endDate":"2026-11-12T07:36:39.800Z","createdAt":"2026-10-12T07:36:39.807Z","updatedAt":"2026-10-12T07:36:39.807Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1-member-8
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1-member-8","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:39.816Z"}
+RESPONSE 201  {"data":{"id":"371452b5-93f2-42fc-a6bf-29cbf2db7ff0","userId":"p1-member-8","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:39.816Z","endDate":"2026-11-12T07:36:39.816Z","createdAt":"2026-10-12T07:36:39.822Z","updatedAt":"2026-10-12T07:36:39.822Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- SQL read-back: assignments
+SQL      SELECT "userId", "daysOfWeek", "startTime", status FROM "MemberGroupAssignment" ORDER BY "createdAt"
+   userId    | daysOfWeek | startTime | status 
+-------------+------------+-----------+--------
+ p1-member-1 | 1          | 12:00     | ACTIVE
+ p1-member-2 | 1          | 12:00     | ACTIVE
+ p1-member-3 | 1          | 12:00     | ACTIVE
+ p1-member-4 | 1          | 12:00     | ACTIVE
+ p1-member-5 | 1          | 12:00     | ACTIVE
+ p1-member-6 | 1          | 12:00     | ACTIVE
+ p1-member-7 | 1          | 12:00     | ACTIVE
+ p1-member-8 | 1          | 12:00     | ACTIVE
+(8 rows)
+
+
+--- member p1-member-1 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1-member-1)]
+  body: {"assignmentId":"0e71807f-a289-4d06-b1a2-51c0620e2962"}
+RESPONSE 201  {"data":{"id":"9929b21d-6a33-42a6-9ff4-717d45b10e1a","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","resourceId":null,"courtSlotIndex":null,"windowId":"0d652e48-58cb-441e-b1f6-19173fe494ae","userId":"p1-member-1","status":"CONFIRMED","heldAt":"2026-10-12T07:36:39.847Z","heldUntil":"2026-10-12T07:36:39.847Z","idempotencyKey":"member-booking-p1-member-1-0d652e48-58cb-441e-b1f6-19173fe494ae-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:39.847Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:39.859Z","updatedAt":"2026-10-12T07:36:39.859Z","parentBookingId":null,"orderId":null}}
+--- member p1-member-2 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1-member-2)]
+  body: {"assignmentId":"d6e72ec2-4f7f-44ba-b636-863d3aaf9383"}
+RESPONSE 201  {"data":{"id":"c8c14b9a-1dc3-4899-a8f5-02371fb78df6","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","resourceId":null,"courtSlotIndex":null,"windowId":"0d652e48-58cb-441e-b1f6-19173fe494ae","userId":"p1-member-2","status":"CONFIRMED","heldAt":"2026-10-12T07:36:39.864Z","heldUntil":"2026-10-12T07:36:39.864Z","idempotencyKey":"member-booking-p1-member-2-0d652e48-58cb-441e-b1f6-19173fe494ae-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:39.864Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:39.878Z","updatedAt":"2026-10-12T07:36:39.878Z","parentBookingId":null,"orderId":null}}
+--- member p1-member-3 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1-member-3)]
+  body: {"assignmentId":"a1709622-5d9f-4956-bdb1-9922b4d260da"}
+RESPONSE 201  {"data":{"id":"4d763cfb-3648-4b3f-be6d-1d2ee2515cc8","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","resourceId":null,"courtSlotIndex":null,"windowId":"0d652e48-58cb-441e-b1f6-19173fe494ae","userId":"p1-member-3","status":"CONFIRMED","heldAt":"2026-10-12T07:36:39.881Z","heldUntil":"2026-10-12T07:36:39.881Z","idempotencyKey":"member-booking-p1-member-3-0d652e48-58cb-441e-b1f6-19173fe494ae-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:39.881Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:39.891Z","updatedAt":"2026-10-12T07:36:39.891Z","parentBookingId":null,"orderId":null}}
+--- member p1-member-4 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1-member-4)]
+  body: {"assignmentId":"6b4e0c75-b03f-466c-aebb-7eb9ded92c4d"}
+RESPONSE 201  {"data":{"id":"fce19459-6b6e-446a-8d75-e4abefe1946b","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"7de87ab0-5c1f-4d6a-9653-9d5550b7b3d4","resourceId":null,"courtSlotIndex":null,"windowId":"0d652e48-58cb-441e-b1f6-19173fe494ae","userId":"p1-member-4","status":"CONFIRMED","heldAt":"2026-10-12T07:36:39.894Z","heldUntil":"2026-10-12T07:36:39.894Z","idempotencyKey":"member-booking-p1-member-4-0d652e48-58cb-441e-b1f6-19173fe494ae-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:39.894Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:39.904Z","updatedAt":"2026-10-12T07:36:39.904Z","parentBookingId":null,"orderId":null}}
+--- member p1-member-5 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1-member-5)]
+  body: {"assignmentId":"f0fb3cca-a54b-48a3-b5b4-3f08034badfd"}
+RESPONSE 409  {"error":{"code":"MEMBER_SLOT_AT_CAPACITY","message":"This window is already at capacity"}}
+--- member p1-member-6 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1-member-6)]
+  body: {"assignmentId":"54f7fbe5-820b-4bfa-acaa-f58dfb0bf54a"}
+RESPONSE 409  {"error":{"code":"MEMBER_SLOT_AT_CAPACITY","message":"This window is already at capacity"}}
+--- member p1-member-7 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1-member-7)]
+  body: {"assignmentId":"d6270b7b-a85a-43ec-a935-bb7fb2aa0cf1"}
+RESPONSE 409  {"error":{"code":"MEMBER_SLOT_AT_CAPACITY","message":"This window is already at capacity"}}
+--- member p1-member-8 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1-member-8)]
+  body: {"assignmentId":"371452b5-93f2-42fc-a6bf-29cbf2db7ff0"}
+RESPONSE 409  {"error":{"code":"MEMBER_SLOT_AT_CAPACITY","message":"This window is already at capacity"}}
+--- SQL read-back: Booking rows after 8 confirm attempts
+SQL      SELECT "userId", status, "isMemberBooking" AS member, "resourceId" IS NOT NULL AS has_court, "courtSlotIndex" AS slot_idx FROM "Booking" WHERE "windowId"='0d652e48-58cb-441e-b1f6-19173fe494ae' ORDER BY "createdAt"
+   userId    |  status   | member | has_court | slot_idx 
+-------------+-----------+--------+-----------+----------
+ p1-member-1 | CONFIRMED | t      | f         |         
+ p1-member-2 | CONFIRMED | t      | f         |         
+ p1-member-3 | CONFIRMED | t      | f         |         
+ p1-member-4 | CONFIRMED | t      | f         |         
+(4 rows)
+
+
+--- SQL read-back: capacity accounting
+SQL      SELECT count(*) FILTER (WHERE "isMemberBooking" AND status='CONFIRMED') AS member_confirmed, count(*) FILTER (WHERE NOT "isMemberBooking" AND status IN ('HELD','CONFIRMED')) AS guest_live, count(*) FILTER (WHERE status IN ('HELD','CONFIRMED')) AS capacity_consumed, (SELECT capacity FROM "AvailabilityWindow" WHERE id='0d652e48-58cb-441e-b1f6-19173fe494ae') AS window_capacity FROM "Booking" WHERE "windowId"='0d652e48-58cb-441e-b1f6-19173fe494ae'
+ member_confirmed | guest_live | capacity_consumed | window_capacity 
+------------------+------------+-------------------+-----------------
+                4 |          0 |                 4 |               4
+(1 row)
+
+
+
+====================================================================================================
+P1b — footprint today equals confirming-member count (3-member batch; two 3-member batches same hour)
+====================================================================================================
+--- P1b-(a): ONE batch of 3 members, all confirm. Then ask: how many seats are left, and can a negotiated (admin/walk-in) booking still use them?
+--- create assignment p1b-a-1
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-a-1","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.181Z"}
+RESPONSE 201  {"data":{"id":"1530930f-5afe-4246-8e98-9c1f713aa76c","userId":"p1b-a-1","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.181Z","endDate":"2026-11-12T07:36:40.181Z","createdAt":"2026-10-12T07:36:40.187Z","updatedAt":"2026-10-12T07:36:40.187Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1b-a-2
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-a-2","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.196Z"}
+RESPONSE 201  {"data":{"id":"eca7f779-3567-4982-9a71-84f087d1b17b","userId":"p1b-a-2","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.196Z","endDate":"2026-11-12T07:36:40.196Z","createdAt":"2026-10-12T07:36:40.201Z","updatedAt":"2026-10-12T07:36:40.201Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1b-a-3
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-a-3","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.210Z"}
+RESPONSE 201  {"data":{"id":"13a79811-5512-457b-a713-fc584a4e543a","userId":"p1b-a-3","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.210Z","endDate":"2026-11-12T07:36:40.210Z","createdAt":"2026-10-12T07:36:40.216Z","updatedAt":"2026-10-12T07:36:40.216Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- member p1b-a-1 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-a-1)]
+  body: {"assignmentId":"1530930f-5afe-4246-8e98-9c1f713aa76c"}
+RESPONSE 201  {"data":{"id":"ebca412d-a08d-4c90-8bf4-67756f2c04bd","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","resourceId":null,"courtSlotIndex":null,"windowId":"2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3","userId":"p1b-a-1","status":"CONFIRMED","heldAt":"2026-10-12T07:36:40.224Z","heldUntil":"2026-10-12T07:36:40.224Z","idempotencyKey":"member-booking-p1b-a-1-2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:40.224Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:40.233Z","updatedAt":"2026-10-12T07:36:40.233Z","parentBookingId":null,"orderId":null}}
+--- member p1b-a-2 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-a-2)]
+  body: {"assignmentId":"eca7f779-3567-4982-9a71-84f087d1b17b"}
+RESPONSE 201  {"data":{"id":"972b2e4f-8d0c-4223-ab88-42276d2bfcbc","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","resourceId":null,"courtSlotIndex":null,"windowId":"2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3","userId":"p1b-a-2","status":"CONFIRMED","heldAt":"2026-10-12T07:36:40.237Z","heldUntil":"2026-10-12T07:36:40.237Z","idempotencyKey":"member-booking-p1b-a-2-2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:40.237Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:40.245Z","updatedAt":"2026-10-12T07:36:40.245Z","parentBookingId":null,"orderId":null}}
+--- member p1b-a-3 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-a-3)]
+  body: {"assignmentId":"13a79811-5512-457b-a713-fc584a4e543a"}
+RESPONSE 201  {"data":{"id":"69ef0c16-0c1b-493e-91ba-69c1e09581cd","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","resourceId":null,"courtSlotIndex":null,"windowId":"2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3","userId":"p1b-a-3","status":"CONFIRMED","heldAt":"2026-10-12T07:36:40.248Z","heldUntil":"2026-10-12T07:36:40.248Z","idempotencyKey":"member-booking-p1b-a-3-2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:40.248Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:40.262Z","updatedAt":"2026-10-12T07:36:40.262Z","parentBookingId":null,"orderId":null}}
+--- SQL read-back: capacity accounting (3-member batch)
+SQL      SELECT count(*) FILTER (WHERE "isMemberBooking" AND status='CONFIRMED') AS member_confirmed, count(*) FILTER (WHERE NOT "isMemberBooking" AND status IN ('HELD','CONFIRMED')) AS guest_live, count(*) FILTER (WHERE status IN ('HELD','CONFIRMED')) AS capacity_consumed, (SELECT capacity FROM "AvailabilityWindow" WHERE id='2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3') AS window_capacity FROM "Booking" WHERE "windowId"='2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3'
+ member_confirmed | guest_live | capacity_consumed | window_capacity 
+------------------+------------+-------------------+-----------------
+                3 |          0 |                 3 |               4
+(1 row)
+
+
+--- admin negotiated booking onto the same window (what a walk-in uses; capacity-only check)
+REQUEST  POST http://localhost:3001/bookings/negotiated  [internal-key] idem=p1b-a-neg-1
+  body: {"tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","windowId":"2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3","userId":"p1b-guest-1","negotiatedPrice":100,"guestOnly":true}
+RESPONSE 201  {"data":{"id":"3678e017-a04f-4e46-b8e9-e938143e9f47","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"d02e92e5-4fb3-4f4c-8a12-089326915aaf","resourceId":"007e59ad-f15a-4416-b36c-41677b6f5ff2","courtSlotIndex":1,"windowId":"2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3","userId":"p1b-guest-1","status":"HELD","heldAt":"2026-10-12T07:36:40.291Z","heldUntil":"2026-10-12T07:41:40.291Z","idempotencyKey":"p1b-a-neg-1","isMemberBooking":false,"memberAttendanceConfirmedAt":null,"memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:40.293Z","updatedAt":"2026-10-12T07:36:40.293Z","parentBookingId":null,"orderId":null}}
+--- SQL read-back: capacity accounting after walk-in
+SQL      SELECT count(*) FILTER (WHERE "isMemberBooking" AND status='CONFIRMED') AS member_confirmed, count(*) FILTER (WHERE NOT "isMemberBooking" AND status IN ('HELD','CONFIRMED')) AS guest_live, count(*) FILTER (WHERE status IN ('HELD','CONFIRMED')) AS capacity_consumed, (SELECT capacity FROM "AvailabilityWindow" WHERE id='2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3') AS window_capacity FROM "Booking" WHERE "windowId"='2cd03e66-4fb5-46e5-b42a-9f95e26d7dc3'
+ member_confirmed | guest_live | capacity_consumed | window_capacity 
+------------------+------------+-------------------+-----------------
+                3 |          1 |                 4 |               4
+(1 row)
+
+
+--- P1b-(b): TWO batches of 3 members each, SAME hour, SAME pool (pool-level batches today). All 6 confirm in order.
+--- create assignment p1b-b-1
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-b-1","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.517Z"}
+RESPONSE 201  {"data":{"id":"9cfcd834-1f25-47f6-a9ce-92b2b9b2ae58","userId":"p1b-b-1","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.517Z","endDate":"2026-11-12T07:36:40.517Z","createdAt":"2026-10-12T07:36:40.523Z","updatedAt":"2026-10-12T07:36:40.523Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1b-b-2
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-b-2","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.534Z"}
+RESPONSE 201  {"data":{"id":"340a4a7a-9902-4926-9d64-7b3822daf88a","userId":"p1b-b-2","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.534Z","endDate":"2026-11-12T07:36:40.534Z","createdAt":"2026-10-12T07:36:40.542Z","updatedAt":"2026-10-12T07:36:40.542Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1b-b-3
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-b-3","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.552Z"}
+RESPONSE 201  {"data":{"id":"52e0e2d0-d778-413d-8423-b984edf4f771","userId":"p1b-b-3","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.552Z","endDate":"2026-11-12T07:36:40.552Z","createdAt":"2026-10-12T07:36:40.559Z","updatedAt":"2026-10-12T07:36:40.559Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1b-b-4
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-b-4","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.567Z"}
+RESPONSE 201  {"data":{"id":"6e6d152f-076b-421d-bbfb-f93f18c45fde","userId":"p1b-b-4","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.567Z","endDate":"2026-11-12T07:36:40.567Z","createdAt":"2026-10-12T07:36:40.573Z","updatedAt":"2026-10-12T07:36:40.573Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1b-b-5
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-b-5","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.584Z"}
+RESPONSE 201  {"data":{"id":"d7fd8b21-7789-4bdf-a915-9defa2bab055","userId":"p1b-b-5","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.584Z","endDate":"2026-11-12T07:36:40.584Z","createdAt":"2026-10-12T07:36:40.590Z","updatedAt":"2026-10-12T07:36:40.590Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p1b-b-6
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p1b-b-6","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:40.600Z"}
+RESPONSE 201  {"data":{"id":"e7f9e56d-a5d7-4b2f-a084-c771522d8de0","userId":"p1b-b-6","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:40.600Z","endDate":"2026-11-12T07:36:40.600Z","createdAt":"2026-10-12T07:36:40.606Z","updatedAt":"2026-10-12T07:36:40.606Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- member p1b-b-1 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-b-1)]
+  body: {"assignmentId":"9cfcd834-1f25-47f6-a9ce-92b2b9b2ae58"}
+RESPONSE 201  {"data":{"id":"8aad9a81-33a7-43a9-b054-b7d207ea2cf3","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","resourceId":null,"courtSlotIndex":null,"windowId":"0d7937bd-876c-4ca2-9f42-bee627a80563","userId":"p1b-b-1","status":"CONFIRMED","heldAt":"2026-10-12T07:36:40.616Z","heldUntil":"2026-10-12T07:36:40.616Z","idempotencyKey":"member-booking-p1b-b-1-0d7937bd-876c-4ca2-9f42-bee627a80563-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:40.616Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:40.627Z","updatedAt":"2026-10-12T07:36:40.627Z","parentBookingId":null,"orderId":null}}
+--- member p1b-b-2 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-b-2)]
+  body: {"assignmentId":"340a4a7a-9902-4926-9d64-7b3822daf88a"}
+RESPONSE 201  {"data":{"id":"be73f72f-a243-4865-abd4-4000021cd1ed","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","resourceId":null,"courtSlotIndex":null,"windowId":"0d7937bd-876c-4ca2-9f42-bee627a80563","userId":"p1b-b-2","status":"CONFIRMED","heldAt":"2026-10-12T07:36:40.631Z","heldUntil":"2026-10-12T07:36:40.631Z","idempotencyKey":"member-booking-p1b-b-2-0d7937bd-876c-4ca2-9f42-bee627a80563-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:40.631Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:40.643Z","updatedAt":"2026-10-12T07:36:40.643Z","parentBookingId":null,"orderId":null}}
+--- member p1b-b-3 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-b-3)]
+  body: {"assignmentId":"52e0e2d0-d778-413d-8423-b984edf4f771"}
+RESPONSE 201  {"data":{"id":"7cafbee3-a8f8-48aa-a4ed-5e2704f08b3e","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","resourceId":null,"courtSlotIndex":null,"windowId":"0d7937bd-876c-4ca2-9f42-bee627a80563","userId":"p1b-b-3","status":"CONFIRMED","heldAt":"2026-10-12T07:36:40.646Z","heldUntil":"2026-10-12T07:36:40.646Z","idempotencyKey":"member-booking-p1b-b-3-0d7937bd-876c-4ca2-9f42-bee627a80563-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:40.646Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:40.656Z","updatedAt":"2026-10-12T07:36:40.656Z","parentBookingId":null,"orderId":null}}
+--- member p1b-b-4 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-b-4)]
+  body: {"assignmentId":"6e6d152f-076b-421d-bbfb-f93f18c45fde"}
+RESPONSE 201  {"data":{"id":"451d65b0-c378-46d9-ad0a-45f22e749c60","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"f2333f6c-ca79-4f0f-aaf2-45035c6b317e","resourceId":null,"courtSlotIndex":null,"windowId":"0d7937bd-876c-4ca2-9f42-bee627a80563","userId":"p1b-b-4","status":"CONFIRMED","heldAt":"2026-10-12T07:36:40.659Z","heldUntil":"2026-10-12T07:36:40.659Z","idempotencyKey":"member-booking-p1b-b-4-0d7937bd-876c-4ca2-9f42-bee627a80563-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:40.659Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:40.670Z","updatedAt":"2026-10-12T07:36:40.670Z","parentBookingId":null,"orderId":null}}
+--- member p1b-b-5 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-b-5)]
+  body: {"assignmentId":"d7fd8b21-7789-4bdf-a915-9defa2bab055"}
+RESPONSE 409  {"error":{"code":"MEMBER_SLOT_AT_CAPACITY","message":"This window is already at capacity"}}
+--- member p1b-b-6 confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p1b-b-6)]
+  body: {"assignmentId":"e7f9e56d-a5d7-4b2f-a084-c771522d8de0"}
+RESPONSE 409  {"error":{"code":"MEMBER_SLOT_AT_CAPACITY","message":"This window is already at capacity"}}
+--- SQL read-back: capacity accounting (two 3-member batches)
+SQL      SELECT count(*) FILTER (WHERE "isMemberBooking" AND status='CONFIRMED') AS member_confirmed, count(*) FILTER (WHERE NOT "isMemberBooking" AND status IN ('HELD','CONFIRMED')) AS guest_live, count(*) FILTER (WHERE status IN ('HELD','CONFIRMED')) AS capacity_consumed, (SELECT capacity FROM "AvailabilityWindow" WHERE id='0d7937bd-876c-4ca2-9f42-bee627a80563') AS window_capacity FROM "Booking" WHERE "windowId"='0d7937bd-876c-4ca2-9f42-bee627a80563'
+ member_confirmed | guest_live | capacity_consumed | window_capacity 
+------------------+------------+-------------------+-----------------
+                4 |          0 |                 4 |               4
+(1 row)
+
+
+--- SQL read-back: Booking rows
+SQL      SELECT "userId", status, "isMemberBooking" AS member, "resourceId" IS NOT NULL AS has_court, "courtSlotIndex" AS slot_idx FROM "Booking" WHERE "windowId"='0d7937bd-876c-4ca2-9f42-bee627a80563' ORDER BY "createdAt"
+ userId  |  status   | member | has_court | slot_idx 
+---------+-----------+--------+-----------+----------
+ p1b-b-1 | CONFIRMED | t      | f         |         
+ p1b-b-2 | CONFIRMED | t      | f         |         
+ p1b-b-3 | CONFIRMED | t      | f         |         
+ p1b-b-4 | CONFIRMED | t      | f         |         
+(4 rows)
+
+
+
+====================================================================================================
+P2 — one batch with ONE member: does it lock all 4 courts for guests (grid + availability + guest POST /bookings)?
+====================================================================================================
+--- CONTROL grid BEFORE assignment (cells for the window row only; filter applied by the probe)
+REQUEST  GET http://localhost:3001/branches/22222222-2222-2222-2222-2222222222aa/guest-inventory-grid?date=2026-10-12&poolId=0e4b653f-f0cc-46bf-826b-dd751e6798f5  [jwt(MEMBER:owner:owner-user)]
+RESPONSE 200  (body suppressed, 13787 bytes)
+  cells @window: [{"court":"Court 1","type":"guest-vacant"},{"court":"Court 2","type":"guest-vacant"},{"court":"Court 3","type":"guest-vacant"},{"court":"Court 4","type":"guest-vacant"}]
+--- CONTROL availability BEFORE assignment (unauthenticated guest browse)
+REQUEST  GET http://localhost:3001/resource-pools/0e4b653f-f0cc-46bf-826b-dd751e6798f5/availability?date=2026-10-12  [no-auth]
+RESPONSE 200  (body suppressed, 7038 bytes)
+  bookable slots at window: [{"remainingCapacity":4}]
+--- create batch (Group) with a single member to follow
+REQUEST  POST http://localhost:3001/groups  [jwt(MEMBER:owner:owner-user)]
+  body: {"name":"P2 one-member batch","resourcePoolId":"0e4b653f-f0cc-46bf-826b-dd751e6798f5","daysOfWeek":"1","startTime":"12:00","customRate":100}
+RESPONSE 201  {"data":{"id":"d66eb777-d7b6-41f5-ba67-8c6de48fdc39","tenantId":"11111111-1111-1111-1111-1111111111aa","name":"P2 one-member batch","resourcePoolId":"0e4b653f-f0cc-46bf-826b-dd751e6798f5","daysOfWeek":"1","startTime":"12:00","isPeak":false,"customRate":"100","startDate":"2026-11-01T00:00:00.000Z","endDate":"2026-11-30T23:59:59.999Z","parentId":null,"createdAt":"2026-10-12T07:36:41.075Z","updatedAt":"2026-10-12T07:36:41.075Z"}}
+--- create assignment p2-member
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p2-member","resourcePoolId":"0e4b653f-f0cc-46bf-826b-dd751e6798f5","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:41.077Z","groupId":"d66eb777-d7b6-41f5-ba67-8c6de48fdc39"}
+RESPONSE 201  {"data":{"id":"c167dae3-d791-4e83-9944-d6f9c95e0c73","userId":"p2-member","resourcePoolId":"0e4b653f-f0cc-46bf-826b-dd751e6798f5","groupId":"d66eb777-d7b6-41f5-ba67-8c6de48fdc39","daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:41.077Z","endDate":"2026-11-12T07:36:41.077Z","createdAt":"2026-10-12T07:36:41.085Z","updatedAt":"2026-10-12T07:36:41.085Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- SQL read-back: batch + assignment (note assignment.startDate)
+SQL      SELECT g.name, g."startDate" AS group_start, a."userId", a.status, a."startDate" AS assignment_start, a."endDate" FROM "Group" g JOIN "MemberGroupAssignment" a ON a."groupId"=g.id
+        name         |     group_start     |  userId   | status |    assignment_start     |         endDate         
+---------------------+---------------------+-----------+--------+-------------------------+-------------------------
+ P2 one-member batch | 2026-11-01 00:00:00 | p2-member | ACTIVE | 2026-10-12 07:36:41.077 | 2026-11-12 07:36:41.077
+(1 row)
+
+
+--- grid AFTER single-member batch (member NOT yet confirmed)
+REQUEST  GET http://localhost:3001/branches/22222222-2222-2222-2222-2222222222aa/guest-inventory-grid?date=2026-10-12&poolId=0e4b653f-f0cc-46bf-826b-dd751e6798f5  [jwt(MEMBER:owner:owner-user)]
+RESPONSE 200  (body suppressed, 13795 bytes)
+  cells @window: [{"court":"Court 1","type":"member-blocked"},{"court":"Court 2","type":"member-blocked"},{"court":"Court 3","type":"member-blocked"},{"court":"Court 4","type":"member-blocked"}]
+--- availability AFTER (unauthenticated guest browse)
+REQUEST  GET http://localhost:3001/resource-pools/0e4b653f-f0cc-46bf-826b-dd751e6798f5/availability?date=2026-10-12  [no-auth]
+RESPONSE 200  (body suppressed, 6536 bytes)
+  bookable slots at window: []   (total slots returned: 13)
+--- guest self-service POST /bookings on that window
+REQUEST  POST http://localhost:3001/bookings  [jwt(GUEST:no-roles:p2-guest)] idem=p2-guest-book-1
+  body: {"resourcePoolId":"0e4b653f-f0cc-46bf-826b-dd751e6798f5","windowId":"e5feeead-4473-49b3-8fcb-390f62d19fae"}
+RESPONSE 409  {"error":{"code":"MEMBER_SLOT_RESERVED","message":"This slot is reserved for a Member contract"}}
+
+====================================================================================================
+P3 — scoped manager POST /payment/bookings/manual onto a member window, without vs with releaseGroupId
+====================================================================================================
+--- batch FAR
+REQUEST  POST http://localhost:3001/groups  [jwt(MEMBER:owner:owner-user)]
+  body: {"name":"P3 far batch","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","daysOfWeek":"1","startTime":"12:00","customRate":100}
+RESPONSE 201  {"data":{"id":"d60b4360-6dbd-4f2c-a032-87f1ae6733a1","tenantId":"11111111-1111-1111-1111-1111111111aa","name":"P3 far batch","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","daysOfWeek":"1","startTime":"12:00","isPeak":false,"customRate":"100","startDate":"2026-11-01T00:00:00.000Z","endDate":"2026-11-30T23:59:59.999Z","parentId":null,"createdAt":"2026-10-12T07:36:41.525Z","updatedAt":"2026-10-12T07:36:41.525Z"}}
+--- batch NEAR
+REQUEST  POST http://localhost:3001/groups  [jwt(MEMBER:owner:owner-user)]
+  body: {"name":"P3 near batch","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","daysOfWeek":"1","startTime":"08:00","customRate":100}
+RESPONSE 201  {"data":{"id":"0062f1c6-2d11-4c8c-a3f7-a509f9e454e0","tenantId":"11111111-1111-1111-1111-1111111111aa","name":"P3 near batch","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","daysOfWeek":"1","startTime":"08:00","isPeak":false,"customRate":"100","startDate":"2026-11-01T00:00:00.000Z","endDate":"2026-11-30T23:59:59.999Z","parentId":null,"createdAt":"2026-10-12T07:36:41.533Z","updatedAt":"2026-10-12T07:36:41.533Z"}}
+--- create assignment p3-member-far
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p3-member-far","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:41.535Z","groupId":"d60b4360-6dbd-4f2c-a032-87f1ae6733a1"}
+RESPONSE 201  {"data":{"id":"3d70ba6b-2c72-4421-b10f-a6572c6fda34","userId":"p3-member-far","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","groupId":"d60b4360-6dbd-4f2c-a032-87f1ae6733a1","daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:41.535Z","endDate":"2026-11-12T07:36:41.535Z","createdAt":"2026-10-12T07:36:41.542Z","updatedAt":"2026-10-12T07:36:41.542Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- create assignment p3-member-near
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p3-member-near","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","daysOfWeek":"1","startTime":"08:00","startDate":"2026-10-12T07:36:41.551Z","groupId":"0062f1c6-2d11-4c8c-a3f7-a509f9e454e0"}
+RESPONSE 201  {"data":{"id":"0da0638b-265c-4933-99be-6fcc099f293c","userId":"p3-member-near","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","groupId":"0062f1c6-2d11-4c8c-a3f7-a509f9e454e0","daysOfWeek":"1","startTime":"08:00","status":"ACTIVE","startDate":"2026-10-12T07:36:41.551Z","endDate":"2026-11-12T07:36:41.551Z","createdAt":"2026-10-12T07:36:41.558Z","updatedAt":"2026-10-12T07:36:41.558Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- (a) scoped manager, member-reserved window FAR, NO releaseGroupId
+REQUEST  POST http://localhost:3004/bookings/manual  [jwt(MEMBER:branch_manager:22222222-2222-2222-2222-2222222222aa:manager-user)] idem=p3-a
+  body: {"tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","windowId":"3baec057-7996-4a90-b633-83da703aad3a","userId":"p3-guest-a","negotiatedPrice":100,"paymentMethod":"cash"}
+RESPONSE 201  {"data":{"booking":{"id":"bd6da618-410b-4f41-809d-bab328a42392","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","resourceId":"85a3f38a-cdef-4dd8-ad1b-def4b47acfbb","courtSlotIndex":1,"windowId":"3baec057-7996-4a90-b633-83da703aad3a","userId":"p3-guest-a","status":"CONFIRMED","heldAt":"2026-10-12T07:36:41.592Z","heldUntil":"2026-10-12T07:41:41.592Z","idempotencyKey":"p3-a","isMemberBooking":false,"memberAttendanceConfirmedAt":null,"memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:41.594Z","updatedAt":"2026-10-12T07:36:41.650Z","parentBookingId":null,"orderId":null,"window":{"id":"3baec057-7996-4a90-b633-83da703aad3a","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","resourceId":null,"startTime":"2026-10-12T12:00:00.000Z","endTime":"2026-10-12T13:00:00.000Z","capacity":4,"generatedFromPatternId":"6563c85e-6ae3-4ae4-93c1-e4d447b3fb63","generationDate":"2026-10-12T00:00:00.000Z","pricingMode":null,"price":null,"createdAt":"2026-10-12T07:36:41.384Z","updatedAt":"2026-10-12T07:36:41.384Z"},"resourcePool":{"id":"e9645cf4-2948-4471-b744-995ffaa6c390","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","name":"Pool A","allocationMode":"POOLED","capacity":4,"basePrice":"100","minOccupancy":1,"minBookingDurationMinutes":60,"pricingMode":"FLAT","defaultRate":"100","createdAt":"2026-10-12T07:36:41.344Z","updatedAt":"2026-10-12T07:36:41.344Z"}},"payment":{"intentId":"08031379-8b90-4d9b-8324-d76cce79d379","status":"captured","amount":10000,"gatewayRef":"cash_5f375258492e89b8","method":"cash"}}}
+--- SQL read-back: (a) read-back: bookings on FAR window
+SQL      SELECT "userId", status, "isMemberBooking" AS member, "resourceId" IS NOT NULL AS has_court, "courtSlotIndex" AS slot_idx FROM "Booking" WHERE "windowId"='3baec057-7996-4a90-b633-83da703aad3a' ORDER BY "createdAt"
+   userId   |  status   | member | has_court | slot_idx 
+------------+-----------+--------+-----------+----------
+ p3-guest-a | CONFIRMED | f      | t         |        1
+(1 row)
+
+
+--- member p3-member-far confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p3-member-far)]
+  body: {"assignmentId":"3d70ba6b-2c72-4421-b10f-a6572c6fda34"}
+RESPONSE 201  {"data":{"id":"939af192-b545-43b4-9592-e120c0f83c05","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","resourceId":null,"courtSlotIndex":null,"windowId":"3baec057-7996-4a90-b633-83da703aad3a","userId":"p3-member-far","status":"CONFIRMED","heldAt":"2026-10-12T07:36:41.731Z","heldUntil":"2026-10-12T07:36:41.731Z","idempotencyKey":"member-booking-p3-member-far-3baec057-7996-4a90-b633-83da703aad3a-2026-10-12","isMemberBooking":true,"memberAttendanceConfirmedAt":"2026-10-12T07:36:41.731Z","memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:41.744Z","updatedAt":"2026-10-12T07:36:41.744Z","parentBookingId":null,"orderId":null}}
+--- (b) scoped manager, FAR window, WITH releaseGroupId, member has CONFIRMED
+REQUEST  POST http://localhost:3004/bookings/manual  [jwt(MEMBER:branch_manager:22222222-2222-2222-2222-2222222222aa:manager-user)] idem=p3-b
+  body: {"tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","windowId":"3baec057-7996-4a90-b633-83da703aad3a","userId":"p3-guest-b","negotiatedPrice":100,"paymentMethod":"cash","releaseGroupId":"d60b4360-6dbd-4f2c-a032-87f1ae6733a1"}
+RESPONSE 409  {"error":{"code":"RELEASE_NO_LONGER_ELIGIBLE","message":"This slot is no longer eligible for guest release — a member may have confirmed attendance since this was last checked"}}
+--- release-eligibility FAR (what the gate asks)
+REQUEST  GET http://localhost:3001/groups/d60b4360-6dbd-4f2c-a032-87f1ae6733a1/release-eligibility  [internal-key]
+RESPONSE 200  {"data":{"groupId":"d60b4360-6dbd-4f2c-a032-87f1ae6733a1","groupName":"P3 far batch","eligible":false,"window":{"id":"3baec057-7996-4a90-b633-83da703aad3a","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","resourceId":null,"startTime":"2026-10-12T12:00:00.000Z","endTime":"2026-10-12T13:00:00.000Z","capacity":4,"generatedFromPatternId":"6563c85e-6ae3-4ae4-93c1-e4d447b3fb63","generationDate":"2026-10-12T00:00:00.000Z","pricingMode":null,"price":null,"createdAt":"2026-10-12T07:36:41.384Z","updatedAt":"2026-10-12T07:36:41.384Z"},"cutoffTime":"2026-10-12T11:00:00.000Z","members":[{"userId":"p3-member-far","phone":"Phone not available","status":"CONFIRMED"}]}}
+--- (c) control: scoped manager, NEAR window (cutoff passed, nobody confirmed), WITH releaseGroupId
+REQUEST  POST http://localhost:3004/bookings/manual  [jwt(MEMBER:branch_manager:22222222-2222-2222-2222-2222222222aa:manager-user)] idem=p3-c
+  body: {"tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","windowId":"198b921e-31fc-4b1f-b472-7f851ba81278","userId":"p3-guest-c","negotiatedPrice":100,"paymentMethod":"cash","releaseGroupId":"0062f1c6-2d11-4c8c-a3f7-a509f9e454e0"}
+RESPONSE 201  {"data":{"booking":{"id":"215427c3-7ff0-421f-b6da-13bf75aa6fa0","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","resourceId":"85a3f38a-cdef-4dd8-ad1b-def4b47acfbb","courtSlotIndex":1,"windowId":"198b921e-31fc-4b1f-b472-7f851ba81278","userId":"p3-guest-c","status":"CONFIRMED","heldAt":"2026-10-12T07:36:41.822Z","heldUntil":"2026-10-12T07:41:41.822Z","idempotencyKey":"p3-c","isMemberBooking":false,"memberAttendanceConfirmedAt":null,"memberAttendanceDeclinedAt":null,"termsAcceptedAt":null,"termsVersion":null,"price":"100","refundAmount":null,"createdAt":"2026-10-12T07:36:41.825Z","updatedAt":"2026-10-12T07:36:41.837Z","parentBookingId":null,"orderId":null,"window":{"id":"198b921e-31fc-4b1f-b472-7f851ba81278","resourcePoolId":"e9645cf4-2948-4471-b744-995ffaa6c390","resourceId":null,"startTime":"2026-10-12T08:00:00.000Z","endTime":"2026-10-12T09:00:00.000Z","capacity":4,"generatedFromPatternId":"6563c85e-6ae3-4ae4-93c1-e4d447b3fb63","generationDate":"2026-10-12T00:00:00.000Z","pricingMode":null,"price":null,"createdAt":"2026-10-12T07:36:41.376Z","updatedAt":"2026-10-12T07:36:41.376Z"},"resourcePool":{"id":"e9645cf4-2948-4471-b744-995ffaa6c390","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","name":"Pool A","allocationMode":"POOLED","capacity":4,"basePrice":"100","minOccupancy":1,"minBookingDurationMinutes":60,"pricingMode":"FLAT","defaultRate":"100","createdAt":"2026-10-12T07:36:41.344Z","updatedAt":"2026-10-12T07:36:41.344Z"}},"payment":{"intentId":"0dbdba61-fed7-46eb-9642-cad4de9da89b","status":"captured","amount":10000,"gatewayRef":"cash_5de6117a01ae632c","method":"cash"}}}
+--- SQL read-back: read-back: all bookings
+SQL      SELECT w."startTime", b."userId", b.status, b."isMemberBooking" AS member FROM "Booking" b JOIN "AvailabilityWindow" w ON w.id=b."windowId" ORDER BY w."startTime", b."createdAt"
+      startTime      |    userId     |  status   | member 
+---------------------+---------------+-----------+--------
+ 2026-10-12 08:00:00 | p3-guest-c    | CONFIRMED | f
+ 2026-10-12 12:00:00 | p3-guest-a    | CONFIRMED | f
+ 2026-10-12 12:00:00 | p3-member-far | CONFIRMED | t
+(3 rows)
+
+
+
+====================================================================================================
+P4 — member with an ACTIVE assignment and NO Subscription row: confirm attendance
+====================================================================================================
+--- create assignment p4-member-nosub
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p4-member-nosub","resourcePoolId":"68f40c6d-e91d-49dc-8c06-32f340adbd42","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:42.109Z"}
+RESPONSE 201  {"data":{"id":"5b015f7a-70da-435b-a55a-ed02fa5c7172","userId":"p4-member-nosub","resourcePoolId":"68f40c6d-e91d-49dc-8c06-32f340adbd42","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:42.109Z","endDate":"2026-11-12T07:36:42.109Z","createdAt":"2026-10-12T07:36:42.116Z","updatedAt":"2026-10-12T07:36:42.116Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- SQL read-back: Subscription rows (expect none)
+SQL      SELECT count(*) AS subscriptions FROM "Subscription"
+ subscriptions 
+---------------
+             0
+(1 row)
+
+
+--- member sees today state
+REQUEST  GET http://localhost:3001/member/today-assignment  [jwt(MEMBER:no-roles:p4-member-nosub)]
+RESPONSE 200  {"data":[{"state":"SUBSCRIPTION_INACTIVE","assignmentId":"5b015f7a-70da-435b-a55a-ed02fa5c7172","weekday":"1","assignment":{"id":"5b015f7a-70da-435b-a55a-ed02fa5c7172","userId":"p4-member-nosub","resourcePoolId":"68f40c6d-e91d-49dc-8c06-32f340adbd42","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:42.109Z","endDate":"2026-11-12T07:36:42.109Z","createdAt":"2026-10-12T07:36:42.116Z","updatedAt":"2026-10-12T07:36:42.116Z","resourcePool":{"id":"68f40c6d-e91d-49dc-8c06-32f340adbd42","tenantId":"11111111-1111-1111-1111-1111111111aa","branchId":"22222222-2222-2222-2222-2222222222aa","name":"Pool A","allocationMode":"POOLED","capacity":4,"basePrice":"100","minOccupancy":1,"minBookingDurationMinutes":60,"pricingMode":"FLAT","defaultRate":"100","createdAt":"2026-10-12T07:36:41.992Z","updatedAt":"2026-10-12T07:36:41.992Z","bookingRules":[{"id":"e922a9fa-af79-4103-aad5-1523d157f707","resourcePoolId":"68f40c6d-e91d-49dc-8c06-32f340adbd42","memberWindowDays":30,"guestOpenWindowDays":7,"gracePeriodMinutes":60,"guestAccessCutoffMinutes":120,"lowOccupancyThresholdPct":50,"prepaymentRequired":true,"cancellationPolicyJson":{"type":"tiered","tiers":[{"hoursBeforeStart":0,"refundPercentage":100}]},"maxAdditionalWindows":1,"maxDailyBookingsPerGuest":3,"dailyBookingCapEnabled":true,"createdAt":"2026-10-12T07:36:41.994Z","updatedAt":"2026-10-12T07:36:41.994Z"}]}},"window":{"id":"4b2f3555-d67b-4d57-bfc1-7f3e93ade5b1","resourcePoolId":"68f40c6d-e91d-49dc-8c06-32f340adbd42","resourceId":null,"startTime":"2026-10-12T12:00:00.000Z","endTime":"2026-10-12T13:00:00.000Z","capacity":4,"generatedFromPatternId":"550d3577-0489-4d76-81fe-7bb57b79de53","generationDate":"2026-10-12T00:00:00.000Z","pricingMode":null,"price":null,"createdAt":"2026-10-12T07:36:42.038Z","updatedAt":"2026-10-12T07:36:42.038Z"},"booking":null,"cutoffTime":"2026-10-12T11:00:00.000Z","canConfirm":false,"canDecline":true}]}
+--- member p4-member-nosub confirms attendance
+REQUEST  POST http://localhost:3001/member/today-assignment/confirm  [jwt(MEMBER:no-roles:p4-member-nosub)]
+  body: {"assignmentId":"5b015f7a-70da-435b-a55a-ed02fa5c7172"}
+RESPONSE 409  {"error":{"code":"SUBSCRIPTION_INACTIVE","message":"Active subscription is required to confirm attendance"}}
+--- SQL read-back: Booking rows (expect none)
+SQL      SELECT count(*) AS bookings FROM "Booking"
+ bookings 
+----------
+        0
+(1 row)
+
+
+
+====================================================================================================
+P5 — single-pool branch, 2 CONFIRMED + 1 HELD guest bookings, create the FIRST assignment
+====================================================================================================
+Seeded 3 guest bookings on window 4ef5b630-2f50-4351-8dcd-6c9c45f21bc6 @ 2026-10-13T19:00:00.000Z (statuses CONFIRMED,CONFIRMED,HELD); CONFIRMED ones carry a captured cash PaymentIntent.
+--- SQL read-back: BEFORE: bookings on window
+SQL      SELECT "userId", status, "isMemberBooking" AS member FROM "Booking" WHERE "windowId"='4ef5b630-2f50-4351-8dcd-6c9c45f21bc6' ORDER BY "createdAt"
+ userId  |  status   | member 
+---------+-----------+--------
+ guest-1 | CONFIRMED | f
+ guest-2 | CONFIRMED | f
+ guest-3 | HELD      | f
+(3 rows)
+
+
+--- owner previews the collision for this batch slot
+REQUEST  GET http://localhost:3001/resource-pools/1e3dc89d-0f74-4274-afc5-a1125b0f6e4c/member-collision-preview?daysOfWeek=2&startTime=19:00  [jwt(MEMBER:owner:owner-user)]
+RESPONSE 200  {"data":{"scanned":3}}
+--- create assignment #1 (this is what triggers the sweep)
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"P5-member-1","resourcePoolId":"1e3dc89d-0f74-4274-afc5-a1125b0f6e4c","daysOfWeek":"2","startTime":"19:00","startDate":"2026-10-12T07:36:42.446Z"}
+RESPONSE 201  {"data":{"id":"d81cab51-1cc8-498a-bba7-cbf257e7946f","userId":"P5-member-1","resourcePoolId":"1e3dc89d-0f74-4274-afc5-a1125b0f6e4c","groupId":null,"daysOfWeek":"2","startTime":"19:00","status":"ACTIVE","startDate":"2026-10-12T07:36:42.446Z","endDate":"2026-11-12T07:36:42.446Z","createdAt":"2026-10-12T07:36:42.453Z","updatedAt":"2026-10-12T07:36:42.453Z","collisionSweep":{"scanned":3,"relocated":0,"cancelled":3,"failed":[]}}}
+--- SQL read-back: AFTER: bookings on window
+SQL      SELECT "userId", status, "isMemberBooking" AS member, "refundAmount" FROM "Booking" WHERE "windowId"='4ef5b630-2f50-4351-8dcd-6c9c45f21bc6' ORDER BY "createdAt"
+ userId  |  status   | member | refundAmount 
+---------+-----------+--------+--------------
+ guest-1 | CANCELLED | f      |       100.00
+ guest-2 | CANCELLED | f      |       100.00
+ guest-3 | CANCELLED | f      |             
+(3 rows)
+
+
+--- SQL read-back: AFTER: refunds
+SQL      SELECT r.amount, r.status, r.reason, pi."referenceId" AS booking FROM "Refund" r JOIN "PaymentIntent" pi ON pi.id=r."paymentIntentId" ORDER BY r."createdAt"
+ amount |  status   |        reason         |               booking                
+--------+-----------+-----------------------+--------------------------------------
+  10000 | processed | customer_cancellation | c49c0ca6-056b-436c-8a9f-ae37d9580432
+  10000 | processed | customer_cancellation | 93116d49-f20f-4877-aebb-3c7dd2b11c6b
+(2 rows)
+
+
+--- SQL read-back: AFTER: sibling pools (can anything relocate?)
+SQL      SELECT count(*) AS pools_in_branch FROM "ResourcePool" WHERE "branchId"='22222222-2222-2222-2222-2222222222aa'
+ pools_in_branch 
+-----------------
+               1
+(1 row)
+
+
+
+====================================================================================================
+P6 — capacity 4, 2 guest bookings, create a 2-member batch (would 2 free courts remain for guests?)
+====================================================================================================
+Seeded 2 guest bookings on window cbfd8cab-9867-48ca-9640-3dff72c204a6 @ 2026-10-13T19:00:00.000Z (statuses CONFIRMED,CONFIRMED); CONFIRMED ones carry a captured cash PaymentIntent.
+--- SQL read-back: BEFORE: bookings on window
+SQL      SELECT "userId", status, "isMemberBooking" AS member FROM "Booking" WHERE "windowId"='cbfd8cab-9867-48ca-9640-3dff72c204a6' ORDER BY "createdAt"
+ userId  |  status   | member 
+---------+-----------+--------
+ guest-1 | CONFIRMED | f
+ guest-2 | CONFIRMED | f
+(2 rows)
+
+
+--- owner previews the collision for this batch slot
+REQUEST  GET http://localhost:3001/resource-pools/e5d322c8-d785-4858-aa09-e624030d9b34/member-collision-preview?daysOfWeek=2&startTime=19:00  [jwt(MEMBER:owner:owner-user)]
+RESPONSE 200  {"data":{"scanned":2}}
+--- create assignment #1 (this is what triggers the sweep)
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"P6-member-1","resourcePoolId":"e5d322c8-d785-4858-aa09-e624030d9b34","daysOfWeek":"2","startTime":"19:00","startDate":"2026-10-12T07:36:42.822Z"}
+RESPONSE 201  {"data":{"id":"f9ca07c8-5aca-4948-9279-f06a81368df8","userId":"P6-member-1","resourcePoolId":"e5d322c8-d785-4858-aa09-e624030d9b34","groupId":null,"daysOfWeek":"2","startTime":"19:00","status":"ACTIVE","startDate":"2026-10-12T07:36:42.822Z","endDate":"2026-11-12T07:36:42.822Z","createdAt":"2026-10-12T07:36:42.829Z","updatedAt":"2026-10-12T07:36:42.829Z","collisionSweep":{"scanned":2,"relocated":0,"cancelled":2,"failed":[]}}}
+--- create assignment #2 (this is what triggers the sweep)
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"P6-member-2","resourcePoolId":"e5d322c8-d785-4858-aa09-e624030d9b34","daysOfWeek":"2","startTime":"19:00","startDate":"2026-10-12T07:36:42.892Z"}
+RESPONSE 201  {"data":{"id":"b9a2144b-74c7-4d2f-b986-db1e1fbe1c2b","userId":"P6-member-2","resourcePoolId":"e5d322c8-d785-4858-aa09-e624030d9b34","groupId":null,"daysOfWeek":"2","startTime":"19:00","status":"ACTIVE","startDate":"2026-10-12T07:36:42.892Z","endDate":"2026-11-12T07:36:42.892Z","createdAt":"2026-10-12T07:36:42.898Z","updatedAt":"2026-10-12T07:36:42.898Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- SQL read-back: AFTER: bookings on window
+SQL      SELECT "userId", status, "isMemberBooking" AS member, "refundAmount" FROM "Booking" WHERE "windowId"='cbfd8cab-9867-48ca-9640-3dff72c204a6' ORDER BY "createdAt"
+ userId  |  status   | member | refundAmount 
+---------+-----------+--------+--------------
+ guest-1 | CANCELLED | f      |       100.00
+ guest-2 | CANCELLED | f      |       100.00
+(2 rows)
+
+
+--- SQL read-back: AFTER: refunds
+SQL      SELECT r.amount, r.status, r.reason, pi."referenceId" AS booking FROM "Refund" r JOIN "PaymentIntent" pi ON pi.id=r."paymentIntentId" ORDER BY r."createdAt"
+ amount |  status   |        reason         |               booking                
+--------+-----------+-----------------------+--------------------------------------
+  10000 | processed | customer_cancellation | 7bcd70ac-1436-4171-9097-14d44e08caf3
+  10000 | processed | customer_cancellation | 47b384e2-2946-443e-adb7-ee237dc49d34
+(2 rows)
+
+
+--- SQL read-back: AFTER: sibling pools (can anything relocate?)
+SQL      SELECT count(*) AS pools_in_branch FROM "ResourcePool" WHERE "branchId"='22222222-2222-2222-2222-2222222222aa'
+ pools_in_branch 
+-----------------
+               1
+(1 row)
+
+
+
+====================================================================================================
+P7 (observation, not in the P1-P6 brief) — same member in two batches of one pool; assignment queued for next month
+====================================================================================================
+--- create assignment p7-member
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p7-member","resourcePoolId":"0a3a6b33-92f1-49e5-96c2-8e79dfd9d7cc","daysOfWeek":"1","startTime":"12:00","startDate":"2026-10-12T07:36:43.236Z"}
+RESPONSE 201  {"data":{"id":"c2c2760b-f318-489c-b3e9-0b5b1b5eaf5b","userId":"p7-member","resourcePoolId":"0a3a6b33-92f1-49e5-96c2-8e79dfd9d7cc","groupId":null,"daysOfWeek":"1","startTime":"12:00","status":"ACTIVE","startDate":"2026-10-12T07:36:43.236Z","endDate":"2026-11-12T07:36:43.236Z","createdAt":"2026-10-12T07:36:43.244Z","updatedAt":"2026-10-12T07:36:43.244Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- same member, second batch at a different hour, SAME pool
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p7-member","resourcePoolId":"0a3a6b33-92f1-49e5-96c2-8e79dfd9d7cc","daysOfWeek":"1","startTime":"14:00","startDate":"2026-10-12T07:36:43.253Z"}
+RESPONSE 409  {"error":{"code":"ASSIGNMENT_ALREADY_EXISTS","message":"Member already has an active slot assignment"}}
+--- batch created today (not the 1st) => queued to next month
+REQUEST  POST http://localhost:3001/groups  [jwt(MEMBER:owner:owner-user)]
+  body: {"name":"P7 queued batch","resourcePoolId":"0a3a6b33-92f1-49e5-96c2-8e79dfd9d7cc","daysOfWeek":"1","startTime":"16:00","customRate":100}
+RESPONSE 201  {"data":{"id":"95f6e742-78b1-45af-946d-947250d69400","tenantId":"11111111-1111-1111-1111-1111111111aa","name":"P7 queued batch","resourcePoolId":"0a3a6b33-92f1-49e5-96c2-8e79dfd9d7cc","daysOfWeek":"1","startTime":"16:00","isPeak":false,"customRate":"100","startDate":"2026-11-01T00:00:00.000Z","endDate":"2026-11-30T23:59:59.999Z","parentId":null,"createdAt":"2026-10-12T07:36:43.270Z","updatedAt":"2026-10-12T07:36:43.270Z"}}
+--- create assignment p7-queued-member
+REQUEST  POST http://localhost:3001/member-group-assignments  [jwt(MEMBER:owner:owner-user)]
+  body: {"userId":"p7-queued-member","resourcePoolId":"0a3a6b33-92f1-49e5-96c2-8e79dfd9d7cc","daysOfWeek":"1","startTime":"16:00","groupId":"95f6e742-78b1-45af-946d-947250d69400"}
+RESPONSE 201  {"data":{"id":"71b5756f-2e88-4d31-bf7a-5bf073e48515","userId":"p7-queued-member","resourcePoolId":"0a3a6b33-92f1-49e5-96c2-8e79dfd9d7cc","groupId":"95f6e742-78b1-45af-946d-947250d69400","daysOfWeek":"1","startTime":"16:00","status":"ACTIVE","startDate":"2026-11-01T00:00:00.000Z","endDate":"2026-12-01T00:00:00.000Z","createdAt":"2026-10-12T07:36:43.355Z","updatedAt":"2026-10-12T07:36:43.355Z","collisionSweep":{"scanned":0,"relocated":0,"cancelled":0,"failed":[]}}}
+--- SQL read-back: queued assignment dates
+SQL      SELECT "userId", status, "startDate", "endDate" FROM "MemberGroupAssignment" WHERE "userId"='p7-queued-member'
+      userId      | status |      startDate      |       endDate       
+------------------+--------+---------------------+---------------------
+ p7-queued-member | ACTIVE | 2026-11-01 00:00:00 | 2026-12-01 00:00:00
+(1 row)
+
+
+--- availability today (is the QUEUED batch slot already withheld from guests?)
+REQUEST  GET http://localhost:3001/resource-pools/0a3a6b33-92f1-49e5-96c2-8e79dfd9d7cc/availability?date=2026-10-12  [no-auth]
+RESPONSE 200  (body suppressed, 6034 bytes)
+  bookable windows today: ["2026-10-12T08:00:00.000Z","2026-10-12T09:00:00.000Z","2026-10-12T10:00:00.000Z","2026-10-12T11:00:00.000Z","2026-10-12T13:00:00.000Z","2026-10-12T14:00:00.000Z","2026-10-12T15:00:00.000Z","2026-10-12T17:00:00.000Z","2026-10-12T18:00:00.000Z","2026-10-12T19:00:00.000Z","2026-10-12T20:00:00.000Z","2026-10-12T21:00:00.000Z"]   (queued-batch window is 2026-10-12T16:00:00.000Z)
