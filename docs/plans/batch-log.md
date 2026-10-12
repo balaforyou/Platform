@@ -5163,3 +5163,87 @@ Merge needs Chief's sign-off and Bala's explicit go.
 - `Tenant.logo`: `jbc` `/logo-jbc.png`, `courtowner1` `/logo.png` (the same image as the default push icon, so F-334 changes nothing visible for `courtowner1`).
 - The `courtowner1` database logo check listed above as still open is therefore done. A dated note is on F-334's row (Description), and one on F-234's row records that JBC is no longer `UTC`; F-234's original text is untouched.
 - The JBC time zone matters for F-335: the `/book` bar must never format a time with the UTC fallback. That rule is Chief's, in the F-335 plan rulings.
+
+---
+
+## Batch -- F-335: label the "next booking" bar on /book (PR #138, draft)
+
+**7 Oct 2026. Opened, not closed.** F-335 (Low, Open): the green bar above the date ribbon on `/book` showed only a weekday and time, so a guest could read their own booking at the other venue as an availability hint.
+Plan approved by Chief with rulings (archived at `docs/plans/chief-archive/f335-book-next-booking-label.md`). `BranchBooking.tsx` only; the Home card, F-333, F-334, `CourtBooking.tsx` and F-327 are untouched.
+
+**Change:** the bar reads "Your next booking · {venue} · {Thu 6:00 AM}" with a Manage link to `/bookings/my`, laid out on two lines (Chief's layout ruling): line 1 is the label and Manage; line 2 is the venue, which truncates with an ellipsis, then the time, which never shrinks or wraps.
+- **Venue and time zone are keyed by branch id** and derived at render (the F-333 pattern). The old single copied value showed the previous venue's zone while a lookup was pending, and forever if it failed.
+- **No time without a known IANA zone, and no UTC fallback.** The production read of 7 Oct 2026 shows both JBC branches are `Asia/Kolkata` (the three `courtowner1` branches are `UTC`), so the fallback reads 12:30 AM for a 6:00 AM booking.
+  Pending and failed lookups show only "Your next booking" and Manage; the second line is reserved only while pending.
+- **The stale-response guard rides with F-335** (Chief's ruling): it protects the bar's own "another pool only" rule, so it is not logged as an adjacent finding. No `/bookings/my` request until the pool is known; the result is kept with the pool
+  it was computed for; a response for a pool the guest has left is ignored. The branch-about effect also ignores responses for a branch the guest left, and `branchAboutFor` records which branch the current `branchAbout` belongs to.
+- The full text is in the `title`; Manage keeps a 44px tap target through an invisible hit area (no taller bar); Manage is `accent-700` because the pair measures 5.13:1 (JBC) and 5.56:1 (`courtowner1`) on `accent-200`, both over 4.5:1
+  (the `accent-800` fallback was only for a pair under 4.5:1). Test hooks: `data-testid="upcoming-booking-bar"`, `data-venue-state`.
+
+**Time-zone data found while checking whether the screen already carries it (Chief asked):** only the `Branch.timezone` column holds it. `/bookings/my` returns the window, pool, resource, players and child windows with no branch relation and no
+time zone (a booking carries only a scalar `branchId`). `GET /tenants/:id/branches` returns whole Branch rows, so it does carry `timezone` for every branch of the tenant; the per-branch `/about` call the plan uses carries it and the name.
+`/about` was kept as approved; the branch list is a possible one-request alternative.
+
+**Live-fire (real Chromium, real component and services, scratch DB with the JBC branches set to `Asia/Kolkata`; before = `main`; 10 scenarios, 0 errors, re-run on the two-line layout):**
+- **Wrong time on `main`:** with only the New Court booking (the real JBC case) the bar read "Thu 12:30 AM" for the whole 4 s lookup, and permanently when the lookup failed. After: label only while pending; then the right venue and time.
+- **Stale venue (case 6):** switching venue while the bar shows, `main` formatted the Old Court booking with the previous venue's zone for the whole lookup (forever on failure); a scratch build of the new label on the old state showed the previous venue's **name**.
+  After: pending shows the label only, loaded shows the correct venue and time, failed shows the label only.
+- **Stale response:** on `main`, a request made before the pool is known flashed the current pool's own booking ("Thu 1:00 AM") for 3 s, and a late first response overwrote the newer, correct result and stayed. After: neither; chip toggling with
+  an out-of-order response ends on the right booking.
+- Same venue, other pool: shows this venue's name with no extra `/about` request. No bar when the only other booking is in the current pool or there are none. Manage navigates to `/bookings/my`.
+- **Layout:** long venue ("Coimbatore Main Arena and Sports Academy, Race Course Road") truncates at 360 px (bar 328 px) and 390 px (bar 358 px) with the time fully visible (88 px, never clipped) and no overlap with Manage; the short venue does not truncate.
+- Height: pending 58.4 px to loaded 58.4 px (no jump at 390 px); failed releases to 41 px. Manage hit area about 46 px high and 8 px beyond the link horizontally. Contrast numbers above are identical in light and dark (the accent ramp is inline per tenant).
+- **Not provable locally:** a real device and production venue names. Not run: the guest e2e suite (needs the e2e database; already partly red and time-of-day dependent).
+
+**Surfaced, not fixed, not numbered (read-only audit of the other `formatBranchTime` call sites, 7 Oct 2026):** each passes a time zone that is `undefined` until the branch's `/about` arrives, and `formatBranchTime` then falls back to UTC.
+Live check with every `/about` delayed 3.5 s, JBC branches `Asia/Kolkata`, a 6:00 AM IST booking: **History card** "12:30 AM - 01:30 AM" for 3.5 s, then "06:00 AM - 07:00 AM"; **Home card** "12:30 AM" then "06:00 AM"; **Booking confirmation** "12:30 AM" then "06:00 AM";
+**`/book` slot grid** period counts Morning 18 / Afternoon 9 / Evening 5, then 10 / 10 / 12 (the `branchHour` bucketing and the slot labels at `BranchBooking.tsx:308,506-507`). Confirmed by code read only, not run: `BookingPay.tsx:429-431,441`, the member-session card `main.tsx:420,481-482`,
+and receipts (`lib/receipt.ts:17,24`; `BookingHistory.handleDownloadReceipt` can pass an absent about, so a UTC time could be baked into a PDF). Dead code: `CourtBooking.tsx:134,335-336,514-515`. Admin-v2 uses its own helpers and was not audited. All of these share one cause and a likely one fix (hold the time until the zone is known, or take it from the branch list); no code was changed.
+**History check (read-only, no rows changed):** the `Asia/Kolkata` flip was F-088 Stage 2 part 3 (Batch 64, with F-100). The DB flip landed ahead of part 4's deploy, which merged as `0bd53b3` (PR #51) on 19 Sep 2026; the register has F-088 and F-100 Resolved on 20 Sep. F-234 (12 Sep) predates the flip, so its "both `UTC`" statement was true when written.
+
+**CI:** reported on the PR. Merge needs Chief's sign-off after the live-fire and Bala's explicit go.
+
+**Correction 8 Oct 2026 (supersedes the heading's "draft" and the "Opened, not closed" and "Merge needs..." lines above, which were true when written):** PR #138 was marked ready and merged as `7d50b59`; `main` CI run 509 on that SHA was green (`checks`, `regression`, `integration`, the 7 images pushed to Docker Hub). Closed out in the entry for the F-335 close-out below.
+
+## Batch -- F-335 close-out (merged, promoted, Resolved); F-336 to F-339 logged (docs only)
+
+**8 Oct 2026. Docs only: no code, no deploy.** Closes out F-335 and logs four findings that came out of its audit and device check.
+
+**F-335 merged and promoted.** #138 was merged as `7d50b590a9209111cc89f3794d0a6f01e9ae9f5b` (merge commit). `main` CI run 509 on that SHA: `checks`, `regression` and `integration` all green; the 7 images were pushed to Docker Hub (`:<svc>` and `:<svc>-7d50b590...`).
+**Promote log (VM, run by Bala from Windows over IAP, 8 Oct 2026, about 09:50-09:53 UTC):** the 7 `:<svc>-7d50b590...` images pulled; `docker-compose.yml` and the Caddyfile already current (no topology change); the F-077 guard reported the image matches the deploy target;
+30 migrations found, none pending; the six long-running services recreated (`migrate` and `postgres` excluded; Postgres uptime unchanged at 6 weeks); a connection refusal and six 502s while the stack came up, every endpoint answering after about 24 s;
+Caddy HTTP-fallback check `0`; `verify-deployment.mjs https://elitecourts.duckdns.org 7d50b590a9209111cc89f3794d0a6f01e9ae9f5b` reported **all 7 components PASS at `7d50b590a920`**; the superseded `9fea0f5` generation was pruned (`67ddcb8` kept as the prior generation).
+Rollback is `promote.sh 7d50b590a9209111cc89f3794d0a6f01e9ae9f5b --rollback`, which restores the `67ddcb8` images and config. The compose output showed blank-default warnings for the `FIREBASE_*` variables; whether they are new was not established, and they belong to the parked F-326 VM `.env` check.
+**Per-host `/version.json` (output pasted by Bala):** `jbc.elitecourts.duckdns.org`, `courtowner1.elitecourts.duckdns.org` and `admin.elitecourts.duckdns.org` all return `{"sha":"7d50b590a9209111cc89f3794d0a6f01e9ae9f5b"}`.
+**Device check (Bala, 8 Oct 2026):** Android, JBC, `/book` at Old Court and at New Court: "Android testing looks fine"; no wrong time flash while loading. Not covered by a device check: a long venue name and `courtowner1`.
+
+**Register (this PR):** F-335 moves from Open to Resolved (resolved 8 Oct 2026), original Description kept, with a dated update and a dated correction that supersedes the 7 Oct note reading "implemented in draft PR #138 ... (not merged or deployed)" and "Stays Open until Bala's device check".
+F-336 (Medium, provisional), F-337 (Low, provisional), F-338 (Medium, provisional) and F-339 (Low, provisional) are logged Open, each with a Confirmed-ID entry in `docs/plans/pending-findings.md`. Chief assigned the four IDs; **the F-337, F-338 and F-339 row text was drafted by Claude Code from its own reports** (Chief supplied no text for them) and the number-to-finding mapping was inferred from Chief's messages, so Chief confirms both before the PR is marked ready.
+- **F-336:** the branch time zone arrives after booking times render (UTC fallback). Evidence: History, Home, confirmation and the `/book` period counts live on 7 Oct; `BookingPay` and the member-session card live on 8 Oct (`02:30 AM - 03:30 AM` then `08:00 AM - 09:00 AM`; `07:30 AM` then `01:00 PM`; scratch database, JBC at `Asia/Kolkata`, `/about` delayed 4.5 s, build `7d50b59`).
+- **F-337:** `regression` fails between about 21:30 and 24:00 UTC. Reproduced for slot-engine with a shifted clock; payment by code read and the CI log.
+- **F-338:** receipt PDFs downloaded before the zone loads carry `Time 12:30 AM - 01:30 AM` and `Venue —`. Live for History and the confirmation screen; the cancellation receipt by code read only.
+- **F-339:** after a venue's empty day auto-advances the date, switching venue keeps the date and the no-slots message. Code read only; F-335's diff does not touch it.
+**Not done here:** no fix and no code for any of the four; F-336, F-337, F-338 and F-339 each get their own plan-mode kickoff.
+
+## Batch -- F-339: a venue or pool switch no longer keeps the auto-advanced date (draft PR)
+
+**8 Oct 2026. Opened, not closed.** F-339 (Low, Open): on `/book`, after one venue's empty day auto-advanced the date (F-212), switching to the other venue kept that date and showed "No slots available on this date". Plan approved by Chief 8 Oct 2026 with three additions; Bala's go received. Archived at `docs/plans/chief-archive/f339-venue-switch-stale-date.md`. `BranchBooking.tsx` only; `CourtBooking.tsx` (dead, unrouted copy of the refs), the backend and F-336/F-338 are untouched.
+
+**Change:** `autoAdvancedToRef` and `searchRanForRef` hold `${poolId}|${date}` (one `searchKey(poolId, date)` helper that takes real strings only, so a pool still loading can never produce a key); one `resetAutoAdvance()` is called from `handleSelectBranch` (when the venue really changes; it also clears the selected pool in the same batch) and from the pool chip's `onClick` (when the pool really changes). It clears both refs and the notice, and puts an auto-advanced date back on today; a hand-picked date is kept.
+`todayKey()` is the old `bookingDate` initialiser extracted unchanged.
+**Time zone of "today" (Chief's addition 1):** the initialiser is **browser-local** (`getFullYear`/`getMonth`/`getDate`), not the branch zone. Left as it is. **Adjacent observation for the F-336 family, not fixed here:** a guest whose browser zone differs from the branch's can open `/book` on a different calendar day from the branch's.
+
+**Live-fire (real Chromium, real component and services, scratch database; empty day = whole-day `BlockedWindow`; browser clock fixed to 9 Oct 2026; BEFORE = a `67ddcb8` build, AFTER = this branch). Requests are the availability and next-available calls recorded after the switch:**
+- **S1 (Bala's case, New Court empty today, Old Court empty tomorrow):** BEFORE stuck on "No slots available on this date" with only `OC availability 2026-10-10`; AFTER Old Court shows its 35 slots for 9 Oct, no notice, `OC availability 2026-10-09` only.
+- **S2:** BEFORE carried the notice "showing the next available date, Sat, Oct 10" over although Old Court has slots today; AFTER no notice. **S3 and S5 (reverse direction):** BEFORE stuck; AFTER the new venue's slots for today.
+- **S4 (control, first venue has slots today):** identical on both builds: availability, next-available, then the next date, with the notice.
+- **S6 (both venues empty today):** BEFORE stuck; AFTER the date resets to 9 Oct, Old Court's own search runs (`OC next-from 2026-10-09`) and advances to 11 Oct with the notice.
+- **S7 (hand-picked date, then a venue switch to an empty day) and S12 (Chief's addition 2, pre-fix control on `67ddcb8`):** picking an empty date by hand on the SAME venue already triggers the advance today (`NC avail 12 | NC next-from 12 | NC avail 13`), so S7's keyed search is existing F-212 behaviour, not a change; S7 is identical on both builds.
+- **S8 (pool chips, main pool empty today, annex has slots today only):** BEFORE stuck on the annex; AFTER the annex's 8 slots for 9 Oct. **S9 (back and forth) and S10 (New Court's next-available delayed 3.5 s, switch before it returns):** AFTER no advance is applied to Old Court; each visit searches once per pool and date.
+- **Key assertion (Chief's addition 3):** over the request logs of S1 to S10 and Z, no availability or next-available request carries a pool segment that is not a UUID (no `null`, no `undefined`), and no (pool, date) pair is searched twice within one visit.
+- **S11 (F-318 selection restore after a reload):** selected before and selected after on both builds; unchanged.
+- **Z (Chief's addition 1, browser zone `America/Los_Angeles`, where local today is 8 Oct while UTC today is 9 Oct):** the first request is `NC avail 2026-10-08` on both builds (the extraction behaves identically), and after the switch AFTER requests `OC avail 2026-10-08`, the same local today.
+- **Checks:** typecheck clean, 54 unit tests pass, lint 0 errors, build ok. Not provable locally: a real device.
+**Not run:** the guest e2e suite (needs the e2e database).
+
+**CI:** reported on the PR. Merge needs Chief's sign-off after the live-fire and Bala's explicit go; F-339 stays Open until Bala's device check.

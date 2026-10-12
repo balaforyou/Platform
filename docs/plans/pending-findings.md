@@ -2626,3 +2626,31 @@ Surfaced: Bala's device, 7 Oct 2026 (screenshot of `/book`, Android, JBC); assig
 Description: On the guest `/book` screen (`BranchBooking.tsx`) a green bar above the date ribbon shows only a weekday and time ("Thu 6:00 AM") with no label. It is the guest's own soonest upcoming booking in a different pool from the one open (`BranchBooking.tsx:196-205`, rendered at `:657-665`), so it can read as an availability hint for the current venue. Unlabeled since the F-235 `/book` Slice A screen (`832cfc6`); not touched by the 67ddcb8 promote. Found 7 Oct 2026 on Bala's device.
 Confirmed-ID: F-335
 Confirmed: assigned by Chief 7 Oct 2026, logged 7 Oct 2026
+
+### branch-time-zone-arrives-after-booking-times-render
+Batch: guest-member-pwa, 8 Oct 2026
+Surfaced: Claude Code, 7 Oct 2026, in the read-only audit of the other `formatBranchTime` call sites during F-335; assigned by Chief.
+Description: Booking times in the guest PWA are formatted with a branch time zone that arrives from the branch's `/about` response after the content has rendered. Until it arrives, `formatBranchTime` falls back to UTC, so a JBC booking at 6:00 AM IST reads 12:30 AM - 01:30 AM, and if the lookup fails the wrong time stays. Verified live on 7 Oct 2026 on the History card, the Home card, the booking confirmation and the `/book` period counts; BookingPay and the member-session card were run live on 8 Oct 2026. Medium, provisional. Out of scope: the receipt PDF (F-338) and admin-v2.
+Confirmed-ID: F-336
+Confirmed: assigned by Chief 8 Oct 2026, logged 8 Oct 2026
+
+### regression-check-fails-late-in-the-utc-day
+Batch: ci regression fixtures, 8 Oct 2026
+Surfaced: Claude Code, 7-8 Oct 2026, from `regression` failing on PR #138 (run `37693854418`, head `b71be18`) at 22:05-22:15 UTC; assigned by Chief.
+Description: The `regression` check fails deterministically between about 21:30 and 24:00 UTC and passes the rest of the day: slot-engine `F-207.2` (5 cases), `F-207.3` and `F-133B §6`, and payment `F-276 /bookings/manual`. Their fixtures build "today" windows from the wall clock (`alignedHourWithinToday`, `withinTodayUtc`, `futureAlignedHour(2)`), so late in the UTC day the window is in the past or on tomorrow's date. Reproduced locally for slot-engine with a shifted clock (129/129 at 09:26 UTC, the same 7 tests failing at 22:10 UTC); payment by code read and the CI log. Low, provisional. Test-fixture code, no path to a real user.
+Confirmed-ID: F-337
+Confirmed: assigned by Chief 8 Oct 2026, logged 8 Oct 2026
+
+### receipt-pdf-bakes-in-utc-time-and-blank-venue-before-the-zone-loads
+Batch: guest-member-pwa, 8 Oct 2026
+Surfaced: Claude Code, 8 Oct 2026, in the read-only receipt-PDF check after the F-335/F-336 audit; assigned by Chief.
+Description: A receipt PDF downloaded from History or the confirmation screen before the branch's `/about` response returns has the UTC time and `Venue —` baked into the file (`lib/receipt.ts:17,26,29`; `BookingHistory.tsx:129-130`; `BookingConfirmation.tsx:235`; `CancelBookingModal.tsx:152-153`). Verified live on 8 Oct 2026 for History and the confirmation screen (`Time 12:30 AM - 01:30 AM` and `Venue —`, against `Time 06:00 AM - 07:00 AM` and `Venue JBC New Court` after the lookup); the cancellation receipt by code read only. Medium, provisional. A sibling of F-336.
+Confirmed-ID: F-338
+Confirmed: assigned by Chief 8 Oct 2026, logged 8 Oct 2026
+
+### venue-switch-keeps-the-advanced-date-and-the-no-slots-message
+Batch: guest-member-pwa, 8 Oct 2026
+Surfaced: Bala's device, 8 Oct 2026 (JBC, New Court then Old Court); assigned by Chief.
+Description: On `/book`, after a venue with no slots today auto-advances the date (F-212), switching to the other venue keeps the advanced date and shows "No slots available on this date. Try another date." `bookingDate` is not reset on a venue switch, and `autoAdvancedToRef` and `searchRanForRef` hold only a date (`BranchBooking.tsx:187,201-202,411-413,438-441`), so the second venue's own next-available search is skipped. Code read only, not yet reproduced; F-335's diff does not touch this code. Low, provisional.
+Confirmed-ID: F-339
+Confirmed: assigned by Chief 8 Oct 2026, logged 8 Oct 2026
