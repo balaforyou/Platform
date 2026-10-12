@@ -5260,3 +5260,5 @@ F-336 (Medium, provisional), F-337 (Low, provisional), F-338 (Medium, provisiona
 
 **Reported to Chief:** what landed is the Spike archive, plan revision 3, F-340 to F-343 (Open), and this entry; none of the four findings is Resolved.
 **Not done here:** no SB, S1, S2 or S3 design or code (the decision gate is Chief's), no fix for any finding, no numbering of C-15 to C-17.
+
+**Update 12 Oct 2026 (same PR, before merge):** Chief assigned F-344 (Medium, provisional; candidate C-15, a queued batch withholds today's slot from guests because the exclusion ignores `startDate` and `endDate`; observed on guest availability only) and F-345 (Medium, provisional; candidate C-17, displaced guests are not notified and a refund is a bookkeeping row with no gateway call). Both logged Open with Confirmed-ID entries in `docs/plans/pending-findings.md`; F-344 and F-345 appeared nowhere in `docs/` or on `main` beforehand. The statement above that C-15 to C-17 are not numbered is superseded for C-15 and C-17. C-16 is not logged as a finding (see the addendum recorded after this PR).

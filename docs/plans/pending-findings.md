@@ -2682,3 +2682,17 @@ Surfaced: Claude Code, 12 Oct 2026, plan-mode verification (candidate C-8); assi
 Description: `duesCollected` in `GET /branches/:id/guest-occupancy-dashboard` is the sum of guest booking prices, not member dues; the name will mislead once member dues exist. Described, code-read, not probed.
 Confirmed-ID: F-343
 Confirmed: provisional, assigned by Chief 12 Oct 2026 (relayed by Bala), subject to the register check; check done 12 Oct 2026, the highest ID on main is F-339.
+
+### queued-batch-withholds-todays-slot-from-guests
+Batch: admin-v2 revamp, Spike, 12 Oct 2026
+Surfaced: Claude Code, 12 Oct 2026, Spike probe P7(ii) (candidate C-15); assigned by Chief 12 Oct 2026.
+Description: The member exclusion selects ACTIVE assignments by pool, weekday and time and ignores `startDate` and `endDate`, so a batch queued to the 1st of next month already removes today's slot from guest availability. Probed on guest availability only; the grid and a guest booking attempt are not yet checked. Archive: `docs/plans/chief-archive/admin-v2-spike/`.
+Confirmed-ID: F-344
+Confirmed: assigned by Chief 12 Oct 2026, logged 12 Oct 2026
+
+### displaced-guests-not-notified-and-refund-is-bookkeeping-only
+Batch: admin-v2 revamp, Spike, 12 Oct 2026
+Surfaced: Claude Code, 12 Oct 2026, Spike probes P5 and P6 (candidate C-17); assigned by Chief 12 Oct 2026.
+Description: The collision sweep cancels guest bookings with no notification, and payment `POST /refunds` writes a `processed` Refund row with no gateway call. Probed in P5 and P6 (no notification send logged). Archive: `docs/plans/chief-archive/admin-v2-spike/`.
+Confirmed-ID: F-345
+Confirmed: assigned by Chief 12 Oct 2026, logged 12 Oct 2026

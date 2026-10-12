@@ -42,7 +42,7 @@ says *probed* and cites the probe. Claims the Spike did not touch stay **code-re
    gate refuses; single-pool collisions refund everything; partial overlap displaces everything). P7 (extra)
    found two things nobody predicted: **a member cannot belong to two batches in one pool**, and **a batch
    queued for next month already withholds today's slot from guests** (§9, C-15 / C-16). Displaced guests are
-   **not notified** (C-17).
+   **not notified** (C-17). *(Update 12 Oct 2026: C-15 is now F-344 and C-17 is F-345, both provisional.)*
 4. **What can still resize the plan:**
    - **Capacity accounting (D2) — Spike-confirmed.** A confirmed member attendance consumes one unit of
      window capacity; with JBC's pool capacity 4, **members 5–8 of an 8-member batch are refused
@@ -806,7 +806,7 @@ are free. They are provisional until Chief confirms them in `docs/plans/pending-
 
 **Not findings:** C-1 / C-2 are covered by SB (probed: P1 / P1b / P2); **C-7 attaches to F-109** (probed: P4);
 C-9 / C-12 are S3 scope; C-6 / C-10 / C-11 / C-13 are new capabilities, not defects; **C-3 is closed**. **C-15,
-C-16 and C-17 below are new from the Spike and are described only, not numbered** — Chief assigns any ID.
+C-16 and C-17 below are new from the Spike.** *(Update 12 Oct 2026: Chief assigned **C-15 = F-344** (Medium) and **C-17 = F-345** (Medium), provisional, rows in this PR. C-16 is not a finding: Bala's addendum of 12 Oct makes it a requirement, to be recorded with a dated note in a follow-up.)*
 
 The register rows for F-340 to F-343 go in as a **separate docs-only PR** for Chief to review before merge.
 
@@ -826,9 +826,9 @@ The register rows for F-340 to F-343 go in as a **separate docs-only PR** for Ch
 | **C-12** | **No route creates a member account from Gmail + phone** (promote needs an existing account; walk-in creates a phone-only guest). | identity-auth `:130 :222 :1458` | S3 |
 | **C-14** (F-342, provisional) | **The collision preview and the sweep are blunter than the business rule needs:** the preview returns a count only; the sweep displaces **every** active booking in a colliding window (not just the overflow) and, in a single-pool branch, can **never relocate**, so every confirmed booking is refunded. | `scanCollidingBookings` (`:5934`), `runMemberCollisionSweep` (`:5975`), `tryRelocateBooking` (`siblings.length === 0 → false`); `scripts/tenants/jbc.json` one pool per branch. **Probed (Spike P5 / P6).** | SB, S3 (D13) |
 | **C-13** | **Renewal presets are code fixtures** and batch assignments reject `termPreset` — conflicts with B3 and with quarterly / yearly members in batches. | `:5843`, `:6676` | S4a |
-| **C-15** (new, not numbered) | **A batch queued for next month already withholds today's slot from guests.** `fetchMemberExclusionContext` selects ACTIVE assignments by pool, weekday and time only; it ignores `startDate` / `endDate`. **Probed (Spike P7(ii)):** a batch created on 12 Oct is queued to 1 Nov, its assignment is `ACTIVE` with `startDate 2026-11-01`, and the 12 Oct slot at that hour is missing from guest availability. Member attendance confirm has the same blind spot (`resolveOneTodayMemberAssignment` also checks status only). Bears on D7 ("active = ACTIVE and within term"). | `index.ts:3681–3698`, `:2081–2092`; Spike P7 | SB, S3 (D7) |
+| **C-15** (F-344, provisional) | **A batch queued for next month already withholds today's slot from guests.** `fetchMemberExclusionContext` selects ACTIVE assignments by pool, weekday and time only; it ignores `startDate` / `endDate`. **Probed (Spike P7(ii)):** a batch created on 12 Oct is queued to 1 Nov, its assignment is `ACTIVE` with `startDate 2026-11-01`, and the 12 Oct slot at that hour is missing from guest availability. Member attendance confirm has the same blind spot (`resolveOneTodayMemberAssignment` also checks status only). Bears on D7 ("active = ACTIVE and within term"). | `index.ts:3681–3698`, `:2081–2092`; Spike P7 | SB, S3 (D7) |
 | **C-16** (new, not numbered) | **A member cannot belong to two batches in one pool** (`@@unique([userId, resourcePoolId])` → `409 ASSIGNMENT_ALREADY_EXISTS`, probed P7(i)). Batches are pool-level and JBC has one pool per branch, so a member could not be in both a morning and an evening batch at the same branch. Whether the business wants that is a question for Bala; the schema comment ("a member may hold concurrent ACTIVE assignments across different pools") assumes more pools than JBC has. | schema `MemberGroupAssignment`; `index.ts:6531` error mapping; Spike P7 | SB, S3 (D3) |
-| **C-17** (new, not numbered) | **Displaced guests are not notified, and a `Refund` row is bookkeeping only.** The sweep cancels and records a refund with no notification (probed: P5 / P6 produced no send), and `POST /refunds` writes `processed` with no gateway call (code read). Real customers lose a booking without being told. | `cancelBookingCore` `:5334–5427`; payment `:732–739`; notification log in the Spike archive | SB, S3 (D13) |
+| **C-17** (F-345, provisional) | **Displaced guests are not notified, and a `Refund` row is bookkeeping only.** The sweep cancels and records a refund with no notification (probed: P5 / P6 produced no send), and `POST /refunds` writes `processed` with no gateway call (code read). Real customers lose a booking without being told. | `cancelBookingCore` `:5334–5427`; payment `:732–739`; notification log in the Spike archive | SB, S3 (D13) |
 
 Already in the register and relevant: **F-108** (payment service exposes no readable data, Open), **F-109**
 (`Subscription` cannot express when money is due, Open — **Bala's billing-model answers decide its open
