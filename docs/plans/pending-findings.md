@@ -2654,3 +2654,45 @@ Surfaced: Bala's device, 8 Oct 2026 (JBC, New Court then Old Court); assigned by
 Description: On `/book`, after a venue with no slots today auto-advances the date (F-212), switching to the other venue keeps the advanced date and shows "No slots available on this date. Try another date." `bookingDate` is not reset on a venue switch, and `autoAdvancedToRef` and `searchRanForRef` hold only a date (`BranchBooking.tsx:187,201-202,411-413,438-441`), so the second venue's own next-available search is skipped. Code read only, not yet reproduced; F-335's diff does not touch this code. Low, provisional.
 Confirmed-ID: F-339
 Confirmed: assigned by Chief 8 Oct 2026, logged 8 Oct 2026
+
+### walk-in-route-has-no-mandatory-member-collision-guard
+Batch: admin-v2 revamp, plan-mode and Spike, 12 Oct 2026
+Surfaced: Claude Code, 12 Oct 2026, plan-mode verification (candidate C-4) and Spike probe P3; assigned by Chief (provisional).
+Description: `POST /bookings/manual` (payment) reaches slot-engine `POST /bookings/negotiated`, which checks blocked windows and capacity only. The opt-in `releaseGroupId` branch is the only member check; without it an owner or a scoped manager can place a paid guest booking on a member-reserved window. Probed: a scoped manager's request without it returned `201`. Archive: `docs/plans/chief-archive/admin-v2-spike/`.
+Confirmed-ID: F-340
+Confirmed: provisional, assigned by Chief 12 Oct 2026 (relayed by Bala), subject to the register check; check done 12 Oct 2026, the highest ID on main is F-339.
+
+### manager-over-privilege-on-batch-member-and-release-routes
+Batch: admin-v2 revamp, plan-mode, 12 Oct 2026
+Surfaced: Claude Code, 12 Oct 2026, plan-mode verification (candidate C-5); assigned by Chief (provisional).
+Description: Batch, member, assignment, release and manual-booking routes admit a scoped branch manager; only availability patterns and court eligibility are owner-only. No capability matrix, and no list or revoke role routes in tenant-management. Described, code-read, not probed.
+Confirmed-ID: F-341
+Confirmed: provisional, assigned by Chief 12 Oct 2026 (relayed by Bala), subject to the register check; check done 12 Oct 2026, the highest ID on main is F-339.
+
+### collision-preview-and-sweep-blunter-than-the-business-rule
+Batch: admin-v2 revamp, plan-mode and Spike, 12 Oct 2026
+Surfaced: Claude Code, 12 Oct 2026, plan-mode verification (candidate C-14) and Spike probes P5 and P6; assigned by Chief (provisional).
+Description: The preview returns a count only. The sweep displaces every active booking in a colliding window, not only the overflow beyond remaining capacity, and in a single-pool branch it cannot relocate, so every CONFIRMED guest booking is refunded. Probed in P5 and P6. Archive: `docs/plans/chief-archive/admin-v2-spike/`.
+Confirmed-ID: F-342
+Confirmed: provisional, assigned by Chief 12 Oct 2026 (relayed by Bala), subject to the register check; check done 12 Oct 2026, the highest ID on main is F-339.
+
+### guest-dashboard-dues-collected-is-guest-revenue
+Batch: admin-v2 revamp, plan-mode, 12 Oct 2026
+Surfaced: Claude Code, 12 Oct 2026, plan-mode verification (candidate C-8); assigned by Chief (provisional).
+Description: `duesCollected` in `GET /branches/:id/guest-occupancy-dashboard` is the sum of guest booking prices, not member dues; the name will mislead once member dues exist. Described, code-read, not probed.
+Confirmed-ID: F-343
+Confirmed: provisional, assigned by Chief 12 Oct 2026 (relayed by Bala), subject to the register check; check done 12 Oct 2026, the highest ID on main is F-339.
+
+### queued-batch-withholds-todays-slot-from-guests
+Batch: admin-v2 revamp, Spike, 12 Oct 2026
+Surfaced: Claude Code, 12 Oct 2026, Spike probe P7(ii) (candidate C-15); assigned by Chief 12 Oct 2026.
+Description: The member exclusion selects ACTIVE assignments by pool, weekday and time and ignores `startDate` and `endDate`, so a batch queued to the 1st of next month already removes today's slot from guest availability. Probed on guest availability only; the grid and a guest booking attempt are not yet checked. Archive: `docs/plans/chief-archive/admin-v2-spike/`.
+Confirmed-ID: F-344
+Confirmed: assigned by Chief 12 Oct 2026, logged 12 Oct 2026
+
+### displaced-guests-not-notified-and-refund-is-bookkeeping-only
+Batch: admin-v2 revamp, Spike, 12 Oct 2026
+Surfaced: Claude Code, 12 Oct 2026, Spike probes P5 and P6 (candidate C-17); assigned by Chief 12 Oct 2026.
+Description: The collision sweep cancels guest bookings with no notification, and payment `POST /refunds` writes a `processed` Refund row with no gateway call. Probed in P5 and P6 (no notification send logged). Archive: `docs/plans/chief-archive/admin-v2-spike/`.
+Confirmed-ID: F-345
+Confirmed: assigned by Chief 12 Oct 2026, logged 12 Oct 2026
