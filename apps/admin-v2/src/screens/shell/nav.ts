@@ -68,7 +68,7 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   // the mobile "Apps" overflow (S1-9), so the daily tasks keep the bottom-nav slots.
   { key: 'communications', label: 'Communications', shortLabel: 'Comms', path: '/communications', Icon: MessageSquare, mobileDirect: false, roles: ['owner'] },
   { key: 'ledger', label: 'Ledger', shortLabel: 'Ledger', path: '/ledger', Icon: DollarSign, mobileDirect: true },
-  { key: 'inventory', label: 'Inventory', path: '/inventory', Icon: Package, mobileDirect: true },
+  { key: 'inventory', label: 'Inventory', path: '/inventory', Icon: Package, mobileDirect: true, branchScoped: true, dateScoped: true },
   // S1: Walk-in is a mobile nav entry until S2 creates Today (ruled 13 Oct). Same screen as
   // Guest Management, opened on its walk-in (Reservations) tab.
   { key: 'walk-in', label: 'Walk-in', path: '/walk-in', Icon: UserPlus, mobileDirect: true, module: 'GUEST_BOOKING' },

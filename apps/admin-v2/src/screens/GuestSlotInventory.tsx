@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Circle, Lock, Minus, Plus, type LucideIcon } from 'lucide-react';
 import { Banner, Card, LoadingState, Modal, Select, useToast } from '../components';
-import { useBranches, useGuestInventoryGrid, usePools } from './guestManagement/queries';
+import { useGuestInventoryGrid, usePools } from './guestManagement/queries';
+import { useBranchDate } from './shell/BranchDateContext';
 import { WalkInBookingFlow, segBtn, segStrip, type WalkInInitialSelection } from './guestManagement/sections/WalkInBookingFlow';
 import { BookingDetailModal } from './guestManagement/sections/BookingDetailModal';
-import { BANDS, bandOf, branchHour, formatHourLabel, stripCourtPrefix, todayIsoDate, type Band } from './guestManagement/reservationHelpers';
+import { BANDS, bandOf, branchHour, formatHourLabel, stripCourtPrefix, type Band } from './guestManagement/reservationHelpers';
 import type { GuestInventoryCell } from './guestManagement/types';
 
 // The real tap target — kept at the existing 44px minimum (touch-accessibility, F-256's own
@@ -134,14 +135,10 @@ const LEGEND: { family: Family; label: string; style: React.CSSProperties }[] = 
  */
 export function GuestSlotInventory() {
   const toast = useToast();
-  const branches = useBranches();
-  const [branchId, setBranchId] = useState('');
-  const [date, setDate] = useState(todayIsoDate());
+  // S1: branch and date come from the shell's global context (the date defaults to the branch's
+  // own local today, not the UTC date); both are changed in the context bar, not on this screen.
+  const { branchId, branch, date } = useBranchDate();
   const [poolId, setPoolId] = useState('');
-
-  useEffect(() => {
-    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
-  }, [branchId, branches.data]);
 
   const pools = usePools(branchId);
   const branchPools = pools.data ?? [];
@@ -149,7 +146,6 @@ export function GuestSlotInventory() {
     if (branchPools.length && !branchPools.some((p) => p.id === poolId)) setPoolId(branchPools[0].id);
   }, [branchPools, poolId]);
   const pool = branchPools.find((p) => p.id === poolId);
-  const branch = (branches.data ?? []).find((b) => b.id === branchId);
 
   const grid = useGuestInventoryGrid(branchId, poolId, date);
 
@@ -229,14 +225,6 @@ export function GuestSlotInventory() {
       {/* F-256: stacked (non-overlapping) on mobile via .inventory-filters; side by side on
           desktop — fixes the real overlap ("Coimbatore" colliding with the date field). */}
       <div className="inventory-filters" style={{ gap: 'var(--av2-space-3)', maxWidth: 640 }}>
-        <Select label="Branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={branches.isLoading}>
-          <option value="">{branches.isLoading ? 'Loading branches…' : 'Select branch'}</option>
-          {(branches.data || []).map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
         {branchPools.length > 1 && (
           <Select label="Court pool" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
             {branchPools.map((p) => (
@@ -246,23 +234,6 @@ export function GuestSlotInventory() {
             ))}
           </Select>
         )}
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--av2-space-2)' }}>
-          <span style={{ fontSize: 'var(--av2-text-sm)', fontWeight: 600 }}>Date</span>
-          <input
-            type="date"
-            value={date}
-            min={todayIsoDate()}
-            onChange={(e) => setDate(e.target.value)}
-            style={{
-              padding: 'var(--av2-space-2) var(--av2-space-3)',
-              fontSize: 'var(--av2-text-base)',
-              borderRadius: 'var(--av2-radius-sm)',
-              border: '1px solid var(--av2-border)',
-              background: 'var(--av2-surface)',
-              color: 'var(--av2-text)',
-            }}
-          />
-        </label>
       </div>
 
       {/* Segmented Morning/Afternoon/Evening time-of-day picker — reuses WalkInBookingFlow's own
