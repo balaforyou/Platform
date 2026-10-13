@@ -15,6 +15,7 @@ import { BranchSettingsScreen } from './screens/BranchSettingsScreen';
 import { GuestManagementScreen } from './screens/GuestManagementScreen';
 import { LedgerScreen } from './screens/LedgerScreen';
 import { MembersScreen } from './screens/MembersScreen';
+import { RoleGate } from './screens/shell/RoleGate';
 
 /**
  * Auth gate → navigated app.
@@ -57,10 +58,12 @@ export default function App() {
           <Route
             path="/communications"
             element={
-              <StubScreen
-                title="Communications"
-                description="Announcements and messages to members and guests."
-              />
+              <RoleGate destination="communications">
+                <StubScreen
+                  title="Communications"
+                  description="Announcements and messages to members and guests."
+                />
+              </RoleGate>
             }
           />
           <Route path="/ledger" element={<LedgerScreen />} />
@@ -69,14 +72,25 @@ export default function App() {
           <Route
             path="/court-groups"
             element={
-              <StubScreen
-                title="Manage Court Groups"
-                description="Court groupings and their availability windows."
-              />
+              <RoleGate destination="court-groups">
+                <StubScreen
+                  title="Manage Court Groups"
+                  description="Court groupings and their availability windows."
+                />
+              </RoleGate>
             }
           />
           <Route path="/guests" element={<GuestManagementScreen />} />
-          <Route path="/branch-settings" element={<BranchSettingsScreen />} />
+          {/* S1: mobile nav entry for walk-ins until Today exists (S2); the same screen, opening on its Reservations tab. */}
+          <Route path="/walk-in" element={<GuestManagementScreen />} />
+          <Route
+            path="/branch-settings"
+            element={
+              <RoleGate destination="branch-settings">
+                <BranchSettingsScreen />
+              </RoleGate>
+            }
+          />
           <Route path="/apps" element={<AppsOverflowScreen />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
