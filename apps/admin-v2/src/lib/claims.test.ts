@@ -26,6 +26,9 @@ describe('parseAdminClaims', () => {
       tenantId: 't-1',
       userType: 'STAFF',
       roles: ['owner'],
+      // F-219 added these two claims to AdminUser; absent from the token => null.
+      displayName: null,
+      photoUrl: null,
     });
   });
 
