@@ -63,7 +63,7 @@ export interface NavDestination {
 }
 
 export const NAV_DESTINATIONS: NavDestination[] = [
-  { key: 'dashboard', label: 'Dashboard', path: '/dashboard', Icon: LayoutDashboard, mobileDirect: true },
+  { key: 'dashboard', label: 'Dashboard', path: '/dashboard', Icon: LayoutDashboard, mobileDirect: true, branchScoped: true, dateScoped: true },
   // Owner-only (Bala: Communications and settings are owner alone). Owner tools sit behind
   // the mobile "Apps" overflow (S1-9), so the daily tasks keep the bottom-nav slots.
   { key: 'communications', label: 'Communications', shortLabel: 'Comms', path: '/communications', Icon: MessageSquare, mobileDirect: false, roles: ['owner'] },

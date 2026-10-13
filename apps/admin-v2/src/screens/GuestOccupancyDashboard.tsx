@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Banner, Badge, Button, Card, LoadingState, Modal, Select, Tabs } from '../components';
-import { useBranches, useGuestMonthSummary, useGuestOccupancyDashboard } from './guestManagement/queries';
-import { formatHourLabel, formatSlotLabel, todayIsoDate, todayIsoMonth } from './guestManagement/reservationHelpers';
+import { useState } from 'react';
+import { Banner, Badge, Button, Card, LoadingState, Modal, Tabs } from '../components';
+import { useGuestMonthSummary, useGuestOccupancyDashboard } from './guestManagement/queries';
+import { formatHourLabel, formatSlotLabel } from './guestManagement/reservationHelpers';
+import { useBranchDate } from './shell/BranchDateContext';
 import { WalkInBookingFlow, type WalkInInitialSelection } from './guestManagement/sections/WalkInBookingFlow';
 import type { BadgeTone } from '../components';
 import type { GuestMonthSummaryRow, LiveAllocationEntry, MemberAttendanceState, MemberAttendanceWindow, SlotMonitorStatus } from './guestManagement/types';
@@ -169,17 +170,12 @@ function MemberAttendanceWindowCard({
  * court list. Member occupancy is out of scope for this pass.
  */
 export function GuestOccupancyDashboard() {
-  const branches = useBranches();
-  const [branchId, setBranchId] = useState('');
+  // S1: branch and date come from the shell's global context (branch-local "today", not the UTC date).
+  const { branchId, branch, date, today, error: branchesError } = useBranchDate();
   const [tab, setTab] = useState('today');
-  const date = todayIsoDate();
-  const [month, setMonth] = useState(todayIsoMonth());
-
-  useEffect(() => {
-    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
-  }, [branchId, branches.data]);
-
-  const branch = (branches.data ?? []).find((b) => b.id === branchId);
+  const [monthPick, setMonthPick] = useState<string | null>(null);
+  const month = monthPick ?? today.slice(0, 7);
+  const setMonth = setMonthPick;
   const dashboard = useGuestOccupancyDashboard(tab === 'today' ? branchId : undefined, date);
   const monthSummary = useGuestMonthSummary(tab === 'month' ? branchId : undefined, month);
 
@@ -210,22 +206,7 @@ export function GuestOccupancyDashboard() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gap: 'var(--av2-space-2)', maxWidth: 280 }}>
-        <Select
-          label="Branch"
-          value={branchId}
-          onChange={(e) => setBranchId(e.target.value)}
-          disabled={branches.isLoading || (branches.data || []).length === 0}
-        >
-          <option value="">{branches.isLoading ? 'Loading branches…' : 'Select branch'}</option>
-          {(branches.data || []).map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
-        {branches.error && <Banner tone="error">{(branches.error as Error)?.message}</Banner>}
-      </div>
+      {branchesError ? <Banner tone="error">{(branchesError as Error)?.message}</Banner> : null}
 
       <Tabs items={DASHBOARD_TABS} activeKey={tab} onChange={setTab} />
 
