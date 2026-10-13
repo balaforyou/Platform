@@ -67,7 +67,7 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   // Owner-only (Bala: Communications and settings are owner alone). Owner tools sit behind
   // the mobile "Apps" overflow (S1-9), so the daily tasks keep the bottom-nav slots.
   { key: 'communications', label: 'Communications', shortLabel: 'Comms', path: '/communications', Icon: MessageSquare, mobileDirect: false, roles: ['owner'] },
-  { key: 'ledger', label: 'Ledger', shortLabel: 'Ledger', path: '/ledger', Icon: DollarSign, mobileDirect: true },
+  { key: 'ledger', label: 'Ledger', shortLabel: 'Ledger', path: '/ledger', Icon: DollarSign, mobileDirect: true, branchScoped: true },
   { key: 'inventory', label: 'Inventory', path: '/inventory', Icon: Package, mobileDirect: true, branchScoped: true, dateScoped: true },
   // S1: Walk-in is a mobile nav entry until S2 creates Today (ruled 13 Oct). Same screen as
   // Guest Management, opened on its walk-in (Reservations) tab.

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Lock } from 'lucide-react';
 import { Badge, Banner, LoadingState, Select, Table, Tabs, type BadgeTone, type Column } from '../components';
 import { friendlyError } from '../lib/errorMessage';
-import { useBranches, useGuestLedger, usePools } from './guestManagement/queries';
+import { useGuestLedger, usePools } from './guestManagement/queries';
+import { useBranchDate } from './shell/BranchDateContext';
 import { safeTimeZone } from './guestManagement/reservationHelpers';
 import type { GuestLedgerRow, LedgerMethod } from './guestManagement/types';
 
@@ -71,15 +72,9 @@ function formatDateTime(iso: string, timezone: string | undefined): string {
  */
 export function LedgerScreen() {
   const navigate = useNavigate();
-  const branches = useBranches();
-  const [branchId, setBranchId] = useState('');
+  // S1: the branch comes from the shell's global context (the switcher in the context bar).
+  const { branchId, branch, error: branchesError } = useBranchDate();
   const [tab, setTab] = useState('guest');
-
-  useEffect(() => {
-    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
-  }, [branchId, branches.data]);
-
-  const branch = useMemo(() => (branches.data ?? []).find((b) => b.id === branchId), [branches.data, branchId]);
   const tz = branch?.timezone;
 
   const pools = usePools(branchId);
@@ -143,19 +138,6 @@ export function LedgerScreen() {
       </div>
 
       <div style={{ display: 'grid', gap: 'var(--av2-space-3)', maxWidth: 320, minWidth: 0 }}>
-        <Select
-          label="Branch"
-          value={branchId}
-          onChange={(e) => setBranchId(e.target.value)}
-          disabled={branches.isLoading || (branches.data || []).length === 0}
-        >
-          <option value="">{branches.isLoading ? 'Loading branches…' : 'Select branch'}</option>
-          {(branches.data || []).map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
         {branchPools.length > 1 && (
           <Select label="Court pool" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
             {branchPools.map((p) => (
@@ -165,7 +147,7 @@ export function LedgerScreen() {
             ))}
           </Select>
         )}
-        {branches.error && <Banner tone="error">{friendlyError(branches.error, "Couldn’t load branches.")}</Banner>}
+        {branchesError ? <Banner tone="error">{friendlyError(branchesError, "Couldn’t load branches.")}</Banner> : null}
       </div>
 
       <div style={{ display: 'grid', gap: 'var(--av2-space-4)', minWidth: 0 }}>
