@@ -50,3 +50,29 @@ export function roleLabel(token: string): string {
   if (token === 'front_desk' || token.startsWith('front_desk:')) return 'Front desk';
   return token;
 }
+
+/**
+ * S1: the role kinds the shell distinguishes. `owner` sees every branch; `manager` is scoped
+ * to the branches in its `branch_manager:<id>` tokens (one or several); `none` is any other
+ * signed-in admin (kept as today: no role-based hiding is applied).
+ *
+ * UI-ONLY. These drive navigation and the branch switcher; they are NOT a security boundary.
+ * The services decide what a token may do (see F-341 for how little they restrict a manager
+ * today; slice S0 is the server-side enforcement).
+ */
+export type RoleKind = 'owner' | 'manager' | 'none';
+
+/** Branch ids a manager is scoped to, from `branch_manager:<id>` role tokens. */
+export function branchScopes(roles: string[] = []): string[] {
+  return roles
+    .filter((role) => role.startsWith('branch_manager:'))
+    .map((role) => role.split(':')[1])
+    .filter(Boolean);
+}
+
+/** Owner wins over manager if a token somehow carries both. */
+export function roleKind(roles: string[] = []): RoleKind {
+  if (roles.includes('owner')) return 'owner';
+  if (branchScopes(roles).length > 0) return 'manager';
+  return 'none';
+}

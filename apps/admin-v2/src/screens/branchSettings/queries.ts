@@ -1,3 +1,4 @@
+import { branchScopes } from '../../lib/claims';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAdminApi } from '../../lib/useAdminApi';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
@@ -16,11 +17,6 @@ export interface Branch {
 }
 
 /** owner sees every branch; branch_manager:<id> sees only the branches its roles scope it to. */
-const branchScopes = (roles: string[] = []) =>
-  roles
-    .filter((r) => r.startsWith('branch_manager:'))
-    .map((r) => r.split(':')[1])
-    .filter(Boolean);
 
 const branchesKey = (tenantId?: string) => ['branch-settings', 'branches', tenantId] as const;
 
