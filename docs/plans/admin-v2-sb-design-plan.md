@@ -1,7 +1,9 @@
 # SB design plan — batch court occupancy (PLAN ONLY)
 
-**Status:** PLAN ONLY, 12 Oct 2026. Nothing is implemented, committed or pushed. Stops for Chief's review; nothing is
-built until Bala signs off. **Not final until Chief rules on §12.**
+**Status:** PLAN ONLY. Nothing is implemented. **Revision 2, 13 Oct 2026:** Chief's rulings on the seven §12 questions are
+recorded (§12), and a **design gap Chief found is fixed**: the reservation now derives from the **batch itself**, not
+from its members (SB-11, §4, §5.1, §6, step 5b). Revision 1 text that changed is replaced, not annotated, because the
+document is unmerged. Stops for Chief's read of the diff; nothing is built until Bala signs off.
 **Inputs:** `docs/plans/admin-v2-revamp-plan-mode.md` (SB section, D2 / D11 / D12 / D13, now also D14–D16 in the
 open rulings PR #143), the Spike archive `docs/plans/chief-archive/admin-v2-spike/` (P1–P7), register F-340–F-345
 (provisional), and Bala's addendum of 12 Oct (a member in many batches, one deposit per member, pause and cancel per
@@ -24,9 +26,11 @@ its own test (§8), and Chief should confirm the bundling.**
 | **SB-5** | **Overlap guard:** joining a batch that clashes with one the member already holds (same hour **and** a shared weekday) is refused, `409 MEMBER_BATCH_OVERLAP`, with a message naming the clashing batch. Different hours on the same day are fine. | none today (one batch per pool made it unnecessary) |
 | **SB-6** | Seat counts and min / max are **per batch**; a member counts once in each batch they hold. (Counting primitive only; enforcement of min / max is S3, C-6.) | not enforced anywhere |
 | **SB-7** | **Create batch shows exactly which guest bookings are affected** (D13): each booking listed with its outcome; only the **overflow** is displaced, **latest-booked first**; the owner confirms; the write refuses if the outcome changed since the preview. | P5 / P6: everything displaced; preview is a count |
-| **SB-8** | **Every displaced or re-courted guest is notified** (D13, F-345). | P5 / P6: no notification sent |
-| **SB-9** | A batch whose term has not started (or has ended) **does not** withhold guest slots (F-344). | P7(ii): a batch queued to 1 Nov already removes today's slot |
+| **SB-8** | **Every displaced or re-courted guest is notified** (D13, F-345), through a **channel-agnostic** event; push is the first wired channel (§6). The preview and the message say **"refund recorded; the venue will return your money"** and never "refunded". | P5 / P6: no notification sent |
+| **SB-9** | A batch whose **term** has not started (or has ended) **does not** withhold guest slots, and the creation-time scan covers the batch's term ∩ the guest horizon (F-344). | P7(ii): a batch queued to 1 Nov already removes today's slot |
 | **SB-10** | With **no batch having courts set**, guest-facing behaviour is **byte-identical** to today (rollout safety, §10). | n/a (regression) |
+| **SB-11** | **The reservation derives from the batch itself** (its courts, weekdays, start time and term), **not from its members.** A batch with no members yet still holds its slots; the creation-time sweep and preview therefore match exactly what availability enforces, and the first member joining needs no sweep. Only legacy `groupId null` assignment rows keep assignment-based reservation. | today: an empty batch reserves nothing (no assignment exists), and the exclusion is assignment-based (`:3696`) |
+| **SB-12** | **Moving a member between batches is one atomic operation**; the overlap guard ignores the batch being left (Chief, 12 Oct). | today: RosterPanel composes suspend + create in two calls |
 
 ---
 
@@ -77,64 +81,93 @@ phone with two batches in **one** pool once SB-4 lands.
 ## 4. Data model (additive; self-defending migration, F-067 / F-115 precedent)
 
 1. **`Group.reservedResourceIds`** (`String[]`, default empty). **Empty = all courts of the pool** (today's behaviour;
-   this is the rollout default, SB-10). `courtsPerBatch` is derived (`length`, or pool capacity when empty), not stored.
-   Court identity is by `Resource.id` (D11), validated to belong to the batch's pool.
-2. **Assignments inherit the court set from their group**; an assignment with `groupId null` (legacy, pre-F-133) keeps
-   all-courts behaviour. No court column on the assignment.
+   the rollout default, SB-10). `courtsPerBatch` is derived (`length`, or pool capacity when empty), not stored. Court
+   identity is `Resource.id` (D11), validated to belong to the batch's pool. A `Group` already carries `resourcePoolId`,
+   `daysOfWeek`, `startTime`, `startDate`, `endDate` — **everything the reservation needs is on the batch** (SB-11).
+2. **The reservation is a property of the Group, not of its assignments.** `MemberGroupAssignment` rows are *members of* a
+   batch; they no longer decide whether a slot is held. **Legacy rows** (`groupId null`, created before F-133 or by
+   scripts) have no batch to read, so they keep today's assignment-based behaviour (all courts of the pool, their own
+   weekdays / start time, and — per SB-9 — their own `startDate` / `endDate`).
 3. **Drop** `@@unique([userId, resourcePoolId])` on `MemberGroupAssignment` (SB-4); **add** `@@unique([userId, groupId])`
-   (a member cannot join the *same* batch twice; Postgres treats `groupId null` rows as distinct, so legacy rows are not
-   constrained). A self-defending `DO $$` migration drops the index only if it exists and adds the new one only if absent.
-4. **No change** to `AvailabilityWindow`, `Booking` or `Resource`. (A `Booking.isMemberBooking` already exists.)
+   (the *same* batch twice is still refused; Postgres treats `groupId null` rows as distinct, so legacy rows are not
+   constrained). A self-defending `DO $$` migration drops the old index only if it exists and adds the new one only if
+   absent.
+4. **No change** to `AvailabilityWindow`, `Booking` or `Resource`. (`Booking.isMemberBooking` already exists.)
 
 *Relaxing the unique index is not strictly "additive"; its rollback story is in §10.*
 
 ## 5. Server behaviour
 
 **5.1 One shared reservation function** (the F-212 precedent: change the shared function once, not per caller).
-`reservedCourtsFor(window, ctx)` returns the set of reserved court ids at a window = union of the courts of every
-**in-term** ACTIVE group assignment whose weekday and start time match (**SB-9**: term check uses the window's
-branch-local date against `startDate` / `endDate`). It replaces `collidesWithMemberAssignment`'s boolean in
-`windowBookable`.
-**5.2 Guest capacity** becomes `capacity − |reserved| − (guest bookings)`, where guest bookings **exclude**
-`isMemberBooking` (SB-2). Every counter in §2's grep list is touched; each is listed in §7 with its caller.
-**5.3 Court assignment for guests** (`assignPooledCourt`) skips reserved courts, the way it already skips
-non-`guestBookable` ones (F-225 / F-230). A guest booking is therefore never placed on a reserved court.
+`reservedCourtsFor(window, ctx)` returns the set of reserved court ids at a window =
+(a) the union of `reservedResourceIds` of every **Group** in the window's pool whose weekdays and start time match the
+window and whose **term** (`startDate` … `endDate`, compared on the window's branch-local date) contains it — **whether
+or not the Group has any member** (SB-11) — **plus** (b) for legacy `groupId null` assignments only, the all-courts
+reservation of each in-term ACTIVE assignment matching weekday and start time. An empty `reservedResourceIds` on a Group
+means "every court". It replaces `collidesWithMemberAssignment`'s boolean in `windowBookable`, and `fetchMemberExclusionContext`
+reads **Groups** (plus the legacy assignments), not all ACTIVE assignments. The F-207 entitlement gate (MEMBER_MANAGEMENT
+ACTIVE) is kept.
+**5.2 Guest capacity** becomes `capacity − |reserved| − (guest bookings)`, where guest bookings **exclude** `isMemberBooking`
+(SB-2). Every counter in §2's grep list is touched; each is listed in §7 with its caller.
+**5.3 Court assignment for guests** (`assignPooledCourt`) skips reserved courts, the way it already skips non-`guestBookable`
+ones (F-225 / F-230). A guest booking is therefore never placed on a reserved court.
 **5.4 Member confirm** (`ensureTodayMemberBooking`): the capacity guard is replaced by "this window is reserved by this
 member's batch" (a member whose batch does not reserve the window cannot confirm). Members never take a court row.
-**5.5 Batch create** (`POST /groups`): new optional `courtIds`; validated (belong to the pool; disjoint from other
-in-term batches sharing a weekday and the same start time; Σ ≤ capacity); error codes `BATCH_COURTS_INVALID`,
-`BATCH_COURT_CONFLICT`. Absent `courtIds` = all courts (today's request keeps working).
-**5.6 Member join** (`POST /member-group-assignments`): remove the P2002 → `ASSIGNMENT_ALREADY_EXISTS` for a different
-batch; keep it for the same batch twice; add the **member-wide overlap guard** (§3) → `409 MEMBER_BATCH_OVERLAP`. The
-per-join collision sweep is **removed from this route** and moves to batch creation (§6), because under SB a member
-joining an existing batch reserves nothing new.
+**5.5 Batch create** (`POST /groups`): new optional `courtIds`, validated (belong to the pool; disjoint from other in-term
+batches sharing a weekday and the same start time; Σ ≤ capacity); error codes `BATCH_COURTS_INVALID`,
+`BATCH_COURT_CONFLICT`. Absent `courtIds` = all courts (today's request keeps working). **The batch is the unit that
+reserves, so creation is where displacement happens (§6).**
+**5.6 Member join** (`POST /member-group-assignments`): remove the P2002 → `ASSIGNMENT_ALREADY_EXISTS` for a *different* batch;
+keep it for the same batch twice. **No sweep on join** — the batch already holds its slots (SB-11), so a join reserves nothing
+new and displaces nobody. Add the **member-wide overlap guard** (Chief, 12 Oct: a person cannot be in two places in one
+hour): look up the member's other non-ended assignments across **all pools of the tenant** (assignment → pool → tenant),
+and refuse with `409 MEMBER_BATCH_OVERLAP` naming the clashing batch when a shared weekday exists, the hours overlap
+(`[start, start + pool.minBookingDurationMinutes)`; each side in its own branch's zone, compared as instants on a
+representative week), **and the terms intersect** (a member may join a queued batch that starts after the clashing one
+ends). Legacy `groupId null` assignments take part in the guard too.
+**5.7 Move between batches (SB-12, Chief's ruling 5).** A new `POST /member-group-assignments/:id/move { targetGroupId }`
+does, in **one transaction**: end the source assignment (`SUSPENDED`, `endDate = now`, exactly what RosterPanel's suspend
+does today) and create the target assignment; the overlap guard **excludes the source assignment**; seat-limit checks (S3)
+apply to the target only. Failure rolls both back. RosterPanel then calls this route instead of composing two calls (its
+only caller). Dues, deposit and notice interactions of a move are S4 concerns and are not designed here.
 
 ## 6. Collision preview and displacement (D13, F-342, F-345)
 
-- **New** `POST /groups/preview` (or `GET` with query; read-only, `write:false`): input = the batch as it would be
-  created. For each window in `today … today + guestOpenWindowDays` matching the batch, compute with the **same
-  function the write uses**: `remaining = capacity − |reservedAfter|`; guest bookings `g` (HELD + CONFIRMED, non-member);
-  for each guest booking decide **stays** (its court is unreserved), **re-courted** (its court is reserved but a free
-  unreserved court exists → moved, no loss), or **displaced** (overflow beyond `remaining`; chosen **latest-booked
-  first**, F-183 parent + children as one unit). Output: a list, one row per booking (guest name / phone, date, time,
+- **Where it happens:** at **batch creation** (SB-11). Because the batch reserves from the moment it exists, the creation-time
+  scan and the availability rule use the **same** `reservedCourtsFor`; there is no window of time in which an empty batch
+  looks free to guests and then collides when its first member arrives.
+- **Scan scope:** every window matching the batch in its **term ∩ [today, today + guestOpenWindowDays]** (SB-9). Dates beyond
+  the guest horizon cannot hold guest bookings yet, and once the batch exists they cannot acquire them (reserved).
+- **New** `POST /groups/preview` (read-only, `write:false`): input = the batch as it would be created. For each guest booking
+  (HELD + CONFIRMED, non-member) in scope: **stays** (its court is unreserved), **re-courted** (its court is reserved but an
+  unreserved court is free → moved, no loss), or **displaced** (overflow beyond `remaining = capacity − |reservedAfter|`; chosen
+  **latest-booked first**, F-183 parent + children as one unit). Output: one row per booking (guest name / phone, date, time,
   amount, outcome) plus totals, and a `previewToken` (hash of the booking ids and outcomes).
-- **Write** (`POST /groups` with `previewToken`): recompute inside the transaction with the window rows locked
-  (`FOR UPDATE`, ordered by id to avoid deadlocks); if the outcome set differs from the token → `409
-  PREVIEW_STALE` and the UI re-shows the list. A caller with no token may create a batch **only** when the recomputed
-  displaced set is empty. This makes the owner's confirmation binding (D1) and keeps F-207.3's note that the
-  relocate-or-refund split is decided at write time: the preview says "relocate if a sibling pool has room, else
-  refund" and the result reports what happened.
-- **Displaced:** relocation keeps `tryRelocateBooking` (sibling POOLED pool at the same time); otherwise
-  `cancelBookingCore` + payment `POST /refunds`. **A `Refund` row is bookkeeping only** (no gateway call); the preview
-  therefore labels it "refund recorded — owner returns the money". Whether to make it a real gateway refund is the open
-  half of F-345 (§12 Q4).
-- **Notification (SB-8):** a new notification event for each displaced and each re-courted guest, sent after the
-  transaction commits (a notification failure never rolls back the batch, matching F-321). The notification service keys
-  channel policy by `event_type` (`CHANNEL_POLICY`, default `push_or_sms`) and templates by (tenant, channel, event);
-  SB adds the event, its channel policy and a platform-default template. *To verify at build time:* that platform-level
-  templates resolve when a tenant has none.
+- **Write** (`POST /groups` with `previewToken`): recompute inside the transaction with the window rows locked (`FOR UPDATE`,
+  ordered by id); if the outcome set differs → `409 PREVIEW_STALE` and the UI re-shows the list. A caller with no token may
+  create a batch **only** when the recomputed displaced and re-courted sets are empty.
+- **Displaced:** relocation keeps `tryRelocateBooking` (sibling POOLED pool at the same time); otherwise `cancelBookingCore` +
+  payment `POST /refunds`. **A `Refund` row is bookkeeping only (no gateway call) — ruled 12 Oct: a recorded row, and the owner
+  returns the money manually. No payment change.** Wording, everywhere (preview, owner confirmation, guest message): **"refund
+  recorded; the venue will return your money"**. The word "refunded" is not used.
+- **Notification (SB-8), channel-agnostic.** One new event `guest_booking_displaced` (and `guest_booking_recourted` for the
+  no-loss move) carrying channel-neutral variables (venue, date, time, court, amount, outcome, wording above). Its **channel
+  policy** is a list in `CHANNEL_POLICY` (`['push']` to start); its **template** is a row per (tenant or platform, channel,
+  event). Adding a channel later is a policy edit plus a template and a dispatcher, **not an SB change**.
+  **What is wired now vs only provisioned (verified in `services/notification`):**
+  - *Wired now:* the event, its policy entry (`['push']`), the platform-default push template, and the enqueue from SB.
+    Real push dispatch exists (`sendPush`, F-197) **only when Firebase is configured**; without it the queue uses
+    `mockDispatch` (as in CI).
+  - *Provisioned only (nothing real behind it):* **SMS** and **email** — the policy matrix and queue accept `sms` / `email`
+    requests, but dispatch for them is `mockDispatch`, i.e. **no SMS or email is actually sent anywhere today**; **WhatsApp**
+    and **Telegram** — no code exists in the service at all.
+  - *Open (Chief confirming with Bala):* whether an SMS fallback ships in SB. Because real SMS dispatch does not exist,
+    shipping it means building the SMS dispatcher — a notification-service task, not a policy edit. Until ruled, SB ships
+    push only, and a guest with no registered push token **is not reached** (stated plainly in the owner confirmation).
+  - Sent after the transaction commits; a notification failure never rolls back the batch (F-321 precedent).
 - **Old preview route** `GET /resource-pools/:id/member-collision-preview` stays (its only callers, by grep: the retired
-  `apps/admin-web` and one regression section; **admin-v2's `CreateBatchForm` does not call it at all**) until the new preview ships, then is retired in a separate step.
+  `apps/admin-web` and one regression section; **admin-v2's `CreateBatchForm` does not call it at all**) until the new
+  preview ships, then is retired in a separate step.
 
 ## 7. Blast radius (every caller of the touched code; grep-driven, stated before implementation per root rule 3a)
 
@@ -170,8 +203,10 @@ F-343 (`duesCollected` rename — S2 / S4a), min / max enforcement (S3), the rel
 | 3 | `ensureTodayMemberBooking` guard → reservation check | P1 RED → GREEN (8 of 8 confirm) |
 | 4 | **F-344 as its own commit:** term-bounded exclusion (also grid and member lookup) | P7(ii) RED → GREEN; then also check the grid and a guest booking attempt on a queued batch (still unchecked) |
 | 5 | `POST /groups` `courtIds` + validation | P2 / P1b-b RED → GREEN: a 1-court batch leaves 3 courts bookable (availability, grid, a real guest booking succeeds on an unreserved court and **fails** on a reserved one); a disjoint 2-court + 1-court pair fits; a third overlapping batch is refused |
+| 5b | **The empty-batch test (Chief's double-sell case).** | A single named test: (1) create a batch with courts {2, 3} and **no members**; (2) a guest books a court — a booking on an **unreserved** court (1) **succeeds**, an attempt on a **reserved** slot is refused (`MEMBER_SLOT_RESERVED`), and availability shows exactly the unreserved courts; (3) **add the first member**; (4) the guest booking from step 2 is **still CONFIRMED**, availability is **byte-identical** to step 2, the join response carries **no** sweep, and nothing was cancelled or refunded. Plus the all-courts variant (a batch with no `courtIds`): after creation **no** guest can book that hour, with zero members. RED today: step 2 allows a guest onto the soon-to-be-reserved slot because no assignment exists. |
 | 6 | Member join: lift uniqueness, add overlap guard | P7(i) RED → GREEN; same-hour refused with the clashing batch named; different hours both confirm; extended `member-multi-batch-attendance` |
-| 7 | Preview + `previewToken` + overflow-only displacement + notifications | P5 / P6 RED → GREEN: 2 guests + 2-court batch → both stay; 4 guests + 2-court batch → latest-booked 2 displaced; stale token → `409`; notification service receives one send per displaced guest |
+| 6b | Atomic move (SB-12) | move between two non-overlapping batches: source ended and target created in one transaction; a forced failure on the target leaves the source `ACTIVE`; the overlap guard ignores the source (moving to a clashing hour of the *source itself* succeeds, to a third batch's hour is refused) |
+| 7 | Preview + `previewToken` + overflow-only displacement + term-bounded scan + notifications | P5 / P6 RED → GREEN: 2 guests + 2-court batch → both stay; 4 guests + 2-court batch → latest-booked 2 displaced; stale token → `409`; notification service receives one send per displaced guest |
 | 8 | Deployed-VM check behind a provisional `-preproof` image with a **throwaway tenant** (root rule 10), then the real SHA | real HTTPS: the five checks above on the deployed stack; `deploy:verify` |
 
 Each step: typecheck + build clean, rebuild before regression, `badminton_db_test` only, stop manual services on
@@ -212,14 +247,27 @@ Each step: typecheck + build clean, rebuild before regression, `badminton_db_tes
 - Frozen-transition / gradient / Radix `Presence` traps apply to the UI work that follows (S2 / S3), not to SB.
 - Ports and databases: Spike lessons stand (own scratch DB, rebuild first, no manual services).
 
-## 12. Questions for Chief / Bala (SB design is not final until these are ruled)
+## 12. Rulings (Chief / Bala, 12 Oct 2026) and what is still open
 
-1. **D12 final:** confirm "reserve at batch level; members never consume guest capacity" now that the Spike (P1 / P1b / P2 / P6) is read.
-2. **F-344 bundling:** fix in SB step 4 as its own commit (my recommendation, same function), or separately first?
-3. **Overlap guard scope:** member-wide across the tenant's pools / branches (recommended: a person cannot be at two courts in the same hour), or per pool?
-4. **F-345 second half:** is "refund = recorded row, owner returns money" the intended process, or must displacement trigger a real gateway refund (a separate, larger change in payment)?
-5. **Same-batch move:** moving a member between batches (RosterPanel's suspend + create) now interacts with the overlap guard (the old batch must end before the new one starts, or the guard must ignore the batch being left). Confirm the move should be one atomic operation.
-6. **Notification wording and channel** for displaced / re-courted guests (push only like `guest_booking_reminder`, or push + SMS like `batch_renewal_reminder`)?
-7. **Min / max** per batch: SB provides the per-batch count; confirm enforcement stays in S3.
+| # | Question | Ruling | Where it lands |
+|---|---|---|---|
+| 1 | D12 | **Final:** a batch reserves its courts at batch level; members never consume guest capacity. | SB-1, SB-2, §5.1–5.4 |
+| 2 | F-344 | **Its own commit inside SB**, same shared function. | step 4, SB-9 |
+| 3 | Overlap guard scope | **Member-wide across the tenant's pools and branches.** | SB-5, §5.6 |
+| 4 | Refund | **A recorded row; the owner returns the money manually.** Wording "refund recorded; the venue will return your money", never "refunded". **No payment change.** | SB-8, §6 |
+| 5 | Move between batches | **One atomic operation; the guard ignores the batch being left.** | SB-12, §5.7, step 6b |
+| 6 | Notification | **Channel-agnostic** (event, policy, template); push first; SMS / WhatsApp / Telegram attach later without changing SB. The plan states what is wired and what is provisioned. | §6 |
+| 7 | Min / max | **SB counts, S3 enforces.** | SB-6 |
+
+**Added by Chief (design gap):** the reservation derives from the batch, not its members (SB-11), with the empty-batch test
+(step 5b).
+
+**Still open:**
+1. **SMS fallback in SB?** Chief is confirming with Bala. Findings above: no real SMS (or email) dispatch exists in the
+   notification service today, so "SMS fallback" means building a dispatcher, not flipping a policy. Until ruled, push only.
+2. **Empty batches that never fill:** under SB-11 a batch holds its slots until its term ends even with zero members. This is the
+   ruled behaviour; whether an owner should see a "holding N slots, 0 members" warning is an S3 UI question.
+3. **Overlap-guard timing arithmetic across zones** (JBC is `Asia/Kolkata`, courtowner1 `UTC`): §5.6 compares instants on a
+   representative week; confirm that is acceptable or whether a single-branch member (the realistic case) suffices for v1.
 
 **Nothing is built until Bala signs off.**
