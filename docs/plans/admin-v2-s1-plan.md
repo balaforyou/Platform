@@ -1,7 +1,8 @@
 # S1 plan — role-aware shell + global branch / date context (PLAN ONLY)
 
-**Status:** PLAN ONLY, 12 Oct 2026. Frontend only. Nothing is implemented, committed or pushed. Stops for Chief's review;
-nothing is built until Bala signs off.
+**Status:** Revision 2, 13 Oct 2026: Chief's and Bala's rulings on the §9 questions are recorded (§9) and an "All"-branch time-zone
+rule is added (S1-11). Frontend only. Implementation was authorised on 13 Oct (own branch and PR, one screen at a time, UI-only
+hiding until S0, no deploy without a separate go).
 **Inputs:** `docs/plans/admin-v2-revamp-plan-mode.md` (S1 section, §4 G10 placement), the combined mockup
 (`docs/plans/chief-archive/admin-v2-combined-mockup.html`, the acceptance reference with stated deviations), Bala's
 addendum of 12 Oct, the Spike (for what S1 must *not* claim).
@@ -26,13 +27,14 @@ dues / deposit / pause UI; `FRONT_DESK` stays excluded from admin sign-in by the
 |---|---|
 | **S1-1** | A role kind is derived **once** in `lib/claims.ts` from `AdminUser.roles`: `owner`; `manager` with its scoped branch ids (one or many). Anything else (no admin role) keeps today's behaviour. |
 | **S1-2** | `NavDestination` gains `roles?`; `filterByRole` composes with `filterByEntitlement` (F-206). One list stays the single source for the sidebar, the mobile bottom nav and `/apps`. A destination with no `roles` is visible to every admin role. |
-| **S1-3** | Destinations per the mockup: Today, Walk-in (action), Ledger (manager sees **today's** collections only — enforced by S0/S2, S1 only hides the owner-only entry), Members, and the owner tools (Communications, Attendance rules, Pricing and rules, Branch settings, Managers). Destinations whose screens do not exist yet are **hidden, not stubbed with fake content** (rule: nothing faked). |
+| **S1-3** | Destinations per the mockup: Today, Walk-in (action), Ledger (manager sees **today's** collections only — enforced by S0/S2, S1 only hides the owner-only entry), Members, and the owner tools (Communications, Attendance rules, Pricing and rules, Branch settings, Managers). Destinations whose screens do not exist yet are **hidden, not stubbed or labelled "coming soon"** (ruled 13 Oct). **The owner's and manager's home stays `/dashboard` until S2 creates Today, then it is renamed**; no redirect points at a screen that does not exist. **Walk-in stays a mobile nav entry** in the meantime. |
 | **S1-4** | Old routes `/dashboard`, `/inventory`, `/guests`, `/members`, `/court-groups` keep working as **redirects** (the service worker caches the shell; bookmarks and the PWA start URL exist). |
-| **S1-5** | A `BranchDateContext` in the shell: branch (`all` or one id) and date. Segmented switcher for ≤ 4 options, dropdown beyond (owners may have more than 3 branches); **hidden for a single-branch manager** (their one branch is implied). A multi-branch manager sees only their branches and **no "all"** unless they have two or more (decision Q3). |
+| **S1-5** | A `BranchDateContext` in the shell: branch (`all` or one id) and date. Segmented switcher for ≤ 4 options, dropdown beyond (owners may have more than 3 branches); **hidden for a single-branch manager** (their one branch is implied). A manager sees only their own branches; **"All" is offered to a manager with two or more branches (ruled 13 Oct), reads only — every write is branch-specific.** |
 | **S1-6** | The last chosen branch is remembered per user in `localStorage`, **every read and write wrapped in try/catch**; the app is correct without it (private window, blocked storage, thumbnail capture). Remembered value is re-validated against the user's allowed branches on load. |
 | **S1-7** | The screens that keep their own branch state today move onto the context (see §4). Behaviour per screen is unchanged apart from where the branch comes from. |
 | **S1-8** | A direct URL to a role-hidden route redirects to the role's home (same posture as `GuestManagementScreen`'s entitlement refusal). Documented in code and in the PR as UI-only. |
 | **S1-9** | Mobile: bottom nav carries the daily tasks; owner tools sit behind "More" (`/apps`). Both shells stay mounted with the existing 767 px CSS breakpoint (the `AppShell` precedent; no JS width check). |
+| **S1-11** | **"All" across branches in different zones.** When "All" is selected and the branches sit in different zones (JBC is `Asia/Kolkata`, courtowner1 is `UTC`), the selected **date is a calendar date** (`YYYY-MM-DD`) and **each branch interprets it in its own zone** (that branch's local day). It is never converted to a single instant. Reads only. The initial "today" when "All" is selected is each branch's own today, shown per branch; a single shared "today" is not assumed. Tested with two zones. |
 | **S1-10** | F-206 module gating, the passkey prompt, theme toggle and push opt-in in `AppShell` are **preserved unchanged**. |
 
 ## 3. Design
@@ -124,17 +126,17 @@ Frontend only, behind the normal CI → promote path. Rollback = `./deploy/gcp-v
 backend state to unwind. The remembered-branch key in `localStorage` is inert to old code. First look: owner and a seeded
 manager on the deployed demo over HTTPS.
 
-## 9. Questions for Chief / Bala (S1 is not final until ruled)
+## 9. Rulings (13 Oct 2026) — all recorded; nothing open
 
-1. **Owner home:** is Today the owner's landing route even before S2 exists (until then `/dashboard` redirect target), or
-   does S1 keep `/dashboard` as home and rename later?
-2. **Walk-in as a destination or an action:** the mockup treats it as an action button on Today; S1 needs a nav entry on
-   mobile in the meantime — confirm.
-3. **Multi-branch manager and "All":** confirm "All" is offered to a manager with two or more branches (read-only
-   roll-ups are fine; writes are always branch-specific).
-4. **Owner with many branches:** segmented switcher for ≤ 4, dropdown beyond — confirm the threshold.
-5. **Hiding destinations that have no screen yet:** confirm "hidden until built" over a labelled "coming soon" tile.
-6. **Seed:** OK to extend `tests/seed-admin-v2-data.mjs` with a scoped manager and a second branch (generic, by subdomain,
-   never hardcoded ids)?
+| # | Question | Ruling | Lands in |
+|---|---|---|---|
+| 1 | Owner home | **Stays `/dashboard` until S2 creates Today, then renamed.** No redirect to a screen that does not exist. | S1-3, S1-4 |
+| 2 | Walk-in | **Stays a mobile nav entry** in the meantime. | S1-3 |
+| 3 | "All" for managers | **Offered to a manager with two or more branches; reads only; writes always branch-specific.** | S1-5 |
+| 4 | Switcher threshold | **Segmented up to 4 branches, dropdown beyond.** | S1-5 |
+| 5 | Destinations with no screen | **Hidden, not "coming soon".** | S1-3 |
+| 6 | Seed | **Yes:** extend `tests/seed-admin-v2-data.mjs` with a scoped manager and a second branch, generic by subdomain, never hardcoded ids. | §5 step 6, §6 |
+| 7 | (addition) "All" across zones | **Calendar date, each branch interprets it in its own zone; add a test.** | S1-11, §6 |
 
-**Nothing is built until Bala signs off.**
+**Implementation:** authorised 13 Oct. Own branch and PR; one screen at a time; rebuild before testing; real-device pass before
+sign-off; **no deploy or promote without a separate go from Bala**; the PR text states that S1 is **UI-only hiding until S0**.
