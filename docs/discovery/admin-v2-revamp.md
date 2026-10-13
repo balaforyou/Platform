@@ -40,9 +40,9 @@ given yet.
 | B4 | Seats: min 4, max 8 (tenant default, per-batch override). Below min = owner warning only. |
 | B5 | Dues due window **5th–10th, configurable**. The member pays from the **Pay button in the member app** from the start of the month until paid (gateway, like guest payment, **no cancel / refund of dues**). The owner can also record cash / UPI (UPI with reference). Part payments allowed; the **unpaid balance carries to next month**. |
 | B6 | Overdue is a **flag only** — overdue members still attend; no auto-suspend. |
-| B7 | **Deposit** (default amount, editable per member) collected with the first month; refunded **manually** by the owner (cash / UPI + reference), optional deduction with a note. |
-| B8 | **Cancellation:** the member requests in the member app, **30 days' notice**; owner / manager notified; they check attendance, **phone the member**, then end or pause. The owner can waive the notice or adjust the shortfall against the deposit. |
-| B9 | **Pause (holiday / break):** keeps the seat, pays nothing for the paused month(s), resumes by paying the next month. Owner or manager. |
+| B7 | **Deposit** (default amount, editable per member) collected with the first month; refunded **manually** by the owner (cash / UPI + reference), optional deduction with a note. *(Dated note, 12 Oct 2026, Bala's addendum: the deposit is **one per member**, not per batch. It is collected with the member's first month and refunded when the member's **last** batch ends.)* |
+| B8 | **Cancellation:** the member requests in the member app, **30 days' notice**; owner / manager notified; they check attendance, **phone the member**, then end or pause. The owner can waive the notice or adjust the shortfall against the deposit. *(Dated note, 12 Oct 2026, Bala's addendum: cancellation is **per batch membership**. A cancel request names the batch; the 30-day notice runs per batch; a member can leave Evening and stay in Morning.)* |
+| B9 | **Pause (holiday / break):** keeps the seat, pays nothing for the paused month(s), resumes by paying the next month. Owner or manager. *(Dated note, 12 Oct 2026, Bala's addendum: pause is **per batch membership**. A member can pause Evening while staying in Morning.)* |
 | B10 | Renewal is **batch-level with a per-member untick**. Moving a member between batches is the owner's decision; the new rate applies from next month; history stays with the member. |
 | B11 | **Attendance is read-only** to admin: members confirm their own attendance; no manual marking, no front-desk check-in. History is unlimited, grouped by month, with month stats and per-member history. Names first, phone one tap away. |
 | B12 | **Attendance cutoff** becomes configurable (tenant default + per-batch override). **Low attendance** = fewer than 2 confirmed after cutoff → amber marker on the grid + "Add guest slot". |
@@ -50,6 +50,16 @@ given yet.
 | B14 | Manager can: see Today / grid, take walk-ins, see **today's** collections (not history), view member attendance, call members, **pause or end** memberships. By default cannot: settings, pricing, dues / payment recording, batch create / edit, renewals, deposit refund. The owner can **grant** these per tenant later. |
 | B15 | Grid cells stay **icon-only** (the F-252 decision). Guest name / payment only behind a tap. "Release to guests" is out for now. |
 | B16 | Out of scope: guest passes, make-up sessions, gateway refunds of deposits, a stored parent-group hierarchy, Communications, Pricing & rules, Branch settings (untouched placeholders). |
+
+**Rulings recorded 12 Oct 2026 (Bala's addendum — members in many batches).** These add to B2 / B7–B9; the earlier
+text above is left as written and carries dated notes where it is affected.
+
+| # | Ruling |
+|---|---|
+| **R1** | **A member can join any number of batches**, including several on the same day, and pays for each. The current "one assignment per member per pool" rule (`409 ASSIGNMENT_ALREADY_EXISTS`, found by Spike probe P7(i)) is lifted and replaced by an **overlap guard**: joining a batch that clashes with one the member already holds at that hour is refused; different hours on the same day are fine. |
+| **R2** | **Deposit once per member**, not per batch: collected with the first month, refunded when the member's last batch ends. |
+| **R3** | **Pause and cancellation are per batch membership** (they hang off the assignment, not the member). The 30-day notice and the pause run per batch. |
+
 
 ### Final answers to Q1–Q8 (Bala, 12 Oct, via Chief)
 
