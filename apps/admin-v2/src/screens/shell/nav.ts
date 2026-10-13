@@ -71,12 +71,12 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   { key: 'inventory', label: 'Inventory', path: '/inventory', Icon: Package, mobileDirect: true, branchScoped: true, dateScoped: true },
   // S1: Walk-in is a mobile nav entry until S2 creates Today (ruled 13 Oct). Same screen as
   // Guest Management, opened on its walk-in (Reservations) tab.
-  { key: 'walk-in', label: 'Walk-in', path: '/walk-in', Icon: UserPlus, mobileDirect: true, module: 'GUEST_BOOKING' },
+  { key: 'walk-in', label: 'Walk-in', path: '/walk-in', Icon: UserPlus, mobileDirect: true, module: 'GUEST_BOOKING', branchScoped: true },
   { key: 'members', label: 'Manage Members', path: '/members', Icon: Users, mobileDirect: false, module: 'MEMBER_MANAGEMENT' },
   // F-220 §2: /court-groups is a plain stub now (its real functionality moved to /guests) —
   // no module gate, the stub is always visible to the owner; hidden from managers (no screen to use).
   { key: 'court-groups', label: 'Manage Court Groups', path: '/court-groups', Icon: FolderPlus, mobileDirect: false, roles: ['owner'] },
-  { key: 'guests', label: 'Guest Management', path: '/guests', Icon: FileSpreadsheet, mobileDirect: false, module: 'GUEST_BOOKING' },
+  { key: 'guests', label: 'Guest Management', path: '/guests', Icon: FileSpreadsheet, mobileDirect: false, module: 'GUEST_BOOKING', branchScoped: true },
   // F-210: branch operating hours. No module gate - branch hours aren't a sellable module.
   // Owner-only (settings are owner alone); a manager keeps no entry here in S1.
   { key: 'branch-settings', label: 'Branch Settings', path: '/branch-settings', Icon: Clock, mobileDirect: false, roles: ['owner'] },
