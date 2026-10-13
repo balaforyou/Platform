@@ -79,7 +79,7 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   { key: 'guests', label: 'Guest Management', path: '/guests', Icon: FileSpreadsheet, mobileDirect: false, module: 'GUEST_BOOKING', branchScoped: true },
   // F-210: branch operating hours. No module gate - branch hours aren't a sellable module.
   // Owner-only (settings are owner alone); a manager keeps no entry here in S1.
-  { key: 'branch-settings', label: 'Branch Settings', path: '/branch-settings', Icon: Clock, mobileDirect: false, roles: ['owner'] },
+  { key: 'branch-settings', label: 'Branch Settings', path: '/branch-settings', Icon: Clock, mobileDirect: false, roles: ['owner'], branchScoped: true },
 ];
 
 /** The destinations behind the mobile "Apps" overflow screen. */

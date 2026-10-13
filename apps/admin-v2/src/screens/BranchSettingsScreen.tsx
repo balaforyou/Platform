@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useBranchDate } from './shell/BranchDateContext';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -9,13 +10,12 @@ import {
   Clock,
   MapPin,
   Moon,
-  Repeat,
   Save,
   Sun,
 } from 'lucide-react';
 import { useAdminAuth } from '../auth/AdminAuthContext';
 import { useAdminTenant } from '../auth/AdminTenantContext';
-import { Badge, Banner, Button, Card, EmptyState, LoadingState, Select, TimeField, Toggle } from '../components';
+import { Badge, Banner, Button, Card, EmptyState, LoadingState, TimeField, Toggle } from '../components';
 import { errorMessage } from '../lib/errorMessage';
 import { branchSettingsSchema, WEEKDAYS } from './branchSettings/schema';
 import { cityFromAddress, describeSchedule, to12h } from './branchSettings/format';
@@ -40,8 +40,9 @@ export function BranchSettingsScreen() {
   const branches = useBranchList();
   const isOwner = !!user?.roles?.includes('owner');
 
-  const [branchId, setBranchId] = useState('');
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // S1: the branch comes from the shell's global context (the switcher in the context bar);
+  // this screen no longer keeps its own "Change branch" picker.
+  const { branchId } = useBranchDate();
   const [editingHours, setEditingHours] = useState(false);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -53,12 +54,10 @@ export function BranchSettingsScreen() {
 
   useEffect(() => {
     if (!selected) return;
-    setBranchId(selected.id);
     setStart(selected.workingHoursStart ?? '');
     setEnd(selected.workingHoursEnd ?? '');
     setDays(selected.workingDays ?? []);
     setZodError(null);
-    setPickerOpen(false);
     // Drop straight into edit mode if this branch has no hours to show yet.
     setEditingHours(!(selected.workingHoursStart && selected.workingHoursEnd));
     save.reset();
@@ -176,34 +175,7 @@ export function BranchSettingsScreen() {
               </div>
             )}
           </div>
-          {(branches.data ?? []).length > 1 && (
-            <Button
-              variant="secondary"
-              size="sm"
-              leadingIcon={<Repeat size={14} />}
-              onClick={() => setPickerOpen((o) => !o)}
-              style={{ flex: 'none' }}
-            >
-              Change branch
-            </Button>
-          )}
         </div>
-        {pickerOpen && (
-          <Select
-            label="Branch"
-            value={selected?.id ?? ''}
-            onChange={(e) => {
-              setBranchId(e.target.value);
-              setPickerOpen(false);
-            }}
-          >
-            {(branches.data ?? []).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </Select>
-        )}
       </Card>
 
       {/* Regular operating hours — merged with what used to be a separate "Schedule overview"
