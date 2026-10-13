@@ -8,6 +8,8 @@ import { Avatar, IconButton, SidebarNavItem, BottomNavItem } from '../../compone
 import { applyTheme, effectiveTheme, setStoredTheme } from '../../lib/theme';
 import { currentPermission, requestAndRegisterPushToken, type PushOptInResult } from '../../lib/firebase';
 import { roleKind } from '../../lib/claims';
+import { BranchDateProvider } from './BranchDateContext';
+import { BranchSwitcher } from './BranchSwitcher';
 import { NAV_DESTINATIONS, activeDestination, filterByEntitlement, filterByRole } from './nav';
 
 /**
@@ -101,6 +103,7 @@ export function AppShell() {
   );
 
   return (
+    <BranchDateProvider>
     <div className="av2-shell">
       <nav className="av2-sidebar" aria-label="Primary">
         <div style={{ marginBottom: 'var(--av2-space-4)' }}>{brand}</div>
@@ -167,6 +170,10 @@ export function AppShell() {
           </div>
         </header>
 
+        {active?.branchScoped && (
+          <BranchSwitcher allowAll={!!active.supportsAllBranches} showDate={!!active.dateScoped} />
+        )}
+
         <main className="av2-shell-main">
           <Outlet />
         </main>
@@ -191,5 +198,6 @@ export function AppShell() {
         />
       </nav>
     </div>
+    </BranchDateProvider>
   );
 }

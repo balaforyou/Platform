@@ -294,6 +294,61 @@ body {
   display: none;
 }
 
+/* ── S1: global branch / date context bar (under the topbar). Segmented up to 4 branches,
+   a dropdown beyond (BranchSwitcher). Tokens only; wraps on narrow screens. ── */
+.av2-context-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--av2-space-3);
+  padding: var(--av2-space-2) var(--av2-space-5);
+  border-bottom: 1px solid var(--av2-border);
+  background: var(--av2-surface);
+}
+.av2-segmented {
+  display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--av2-border);
+  border-radius: var(--av2-radius-sm);
+  background: var(--av2-surface-alt);
+}
+.av2-segmented-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--av2-muted);
+  padding: var(--av2-space-2) var(--av2-space-3);
+  font-size: var(--av2-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.av2-segmented-btn[aria-pressed='true'] {
+  background: var(--av2-accent);
+  color: var(--av2-accent-fg);
+}
+.av2-context-select {
+  min-width: 180px;
+  max-width: 280px;
+}
+.av2-context-date {
+  display: flex;
+  flex-direction: column;
+  gap: var(--av2-space-1);
+  font-size: var(--av2-text-sm);
+  font-weight: 600;
+  color: var(--av2-text);
+}
+.av2-context-date input {
+  padding: var(--av2-space-2) var(--av2-space-3);
+  font-size: var(--av2-text-base);
+  border-radius: var(--av2-radius-sm);
+  border: 1px solid var(--av2-border);
+  background: var(--av2-surface);
+  color: var(--av2-text);
+}
+
 @media (max-width: 767px) {
   .av2-shell {
     display: block;
@@ -307,6 +362,9 @@ body {
   }
   .av2-topbar h1 {
     display: none;
+  }
+  .av2-context-bar {
+    padding: var(--av2-space-2) var(--av2-space-4);
   }
   .av2-shell-main {
     padding: var(--av2-space-4);

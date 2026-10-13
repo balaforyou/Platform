@@ -58,6 +58,8 @@ export interface NavDestination {
    * Today), so "All" is never offered in S1 rather than faked.
    */
   supportsAllBranches?: boolean;
+  /** S1: the screen reads the global date, so the context bar shows the date picker. */
+  dateScoped?: boolean;
 }
 
 export const NAV_DESTINATIONS: NavDestination[] = [
