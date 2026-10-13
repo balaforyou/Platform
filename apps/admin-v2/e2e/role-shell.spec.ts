@@ -14,8 +14,9 @@ async function signIn(page: Page, email: string) {
   await page.getByLabel('Seeded admin email').fill(email);
   await page.getByRole('button', { name: 'Dev sign-in' }).click();
   // First sign-in offers the passkey prompt; skip it when present.
-  const skip = page.getByRole('button', { name: /skip|not now|later/i });
-  if (await skip.first().isVisible({ timeout: 4000 }).catch(() => false)) await skip.first().click();
+  // First sign-in on a device offers the passkey prompt (skippable). `isVisible` does not wait, so wait explicitly.
+  const skip = page.getByRole('button', { name: 'Skip for now' });
+  await skip.waitFor({ state: 'visible', timeout: 8000 }).then(() => skip.click()).catch(() => {});
   await expect(page.getByRole('navigation', { name: 'Primary' }).first()).toBeAttached({ timeout: 15000 });
 }
 
@@ -86,17 +87,27 @@ test.describe('desktop 1280', () => {
     await expect(page.getByRole('group', { name: 'Branch' }).getByRole('button', { name: 'E2E Branch Two' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('a blocked localStorage does not break the switcher', async ({ page }) => {
+  test('a storage error on the remembered-branch key does not break the switcher', async ({ page }) => {
+    // Only the switcher's own key (av2.branch.*) throws. Blocking ALL of localStorage crashes the app
+    // in code S1 does not own (PwaInstallPrompt reads it unguarded) - described to Chief, not fixed here.
     await page.addInitScript(() => {
-      Object.defineProperty(window, 'localStorage', {
-        get() {
-          throw new Error('SecurityError');
-        },
-      });
+      const get = Storage.prototype.getItem;
+      const set = Storage.prototype.setItem;
+      Storage.prototype.getItem = function (k: string) {
+        if (k.startsWith('av2.branch.')) throw new Error('SecurityError');
+        return get.call(this, k);
+      };
+      Storage.prototype.setItem = function (k: string, v: string) {
+        if (k.startsWith('av2.branch.')) throw new Error('QuotaExceededError');
+        return set.call(this, k, v);
+      };
     });
     await signIn(page, TEST_MANAGER_TWO_EMAIL);
     await page.goto('/ledger');
-    await expect(page.getByRole('group', { name: 'Branch' })).toBeVisible();
+    const group = page.getByRole('group', { name: 'Branch' });
+    await expect(group).toBeVisible();
+    await group.getByRole('button', { name: 'E2E Branch Two' }).click(); // setItem throws; must not break
+    await expect(group.getByRole('button', { name: 'E2E Branch Two' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

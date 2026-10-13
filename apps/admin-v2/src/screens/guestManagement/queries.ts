@@ -44,8 +44,14 @@ export function useBranches() {
     queryKey: ['court-groups', 'branches', tenant?.id],
     enabled: !!tenant?.id,
     queryFn: async () => {
-      const branches = await api.get<Branch[]>(`/tenant/tenants/${tenant?.id}/branches?includeDraft=true`);
-      return user?.roles?.includes('owner') ? branches : branches.filter((branch) => scopes.includes(branch.id));
+      // Draft branches are an owner view. S1: a scoped manager must NOT send includeDraft=true:
+      // tenant-management sets 403 before it swallows the owner-check failure, so the response is
+      // `403` with the branch list in its body and the client rejects it - every screen's branch
+      // list then fails for a manager (found live while building S1; backend defect described to
+      // Chief, not fixed here). Without the flag it is a clean 200 with the ACTIVE branches.
+      const isOwner = !!user?.roles?.includes('owner');
+      const branches = await api.get<Branch[]>(`/tenant/tenants/${tenant?.id}/branches${isOwner ? '?includeDraft=true' : ''}`);
+      return isOwner ? branches : branches.filter((branch) => scopes.includes(branch.id));
     },
   });
 }
