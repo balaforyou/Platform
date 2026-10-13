@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileSpreadsheet } from 'lucide-react';
 import { moduleVisible, useAdminTenant } from '../auth/AdminTenantContext';
-import { Banner, EmptyState, LoadingState, Select, Tabs } from '../components';
-import { useBranches } from './guestManagement/queries';
+import { Banner, EmptyState, LoadingState, Tabs } from '../components';
+import { useBranchDate } from './shell/BranchDateContext';
 import { MemberProvisioningPanel } from './guestManagement/sections/MemberProvisioningPanel';
 import { ReservationsPanel } from './guestManagement/sections/ReservationsPanel';
 import { SetupRulesPanel } from './guestManagement/SetupRulesPanel';
@@ -27,13 +27,9 @@ const TABS = [
 export function GuestManagementScreen() {
   const navigate = useNavigate();
   const { entitlements } = useAdminTenant();
-  const branches = useBranches();
-  const [branchId, setBranchId] = useState('');
+  // S1: the branch comes from the shell's global context (the switcher in the context bar).
+  const { branchId, error: branchesError } = useBranchDate();
   const [tab, setTab] = useState('reservations');
-
-  useEffect(() => {
-    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
-  }, [branchId, branches.data]);
 
   // `null` = entitlements fetch still in flight; don't flash the denied state.
   if (entitlements === null) return <LoadingState label="Loading…" />;
@@ -74,22 +70,7 @@ export function GuestManagementScreen() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gap: 'var(--av2-space-4)', maxWidth: 320, minWidth: 0 }}>
-        <Select
-          label="Branch"
-          value={branchId}
-          onChange={(e) => setBranchId(e.target.value)}
-          disabled={branches.isLoading || (branches.data || []).length === 0}
-        >
-          <option value="">{branches.isLoading ? 'Loading branches…' : 'Select branch'}</option>
-          {(branches.data || []).map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
-        {branches.error && <Banner tone="error">{(branches.error as Error)?.message}</Banner>}
-      </div>
+      {branchesError ? <Banner tone="error">{(branchesError as Error)?.message}</Banner> : null}
 
       <div style={{ display: 'grid', gap: 'var(--av2-space-4)', minWidth: 0 }}>
         <Tabs items={TABS} activeKey={tab} onChange={setTab} />

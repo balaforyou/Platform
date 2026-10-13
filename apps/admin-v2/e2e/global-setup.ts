@@ -13,6 +13,8 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const TEST_ADMIN_EMAIL = 'e2e-admin@jbc-e2e.test';
 export const TEST_NONADMIN_EMAIL = 'e2e-frontdesk@jbc-e2e.test';
+export const TEST_MANAGER_ONE_EMAIL = 'e2e-manager-one@jbc-e2e.test'; // scoped to ONE branch
+export const TEST_MANAGER_TWO_EMAIL = 'e2e-manager-two@jbc-e2e.test'; // scoped to TWO branches
 export const TEST_TENANT_SUBDOMAIN = 'jbc-e2e';
 
 function startService(name: string, entry: string, port: number, extra: Record<string, string>): ChildProcess {
@@ -67,7 +69,35 @@ export default async function globalSetup() {
     data: { tenantId: tenant.id, email: TEST_ADMIN_EMAIL, userType: 'STAFF', isEmailVerified: true },
   });
   await prisma.roleAssignment.create({ data: { userId: admin.id, tenantId: tenant.id, branchId: null, role: 'OWNER' } });
-  const branch = await prisma.branch.create({ data: { tenantId: tenant.id, name: 'E2E Branch', status: 'ACTIVE' } });
+  // S1: two branches in DIFFERENT time zones (the JBC / courtowner1 shape), so the role shell and the
+  // global branch switcher can be exercised for an owner, a one-branch manager and a two-branch manager.
+  const branch = await prisma.branch.create({
+    data: { tenantId: tenant.id, name: 'E2E Branch', status: 'ACTIVE', timezone: 'UTC' },
+  });
+  const branch2 = await prisma.branch.create({
+    data: { tenantId: tenant.id, name: 'E2E Branch Two', status: 'ACTIVE', timezone: 'Asia/Kolkata' },
+  });
+  // Both sellable modules ACTIVE so Walk-in / Manage Members appear in the nav (F-206 gating is
+  // unchanged; it is just satisfied here).
+  for (const module of ['GUEST_BOOKING', 'MEMBER_MANAGEMENT'] as const) {
+    await prisma.moduleEntitlement.create({
+      data: { tenantId: tenant.id, module, startDate: new Date('2020-01-01'), endDate: new Date('2100-01-01') },
+    });
+  }
+  const managerOne = await prisma.user.create({
+    data: { tenantId: tenant.id, email: TEST_MANAGER_ONE_EMAIL, userType: 'STAFF', isEmailVerified: true },
+  });
+  await prisma.roleAssignment.create({
+    data: { userId: managerOne.id, tenantId: tenant.id, branchId: branch.id, role: 'BRANCH_MANAGER' },
+  });
+  const managerTwo = await prisma.user.create({
+    data: { tenantId: tenant.id, email: TEST_MANAGER_TWO_EMAIL, userType: 'STAFF', isEmailVerified: true },
+  });
+  for (const b of [branch, branch2]) {
+    await prisma.roleAssignment.create({
+      data: { userId: managerTwo.id, tenantId: tenant.id, branchId: b.id, role: 'BRANCH_MANAGER' },
+    });
+  }
   const frontDesk = await prisma.user.create({
     data: { tenantId: tenant.id, email: TEST_NONADMIN_EMAIL, userType: 'STAFF', isEmailVerified: true },
   });

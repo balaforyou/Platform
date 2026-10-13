@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAdminClaims, roleLabel } from './claims';
+import { branchScopes, parseAdminClaims, roleKind, roleLabel } from './claims';
 import { friendlyAuthError } from './errors';
 import { APIError } from '@badminton/ui-shared';
 
@@ -26,6 +26,9 @@ describe('parseAdminClaims', () => {
       tenantId: 't-1',
       userType: 'STAFF',
       roles: ['owner'],
+      // F-219 added these two claims to AdminUser; absent from the token => null.
+      displayName: null,
+      photoUrl: null,
     });
   });
 
@@ -72,5 +75,24 @@ describe('friendlyAuthError', () => {
   it('handles plain errors and unknowns', () => {
     expect(friendlyAuthError(new Error('boom'))).toBe('boom');
     expect(friendlyAuthError('nope')).toBe('Something went wrong. Try again.');
+  });
+});
+
+describe('roleKind / branchScopes (S1, UI-only)', () => {
+  it('owner', () => expect(roleKind(['owner'])).toBe('owner'));
+  it('manager of one branch', () => {
+    expect(roleKind(['branch_manager:b1'])).toBe('manager');
+    expect(branchScopes(['branch_manager:b1'])).toEqual(['b1']);
+  });
+  it('manager of several branches', () => {
+    expect(roleKind(['branch_manager:b1', 'branch_manager:b2'])).toBe('manager');
+    expect(branchScopes(['branch_manager:b1', 'branch_manager:b2'])).toEqual(['b1', 'b2']);
+  });
+  it('owner wins if both are present', () => expect(roleKind(['branch_manager:b1', 'owner'])).toBe('owner'));
+  it('anything else is none; an empty branch token is ignored', () => {
+    expect(roleKind([])).toBe('none');
+    expect(roleKind(undefined)).toBe('none');
+    expect(roleKind(['front_desk:b1'])).toBe('none');
+    expect(roleKind(['branch_manager:'])).toBe('none');
   });
 });

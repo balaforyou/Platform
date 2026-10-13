@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Banner, Button, Card, Select, TextField, TimeField, Toggle } from '../../components';
 import { errorMessage } from '../../lib/errorMessage';
-import { useBranches, useCreateGroup, usePools, useTenantRates } from '../guestManagement/queries';
+import { useCreateGroup, usePools, useTenantRates } from '../guestManagement/queries';
+import { useBranchDate } from '../shell/BranchDateContext';
 import { nonNegativeAmount } from '../guestManagement/schemas';
 
 /** ISO weekday, 1=Mon .. 7=Sun -- matches `MemberGroupAssignment.daysOfWeek`'s existing format. */
@@ -46,8 +47,8 @@ function shortenPoolLabel(poolName: string, branchName: string | undefined): str
  * not silently accepted with an unclear price.
  */
 export function CreateBatchForm() {
-  const branches = useBranches();
-  const [branchId, setBranchId] = useState('');
+  // S1: the branch comes from the shell's global context (the switcher in the context bar).
+  const { branchId, branch } = useBranchDate();
   const pools = usePools(branchId);
   const [poolId, setPoolId] = useState('');
 
@@ -64,14 +65,7 @@ export function CreateBatchForm() {
   // displays (guestManagement/queries.ts:214, reused verbatim, not re-fetched).
   const rates = useTenantRates();
 
-  const selectedBranchName = useMemo(
-    () => branches.data?.find((b) => b.id === branchId)?.name,
-    [branches.data, branchId],
-  );
-
-  useEffect(() => {
-    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
-  }, [branchId, branches.data]);
+  const selectedBranchName = branch?.name;
 
   useEffect(() => {
     setPoolId('');
@@ -157,17 +151,6 @@ export function CreateBatchForm() {
         <TextField label="Batch Name" value={name} onChange={(e) => setName(e.target.value)} />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--av2-space-3)' }}>
-          <Select
-            label="Branch"
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
-            disabled={branches.isLoading || (branches.data || []).length === 0}
-          >
-            <option value="">{branches.isLoading ? 'Loading branches…' : 'Select branch'}</option>
-            {(branches.data || []).map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </Select>
           <Select
             label="Court / Pool"
             value={poolId}
