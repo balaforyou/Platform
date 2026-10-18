@@ -17,3 +17,4 @@ export * from './jwt';
 export * from './sections';
 export * from './assertions';
 export * from './database-guard';
+export * from './fixtureZone';

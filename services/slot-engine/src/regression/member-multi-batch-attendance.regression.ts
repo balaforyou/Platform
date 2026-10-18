@@ -1,6 +1,6 @@
-import { Section, signJwt } from '@badminton/test-harness';
+import { Section, signJwt, fixtureZone, windowStartInZoneToday, minuteAheadInZoneToday, zoneLocalHHmm, zoneLocalIsoWeekday } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
-import { db, baseUrl, internalKey, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID, defaultTermDates } from './_fixtures';
+import { db, baseUrl, internalKey, SlotEngineContext, TENANT_ID, ZONED_BRANCH_ID, defaultTermDates } from './_fixtures';
 
 /**
  * F-133 Slice B — multi-batch member experience.
@@ -17,16 +17,11 @@ import { db, baseUrl, internalKey, withinTodayUtc, SlotEngineContext, TENANT_ID,
  * sweep runs.
  */
 
-function alignedHourWithinToday(minutesAhead: number): Date {
-  const date = withinTodayUtc(minutesAhead);
-  date.setUTCMinutes(0, 0, 0);
-  return date;
-}
-
-function todayIsoWeekday(): string {
-  const day = new Date().getUTCDay();
-  return String(day === 0 ? 7 : day);
-}
+// F-337: windows come from the shared per-run fixture zone (branch-local ~07:00 at suite start).
+const zone = fixtureZone();
+const alignedHourWithinToday = (minutesAhead: number) => windowStartInZoneToday(zone, minutesAhead);
+const todayIsoWeekday = () => String(zoneLocalIsoWeekday(zone));
+const hhmm = (d: Date) => zoneLocalHHmm(zone, d);
 
 async function makeMemberPool(label: string, gracePeriodMinutes: number) {
   const poolRes = await fetch(`${baseUrl}/resource-pools`, {
@@ -34,7 +29,7 @@ async function makeMemberPool(label: string, gracePeriodMinutes: number) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       tenantId: TENANT_ID,
-      branchId: BRANCH_ID,
+      branchId: ZONED_BRANCH_ID,
       name: `F-133B ${label} ${Date.now()}`,
       allocationMode: 'POOLED',
       capacity: 8,
@@ -75,10 +70,10 @@ export const memberMultiBatchAttendanceSections: Section<SlotEngineContext>[] = 
         data: { userId, tenantId: TENANT_ID, mandateId: `f133b-multi-${Date.now()}`, amount: 100000, frequency: 'monthly', status: 'active' },
       });
       const assignmentA = await db.memberGroupAssignment.create({
-        data: { userId, resourcePoolId: poolA.id, daysOfWeek: todayIsoWeekday(), startTime: startA.toISOString().slice(11, 16), status: 'ACTIVE', ...defaultTermDates() },
+        data: { userId, resourcePoolId: poolA.id, daysOfWeek: todayIsoWeekday(), startTime: hhmm(startA), status: 'ACTIVE', ...defaultTermDates() },
       });
       const assignmentB = await db.memberGroupAssignment.create({
-        data: { userId, resourcePoolId: poolB.id, daysOfWeek: todayIsoWeekday(), startTime: startB.toISOString().slice(11, 16), status: 'ACTIVE', ...defaultTermDates() },
+        data: { userId, resourcePoolId: poolB.id, daysOfWeek: todayIsoWeekday(), startTime: hhmm(startB), status: 'ACTIVE', ...defaultTermDates() },
       });
 
       const memberJwt = signJwt({ userId, tenantId: TENANT_ID, userType: 'MEMBER', roles: [] });
@@ -171,7 +166,7 @@ export const memberMultiBatchAttendanceSections: Section<SlotEngineContext>[] = 
         data: { userId, tenantId: TENANT_ID, mandateId: `f133b-bugfix-${Date.now()}`, amount: 100000, frequency: 'monthly', status: 'active' },
       });
       const assignment = await db.memberGroupAssignment.create({
-        data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: start.toISOString().slice(11, 16), status: 'ACTIVE', ...defaultTermDates() },
+        data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: hhmm(start), status: 'ACTIVE', ...defaultTermDates() },
       });
       const memberJwt = signJwt({ userId, tenantId: TENANT_ID, userType: 'MEMBER', roles: [] });
       const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${memberJwt}` };
@@ -226,7 +221,7 @@ export const memberMultiBatchAttendanceSections: Section<SlotEngineContext>[] = 
         data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 8 },
       });
       const assignment = await db.memberGroupAssignment.create({
-        data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: start.toISOString().slice(11, 16), status: 'ACTIVE', ...defaultTermDates() },
+        data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: hhmm(start), status: 'ACTIVE', ...defaultTermDates() },
       });
       // Deliberately NO subscription row -- proves decline does not require one.
       const memberJwt = signJwt({ userId, tenantId: TENANT_ID, userType: 'MEMBER', roles: [] });
@@ -252,15 +247,15 @@ export const memberMultiBatchAttendanceSections: Section<SlotEngineContext>[] = 
       // (now >= releaseTime, and releaseTime === cutoffTime by the same formula) has NOT --
       // deliberately keeping existingBooking null across both sweeps below, so this proves the
       // reminder step's OWN insert-first dedup, not an accidental skip from a release-created
-      // booking. withinTodayUtc (not hour-aligned) is used deliberately -- this needs the exact
+      // booking. minuteAheadInZoneToday (not hour-aligned) is used deliberately -- this needs the exact
       // minute offset, not the nearest hour boundary.
       const pool = await makeMemberPool('reminder', 30);
-      const start = withinTodayUtc(90);
+      const start = minuteAheadInZoneToday(zone, 90);
       const window = await db.availabilityWindow.create({
         data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 8 },
       });
       const assignment = await db.memberGroupAssignment.create({
-        data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: start.toISOString().slice(11, 16), status: 'ACTIVE', ...defaultTermDates() },
+        data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: hhmm(start), status: 'ACTIVE', ...defaultTermDates() },
       });
 
       // F-044 Phase 2: /bookings/sweep is decommissioned (410) -- /bookings/sweep/tick is the

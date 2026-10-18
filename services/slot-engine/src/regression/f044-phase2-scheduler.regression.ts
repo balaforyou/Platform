@@ -1,6 +1,6 @@
-import { Section } from '@badminton/test-harness';
+import { Section, fixtureZone, windowStartInZoneToday, minuteAheadInZoneToday, zoneLocalHHmm, zoneLocalIsoWeekday } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
-import { db, baseUrl, internalKey, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID, defaultTermDates } from './_fixtures';
+import { db, baseUrl, internalKey, SlotEngineContext, TENANT_ID, ZONED_BRANCH_ID, defaultTermDates } from './_fixtures';
 
 /**
  * F-044 Phase 2 — job-scheduler-backed decomposition of /bookings/sweep, plus its cutover
@@ -20,9 +20,10 @@ import { db, baseUrl, internalKey, withinTodayUtc, SlotEngineContext, TENANT_ID,
  * makePool/tick/forceJobsDue helpers) is covered separately below.
  */
 
+// F-337: windows come from the shared per-run fixture zone (branch-local ~07:00 at suite start).
+const zone = fixtureZone();
 function todayIsoWeekday(): string {
-  const day = new Date().getUTCDay();
-  return String(day === 0 ? 7 : day);
+  return String(zoneLocalIsoWeekday(zone));
 }
 
 async function makePool(label: string, gracePeriodMinutes: number) {
@@ -31,7 +32,7 @@ async function makePool(label: string, gracePeriodMinutes: number) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
     body: JSON.stringify({
       tenantId: TENANT_ID,
-      branchId: BRANCH_ID,
+      branchId: ZONED_BRANCH_ID,
       name: `F-044P2 ${label} ${Date.now()}`,
       allocationMode: 'POOLED',
       capacity: 8,
@@ -81,8 +82,7 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
     name: 'F-044 Phase 2: POST /bookings/sweep/tick real end-to-end proof -- a real HELD booking auto-releases through the new route exactly as the old /bookings/sweep does, real JobRunSummary returned',
     async run() {
       const pool = await makePool('held-expiry', 30);
-      const start = withinTodayUtc(120);
-      start.setUTCMinutes(0, 0, 0); // availability-window creation requires hour alignment (F-010)
+      const start = windowStartInZoneToday(zone, 120, new Date(), 'down'); // hour-aligned (F-010)
       const end = new Date(start.getTime() + 3600000);
       const poolRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/availability-windows`, {
         method: 'POST',
@@ -98,7 +98,7 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
       const bookingRes = await fetch(`${baseUrl}/bookings/negotiated`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}`, 'Idempotency-Key': `f044p2-held-${Date.now()}` },
-        body: JSON.stringify({ tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id, userId: 'f044p2-held-user', negotiatedPrice: 1 }),
+        body: JSON.stringify({ tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: window.id, userId: 'f044p2-held-user', negotiatedPrice: 1 }),
       });
       const booking = ((await bookingRes.json()) as any).data;
       if (booking.status !== 'HELD') throw new Error(`Expected a real HELD booking, got ${JSON.stringify(booking)}`);
@@ -134,12 +134,12 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
       // proving the migrated dedup path is behavior-preserving.
       const userId = 'f044p2-reminder-member';
       const pool = await makePool('reminder', 30);
-      const start = withinTodayUtc(90);
+      const start = minuteAheadInZoneToday(zone, 90);
       const window = await db.availabilityWindow.create({
         data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 8 },
       });
       const assignment = await db.memberGroupAssignment.create({
-        data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: start.toISOString().slice(11, 16), status: 'ACTIVE', ...defaultTermDates() },
+        data: { userId, resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: zoneLocalHHmm(zone, start), status: 'ACTIVE', ...defaultTermDates() },
       });
 
       await forceJobsDue(['member_assignment_sweep']);
@@ -224,14 +224,13 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
     name: 'F-296 Stage 1: payment_confirm_reconciliation recovers a real booking stuck HELD after a captured PaymentIntent (the webhook capture/confirm-ordering bug)',
     async run() {
       const pool = await makePool('f296-stuck', 30);
-      const start = withinTodayUtc(240);
-      start.setUTCMinutes(0, 0, 0);
+      const start = windowStartInZoneToday(zone, 240, new Date(), 'down'); // hour-aligned (F-010)
       const window = await db.availabilityWindow.create({
         data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 4 },
       });
       const booking = await db.booking.create({
         data: {
-          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+          tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
           userId: 'f296-stuck-user', status: BookingStatus.HELD, heldUntil: new Date(Date.now() + 300000),
         },
       });
@@ -275,14 +274,13 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
     name: 'F-296 Stage 1: payment_confirm_reconciliation leaves a CANCELLED booking untouched even with a captured intent (must not force-confirm an invalid booking)',
     async run() {
       const pool = await makePool('f296-cancelled', 30);
-      const start = withinTodayUtc(250);
-      start.setUTCMinutes(0, 0, 0);
+      const start = windowStartInZoneToday(zone, 250, new Date(), 'down'); // hour-aligned (F-010)
       const window = await db.availabilityWindow.create({
         data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 4 },
       });
       const booking = await db.booking.create({
         data: {
-          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+          tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
           userId: 'f296-cancelled-user', status: BookingStatus.CANCELLED, heldUntil: new Date(),
         },
       });
@@ -332,13 +330,13 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
       // block or fail it), and the route's new `include` returns real window/resourcePool data
       // for the notification payload to use. Real delivery proof needs the live dev stack.
       const pool = await makePool('f321-confirm', 30);
-      const start = withinTodayUtc(200);
+      const start = minuteAheadInZoneToday(zone, 200);
       const window = await db.availabilityWindow.create({
         data: { resourcePoolId: pool.id, startTime: start, endTime: new Date(start.getTime() + 3600000), capacity: 4 },
       });
       const booking = await db.booking.create({
         data: {
-          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+          tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
           userId: 'f321-confirm-user', status: BookingStatus.HELD, heldUntil: new Date(Date.now() + 300000), price: 400,
         },
       });
@@ -374,7 +372,7 @@ export const f044Phase2SchedulerSections: Section<SlotEngineContext>[] = [
         });
         return db.booking.create({
           data: {
-            tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+            tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
             userId: `f322-${label}-user`, status: BookingStatus.CONFIRMED, heldUntil: new Date(),
             isMemberBooking, price: isMemberBooking ? 0 : 400,
           },

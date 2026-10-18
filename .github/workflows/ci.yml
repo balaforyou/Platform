@@ -67,6 +67,9 @@ jobs:
       - name: Migrate the test database
         run: pnpm --filter @badminton/database run prisma:deploy
 
+      - name: Fixture-zone unit test (F-337)
+        run: pnpm --filter @badminton/test-harness run test
+
       - name: Regression suites (5 services)
         run: pnpm test:regression
 

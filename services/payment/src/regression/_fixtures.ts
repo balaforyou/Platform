@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { PrismaClient } from '@badminton/database';
-import { SERVICE_URLS, signJwt, assertDisposableDatabase } from '@badminton/test-harness';
+import { SERVICE_URLS, signJwt, assertDisposableDatabase, fixtureZone } from '@badminton/test-harness';
 
 export const db = new PrismaClient();
 
@@ -12,6 +12,9 @@ export const webhookSecret = 'test-webhook-secret';
 
 export const TENANT_ID = '11111111-1111-1111-1111-111111111111';
 export const BRANCH_ID = '22222222-2222-2222-2222-222222222222';
+// F-337: branch in the per-run fixture zone (branch-local ~07:00 at suite start) for sections
+// that need a same-day window regardless of the real UTC hour.
+export const ZONED_BRANCH_ID = '55555555-5555-5555-5555-555555555555';
 export const USER_ID = '33333333-3333-3333-3333-333333333333';
 
 /**
@@ -195,6 +198,11 @@ export async function setupBaseFixtures(): Promise<PaymentContext> {
     where: { id: BRANCH_ID },
     update: {},
     create: { id: BRANCH_ID, tenantId: TENANT_ID, name: 'Regression Branch', status: 'ACTIVE', timezone: 'UTC' },
+  });
+  await db.branch.upsert({
+    where: { id: ZONED_BRANCH_ID },
+    update: { timezone: fixtureZone().name },
+    create: { id: ZONED_BRANCH_ID, tenantId: TENANT_ID, name: 'Regression Zoned Branch', status: 'ACTIVE', timezone: fixtureZone().name },
   });
 
   const poolRes = await fetch(`${slotEngineUrl}/resource-pools`, {
