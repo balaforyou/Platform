@@ -25,7 +25,7 @@ its own test (§8), and Chief should confirm the bundling.**
 | **SB-4** | **A member can join any number of batches** (R1 / D14). The `@@unique([userId, resourcePoolId])` rule and its `409 ASSIGNMENT_ALREADY_EXISTS` go. | P7(i): `409` on the second batch in a pool |
 | **SB-5** | **Overlap guard:** joining a batch that clashes with one the member already holds (same hour **and** a shared weekday) is refused, `409 MEMBER_BATCH_OVERLAP`, with a message naming the clashing batch. Different hours on the same day are fine. | none today (one batch per pool made it unnecessary) |
 | **SB-6** | Seat counts and min / max are **per batch**; a member counts once in each batch they hold. (Counting primitive only; enforcement of min / max is S3, C-6.) | not enforced anywhere |
-| **SB-7** | **Create batch shows exactly which guest bookings are affected** (D13): each booking listed with its outcome; only the **overflow** is displaced, **latest-booked first**; the owner confirms; the write refuses if the outcome changed since the preview. | P5 / P6: everything displaced; preview is a count |
+| **SB-7** | **Create batch shows exactly which guest bookings are affected** (D13): each booking listed with its outcome; only the **overflow** is displaced, **latest-booked first**; the owner confirms; the write refuses if the outcome changed since the preview. | P5 / P6: everything displaced; preview is a count **Added 13 Oct 2026 (Chief): the same list is also a copyable / exportable phone list** — one row per displaced or re-courted guest with name, phone, booking date, time, court, amount and outcome — so the venue can phone every affected guest, because push reaches only guests with a registered push token (see the push-only ruling, §6). Data source: the guest's `User` name and phone, the same lookup the grid and dashboard already use. |
 | **SB-8** | **Every displaced or re-courted guest is notified** (D13, F-345), through a **channel-agnostic** event; push is the first wired channel (§6). The preview and the message say **"refund recorded; the venue will return your money"** and never "refunded". | P5 / P6: no notification sent |
 | **SB-9** | A batch whose **term** has not started (or has ended) **does not** withhold guest slots, and the creation-time scan covers the batch's term ∩ the guest horizon (F-344). | P7(ii): a batch queued to 1 Nov already removes today's slot |
 | **SB-10** | With **no batch having courts set**, guest-facing behaviour is **byte-identical** to today (rollout safety, §10). | n/a (regression) |
@@ -161,9 +161,12 @@ only caller). Dues, deposit and notice interactions of a move are S4 concerns an
   - *Provisioned only (nothing real behind it):* **SMS** and **email** — the policy matrix and queue accept `sms` / `email`
     requests, but dispatch for them is `mockDispatch`, i.e. **no SMS or email is actually sent anywhere today**; **WhatsApp**
     and **Telegram** — no code exists in the service at all.
-  - *Open (Chief confirming with Bala):* whether an SMS fallback ships in SB. Because real SMS dispatch does not exist,
-    shipping it means building the SMS dispatcher — a notification-service task, not a policy edit. Until ruled, SB ships
-    push only, and a guest with no registered push token **is not reached** (stated plainly in the owner confirmation).
+  - *Ruled 13 Oct 2026 (Chief): SB ships **push only**; no SMS fallback.* Real SMS dispatch does not exist, so a fallback
+    would be a notification-service build, not a policy edit; it is out of SB. A guest with no registered push token **is
+    not reached by the system**: the owner confirmation says so plainly and offers the **phone list (SB-7)** so the venue
+    phones those guests. The channel-agnostic event and policy list stay, so SMS, WhatsApp or Telegram attach later without
+    changing SB. *(This replaces the earlier "Open (Chief confirming with Bala)" wording, kept here as history: whether an
+    SMS fallback ships in SB was the question.)*
   - Sent after the transaction commits; a notification failure never rolls back the batch (F-321 precedent).
 - **Old preview route** `GET /resource-pools/:id/member-collision-preview` stays (its only callers, by grep: the retired
   `apps/admin-web` and one regression section; **admin-v2's `CreateBatchForm` does not call it at all**) until the new
@@ -263,8 +266,7 @@ Each step: typecheck + build clean, rebuild before regression, `badminton_db_tes
 (step 5b).
 
 **Still open:**
-1. **SMS fallback in SB?** Chief is confirming with Bala. Findings above: no real SMS (or email) dispatch exists in the
-   notification service today, so "SMS fallback" means building a dispatcher, not flipping a policy. Until ruled, push only.
+1. ~~**SMS fallback in SB?**~~ **Ruled 13 Oct 2026: push only, no SMS fallback in SB** (§6); the phone list (SB-7) covers guests the system cannot reach.
 2. **Empty batches that never fill:** under SB-11 a batch holds its slots until its term ends even with zero members. This is the
    ruled behaviour; whether an owner should see a "holding N slots, 0 members" warning is an S3 UI question.
 3. **Overlap-guard timing arithmetic across zones** (JBC is `Asia/Kolkata`, courtowner1 `UTC`): §5.6 compares instants on a
