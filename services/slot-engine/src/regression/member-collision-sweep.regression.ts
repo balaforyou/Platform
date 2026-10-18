@@ -1,27 +1,13 @@
-import { Section, signJwt } from '@badminton/test-harness';
+import { Section, signJwt, fixtureZone, windowStartInZoneToday, zoneLocalHHmm, zoneLocalIsoWeekday } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
-import { db, baseUrl, internalKey, guestToken, bookingHeaders, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID, defaultTermDates } from './_fixtures';
+import { db, baseUrl, internalKey, guestToken, bookingHeaders, SlotEngineContext, TENANT_ID, ZONED_BRANCH_ID, defaultTermDates } from './_fixtures';
 
-/**
- * withinTodayUtc, rounded down to the top of the hour -- stays within today (margin already
- * built into withinTodayUtc) while landing on a 60-minute pattern slot boundary.
- *
- * Real bug, found while diagnosing a CI-only failure (passed locally, failed in CI, both
- * against the identical code -- the only variable was wall-clock time): makePool()'s pattern is
- * `startTime: '00:00', endTime: '23:00'`, so its last valid slot boundary is 22:00 -- 23:00
- * itself is NOT a valid start (the pattern's own end). Late enough in the UTC day, an 8h+
- * offset rounds down to exactly hour 23 (e.g. 15:08 UTC + 8h = 23:08 -> rounds to 23:00),
- * landing outside the pattern's real range and failing POST /member-group-assignments with
- * 400 START_TIME_NOT_ALIGNED -- a genuine test-fixture defect, not a product bug, and not
- * something any of these sections were asserting on. Clamped to hour 22 so this can never
- * happen regardless of what time the suite runs.
- */
-function alignedHourWithinToday(minutesAhead: number): Date {
-  const date = withinTodayUtc(minutesAhead);
-  date.setUTCMinutes(0, 0, 0);
-  if (date.getUTCHours() >= 23) date.setUTCHours(22);
-  return date;
-}
+// F-337: every window here comes from the shared per-run fixture zone (branch-local ~07:00 at
+// suite start), so there is no late-UTC-day clamp to maintain -- see packages/test-harness
+// fixtureZone.ts.
+const zone = fixtureZone();
+const alignedHourWithinToday = (minutesAhead: number) => windowStartInZoneToday(zone, minutesAhead);
+const hhmm = (d: Date) => zoneLocalHHmm(zone, d);
 
 /**
  * F-207.2 — Member/guest slot collision: ongoing exclusion, the entitlement gate, the
@@ -36,7 +22,7 @@ function alignedHourWithinToday(minutesAhead: number): Date {
  * evidence report), not duplicated here as a mocked substitute.
  */
 
-async function makePool(label: string, capacity: number, tenantId: string = TENANT_ID, branchId: string = BRANCH_ID) {
+async function makePool(label: string, capacity: number, tenantId: string = TENANT_ID, branchId: string = ZONED_BRANCH_ID) {
   const poolRes = await fetch(`${baseUrl}/resource-pools`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
@@ -75,8 +61,7 @@ async function makePool(label: string, capacity: number, tenantId: string = TENA
 }
 
 function todayIsoWeekday(): string {
-  const day = new Date().getUTCDay();
-  return String(day === 0 ? 7 : day);
+  return String(zoneLocalIsoWeekday(zone));
 }
 
 // F-207.2's relocation tiebreak considers EVERY POOLED sibling pool in the branch -- so the
@@ -90,7 +75,7 @@ async function makeIsolatedTenantAndBranch(label: string) {
     data: { name: `F-207.2 ${label} ${suffix}`, subdomain: `f2072-${label}-${suffix}`.toLowerCase().slice(0, 40) },
   });
   const branch = await db.branch.create({
-    data: { tenantId: tenant.id, name: `F-207.2 ${label} branch`, status: 'ACTIVE', timezone: 'UTC' },
+    data: { tenantId: tenant.id, name: `F-207.2 ${label} branch`, status: 'ACTIVE', timezone: zone.name },
   });
   return { tenant, branch };
 }
@@ -105,7 +90,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       await db.availabilityWindow.create({
         data: { resourcePoolId: pool.id, startTime: windowStart, endTime: windowEnd, capacity: 3 },
       });
-      const startTimeStr = windowStart.toISOString().slice(11, 16);
+      const startTimeStr = hhmm(windowStart);
 
       // Before the assignment exists: visible and bookable.
       const beforeAvail = await fetch(`${baseUrl}/resource-pools/${pool.id}/availability?date=${windowStart.toISOString().slice(0, 10)}`);
@@ -134,7 +119,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const bookRes = await fetch(`${baseUrl}/bookings`, {
         method: 'POST',
         headers: bookingHeaders('f207-2-excl-guest', 'f207-2-excl-key'),
-        body: JSON.stringify({ branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: (await db.availabilityWindow.findFirst({ where: { resourcePoolId: pool.id, startTime: windowStart } }))!.id }),
+        body: JSON.stringify({ branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: (await db.availabilityWindow.findFirst({ where: { resourcePoolId: pool.id, startTime: windowStart } }))!.id }),
       });
       if (bookRes.status !== 409) {
         throw new Error(`F-207.2: expected POST /bookings 409, got ${bookRes.status}`);
@@ -151,7 +136,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
     name: 'F-207.2: entitlement-gated — exclusion only applies while MEMBER_MANAGEMENT is ACTIVE; a disabled module immediately frees the slot',
     async run() {
       const tenant = await db.tenant.create({ data: { name: `F-207.2 Entitlement ${Date.now()}`, subdomain: `f2072-ent-${Date.now()}` } });
-      const branch = await db.branch.create({ data: { tenantId: tenant.id, name: 'F-207.2 Entitlement Branch', status: 'ACTIVE', timezone: 'UTC' } });
+      const branch = await db.branch.create({ data: { tenantId: tenant.id, name: 'F-207.2 Entitlement Branch', status: 'ACTIVE', timezone: zone.name } });
       await db.moduleEntitlement.create({
         data: { tenantId: tenant.id, module: 'MEMBER_MANAGEMENT', startDate: new Date(Date.now() - 86400000), endDate: new Date(Date.now() + 365 * 86400000) },
       });
@@ -170,7 +155,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const windowStart = alignedHourWithinToday(5 * 60);
       const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
       const window = await db.availabilityWindow.create({ data: { resourcePoolId: pool.id, startTime: windowStart, endTime: windowEnd, capacity: 2 } });
-      const startTimeStr = windowStart.toISOString().slice(11, 16);
+      const startTimeStr = hhmm(windowStart);
 
       await db.memberGroupAssignment.create({
         data: { userId: 'f207-2-ent-member', resourcePoolId: pool.id, daysOfWeek: todayIsoWeekday(), startTime: startTimeStr, status: 'ACTIVE', ...defaultTermDates() },
@@ -212,7 +197,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const windowStart = alignedHourWithinToday(3 * 60);
       const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
       const window = await db.availabilityWindow.create({ data: { resourcePoolId: pool.id, startTime: windowStart, endTime: windowEnd, capacity: 1 } });
-      const startTimeStr = windowStart.toISOString().slice(11, 16);
+      const startTimeStr = hhmm(windowStart);
 
       // Fill the pool's only seat via the admin-discretionary negotiated path -- confirmed this
       // session (real-caller grep) to be the ONLY other real booking-creation path besides
@@ -222,7 +207,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const negotiatedRes = await fetch(`${baseUrl}/bookings/negotiated`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}`, 'Idempotency-Key': 'f207-2-cap-negotiated' },
-        body: JSON.stringify({ tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id, userId: 'f207-2-cap-walkin', negotiatedPrice: 150 }),
+        body: JSON.stringify({ tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: window.id, userId: 'f207-2-cap-walkin', negotiatedPrice: 150 }),
       });
       if (negotiatedRes.status !== 201) {
         throw new Error(`F-207.2 capacity guard setup: expected negotiated booking 201, got ${negotiatedRes.status}`);
@@ -263,7 +248,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const windowStart = alignedHourWithinToday(7 * 60);
       const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
       await db.availabilityWindow.create({ data: { resourcePoolId: collisionPool.id, startTime: windowStart, endTime: windowEnd, capacity: 1 } });
-      const startTimeStr = windowStart.toISOString().slice(11, 16);
+      const startTimeStr = hhmm(windowStart);
 
       const guestBookRes = await fetch(`${baseUrl}/bookings`, {
         method: 'POST',
@@ -319,7 +304,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const windowStart = alignedHourWithinToday(8 * 60);
       const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
       await db.availabilityWindow.create({ data: { resourcePoolId: collisionPool.id, startTime: windowStart, endTime: windowEnd, capacity: 1 } });
-      const startTimeStr = windowStart.toISOString().slice(11, 16);
+      const startTimeStr = hhmm(windowStart);
 
       const guestBookRes = await fetch(`${baseUrl}/bookings`, {
         method: 'POST',
@@ -372,7 +357,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const windowStart = alignedHourWithinToday(9 * 60);
       const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
       await db.availabilityWindow.create({ data: { resourcePoolId: pool.id, startTime: windowStart, endTime: windowEnd, capacity: 1 } });
-      const startTimeStr = windowStart.toISOString().slice(11, 16);
+      const startTimeStr = hhmm(windowStart);
       const days = todayIsoWeekday();
 
       const beforeRes = await fetch(`${baseUrl}/resource-pools/${pool.id}/member-collision-preview?daysOfWeek=${days}&startTime=${startTimeStr}`, {
@@ -386,7 +371,7 @@ export const memberCollisionSweepSections: Section<SlotEngineContext>[] = [
       const guestBookRes = await fetch(`${baseUrl}/bookings`, {
         method: 'POST',
         headers: bookingHeaders('f207-3-preview-guest', 'f207-3-preview-key'),
-        body: JSON.stringify({ branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: (await db.availabilityWindow.findFirst({ where: { resourcePoolId: pool.id, startTime: windowStart } }))!.id }),
+        body: JSON.stringify({ branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: (await db.availabilityWindow.findFirst({ where: { resourcePoolId: pool.id, startTime: windowStart } }))!.id }),
       });
       if (guestBookRes.status !== 201) {
         throw new Error(`F-207.3 preview setup: expected guest booking 201, got ${guestBookRes.status}`);

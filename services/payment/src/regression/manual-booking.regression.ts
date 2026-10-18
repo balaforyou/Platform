@@ -1,10 +1,11 @@
-import { Section, signJwt, inspect } from '@badminton/test-harness';
+import { Section, signJwt, inspect, fixtureZone, windowStartInZoneToday, zoneLocalHHmm, zoneLocalIsoWeekday } from '@badminton/test-harness';
 import {
   db,
   slotEngineUrl,
   paymentUrl,
   internalKey,
   futureAlignedHour,
+  ZONED_BRANCH_ID,
   PaymentContext,
   TENANT_ID,
   BRANCH_ID,
@@ -327,26 +328,24 @@ export const manualBookingSections: Section<PaymentContext>[] = [
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${internalKey}` },
         body: JSON.stringify({
-          tenantId: TENANT_ID, branchId: BRANCH_ID, name: `F-276 Pool ${Date.now()}`,
+          tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, name: `F-276 Pool ${Date.now()}`,
           allocationMode: 'POOLED', capacity: 4, basePrice: 150, defaultRate: 150,
         }),
       });
       const pool = ((await poolRes.json()) as any).data;
-      // gracePeriodMinutes: 150 (2.5h), paired with a window 2h out (below) -- the top-of-hour
-      // rounding futureAlignedHour applies can shrink that 2h to as little as ~1h depending on
+      // gracePeriodMinutes: 150 (2.5h), paired with a window 2h out (below) -- top-of-hour
+      // rounding can shrink that 2h to as little as ~1h depending on
       // where in the current hour the test happens to run, so 150min keeps the cutoff genuinely
       // in the past under the worst case, not just the typical one.
       await db.bookingRule.create({
         data: { resourcePoolId: pool.id, gracePeriodMinutes: 150, guestAccessCutoffMinutes: 120, cancellationPolicyJson: { type: 'tiered', tiers: [] } },
       });
 
-      // A real, hour-aligned window ~2h out (availability-window creation requires alignment,
-      // UNALIGNED_TIME_BOUNDARY otherwise) — genuinely not started yet, but with a 150min grace
-      // period its cutoff is already safely in the past. Known, accepted narrow edge case (shared
-      // with every other *AlignedHour-based regression fixture in this codebase): a run within
-      // ~90min of UTC midnight could roll `start` onto tomorrow's calendar date while `daysOfWeek`/
-      // eligibility below resolves against today's -- not engineered around here.
-      const start = futureAlignedHour(2);
+      // A real, hour-aligned window >=2h out inside TODAY in the per-run fixture zone (branch-local
+      // ~07:00 at suite start), so it can never roll onto tomorrow's date whatever the UTC hour
+      // (F-337). The branch above is in that zone, which is what eligibility resolves "today" by.
+      const zone = fixtureZone();
+      const start = windowStartInZoneToday(zone, 120, new Date(), 'down');
       const end = new Date(start.getTime() + 60 * 60 * 1000);
       const windowRes = await fetch(`${slotEngineUrl}/resource-pools/${pool.id}/availability-windows`, {
         method: 'POST',
@@ -359,8 +358,8 @@ export const manualBookingSections: Section<PaymentContext>[] = [
       }
       const window = windowBody.data;
 
-      const todayIsoWeekday = String(start.getUTCDay() === 0 ? 7 : start.getUTCDay());
-      const hhmm = start.toISOString().slice(11, 16);
+      const todayIsoWeekday = String(zoneLocalIsoWeekday(zone, start));
+      const hhmm = zoneLocalHHmm(zone, start);
       const group = await db.group.create({
         data: {
           tenantId: TENANT_ID, name: `F-276 group ${Date.now()}`, resourcePoolId: pool.id,
@@ -400,7 +399,7 @@ export const manualBookingSections: Section<PaymentContext>[] = [
       // --- Real placement, genuinely eligible: /bookings/manual + releaseGroupId succeeds despite
       //     the window being member-blocked (collidesWithMemberAssignment untouched/unconsulted). ---
       const placementBody = {
-        tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
+        tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: window.id,
         userId: 'f276-walk-in-guest', negotiatedPrice: 150, paymentMethod: 'cash', releaseGroupId: group.id,
       };
       const placement = await inspect(await manual(placementBody, `f276-release-${Date.now()}`, ownerJwt));
@@ -420,7 +419,7 @@ export const manualBookingSections: Section<PaymentContext>[] = [
       //     would persist, then attempt a SECOND placement attempt against the same window). ---
       await db.booking.create({
         data: {
-          tenantId: TENANT_ID, branchId: BRANCH_ID, resourcePoolId: pool.id, windowId: window.id, userId: memberA,
+          tenantId: TENANT_ID, branchId: ZONED_BRANCH_ID, resourcePoolId: pool.id, windowId: window.id, userId: memberA,
           status: 'CONFIRMED', isMemberBooking: true, heldUntil: new Date(),
           idempotencyKey: `f276-confirm-${Date.now()}`, memberAttendanceConfirmedAt: new Date(),
         },

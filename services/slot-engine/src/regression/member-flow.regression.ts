@@ -1,6 +1,6 @@
-import { Section, signJwt, inspect, expectForbidden, expectIdentityFromJwt } from '@badminton/test-harness';
+import { Section, signJwt, inspect, expectForbidden, expectIdentityFromJwt, fixtureZone, minuteAheadInZoneToday, zoneLocalHHmm, zoneLocalIsoWeekday } from '@badminton/test-harness';
 import { BookingStatus } from '@badminton/database';
-import { db, baseUrl, nextAlignedHour, withinTodayUtc, SlotEngineContext, TENANT_ID, BRANCH_ID, defaultTermDates } from './_fixtures';
+import { db, baseUrl, nextAlignedHour, SlotEngineContext, TENANT_ID, ZONED_BRANCH_ID, defaultTermDates } from './_fixtures';
 
 /**
  * MEMBER SELF-CONFIRM ATTENDANCE (F-022).
@@ -22,7 +22,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
       const memberPool = await db.resourcePool.create({
         data: {
           tenantId: memberTenant,
-          branchId: BRANCH_ID,
+          branchId: ZONED_BRANCH_ID,
           name: 'Member Self Confirm Pool',
           allocationMode: 'POOLED',
           capacity: 8,
@@ -41,17 +41,17 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
         },
       });
 
-      // F-073: pinned inside today's UTC date. nextAlignedHour(4) lands on tomorrow when
-      // the suite runs after ~20:00 UTC, and resolveTodayMemberAssignment only ever looks
-      // for today's date + startTime — so the window exists and is never found.
-      const futureWindowStart = withinTodayUtc(4 * 60);
+      // F-073/F-337: pinned inside today's date in the per-run fixture zone (branch-local ~07:00
+      // at suite start; ZONED_BRANCH_ID carries that zone). resolveTodayMemberAssignment only
+      // ever looks for today's date + startTime, and the zone keeps hours of day left however
+      // late it is in UTC.
+      const zone = fixtureZone();
+      const futureWindowStart = minuteAheadInZoneToday(zone, 4 * 60);
       const futureWindowEnd = new Date(futureWindowStart.getTime() + 60 * 60 * 1000);
-      const assignmentStartTime = futureWindowStart.toISOString().slice(11, 16);
-      // F-066/F-073: derived from UTC — the clock the seeded branch uses — not from the
-      // runner's local weekday. Reading getDay() here put the assignment on a different
-      // calendar day than the window whenever the runner's zone disagreed with UTC, which
-      // is a real several-hour span every day on any non-UTC machine.
-      const todayIsoWeekday = String(new Date().getUTCDay() === 0 ? 7 : new Date().getUTCDay());
+      const assignmentStartTime = zoneLocalHHmm(zone, futureWindowStart);
+      // F-066/F-073: derived from the branch's zone (the clock the seeded branch uses), not
+      // from the runner's local weekday.
+      const todayIsoWeekday = String(zoneLocalIsoWeekday(zone));
       const notTodayIsoWeekday = todayIsoWeekday === '1' ? '2' : '1';
 
       const selfConfirmWindow = await db.availabilityWindow.create({
@@ -222,12 +222,12 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
 
       // PAST CUTOFF → 409.
       const cutoffUserId = 'member-self-confirm-cutoff';
-      const soonWindowStart = withinTodayUtc(60); // F-073: same constraint as above
+      const soonWindowStart = minuteAheadInZoneToday(zone, 60); // F-073/F-337: same constraint as above
       const soonWindowEnd = new Date(soonWindowStart.getTime() + 60 * 60 * 1000);
       const cutoffPool = await db.resourcePool.create({
         data: {
           tenantId: memberTenant,
-          branchId: BRANCH_ID,
+          branchId: ZONED_BRANCH_ID,
           name: 'Member Cutoff Pool',
           allocationMode: 'POOLED',
           capacity: 8,
@@ -268,7 +268,7 @@ export const memberFlowSections: Section<SlotEngineContext>[] = [
           userId: cutoffUserId,
           resourcePoolId: cutoffPool.id,
           daysOfWeek: todayIsoWeekday,
-          startTime: soonWindowStart.toISOString().slice(11, 16),
+          startTime: zoneLocalHHmm(zone, soonWindowStart),
           status: 'ACTIVE',
           ...defaultTermDates(),
         },

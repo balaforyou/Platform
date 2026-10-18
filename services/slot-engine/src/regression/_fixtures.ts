@@ -1,5 +1,5 @@
 import { PrismaClient } from '@badminton/database';
-import { SERVICE_URLS, signJwt, assertDisposableDatabase } from '@badminton/test-harness';
+import { SERVICE_URLS, signJwt, assertDisposableDatabase, fixtureZone } from '@badminton/test-harness';
 import { addMonthsUtc } from '../branchTime.js';
 
 export const db = new PrismaClient();
@@ -8,6 +8,9 @@ export const internalKey = process.env.INTERNAL_SERVICE_KEY || 'test-service-key
 
 export const TENANT_ID = '11111111-1111-1111-1111-111111111111';
 export const BRANCH_ID = '22222222-2222-2222-2222-222222222222';
+// F-337: sibling of BRANCH_ID whose timezone is the per-run fixture zone (branch-local ~07:00 at
+// suite start). Sections that build same-day windows use it so they never run out of day.
+export const ZONED_BRANCH_ID = '55555555-5555-5555-5555-555555555555';
 export const USER_ID_1 = '33333333-3333-3333-3333-333333333333';
 export const USER_ID_2 = '44444444-4444-4444-4444-444444444444';
 
@@ -156,6 +159,12 @@ export async function setupBaseFixtures(): Promise<SlotEngineContext> {
     where: { id: BRANCH_ID },
     update: {},
     create: { id: BRANCH_ID, tenantId: TENANT_ID, name: 'Regression Branch', status: 'ACTIVE', timezone: 'UTC' },
+  });
+
+  await db.branch.upsert({
+    where: { id: ZONED_BRANCH_ID },
+    update: { timezone: fixtureZone().name },
+    create: { id: ZONED_BRANCH_ID, tenantId: TENANT_ID, name: 'Regression Zoned Branch', status: 'ACTIVE', timezone: fixtureZone().name },
   });
 
   // F-206: the regression tenant holds ACTIVE entitlements for both gated modules, so every
