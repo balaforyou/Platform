@@ -1,0 +1,1458 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin v2 Revamp Mockup (v2)</title>
+<style>
+:root{
+  --bg:#f8fafc;--surface:#fff;--alt:#f1f5f9;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;
+  --accent:#059669;--accent-h:#047857;--accent-fg:#fff;--accent-soft:#ecfdf5;
+  --danger:#dc2626;--danger-soft:#fef2f2;--warn:#d97706;--warn-soft:#fffbeb;--info:#1e40af;--info-soft:#eff6ff;
+  --r:12px;--rs:8px;--shadow:0 1px 3px rgb(15 23 42/.08);
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  --bg:#0b1120;--surface:#111c30;--alt:#1e293b;--border:#263449;--text:#e2e8f0;--muted:#94a3b8;
+  --accent:#10b981;--accent-h:#34d399;--accent-fg:#04121a;--accent-soft:#06281f;
+  --danger:#f87171;--danger-soft:#2a1414;--warn:#fbbf24;--warn-soft:#2a1f0a;--info:#bfdbfe;--info-soft:#10233f;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0b1120;--surface:#111c30;--alt:#1e293b;--border:#263449;--text:#e2e8f0;--muted:#94a3b8;
+  --accent:#10b981;--accent-h:#34d399;--accent-fg:#04121a;--accent-soft:#06281f;
+  --danger:#f87171;--danger-soft:#2a1414;--warn:#fbbf24;--warn-soft:#2a1f0a;--info:#bfdbfe;--info-soft:#10233f;
+  color-scheme:dark;}}
+*{box-sizing:border-box}
+/* v2: a batch on several courts is drawn as a joined span; list styles for the displacement preview */
+.cell{position:relative}
+.cell.jn::after,.cell.jp::before{content:'';position:absolute;background:color-mix(in srgb,var(--info) 55%,transparent);z-index:1}
+.cell.jn::after{left:calc(50% - 1.5px);width:3px;top:calc(50% + 15px);bottom:-1px}
+.cell.jp::before{left:calc(50% - 1.5px);width:3px;top:-1px;bottom:calc(50% + 15px)}
+.grid.mob .cell.jn::after{top:calc(50% - 1.5px);height:3px;bottom:auto;width:auto;left:calc(50% + 15px);right:-1px}
+.grid.mob .cell.jp::before{top:calc(50% - 1.5px);height:3px;bottom:auto;width:auto;right:calc(50% + 15px);left:-1px}
+.aff{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:var(--rs)}
+.aff .lrow{padding:8px 10px;gap:8px;font-size:12.5px}
+.aff small{display:block;color:var(--muted);font-weight:400}
+.v2tag{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:99px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px}
+
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer}
+h1,h2,h3,p{margin:0}
+.preview{background:var(--text);color:var(--bg);padding:8px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px}
+.preview b{opacity:.8;font-weight:600}
+.seg{display:inline-flex;background:var(--alt);border:1px solid var(--border);border-radius:var(--rs);padding:2px;gap:2px}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:6px;color:var(--muted);font-weight:600}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.preview .seg{background:rgba(255,255,255,.12);border-color:transparent}
+.preview .seg button{color:inherit;opacity:.7}
+.preview .seg button[aria-pressed=true]{background:var(--surface);color:var(--text);opacity:1}
+.shell{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:calc(100vh - 42px)}
+.side{background:var(--surface);border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:2px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:16px;padding:0 6px}
+.logo{width:26px;height:26px;border-radius:7px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-size:13px;font-weight:800}
+.nav{display:flex;align-items:center;gap:10px;border:0;background:transparent;text-align:left;padding:9px 10px;border-radius:var(--rs);color:var(--muted);font-weight:600;width:100%}
+.nav:hover{background:var(--alt)}
+.nav[aria-current=page]{background:var(--accent-soft);color:var(--accent)}
+.nav .ic{width:18px;text-align:center}
+.kpi small{display:block;margin-top:2px}
+.cols>*{min-width:0}
+.card .cb{grid-template-columns:minmax(0,1fr)}
+.card .cb>div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+.in{min-width:0;max-width:100%;box-sizing:border-box}
+select.in,label.f .in{width:100%}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+.sticky{position:sticky;top:130px}
+.seatdots{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.sd{width:22px;height:22px;border-radius:50%;border:2px dashed var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.sd.on{background:var(--accent);border:2px solid var(--accent);color:var(--accent-fg)}
+.sd.min{box-shadow:0 0 0 2px var(--warn-soft),0 0 0 3px var(--warn)}
+.daychips{display:flex;gap:6px;flex-wrap:wrap}
+.daychips .chip{padding:8px 12px}
+.backb{border:0;background:transparent;color:var(--muted);font-weight:600;padding:0;text-align:left}
+.rtbl{width:100%}
+.rrow{display:grid;grid-template-columns:28px minmax(0,1.3fr) 110px 100px;gap:10px;align-items:center;padding:10px 16px;border-top:1px solid var(--border)}
+.rrow input[type=checkbox]{width:18px;height:18px}
+.rrow.off{opacity:.65}
+.rrow select.in,.rrow input.in{padding:6px 8px;width:100%}
+@media (max-width:767px){
+  .cols{grid-template-columns:1fr}.sticky{position:static}
+  .rrow{grid-template-columns:28px minmax(0,1fr);row-gap:8px}
+  .rrow>:nth-child(n+3){grid-column:2}
+}
+.sheet{overflow-x:hidden}
+.sheet .sb{grid-template-columns:minmax(0,1fr)}
+.opt>span:first-child{min-width:0}
+.opt{box-sizing:border-box;max-width:100%}
+.sheet footer{flex-wrap:wrap}
+.lrow .grow small{display:block}
+.nav .dot{margin-left:auto;background:var(--danger);color:#fff;border-radius:99px;font-size:11px;padding:0 6px;min-width:18px;text-align:center}
+.side .sep{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:14px 10px 4px}
+.body{min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;position:sticky;top:0;z-index:5}
+.top h1{font-size:18px}
+.ctx{display:flex;gap:10px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);overflow:hidden}
+.stepper button{border:0;background:transparent;padding:6px 10px;font-weight:700}
+.stepper button:hover{background:var(--alt)}
+.stepper span{padding:6px 10px;font-weight:600;min-width:112px;text-align:center;border-inline:1px solid var(--border)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--alt);display:grid;place-items:center;font-weight:700;border:1px solid var(--border)}
+main{padding:20px;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;max-width:1180px;width:100%}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+.card h2{font-size:15px}
+.ch{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ch .sub{color:var(--muted);font-size:13px}
+.cb{padding:16px}
+.muted{color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{padding:14px 16px}
+.kpi span{display:block;color:var(--muted);font-size:12px;font-weight:600}
+.kpi strong{font-size:24px}
+.kpi small{color:var(--accent);font-weight:600}
+.kpi small.dn{color:var(--danger)}
+.attn{display:grid;gap:8px}
+.attn-item{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:var(--rs);background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}
+.attn-item.red{background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.attn-item .txt{flex:1;min-width:0}
+.attn-item .txt small{display:block;color:var(--muted)}
+.btn{border:1px solid var(--border);background:var(--surface);padding:7px 12px;border-radius:var(--rs);font-weight:600}
+.btn:hover{background:var(--alt)}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.btn.pri:hover{background:var(--accent-h)}
+.btn.sm{padding:4px 10px;font-size:13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.bcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.bcard{text-align:left;padding:16px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);display:grid;gap:10px}
+.bcard:hover{border-color:var(--accent)}
+.bcard .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bar{height:8px;background:var(--alt);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;background:var(--alt);color:var(--muted)}
+.pill.ok{background:var(--accent-soft);color:var(--accent)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--danger-soft);color:var(--danger)}
+.pill.info{background:var(--info-soft);color:var(--info)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px;border:1px solid var(--border)}
+.gridwrap{overflow:auto;border-top:1px solid var(--border)}
+table.grid{border-collapse:separate;border-spacing:0;min-width:100%}
+.grid th,.grid td{padding:0;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+.grid thead th{font-size:11px;color:var(--muted);font-weight:600;padding:6px 0;background:var(--surface);position:sticky;top:0;z-index:2;min-width:64px}
+.grid th.court{position:sticky;left:0;z-index:3;background:var(--surface);text-align:left;padding:0 12px;min-width:92px;font-size:13px}
+.grid thead th.court{z-index:4}
+
+.now{box-shadow:inset 0 3px 0 var(--accent)}
+.list{display:grid}
+.lrow{display:flex;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.lrow:first-child{border-top:0}
+.lrow .grow{flex:1;min-width:140px}
+.lrow small{display:block;color:var(--muted)}
+.sheet-bg{position:fixed;inset:0;background:rgb(15 23 42/.45);z-index:20;display:none}
+.sheet-bg.open{display:block}
+.sheet{position:fixed;right:0;top:0;bottom:0;width:min(420px,100%);background:var(--surface);z-index:21;box-shadow:-10px 0 30px rgb(0 0 0/.2);display:none;flex-direction:column}
+.sheet.open{display:flex}
+.sheet header{padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px}
+.sheet .sb{padding:16px;display:grid;gap:14px;overflow:auto;flex:1;align-content:start}
+.sheet footer{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px}
+.sheet footer .btn{flex:1}
+label.f{display:grid;gap:4px;font-weight:600;font-size:13px}
+input.in,select.in{padding:9px 10px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);color:var(--text);font:inherit}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:8px 14px;border:1px solid var(--border);border-radius:99px;background:var(--surface);font-weight:600}
+.chip[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:99px;z-index:40;display:none;gap:12px;align-items:center;box-shadow:var(--shadow)}
+.toast.show{display:flex}
+.toast button{border:0;background:transparent;color:var(--accent-h);font-weight:700}
+.note{background:var(--info-soft);color:var(--info);padding:10px 12px;border-radius:var(--rs);font-size:13px}
+.lock{display:grid;place-items:center;text-align:center;gap:6px;padding:40px 20px;color:var(--muted)}
+.bnav{display:none}
+.table{width:100%;border-collapse:collapse}
+.table th{text-align:left;font-size:12px;color:var(--muted);padding:8px 16px}
+.table td{padding:10px 16px;border-top:1px solid var(--border)}
+.tot{display:flex;justify-content:space-between;padding:12px 16px;border-top:2px solid var(--border);font-weight:700}
+@media (max-width:767px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{display:none}
+  .bnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);z-index:10}
+  .bnav button{flex:1;border:0;background:transparent;padding:8px 2px 10px;display:grid;gap:2px;justify-items:center;font-size:11px;font-weight:600;color:var(--muted)}
+  .bnav button[aria-current=page]{color:var(--accent)}
+  .bnav .ic{font-size:18px}
+  main{padding:14px 14px 90px}
+  .top{padding:10px 14px}
+  .ctx{margin-left:0;width:100%}
+  .fab{display:grid!important}
+}
+.fab{display:none;position:fixed;right:16px;bottom:78px;width:54px;height:54px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-fg);font-size:26px;z-index:12;place-items:center;box-shadow:var(--shadow-lg,0 6px 18px rgb(0 0 0/.3))}
+
+.cell{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;border:0;background:transparent;padding:0}
+.cell:hover{background:var(--alt)}
+.bd{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.legend .bd{width:20px;height:20px;margin-right:5px;vertical-align:middle}
+.legend .bd svg{transform:scale(.8)}
+.bd.open{background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-h)}
+.bd.empty{background:transparent;border:1.5px dashed var(--accent);color:var(--accent)}
+.bd.member{background:var(--info-soft);border:1px solid color-mix(in srgb,var(--info) 40%,transparent);color:var(--info)}
+.bd.booked{background:var(--accent);border:1px solid var(--accent);color:var(--accent-fg)}
+.bd.elapsed{background:var(--alt);border:1px solid var(--border);color:var(--muted)}
+details>summary{list-style:none;cursor:pointer}
+details>summary::-webkit-details-marker{display:none}
+details .chev{transition:transform .15s;color:var(--muted)}
+details[open]>summary .chev{transform:rotate(180deg)}
+details.batch{border-top:1px solid var(--border)}
+details.batch:first-child{border-top:0}
+details.batch>summary.lrow{border-top:0}
+.bm{padding:0 16px 12px 28px;background:var(--bg)}
+.bm .list .lrow{padding:10px 0}
+.month{margin-bottom:0}
+.month>summary.ch{border-bottom:0}
+.month[open]>summary.ch{border-bottom:1px solid var(--border)}
+.bd.memberlow{background:var(--warn-soft);border:1.5px dashed var(--warn);color:var(--warn)}
+.bd.pill{width:auto;min-width:34px;padding:0 8px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap}
+.linkb{border:0;background:transparent;padding:0;font-weight:700;text-align:left;text-decoration:underline dotted;text-underline-offset:3px}
+.linkb:hover{color:var(--accent)}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat3 .card{padding:10px 12px}.stat3 span{display:block;color:var(--muted);font-size:12px}.stat3 strong{font-size:18px}
+.rules-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.rules-row .grow{flex:1;min-width:180px}
+.rules-row input.in{width:90px}
+.gallery{display:none;padding:20px;gap:28px;flex-wrap:wrap;justify-content:center;background:var(--bg);align-items:flex-start}
+.gal-intro{width:100%;max-width:1100px}
+body.gal .shell,body.gal .bnav,body.gal .fab{display:none!important}
+body.gal .gallery{display:flex}
+.phone-wrap{display:grid;gap:8px;justify-items:center;width:410px;max-width:100%}
+.phone-wrap h3{font-size:14px;text-align:center}
+.phone-wrap p{font-size:12px;color:var(--muted);text-align:center;max-width:380px;min-height:32px}
+.phone{width:410px;max-width:100%;height:864px;border:10px solid #0f172a;border-radius:44px;overflow:hidden;background:var(--bg);box-shadow:0 20px 50px -20px rgb(0 0 0/.5)}
+.phone iframe{width:100%;height:100%;border:0;display:block}
+body.embed .preview{display:none}
+body.embed .shell{min-height:100vh}
+.grid.mob th.court{position:sticky;left:0}
+.grid.mob thead th{min-width:0;font-size:12px;color:var(--text);font-weight:700;padding:8px 0}
+.grid.mob td{width:auto}
+.grid.mob tbody th.court{min-width:46px;padding:0 8px;font-size:12px;color:var(--muted);font-weight:600}
+.grid.mob tr.nowrow th.court{color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.grid.mob .cell{min-height:52px}
+@media (max-width:767px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .seg{max-width:100%;overflow-x:auto}.seg button{white-space:nowrap}
+  .top h1{font-size:17px}.top{gap:8px}
+  .gridwrap{max-height:58vh}
+  .legend{gap:6px 12px;margin-left:0!important}
+  .card .ch{padding:12px 14px}
+  .lrow{padding:10px 14px}
+  .toast{bottom:100px;max-width:92%}
+  .bcards{grid-template-columns:1fr}
+  .chips.scroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+  .chips.scroll .chip{white-space:nowrap}
+  .sheet{top:auto;left:0;right:0;bottom:0;width:100%;max-height:90%;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgb(0 0 0/.3)}
+  .sheet header{position:relative;padding-top:20px}
+  .sheet header::before{content:"";position:absolute;top:7px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--border)}
+  .fab{display:none!important}
+  .top{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;row-gap:8px;padding:10px 14px}
+  .top h1{order:1}.top .avatar{order:2;width:30px;height:30px}
+  .top .ctx{order:3;grid-column:1/-1;flex-wrap:nowrap;width:100%;margin-left:0;gap:8px}
+  .top .ctx .seg{flex:1 1 auto;min-width:0}
+  .top .ctx .stepper{flex:none}.top .ctx .stepper span{min-width:76px;padding:6px 6px}
+  .legend{flex-wrap:nowrap;overflow-x:auto;width:100%;font-size:11px;padding-bottom:2px}
+  .legend>span{white-space:nowrap}
+  .attn-card .ch .sub{display:none}
+  .sheet .lrow,.bm .lrow{flex-wrap:nowrap}
+  .sheet .lrow .grow,.bm .lrow .grow{min-width:0}
+  .sheet .lrow .btn.sm,.bm .lrow .btn.sm{white-space:nowrap}
+  .gridwrap{max-height:none}
+}
+</style>
+<style>
+.tabsbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;position:sticky;top:57px;z-index:4}
+.tabs{display:flex;gap:2px;overflow-x:auto}
+.tab{border:0;background:transparent;padding:12px 14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tab[aria-pressed=true]{color:var(--accent);border-bottom-color:var(--accent)}
+.dot2{background:var(--danger);color:#fff;border-radius:99px;font-size:11px;padding:0 6px;margin-left:4px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.stackbar{display:flex;height:14px;border-radius:99px;overflow:hidden;background:var(--alt)}
+.rowb{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.grp-h{padding:10px 16px 4px;font-weight:700;font-size:13px;border-top:1px solid var(--border)}
+.grp-h:first-child{border-top:0}
+.band-h{padding:6px 16px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--alt)}
+.rbtn{width:100%;border:0;background:transparent;text-align:left;border-top:1px solid var(--border)}
+.rbtn:hover{background:var(--alt)}
+.lrow small+small{margin-top:2px}
+.chev2{color:var(--muted);font-size:18px}
+.opt{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--border);background:var(--surface);border-radius:var(--rs);padding:10px 12px;margin:4px 0}
+.opt.on{border-color:var(--accent);background:var(--accent-soft)}
+.opt[disabled]{opacity:.45;cursor:not-allowed}
+.tg{position:relative;display:inline-block;width:42px;height:24px}
+.tg input{opacity:0;width:0;height:0}
+.tg span{position:absolute;inset:0;background:var(--border);border-radius:99px;transition:.15s}
+.tg span::before{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.15s}
+.tg input:checked+span{background:var(--accent)}
+.tg input:checked+span::before{transform:translateX(18px)}
+.nav .ic{width:18px;text-align:center}
+@media (max-width:767px){
+  .tabsbar{padding:0 8px;top:auto;position:static}
+  .grid2{grid-template-columns:1fr}
+  .rules-row input.in{width:80px}
+  .lrow .btn.sm{white-space:nowrap}
+  main{padding:12px 12px 90px}
+}
+</style>
+<style>
+:root{
+  --bg:#f8fafc;--surface:#fff;--alt:#f1f5f9;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;
+  --accent:#059669;--accent-h:#047857;--accent-fg:#fff;--accent-soft:#ecfdf5;
+  --danger:#dc2626;--danger-soft:#fef2f2;--warn:#d97706;--warn-soft:#fffbeb;--info:#1e40af;--info-soft:#eff6ff;
+  --r:12px;--rs:8px;--shadow:0 1px 3px rgb(15 23 42/.08);
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  --bg:#0b1120;--surface:#111c30;--alt:#1e293b;--border:#263449;--text:#e2e8f0;--muted:#94a3b8;
+  --accent:#10b981;--accent-h:#34d399;--accent-fg:#04121a;--accent-soft:#06281f;
+  --danger:#f87171;--danger-soft:#2a1414;--warn:#fbbf24;--warn-soft:#2a1f0a;--info:#bfdbfe;--info-soft:#10233f;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0b1120;--surface:#111c30;--alt:#1e293b;--border:#263449;--text:#e2e8f0;--muted:#94a3b8;
+  --accent:#10b981;--accent-h:#34d399;--accent-fg:#04121a;--accent-soft:#06281f;
+  --danger:#f87171;--danger-soft:#2a1414;--warn:#fbbf24;--warn-soft:#2a1f0a;--info:#bfdbfe;--info-soft:#10233f;
+  color-scheme:dark;}}
+*{box-sizing:border-box}
+/* v2: a batch on several courts is drawn as a joined span; list styles for the displacement preview */
+.cell{position:relative}
+.cell.jn::after,.cell.jp::before{content:'';position:absolute;background:color-mix(in srgb,var(--info) 55%,transparent);z-index:1}
+.cell.jn::after{left:calc(50% - 1.5px);width:3px;top:calc(50% + 15px);bottom:-1px}
+.cell.jp::before{left:calc(50% - 1.5px);width:3px;top:-1px;bottom:calc(50% + 15px)}
+.grid.mob .cell.jn::after{top:calc(50% - 1.5px);height:3px;bottom:auto;width:auto;left:calc(50% + 15px);right:-1px}
+.grid.mob .cell.jp::before{top:calc(50% - 1.5px);height:3px;bottom:auto;width:auto;right:calc(50% + 15px);left:-1px}
+.aff{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:var(--rs)}
+.aff .lrow{padding:8px 10px;gap:8px;font-size:12.5px}
+.aff small{display:block;color:var(--muted);font-weight:400}
+.v2tag{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:99px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px}
+
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer}
+h1,h2,h3,p{margin:0}
+.preview{background:var(--text);color:var(--bg);padding:8px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px}
+.preview b{opacity:.8;font-weight:600}
+.seg{display:inline-flex;background:var(--alt);border:1px solid var(--border);border-radius:var(--rs);padding:2px;gap:2px}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:6px;color:var(--muted);font-weight:600}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.preview .seg{background:rgba(255,255,255,.12);border-color:transparent}
+.preview .seg button{color:inherit;opacity:.7}
+.preview .seg button[aria-pressed=true]{background:var(--surface);color:var(--text);opacity:1}
+.shell{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:calc(100vh - 42px)}
+.side{background:var(--surface);border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:2px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:16px;padding:0 6px}
+.logo{width:26px;height:26px;border-radius:7px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-size:13px;font-weight:800}
+.nav{display:flex;align-items:center;gap:10px;border:0;background:transparent;text-align:left;padding:9px 10px;border-radius:var(--rs);color:var(--muted);font-weight:600;width:100%}
+.nav:hover{background:var(--alt)}
+.nav[aria-current=page]{background:var(--accent-soft);color:var(--accent)}
+.nav .ic{width:18px;text-align:center}
+.nav .dot{margin-left:auto;background:var(--danger);color:#fff;border-radius:99px;font-size:11px;padding:0 6px;min-width:18px;text-align:center}
+.side .sep{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:14px 10px 4px}
+.body{min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;position:sticky;top:0;z-index:5}
+.top h1{font-size:18px}
+.ctx{display:flex;gap:10px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);overflow:hidden}
+.stepper button{border:0;background:transparent;padding:6px 10px;font-weight:700}
+.stepper button:hover{background:var(--alt)}
+.stepper span{padding:6px 10px;font-weight:600;min-width:112px;text-align:center;border-inline:1px solid var(--border)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--alt);display:grid;place-items:center;font-weight:700;border:1px solid var(--border)}
+main{padding:20px;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;max-width:1180px;width:100%}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+.card h2{font-size:15px}
+.ch{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ch .sub{color:var(--muted);font-size:13px}
+.cb{padding:16px}
+.muted{color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{padding:14px 16px}
+.kpi span{display:block;color:var(--muted);font-size:12px;font-weight:600}
+.kpi strong{font-size:24px}
+.kpi small{color:var(--accent);font-weight:600}
+.kpi small.dn{color:var(--danger)}
+.attn{display:grid;gap:8px}
+.attn-item{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:var(--rs);background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}
+.attn-item.red{background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.attn-item .txt{flex:1;min-width:0}
+.attn-item .txt small{display:block;color:var(--muted)}
+.btn{border:1px solid var(--border);background:var(--surface);padding:7px 12px;border-radius:var(--rs);font-weight:600}
+.btn:hover{background:var(--alt)}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.btn.pri:hover{background:var(--accent-h)}
+.btn.sm{padding:4px 10px;font-size:13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.bcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.bcard{text-align:left;padding:16px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);box-shadow:var(--shadow);display:grid;gap:10px}
+.bcard:hover{border-color:var(--accent)}
+.bcard .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bar{height:8px;background:var(--alt);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;background:var(--alt);color:var(--muted)}
+.pill.ok{background:var(--accent-soft);color:var(--accent)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--danger-soft);color:var(--danger)}
+.pill.info{background:var(--info-soft);color:var(--info)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px;border:1px solid var(--border)}
+.gridwrap{overflow:auto;border-top:1px solid var(--border)}
+table.grid{border-collapse:separate;border-spacing:0;min-width:100%}
+.grid th,.grid td{padding:0;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+.grid thead th{font-size:11px;color:var(--muted);font-weight:600;padding:6px 0;background:var(--surface);position:sticky;top:0;z-index:2;min-width:64px}
+.grid th.court{position:sticky;left:0;z-index:3;background:var(--surface);text-align:left;padding:0 12px;min-width:92px;font-size:13px}
+.grid thead th.court{z-index:4}
+
+.now{box-shadow:inset 0 3px 0 var(--accent)}
+.list{display:grid}
+.lrow{display:flex;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.lrow:first-child{border-top:0}
+.lrow .grow{flex:1;min-width:140px}
+.lrow small{display:block;color:var(--muted)}
+.sheet-bg{position:fixed;inset:0;background:rgb(15 23 42/.45);z-index:20;display:none}
+.sheet-bg.open{display:block}
+.sheet{position:fixed;right:0;top:0;bottom:0;width:min(420px,100%);background:var(--surface);z-index:21;box-shadow:-10px 0 30px rgb(0 0 0/.2);display:none;flex-direction:column}
+.sheet.open{display:flex}
+.sheet header{padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px}
+.sheet .sb{padding:16px;display:grid;gap:14px;overflow:auto;flex:1;align-content:start}
+.sheet footer{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px}
+.sheet footer .btn{flex:1}
+label.f{display:grid;gap:4px;font-weight:600;font-size:13px}
+input.in,select.in{padding:9px 10px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);color:var(--text);font:inherit}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:8px 14px;border:1px solid var(--border);border-radius:99px;background:var(--surface);font-weight:600}
+.chip[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:99px;z-index:40;display:none;gap:12px;align-items:center;box-shadow:var(--shadow)}
+.toast.show{display:flex}
+.toast button{border:0;background:transparent;color:var(--accent-h);font-weight:700}
+.note{background:var(--info-soft);color:var(--info);padding:10px 12px;border-radius:var(--rs);font-size:13px}
+.lock{display:grid;place-items:center;text-align:center;gap:6px;padding:40px 20px;color:var(--muted)}
+.bnav{display:none}
+.table{width:100%;border-collapse:collapse}
+.table th{text-align:left;font-size:12px;color:var(--muted);padding:8px 16px}
+.table td{padding:10px 16px;border-top:1px solid var(--border)}
+.tot{display:flex;justify-content:space-between;padding:12px 16px;border-top:2px solid var(--border);font-weight:700}
+@media (max-width:767px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{display:none}
+  .bnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);z-index:10}
+  .bnav button{flex:1;border:0;background:transparent;padding:8px 2px 10px;display:grid;gap:2px;justify-items:center;font-size:11px;font-weight:600;color:var(--muted)}
+  .bnav button[aria-current=page]{color:var(--accent)}
+  .bnav .ic{font-size:18px}
+  main{padding:14px 14px 90px}
+  .top{padding:10px 14px}
+  .ctx{margin-left:0;width:100%}
+  .fab{display:grid!important}
+}
+.fab{display:none;position:fixed;right:16px;bottom:78px;width:54px;height:54px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-fg);font-size:26px;z-index:12;place-items:center;box-shadow:var(--shadow-lg,0 6px 18px rgb(0 0 0/.3))}
+
+.cell{display:flex;align-items:center;justify-content:center;width:100%;min-height:50px;border:0;background:transparent;padding:0}
+.cell:hover{background:var(--alt)}
+.bd{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.legend .bd{width:20px;height:20px;margin-right:5px;vertical-align:middle}
+.legend .bd svg{transform:scale(.8)}
+.bd.open{background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-h)}
+.bd.empty{background:transparent;border:1.5px dashed var(--accent);color:var(--accent)}
+.bd.member{background:var(--info-soft);border:1px solid color-mix(in srgb,var(--info) 40%,transparent);color:var(--info)}
+.bd.booked{background:var(--accent);border:1px solid var(--accent);color:var(--accent-fg)}
+.bd.elapsed{background:var(--alt);border:1px solid var(--border);color:var(--muted)}
+details>summary{list-style:none;cursor:pointer}
+details>summary::-webkit-details-marker{display:none}
+details .chev{transition:transform .15s;color:var(--muted)}
+details[open]>summary .chev{transform:rotate(180deg)}
+details.batch{border-top:1px solid var(--border)}
+details.batch:first-child{border-top:0}
+details.batch>summary.lrow{border-top:0}
+.bm{padding:0 16px 12px 28px;background:var(--bg)}
+.bm .list .lrow{padding:10px 0}
+.month{margin-bottom:0}
+.month>summary.ch{border-bottom:0}
+.month[open]>summary.ch{border-bottom:1px solid var(--border)}
+.bd.memberlow{background:var(--warn-soft);border:1.5px dashed var(--warn);color:var(--warn)}
+.bd.pill{width:auto;min-width:34px;padding:0 8px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap}
+.linkb{border:0;background:transparent;padding:0;font-weight:700;text-align:left;text-decoration:underline dotted;text-underline-offset:3px}
+.linkb:hover{color:var(--accent)}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat3 .card{padding:10px 12px}.stat3 span{display:block;color:var(--muted);font-size:12px}.stat3 strong{font-size:18px}
+.rules-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.rules-row .grow{flex:1;min-width:180px}
+.rules-row input.in{width:90px}
+.gallery{display:none;padding:20px;gap:28px;flex-wrap:wrap;justify-content:center;background:var(--bg);align-items:flex-start}
+.gal-intro{width:100%;max-width:1100px}
+body.gal .shell,body.gal .bnav,body.gal .fab{display:none!important}
+body.gal .gallery{display:flex}
+.phone-wrap{display:grid;gap:8px;justify-items:center;width:410px;max-width:100%}
+.phone-wrap h3{font-size:14px;text-align:center}
+.phone-wrap p{font-size:12px;color:var(--muted);text-align:center;max-width:380px;min-height:32px}
+.phone{width:410px;max-width:100%;height:864px;border:10px solid #0f172a;border-radius:44px;overflow:hidden;background:var(--bg);box-shadow:0 20px 50px -20px rgb(0 0 0/.5)}
+.phone iframe{width:100%;height:100%;border:0;display:block}
+body.embed .preview{display:none}
+body.embed .shell{min-height:100vh}
+.grid.mob th.court{position:sticky;left:0}
+.grid.mob thead th{min-width:0;font-size:12px;color:var(--text);font-weight:700;padding:8px 0}
+.grid.mob td{width:auto}
+.grid.mob tbody th.court{min-width:46px;padding:0 8px;font-size:12px;color:var(--muted);font-weight:600}
+.grid.mob tr.nowrow th.court{color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.grid.mob .cell{min-height:52px}
+@media (max-width:767px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .seg{max-width:100%;overflow-x:auto}.seg button{white-space:nowrap}
+  .top h1{font-size:17px}.top{gap:8px}
+  .gridwrap{max-height:58vh}
+  .legend{gap:6px 12px;margin-left:0!important}
+  .card .ch{padding:12px 14px}
+  .lrow{padding:10px 14px}
+  .toast{bottom:100px;max-width:92%}
+  .bcards{grid-template-columns:1fr}
+  .chips.scroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+  .chips.scroll .chip{white-space:nowrap}
+  .sheet{top:auto;left:0;right:0;bottom:0;width:100%;max-height:90%;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgb(0 0 0/.3)}
+  .sheet header{position:relative;padding-top:20px}
+  .sheet header::before{content:"";position:absolute;top:7px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--border)}
+  .fab{display:none!important}
+  .top{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;row-gap:8px;padding:10px 14px}
+  .top h1{order:1}.top .avatar{order:2;width:30px;height:30px}
+  .top .ctx{order:3;grid-column:1/-1;flex-wrap:nowrap;width:100%;margin-left:0;gap:8px}
+  .top .ctx .seg{flex:1 1 auto;min-width:0}
+  .top .ctx .stepper{flex:none}.top .ctx .stepper span{min-width:76px;padding:6px 6px}
+  .legend{flex-wrap:nowrap;overflow-x:auto;width:100%;font-size:11px;padding-bottom:2px}
+  .legend>span{white-space:nowrap}
+  .attn-card .ch .sub{display:none}
+  .sheet .lrow,.bm .lrow{flex-wrap:nowrap}
+  .sheet .lrow .grow,.bm .lrow .grow{min-width:0}
+  .sheet .lrow .btn.sm,.bm .lrow .btn.sm{white-space:nowrap}
+  .gridwrap{max-height:none}
+}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.stackbar{display:flex;height:14px;border-radius:99px;overflow:hidden;background:var(--alt)}
+.rowb{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.grp-h{padding:10px 16px 4px;font-weight:700;font-size:13px;border-top:1px solid var(--border)}
+.grp-h:first-child{border-top:0}
+.band-h{padding:6px 16px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--alt)}
+.kpi small{display:block;margin-top:2px}
+@media (max-width:767px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="preview">
+  <b>Admin v2 revamp, preview as</b>
+  <div class="seg" id="roleSeg">
+    <button data-role="owner" aria-pressed="true">Owner (3 branches)</button>
+    <button data-role="mgr1" aria-pressed="false">Manager (1 branch)</button>
+    <button data-role="mgr2" aria-pressed="false">Manager (2 branches)</button>
+  </div>
+  <div class="seg" id="themeSeg"><button data-t="light" aria-pressed="true">Light</button><button data-t="dark" aria-pressed="false">Dark</button></div>
+  <div class="seg" id="viewSeg"><button data-v="desk" aria-pressed="true">Laptop / tablet</button><button data-v="mob" aria-pressed="false">Mobile screens</button></div>
+  <span style="opacity:.7" id="pvNote">“Today” is Thu 8 Oct 2026, about 5:10 PM. Nothing is wired to real data.</span>
+</div>
+
+<div class="shell">
+  <aside class="side" id="side"></aside>
+  <div class="body">
+    <header class="top">
+      <h1 id="title">Today</h1>
+      <div class="ctx" id="ctx"></div>
+      <div class="avatar" id="avatar">B</div>
+    </header>
+    <div class="tabsbar" id="tabsbar" style="display:none"><div class="tabs" id="tabs"></div></div>
+    <main id="main"></main>
+  </div>
+</div>
+<nav class="bnav" id="bnav"></nav>
+
+<section class="gallery" id="gallery">
+  <div class="gal-intro card"><div class="cb">
+    <h2 style="margin-bottom:6px">Mobile version — designed separately from the laptop layout</h2>
+    <p class="muted" style="margin-bottom:8px">Each phone is a live, tappable screen. Switch roles or branches inside the phone.</p>
+    <ul class="muted" style="margin:0;padding-left:18px;display:grid;gap:3px">
+      <li><b>The court grid turns on its side:</b> hours run down, courts run across, so there is no sideways scrolling. It opens at the current hour.</li>
+      <li><b>Bottom sheets</b> replace the side panel for walk-ins, batches, members and renewals.</li>
+      <li><b>Bottom tab bar</b> with the daily tasks; owner-only tools sit behind “More”.</li>
+      <li><b>Lists, not tables</b>; the Members module tabs scroll sideways.</li>
+    </ul></div></div>
+</section>
+
+<div class="sheet-bg" id="bg"></div>
+<aside class="sheet" id="sheet" aria-label="Details"></aside>
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="undo">Undo</button></div>
+<script>
+/* =================== core helpers =================== */
+const $=s=>document.querySelector(s);
+const money=n=>'₹'+Math.round(n).toLocaleString('en-IN');
+const fmtH=h=>`${((h+11)%12)+1}${h<12?'a':'p'}`;            // 6p  (grid headers)
+const fmtHP=h=>`${((h+11)%12)+1} ${h<12?'AM':'PM'}`;        // 6 PM
+const fmtHL=h=>`${((h+11)%12)+1}:00 ${h<12?'AM':'PM'}`;     // 6:00 PM
+const fmtMin=m=>{const h=Math.floor(m/60),mm=m%60;return `${((h+11)%12)+1}:${String(mm).padStart(2,'0')} ${h<12?'AM':'PM'}`};
+const band=h=>h<12?'Morning':h<16?'Afternoon':'Evening';
+const BAND_ORDER=['Morning','Afternoon','Evening'];
+function rnd(seed){let x=Math.sin(seed)*10000;return x-Math.floor(x)}
+const NOW_H=17,NOW_MIN=17*60+10;               // “now” = Thu 8 Oct 2026, 5:10 PM
+const dateAt=k=>new Date(2026,9,8+k);
+const DAY7=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const jsToIdx=d=>(d+6)%7;                      // JS getDay (0=Sun) -> Mon-based index
+const idxToJs=i=>(i+1)%7;
+const daysLabel=wd=>{const idx=wd.map(jsToIdx).sort((a,b)=>a-b).join();if(idx==='0,1,2,3,4,5')return'Mon–Sat';if(idx==='0,1,2,3,4')return'Mon–Fri';if(idx==='0,1,2,3,4,5,6')return'Every day';return idx.split(',').map(i=>DAY7[+i]).join(' · ')};
+
+/* =================== settings & permissions =================== */
+const SET={dueFrom:5,dueTo:10,deposit:1000,min:4,max:8,notice:30};
+const RULES={cutoffMin:60,low:2,ov:{}};          // attendance cutoff (minutes before start), low-attendance threshold
+const PERMS={pay:false,batches:false,renew:false,refund:false};   // what managers may additionally do
+
+/* =================== one dataset for everything =================== */
+const BRANCHES=[
+  {id:'b1',name:'JBC Main',courts:4,occ:78,left:11,rev:14200},
+  {id:'b2',name:'JBC Annex',courts:3,occ:52,left:19,rev:6800},
+  {id:'b3',name:'JBC East',courts:3,occ:41,left:24,rev:4100},
+];
+const brById=id=>BRANCHES.find(b=>b.id===id);
+const BATCHES=[
+  {id:'M1',br:'b1',courts:[2,3],h:6,wd:[1,2,3,4,5,6],rate:1800,peak:false,n:6,since:-400},
+  {id:'E1',br:'b1',courts:[1],h:18,wd:[1,2,3,4,5],rate:2500,peak:true,n:8,since:-320},
+  {id:'E2',br:'b1',courts:[3],h:19,wd:[2,4,6],rate:2500,peak:true,n:6,since:-200},
+  {id:'A1',br:'b2',courts:[2,3],h:18,wd:[1,2,3,4,5],rate:2200,peak:true,n:3,since:-150},
+  {id:'A2',br:'b2',courts:[1],h:7,wd:[1,2,3,4,5,6],rate:1600,peak:false,n:5,since:-250},
+  {id:'W1',br:'b3',courts:[1],h:19,wd:[1,3,5],rate:2000,peak:true,n:5,since:-90},
+];
+const bById=id=>BATCHES.find(b=>b.id===id);
+const courtsTxt=cs=>cs.length===1?`Court ${cs[0]}`:`Courts ${cs.slice().sort().join(' + ')}`;
+const bName=b=>b.label||`${courtsTxt(b.courts)} · ${fmtHP(b.h)}`;
+const bDays=b=>daysLabel(b.wd);
+const runsOn=(b,k)=>b.wd.includes(dateAt(k).getDay());
+const NAMES=['Arjun Kumar','Meera Shah','Ravi Prasad','Divya Nair','Karthik Rao','Sana Ali','Vikram Tej','Priya Menon','Nikhil Bhat','Anita Roy','Suresh Iyer','Kavya Reddy','Rohan Das','Lakshmi Narayan','Imran Khan','Neha Joshi','Aditya Verma','Pooja Singh','Manoj Pillai','Shreya Gupta','Tarun Mehta','Isha Kapoor','Gautam Rao','Deepa Nair','Faisal Ahmed','Harini Subramani','Jatin Shah','Kiran Patel','Leela Das','Mohan Raj','Nandini Iyer','Omar Sheikh','Pallavi Rao','Qasim Ali','Rekha Menon','Sandeep Nair'];
+const MEMBERS=[];let _k=0;
+BATCHES.forEach(b=>{for(let i=0;i<b.n;i++,_k++){
+  const name=NAMES[_k%NAMES.length],q=(_k%5===1);
+  const term=q?{months:3,amount:Math.round(3*b.rate*.95/50)*50}:{months:1,amount:b.rate};
+  let balance,arrears=0;
+  if(q)balance=_k%2===0?0:term.amount;
+  else if(_k%7===0){arrears=b.rate;balance=b.rate*2}
+  else balance=_k%3===0?0:b.rate;
+  MEMBERS.push({id:'m'+_k,name,gmail:name.toLowerCase().replace(/ /g,'.')+'@gmail.com',phone:'98'+String(40000000+(_k*7919)%59999999).padStart(8,'0'),
+    batch:b.id,term,balance,arrears,status:'active',deposit:{amount:SET.deposit,state:'held'},joined:['Jun','Jul','Aug','Sep'][_k%4]+' 2026',att:70+Math.round(rnd(_k)*30)});
+}});
+const mById=id=>MEMBERS.find(m=>m.id===id);
+const otherRows=x=>MEMBERS.filter(y=>y.pid===x.pid&&y.id!==x.id&&y.status!=='ended');
+const alsoIn=x=>{const o=otherRows(x);return o.length?` · also in ${o.map(y=>bName(bById(y.batch))).join(', ')}`:''};
+const roster=b=>MEMBERS.filter(x=>x.batch===b.id&&x.status!=='ended');
+const seatsUsed=b=>roster(b).length;
+const _pm=roster(bById('E2')).find(m=>m.balance===0)||roster(bById('E2'))[0];_pm.status='paused';_pm.pausedUntil='1 Dec';_pm.balance=0;_pm.arrears=0;
+/* v2 (Bala's addendum): a member can be in any number of batches. Each batch is its own assignment row (own dues,
+   own pause, own cancellation); `pid` ties the rows of one person; the deposit is held ONCE, on the first row. */
+MEMBERS.forEach(x=>{x.pid=x.id});
+(function(){const dup=(sb,idx,tb)=>{const s=roster(bById(sb))[idx],b=bById(tb);if(!s||!b)return;
+  MEMBERS.push({...s,id:'m'+MEMBERS.length,pid:s.pid,batch:tb,term:{months:1,amount:b.rate},balance:b.rate,arrears:0,status:'active',deposit:{amount:0,state:'held'},joined:'Sep 2026'})};
+  dup('M1',0,'E2');dup('M1',1,'A1');dup('M1',2,'W1')})();
+const REQS=[];
+(function(){const add=(bid,idx,on,last,att)=>{const m=roster(bById(bid)).filter(x=>x.status==='active')[idx];if(!m)return;m.status='notice';m.lastDay=last;REQS.push({id:'r'+REQS.length,m:m.id,on,last,att,state:'open'})};add('E1',3,'5 Oct','4 Nov',64);add('A2',1,'1 Oct','31 Oct',92)})();
+// Overdue = carried from last month, OR an unpaid quarterly/yearly term (it fell due the day the period started).
+const stOf=m=>m.status!=='active'&&m.status!=='notice'?null:(m.balance===0?['Paid','ok']:(m.arrears>0||m.term.months>1)?['Overdue','bad']:['Due','warn']);
+
+/* =================== attendance (read-only, members confirm themselves) =================== */
+const STATUS={CONFIRMED:['Confirmed','ok'],PENDING_CONFIRMATION:['Pending','warn'],PAST_CUTOFF:['Past cutoff','bad'],RELEASED_NO_SHOW:['Released · no-show','bad'],PAUSED:['Paused','info']};
+const cutoffMin=b=>b.h*60-(RULES.ov[b.id]??RULES.cutoffMin);
+const cutoffPassed=b=>NOW_MIN>=cutoffMin(b);
+function attStatus(b,x,i,k){
+  const r=rnd(b.h*31+i*13+k*7+b.courts[0]);
+  if(x.status==='paused')return 'PAUSED';
+  if(k<0||(k===0&&b.h+1<=NOW_H))return r<.82?'CONFIRMED':'RELEASED_NO_SHOW';
+  if(k===0){
+    if(b.h<=NOW_H)return r<.9?'CONFIRMED':'RELEASED_NO_SHOW';
+    const conf=b.id==='E1'?i===0:r<.45;                         // E1 is the low-attendance demo
+    return conf?'CONFIRMED':(cutoffPassed(b)?'PAST_CUTOFF':'PENDING_CONFIRMATION');
+  }
+  return r<.35?'CONFIRMED':'PENDING_CONFIRMATION';
+}
+const sessionRows=(b,k)=>roster(b).map((x,i)=>({id:x.id,n:x.name,p:x.phone,i,st:attStatus(b,x,i,k)}));
+const confirmedCount=(b,k)=>sessionRows(b,k).filter(r=>r.st==='CONFIRMED').length;
+const activeCount=b=>roster(b).filter(x=>x.status!=='paused').length;
+const lowAttn=(b,k)=>k===0&&runsOn(b,0)&&b.h+1>NOW_H&&cutoffPassed(b)&&activeCount(b)>0&&confirmedCount(b,0)<RULES.low;
+const attOf=b=>Math.round(68+rnd(b.h*3+b.courts[0])*28);
+
+/* =================== state & scope =================== */
+const state={role:'owner',page:'today',tab:'members',view:null,branch:'all',dayOffset:0,period:'today',booked:{},filter:'all',q:'',mBatch:null,nm:{},cf:null,sel:null};
+const isOwner=()=>state.role==='owner';
+const myBranches=()=>isOwner()?BRANCHES:state.role==='mgr1'?[BRANCHES[0]]:[BRANCHES[0],BRANCHES[1]];
+const curBranch=()=>BRANCHES.find(b=>b.id===state.branch);
+const scopeBranches=()=>state.branch==='all'?myBranches():[curBranch()].filter(Boolean);
+const scopeBatches=()=>BATCHES.filter(b=>scopeBranches().some(x=>x.id===b.br));
+const scopeMembers=()=>MEMBERS.filter(m=>scopeBatches().some(b=>b.id===m.batch));
+const cn=ci=>`Court ${ci+1}`;
+const dayLbl=(k=state.dayOffset)=>k===0?'Today':k===1?'Tomorrow':k===-1?'Yesterday':dateAt(k).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+const openReqs=()=>REQS.filter(r=>r.state==='open'&&scopeBatches().some(b=>b.id===mById(r.m).batch));
+function groupBatches(list){
+  const out=[];
+  BRANCHES.forEach(br=>{
+    const bb=list.filter(b=>b.br===br.id);if(!bb.length)return;
+    const bands=BAND_ORDER.map(bn=>({band:bn,items:bb.filter(b=>band(b.h)===bn).sort((a,c)=>a.h-c.h)})).filter(x=>x.items.length);
+    out.push({br,bands});
+  });
+  return out;
+}
+const seatPill=b=>{const n=seatsUsed(b);return n<SET.min?`<span class="pill bad">${n}/${SET.max} · below min ${SET.min}</span>`:n>=SET.max?`<span class="pill warn">${n}/${SET.max} · full</span>`:`<span class="pill ok">${n}/${SET.max} seats</span>`};
+
+/* =================== sheet, toast, shared delegates =================== */
+function toast(msg,undo){$('#toastMsg').textContent=msg;const u=$('#undo');u.style.display=undo?'inline':'none';u.onclick=()=>{undo&&undo();$('#toast').classList.remove('show')};$('#toast').classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>$('#toast').classList.remove('show'),4500)}
+function openSheet(html){
+  if(html!==undefined)$('#sheet').innerHTML=html;
+  $('#bg').classList.add('open');$('#sheet').classList.add('open');
+  document.querySelectorAll('#sheet [data-close],#sheet #close,#sheet #cancel').forEach(b=>b.onclick=closeSheet);
+}
+function closeSheet(){$('#bg').classList.remove('open');$('#sheet').classList.remove('open')}
+$('#bg').onclick=closeSheet;
+const shead=(t,sub)=>`<header><div><h2>${t}</h2>${sub?`<p class="muted">${sub}</p>`:''}</div><button class="btn sm" data-close>✕</button></header>`;
+document.addEventListener('click',e=>{
+  const mh=e.target.closest('[data-mh]');if(mh){const[a,c]=mh.dataset.mh.split('|');openMemberHistory(a,c);return}
+  const b=e.target.closest('[data-ph]');if(!b)return;
+  b.outerHTML=`<a class="pill info" href="tel:${b.dataset.ph}" style="padding:5px 10px;text-decoration:none">📞 ${b.dataset.ph}</a>`;
+});
+function memberListHTML(rows,bid){
+  return `<div class="list">${rows.map(r=>`<div class="lrow"><div class="grow"><button class="linkb" data-mh="${bid}|${r.id}">${r.n}</button></div>
+    <span class="pill ${STATUS[r.st][1]}">${STATUS[r.st][0]}</span><button class="btn sm" data-ph="${r.p}">Show number</button></div>`).join('')}</div>`;
+}
+
+/* =================== navigation & chrome =================== */
+const NAV=[
+  {k:'today',l:'Today',s:'Today',i:'▦',roles:['o','m'],mobile:true},
+  {k:'walkin',l:'Walk-in booking',s:'Walk-in',i:'＋',roles:['o','m'],mobile:true},
+  {k:'ledger',l:'Ledger',s:'Ledger',i:'₹',roles:['o','m'],mobile:true},
+  {k:'members',l:'Members',s:'Members',i:'☺',roles:['o','m'],mobile:true},
+  {k:'comms',l:'Communications',s:'Comms',i:'✉',roles:['o'],mobile:false,group:'Owner tools'},
+  {k:'attrules',l:'Attendance rules',s:'Attendance',i:'⏱',roles:['o'],mobile:false,group:'Owner tools'},
+  {k:'rules',l:'Pricing & rules',s:'Rules',i:'⚙',roles:['o'],mobile:false,group:'Owner tools'},
+  {k:'settings',l:'Branch settings',s:'Settings',i:'🕘',roles:['o'],mobile:false,group:'Owner tools'},
+  {k:'managers',l:'Managers',s:'Managers',i:'🔑',roles:['o'],mobile:false,group:'Owner tools'},
+];
+const TABS={o:[['members','Members'],['batches','Batches'],['renewals','Renewals'],['dues','Dues'],['attendance','Attendance'],['requests','Requests'],['settings','Settings']],
+            m:[['attendance','Attendance'],['members','Members'],['requests','Requests']]};
+const roleKind=()=>isOwner()?'o':'m';
+function ensureBranch(){
+  const bs=myBranches();
+  if(isOwner()){if(state.branch!=='all'&&!bs.find(b=>b.id===state.branch))state.branch='all'}
+  else if(!bs.find(b=>b.id===state.branch))state.branch=bs[0].id;
+}
+function lowItems(brs){
+  if(state.dayOffset!==0)return [];
+  const out=[];brs.forEach(br=>BATCHES.filter(b=>b.br===br.id).forEach(b=>{if(lowAttn(b,0))out.push({b,br})}));return out;
+}
+function renderNav(){
+  const items=NAV.filter(n=>n.roles.includes(roleKind())),cnt=lowItems(scopeBranches()).length,rq=openReqs().length;
+  let html=`<div class="brand"><div class="logo">J</div><span>JBC</span></div>`,last='';
+  items.forEach(n=>{
+    if(n.group&&n.group!==last){html+=`<div class="sep">${n.group}</div>`;last=n.group}
+    const badge=n.k==='today'&&cnt?`<span class="dot">${cnt}</span>`:n.k==='members'&&rq?`<span class="dot">${rq}</span>`:'';
+    html+=`<button class="nav" data-p="${n.k}" ${state.page===n.k?'aria-current="page"':''}><span class="ic">${n.i}</span>${n.l}${badge}</button>`;
+  });
+  $('#side').innerHTML=html;
+  const mob=items.filter(n=>n.mobile),more=items.some(n=>!n.mobile);
+  $('#bnav').innerHTML=mob.map(n=>`<button data-p="${n.k}" ${state.page===n.k?'aria-current="page"':''}><span class="ic">${n.i}</span>${n.s}</button>`).join('')+(more?`<button data-p="more" ${state.page==='more'?'aria-current="page"':''}><span class="ic">⋯</span>More</button>`:'');
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>go(b.dataset.p));
+  $('#avatar').textContent=isOwner()?'B':'M';
+}
+function renderCtx(){
+  const bs=myBranches();let h='';
+  if(bs.length>1){
+    const opts=(isOwner()?[{id:'all',name:'All branches'}]:[]).concat(bs);
+    h+=opts.length<=4?`<div class="seg" role="group" aria-label="Branch">${opts.map(o=>`<button data-b="${o.id}" aria-pressed="${state.branch===o.id}">${o.name}</button>`).join('')}</div>`
+      :`<select class="in" id="bsel">${opts.map(o=>`<option value="${o.id}" ${state.branch===o.id?'selected':''}>${o.name}</option>`).join('')}</select>`;
+  }else h+=`<span class="pill info">${bs[0].name}</span>`;
+  if(state.page==='today'||state.page==='ledger')h+=`<div class="stepper"><button id="prev" aria-label="Previous day">‹</button><span>${dayLbl()}</span><button id="next" aria-label="Next day">›</button></div>`;
+  $('#ctx').innerHTML=h;
+  document.querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>{state.branch=b.dataset.b;state.mBatch=null;state.view=null;render()});
+  const p=$('#prev');if(p){p.onclick=()=>{state.dayOffset--;render()};$('#next').onclick=()=>{state.dayOffset++;render()}}
+  const sel=$('#bsel');if(sel)sel.onchange=()=>{state.branch=sel.value;state.mBatch=null;state.view=null;render()};
+}
+function renderTabs(){
+  const bar=$('#tabsbar');
+  if(state.page!=='members'){bar.style.display='none';return}
+  bar.style.display='';
+  const n=openReqs().length;
+  $('#tabs').innerHTML=TABS[roleKind()].map(t=>`<button class="tab" data-t="${t[0]}" aria-pressed="${state.tab===t[0]}">${t[1]}${t[0]==='requests'&&n?` <span class="dot2">${n}</span>`:''}</button>`).join('');
+  document.querySelectorAll('.tab[data-t]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.t;state.view=null;render()});
+}
+function go(p){
+  const n=NAV.find(x=>x.k===p);
+  if(n&&!n.roles.includes(roleKind()))p='today';
+  if(p==='walkin'){state.page='today';state.view=null;ensureBranch();if(state.branch==='all')state.branch=myBranches()[0].id;render();openWalkIn();return}
+  if(p!=='members')state.view=null;
+  state.page=p;render();
+}
+const goMembers=(tab)=>{state.page='members';state.tab=tab;state.view=null;render()};
+function render(){
+  ensureBranch();
+  const role=roleKind();
+  const n=NAV.find(x=>x.k===state.page);
+  if(n&&!n.roles.includes(role))state.page='today';
+  if(state.page==='members'&&!TABS[role].some(t=>t[0]===state.tab))state.tab=TABS[role][0][0];
+  const nn=NAV.find(x=>x.k===state.page);
+  $('#title').textContent=state.page==='more'?'More':nn?nn.l:'Today';
+  renderNav();renderCtx();renderTabs();
+  const m=$('#main');
+  if(state.page==='members'){
+    if(state.view){({create:vCreate,roster:vRoster})[state.view.type](m,state.view);return}
+    ({attendance:vAttendance,members:vMembers,batches:vBatches,renewals:vRenewals,dues:vDues,requests:vRequests,settings:vSettings})[state.tab](m);return;
+  }
+  ({today:viewToday,ledger:viewLedger,more:viewMore,managers:viewManagers,attrules:viewAttRules,
+    comms:()=>stub(m,'Communications','Announcements to members and guests. Owner only for now.'),
+    rules:()=>stub(m,'Pricing & rules','Guest rates, cancellation policy and authorised courts. Owner only.'),
+    settings:()=>stub(m,'Branch settings','Operating hours and special hours. Owner only.')}[state.page]||viewToday)(m);
+}
+function stub(m,t,d){m.innerHTML=`<div class="card"><div class="lock"><h2>${t}</h2><p>${d}</p><p class="muted">Existing screen, unchanged by this revamp.</p></div></div>`}
+function viewMore(m){
+  const items=NAV.filter(n=>n.roles.includes(roleKind())&&!n.mobile);
+  m.innerHTML=`<div class="card"><div class="list">${items.map(n=>`<button class="lrow nav" style="border-radius:0" data-p="${n.k}"><span class="ic">${n.i}</span>${n.l}</button>`).join('')}</div></div>`;
+  m.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>go(b.dataset.p));
+}
+
+/* =================== Today = guest + member composition =================== */
+const PER_LBL={today:'today',week:'this week',month:'this month'};
+function duesStats(members){
+  let exp=0,unpaid=0,owed=0;
+  members.forEach(x=>{if(x.status==='ended'||x.status==='paused')return;const eq=x.term.amount/x.term.months;exp+=eq;if(x.balance-x.arrears>0)unpaid+=eq;owed+=x.balance});
+  return {exp,col:exp-unpaid,owed};
+}
+function compHTML(bs){
+  const own=isOwner(),per=state.period,days=per==='today'?1:per==='week'?7:30;
+  const courts=bs.reduce((a,b)=>a+b.courts,0),avail=courts*16*days;
+  const batches=BATCHES.filter(b=>bs.some(x=>x.id===b.br)&&seatsUsed(b)>0);
+  const memH=Math.round(batches.reduce((a,b)=>a+b.wd.length/7*days,0));
+  const guestH=Math.round(avail*(.16+bs.length*.01)),free=Math.max(0,avail-memH-guestH),util=Math.round((memH+guestH)/avail*100);
+  const todayRev=bs.reduce((a,b)=>a+b.rev,0),mult=per==='today'?1:per==='week'?6:24,guestRev=todayRev*mult;
+  const ds=duesStats(MEMBERS.filter(x=>bs.some(br=>br.id===bById(x.batch).br)));
+  const mrec=per==='month'?ds.col:per==='week'?Math.round(ds.col*.22):Math.round(ds.col*.04);
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div class="muted">Guest and member activity</div>
+      <div class="seg" id="perSeg">${[['today','Today'],['week','This week'],['month','This month']].map(x=>`<button data-per="${x[0]}" aria-pressed="${per===x[0]}">${x[1]}</button>`).join('')}</div></div>
+    <div class="kpis">
+      <div class="card kpi"><span>Court utilisation</span><strong>${util}%</strong><small>guest + member hours</small></div>
+      <div class="card kpi"><span>Guest revenue</span><strong>${money(own?guestRev:todayRev)}</strong><small>${own?'walk-ins &amp; links':'today only'}</small></div>
+      ${own?`<div class="card kpi"><span>Member dues received</span><strong>${money(mrec)}</strong><small>${per==='month'?'of '+money(ds.exp)+' expected':'dues payments'}</small></div>`:`<div class="card kpi"><span>Collected today</span><strong>${money(todayRev)}</strong><small>for the till</small></div>`}
+      <div class="card kpi"><span>Open slots left today</span><strong>${bs.reduce((a,b)=>a+b.left,0)}</strong><small>${batches.length} member batches</small></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><div class="ch"><h2>Court utilisation</h2><span class="sub">hours ${PER_LBL[per]}</span></div><div class="cb" style="display:grid;gap:10px">
+        <div class="stackbar"><i style="width:${memH/avail*100}%;background:#3b82f6"></i><i style="width:${guestH/avail*100}%;background:var(--accent)"></i></div>
+        <div class="legend"><span><i style="background:#3b82f6;border-radius:50%"></i>Member ${memH} h</span><span><i style="background:var(--accent);border-radius:50%"></i>Guest ${guestH} h</span><span><i style="background:var(--alt);border-radius:50%"></i>Free ${free} h</span></div></div></div>
+      <div class="card"><div class="ch"><h2>Collections</h2><span class="sub">${own?PER_LBL[per]:'today only'}</span></div><div class="cb" style="display:grid;gap:14px">
+        <div><div class="rowb"><span>Guest revenue</span><b>${money(own?guestRev:todayRev)}</b></div><div class="bar"><i style="width:100%;background:#3b82f6"></i></div></div>
+        ${own?`<div><div class="rowb"><span>Member dues</span><b>${money(mrec)} ${per==='month'?`<span class="muted">of ${money(ds.exp)}</span>`:''}</b></div><div class="bar"><i style="width:${per==='month'?Math.round(ds.col/ds.exp*100):40}%"></i></div></div>
+        <div class="muted" style="font-size:12px">Outstanding this month: ${money(ds.owed)}</div>`:'<div class="muted" style="font-size:12px">Member dues are handled by the owner.</div>'}</div></div>
+    </div>`;
+}
+function attnHTML(bs,showBranch){
+  const items=lowItems(bs);
+  if(!items.length)return `<div class="card"><div class="cb muted">✓ No batch is below ${RULES.low} confirmed.</div></div>`;
+  return `<div class="card attn-card"><div class="ch"><h2>Low attendance</h2><span class="pill warn">${items.length}</span><span class="sub">Fewer than ${RULES.low} members confirmed after cutoff</span></div><div class="cb attn">${items.map(x=>`
+    <div class="attn-item"><div class="txt"><b>${bName(x.b)} — only ${confirmedCount(x.b,0)} confirmed</b><small>${showBranch?x.br.name+' · ':''}Cutoff passed at ${fmtMin(cutoffMin(x.b))} · the court can be offered to a guest</small></div>
+    <button class="btn sm pri" data-attn="${x.b.id}">Add guest slot</button></div>`).join('')}</div></div>`;
+}
+function memAttnHTML(bs){
+  const own=isOwner(),items=[];
+  const mem=MEMBERS.filter(x=>bs.some(br=>br.id===bById(x.batch).br)),bat=BATCHES.filter(b=>bs.some(br=>br.id===b.br));
+  const req=openReqs().filter(r=>bs.some(br=>br.id===bById(mById(r.m).batch).br)).length;
+  const over=mem.filter(x=>stOf(x)&&stOf(x)[0]==='Overdue').length;
+  const below=bat.filter(b=>seatsUsed(b)>0&&seatsUsed(b)<SET.min);
+  if(req)items.push(['red',`${req} cancellation request${req>1?'s':''} waiting`,'Check attendance, call the member, then pause or end the membership','requests']);
+  if(own&&over)items.push(['',`${over} member${over>1?'s':''} overdue`,'Carried over from last month, or an unpaid quarterly or yearly fee','dues']);
+  if(own&&below.length)items.push(['',`${below.length} batch${below.length>1?'es':''} below the minimum of ${SET.min} members`,below.map(b=>`${brById(b.br).name} · ${bName(b)} has ${seatsUsed(b)}`).join(' · '),'batches']);
+  if(!items.length)return '';
+  return `<div class="card"><div class="ch"><h2>Member follow-ups</h2><span class="pill warn">${items.length}</span></div><div class="cb attn">${items.map(x=>`<div class="attn-item ${x[0]}"><div class="txt"><b>${x[1]}</b><small>${x[2]}</small></div><button class="btn sm" data-mgo="${x[3]}">Open</button></div>`).join('')}</div></div>`;
+}
+function attByBatchHTML(bs,multi){
+  return `<div class="card"><div class="ch"><h2>Attendance by batch</h2><span class="sub">members’ own confirmations · ${PER_LBL[state.period]}</span></div>
+    ${groupBatches(BATCHES.filter(b=>bs.some(x=>x.id===b.br)&&seatsUsed(b)>0)).map(g=>`${multi?`<div class="grp-h">${g.br.name}</div>`:''}${g.bands.map(bd=>`<div class="band-h">${bd.band}</div>${bd.items.map(b=>{const a=attOf(b);return `<div class="lrow"><div class="grow"><b>${bName(b)}</b><small>${bDays(b)}</small></div><div style="width:38%;min-width:80px"><div class="bar"><i style="width:${a}%;${a<75?'background:var(--warn)':''}"></i></div></div><b style="width:42px;text-align:right">${a}%</b></div>`}).join('')}`).join('')}`).join('')}</div>`;
+}
+function bindToday(m){
+  m.querySelectorAll('[data-per]').forEach(b=>b.onclick=()=>{state.period=b.dataset.per;render()});
+  m.querySelectorAll('[data-mgo]').forEach(b=>b.onclick=()=>goMembers(b.dataset.mgo));
+  m.querySelectorAll('[data-attn]').forEach(b=>b.onclick=()=>{const bt=bById(b.dataset.attn);state.branch=bt.br;state.page='today';render();openWalkIn({ci:bt.courts[0]-1,h:bt.h})});
+  m.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{state.branch=b.dataset.open;render()});
+}
+const ICON={
+  open:'<svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  member:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="8" height="6" rx="1.5"/><path d="M5 6V4.5a2 2 0 014 0V6"/></svg>',
+  booked:'<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="currentColor"/></svg>',
+  elapsed:'<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+};
+const CELL_LABEL={open:'Open — tap to book',empty:'Empty — tap to book',member:'Member batch — tap for attendance',booked:'Booked',elapsed:'Elapsed'};
+const GNAMES=['Arjun K','Meera S','Ravi P','Divya N','Karthik R','Sana A','Vikram T','Priya M'];
+function cellState(br,ci,h){
+  const key=`${br.id}|${ci}|${h}|${state.dayOffset}`;
+  if(state.booked[key])return state.booked[key];
+  const b=BATCHES.find(x=>x.br===br.id&&x.courts.includes(ci+1)&&x.h===h&&runsOn(x,state.dayOffset)&&seatsUsed(x)>0);
+  if(b)return {t:'member',b};
+  const r=rnd(br.id.charCodeAt(1)*131+ci*17+h*7+state.dayOffset*53),ev=h>=17&&h<21;
+  if(r<(ev?.55:.22)&&h>=8)return {t:'booked',n:NAMES[Math.floor(r*90)%12],paid:['Cash','UPI','Link'][Math.floor(r*30)%3]};
+  if(state.dayOffset<0||(state.dayOffset===0&&h<NOW_H))return {t:'elapsed'};
+  if(h<8||h>=21)return {t:'empty'};
+  return {t:'open'};
+}
+const isMobile=()=>window.innerWidth<768;
+function cellBtn(br,ci,h){
+  const s=cellState(br,ci,h),low=s.t==='member'&&lowAttn(s.b,state.dayOffset);
+  const face=`<span class="bd ${low?'memberlow':s.t}">${ICON[low||s.t==='empty'?'open':s.t]}</span>`;
+  const lbl=low?'Member batch — low attendance, tap to add a guest':CELL_LABEL[s.t];
+  const jp=s.t==='member'&&s.b.courts.includes(ci),jn=s.t==='member'&&s.b.courts.includes(ci+2);
+  return `<button class="cell ${jp?'jp':''} ${jn?'jn':''}" data-c="${ci}" data-h="${h}" aria-label="${cn(ci)} ${fmtH(h)} — ${lbl}${s.t==='member'&&s.b.courts.length>1?' (one batch on '+courtsTxt(s.b.courts)+')':''}">${face}</button>`;
+}
+function gridHTML(br){
+  const HOURS=[];for(let h=6;h<22;h++)HOURS.push(h);const nowH=h=>h===NOW_H&&state.dayOffset===0;
+  const cs=Array.from({length:br.courts},(_,i)=>i);
+  if(!isMobile())return `<div class="gridwrap"><table class="grid"><thead><tr><th class="court">Court</th>${HOURS.map(h=>`<th class="${nowH(h)?'now':''}">${fmtH(h)}</th>`).join('')}</tr></thead><tbody>${cs.map(ci=>`<tr><th class="court">${cn(ci)}</th>${HOURS.map(h=>`<td>${cellBtn(br,ci,h)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="gridwrap"><table class="grid mob"><thead><tr><th class="court">Time</th>${cs.map(ci=>`<th>${cn(ci)}</th>`).join('')}</tr></thead><tbody>${HOURS.map(h=>`<tr class="${nowH(h)?'nowrow':''}"><th class="court">${fmtH(h)}</th>${cs.map(ci=>`<td>${cellBtn(br,ci,h)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+function batchHeader(b,k){
+  const ok=confirmedCount(b,k),tot=activeCount(b);
+  const cut=k===0?(cutoffPassed(b)?` · Cutoff passed (${fmtMin(cutoffMin(b))})`:` · Cutoff ${fmtMin(cutoffMin(b))}`):'';
+  return `<div class="grow"><b>${bName(b)}</b><small>${fmtHL(b.h)} – ${fmtHL(b.h+1)} · ${bDays(b)}${cut}</small></div><span class="pill ${ok===tot?'ok':'warn'}">${ok} of ${tot} confirmed</span>`;
+}
+function viewToday(m){
+  const bs=scopeBranches();
+  if(state.branch==='all'){
+    m.innerHTML=`${compHTML(bs)}${attnHTML(bs,true)}${memAttnHTML(bs)}
+      <div class="card"><div class="ch"><h2>Branches</h2><span class="sub">Tap a branch to open its court grid</span></div>
+      <div class="cb bcards">${bs.map(b=>{const a=lowItems([b]).length;return `<button class="bcard" data-open="${b.id}">
+        <div class="row"><strong>${b.name}</strong>${a?`<span class="pill warn">${a} low attendance</span>`:'<span class="pill ok">All clear</span>'}</div>
+        <div class="row"><span class="muted">Occupancy</span><strong>${b.occ}%</strong></div><div class="bar"><i style="width:${b.occ}%"></i></div>
+        <div class="row"><span class="muted">${b.left} slots left</span><span>${money(b.rev)}</span></div></button>`}).join('')}</div></div>
+      ${attByBatchHTML(bs,true)}`;
+    bindToday(m);return;
+  }
+  const br=curBranch(),todays=BATCHES.filter(b=>b.br===br.id&&runsOn(b,state.dayOffset)&&seatsUsed(b)>0).sort((a,b)=>a.h-b.h);
+  const gridCard=`<div class="card"><div class="ch"><h2>${br.name} · ${dayLbl()}</h2><span class="pill ok">${br.occ}% occupied</span>
+      <div class="legend" style="margin-left:auto"><span><span class="bd open">${ICON.open}</span>Open</span><span><span class="bd member">${ICON.member}</span>Member</span><span>Joined cells = one batch on several courts</span><span><span class="bd memberlow">${ICON.open}</span>Member · low attendance</span><span><span class="bd booked">${ICON.booked}</span>Booked</span><span><span class="bd elapsed">${ICON.elapsed}</span>Elapsed</span></div></div>
+      ${gridHTML(br)}</div>`;
+  const batchCard=`<div class="card"><div class="ch"><h2>Member batches · ${dayLbl()}</h2><span class="sub">Attendance is confirmed by members. Read-only.</span></div>
+      ${todays.length?`<div class="list">${todays.map(b=>`<details class="batch"><summary class="lrow">${batchHeader(b,state.dayOffset)}<span class="chev">▾</span></summary><div class="bm">${memberListHTML(sessionRows(b,state.dayOffset),b.id)}</div></details>`).join('')}</div>`:`<div class="cb muted">No member batches run on this day.</div>`}</div>`;
+  const note=`<p class="muted" style="font-size:12px">Amber dashed + = a member batch with fewer than ${RULES.low} confirmed after cutoff: tap it to sell that court to a guest. Tap Open to book a walk-in, Booked for the guest details${isOwner()?' (owner also sees Refund)':' (refunds are handled by the owner)'}, Member for that batch's attendance.</p>`;
+  const parts=isOwner()
+    ?[compHTML([br]),attnHTML([br],false),memAttnHTML([br]),gridCard,batchCard,attByBatchHTML([br],false),note]
+    :[attnHTML([br],false),memAttnHTML([br]),gridCard,batchCard,compHTML([br]),attByBatchHTML([br],false),note];   // front desk: grid first
+  m.innerHTML=parts.join('');
+  m.querySelectorAll('.cell').forEach(c=>c.onclick=()=>{
+    const ci=+c.dataset.c,h=+c.dataset.h,s=cellState(br,ci,h);
+    if(s.t==='open'||s.t==='empty')openWalkIn({ci,h});
+    else if(s.t==='member')openBatchSheet(s.b.id,state.dayOffset);
+    else if(s.t==='booked')openDetail(br,ci,h,s);
+  });
+  bindToday(m);
+  const gw=document.querySelector('.gridwrap'),nr=gw&&gw.querySelector('.nowrow');if(nr)gw.scrollTop=Math.max(0,nr.offsetTop-90);
+}
+
+/* ---------- batch sheet (read-only attendance for one session) ---------- */
+function openBatchSheet(bid,k){
+  const b=bById(bid),br=brById(b.br),low=lowAttn(b,k);
+  openSheet(`${shead(bName(b),`${br.name} · ${fmtHL(b.h)} – ${fmtHL(b.h+1)} · ${bDays(b)}`)}
+    <div class="sb"><div class="row" style="display:flex;gap:8px;align-items:center"><span class="pill ${confirmedCount(b,k)===activeCount(b)?'ok':'warn'}">${confirmedCount(b,k)} of ${activeCount(b)} confirmed</span> <span class="muted">${dayLbl(k)}</span></div>
+    ${low?`<div class="note" style="background:var(--warn-soft);color:var(--warn)"><b>Only ${confirmedCount(b,k)} confirmed</b> (alert below ${RULES.low}). This court is likely to sit empty — you can sell it to a guest.</div>`:''}
+    <div class="note">Attendance is confirmed by members themselves. This is a read-only view. Tap a name for that member's full history.</div>
+    ${memberListHTML(sessionRows(b,k),bid)}</div>
+    <footer><button class="btn" data-close>Close</button>${low?`<button class="btn pri" id="addGuest">Add guest to this slot</button>`:''}</footer>`);
+  const ag=$('#addGuest');if(ag)ag.onclick=()=>{closeSheet();state.branch=b.br;state.page='today';state.view=null;render();openWalkIn({ci:b.courts[0]-1,h:b.h})};
+}
+function openMemberHistory(bid,mid){
+  const b=bById(bid),x=mById(mid),idx=roster(b).findIndex(r=>r.id===mid);
+  const sess=[];for(let k=0;k>=b.since;k--)if(runsOn(b,k))sess.push({k,d:dateAt(k),st:attStatus(b,x,Math.max(idx,0),k)});
+  const real=sess.filter(s=>s.st!=='PAUSED'),att=real.filter(s=>s.st==='CONFIRMED').length,ns=real.filter(s=>s.st==='RELEASED_NO_SHOW').length;
+  const months={};sess.forEach(s=>{const key=s.d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});(months[key]=months[key]||[]).push(s)});
+  openSheet(`${shead(x.name,`${bName(b)} · ${brById(b.br).name} · ${bDays(b)}`)}
+    <div class="sb"><div><button class="btn sm" data-ph="${x.phone}">Show number</button></div>
+    <div class="stat3"><div class="card"><span>Sessions</span><strong>${real.length}</strong></div><div class="card"><span>Confirmed</span><strong>${Math.round(att/Math.max(real.length,1)*100)}%</strong></div><div class="card"><span>No-shows</span><strong>${ns}</strong></div></div>
+    <p class="muted">Full history since ${dateAt(b.since).toLocaleDateString('en-GB',{month:'short',year:'numeric'})}.</p>
+    ${Object.keys(months).map((mk,i)=>{const xs=months[mk],c=xs.filter(s=>s.st==='CONFIRMED').length;return `<details class="card month" ${i===0?'open':''}><summary class="ch"><h2>${mk}</h2><span class="sub">${c} of ${xs.length} confirmed</span><span class="chev" style="margin-left:auto">▾</span></summary>
+      <div class="list">${xs.map(s=>`<div class="lrow"><div class="grow"><b>${s.k===0?'Today · ':''}${s.d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</b></div><span class="pill ${STATUS[s.st][1]}">${STATUS[s.st][0]}</span></div>`).join('')}</div></details>`}).join('')}</div>
+    <footer><button class="btn" data-close>Close</button></footer>`);
+}
+
+/* =================== walk-in + booking detail =================== */
+function openWalkIn(pre){
+  const b=curBranch()||myBranches()[0],HOURS=[];for(let h=6;h<22;h++)HOURS.push(h);
+  state.sel={b:b.id,ci:pre?pre.ci:0,h:pre?pre.h:Math.max(NOW_H,8),pay:'Cash'};const s=state.sel;
+  openSheet(`<header><div><h2>New walk-in booking</h2><p class="muted" id="wiSub"></p></div><button class="btn sm" id="close">✕</button></header>
+    <div class="sb">
+      <label class="f">Court<select class="in" id="wiC">${Array.from({length:b.courts},(_,i)=>`<option value="${i}" ${i===s.ci?'selected':''}>${cn(i)}</option>`).join('')}</select></label>
+      <label class="f">Time<select class="in" id="wiH">${HOURS.map(h=>`<option value="${h}" ${h===s.h?'selected':''}>${fmtH(h)} – ${fmtH(h+1)}</option>`).join('')}</select></label>
+      <label class="f">Guest phone<input class="in" id="wiP" inputmode="numeric" maxlength="10" placeholder="10-digit number"></label>
+      <div id="wiFound" class="note" style="display:none"></div>
+      <label class="f">Name<input class="in" id="wiN" placeholder="Guest name"></label>
+      <div><b style="font-size:13px">Payment</b><div class="chips" style="margin-top:6px" id="wiPay"><button class="chip" data-pay="Cash" aria-pressed="true">Cash</button><button class="chip" data-pay="UPI" aria-pressed="false">UPI</button><button class="chip" data-pay="Link" aria-pressed="false">Send payment link</button></div></div>
+      <label class="f" id="wiRefW" style="display:none">UPI reference<input class="in" placeholder="Reference number"></label>
+      <div class="kpi card" style="padding:12px 14px"><span>Amount (standard rate)</span><strong>₹400</strong></div></div>
+    <footer><button class="btn" id="cancel">Cancel</button><button class="btn pri" id="confirm">Confirm booking</button></footer>`);
+  const upd=()=>{$('#wiSub').textContent=`${b.name} · ${dayLbl()} · ${cn(s.ci)} · ${fmtH(s.h)}`};upd();
+  $('#wiC').onchange=e=>{s.ci=+e.target.value;upd()};$('#wiH').onchange=e=>{s.h=+e.target.value;upd()};
+  $('#wiP').oninput=e=>{const v=e.target.value.replace(/\D/g,'');e.target.value=v;const f=$('#wiFound');
+    if(v.length===10){f.style.display='block';if(v.endsWith('1')){f.textContent='✓ Returning guest: Arjun Kumar · 6 visits';$('#wiN').value='Arjun Kumar'}else f.textContent='New guest — will be created on booking'}else f.style.display='none'};
+  document.querySelectorAll('#wiPay .chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('#wiPay .chip').forEach(x=>x.setAttribute('aria-pressed',x===c));s.pay=c.dataset.pay;$('#wiRefW').style.display=s.pay==='UPI'?'grid':'none'});
+  $('#confirm').onclick=()=>{const name=$('#wiN').value||'Walk-in guest',key=`${b.id}|${s.ci}|${s.h}|${state.dayOffset}`;
+    state.booked[key]={t:'booked',n:name,paid:s.pay};closeSheet();toast(`Booked ${cn(s.ci)} · ${fmtH(s.h)} for ${name} (${s.pay})`,()=>{delete state.booked[key];render()});render()};
+}
+function openDetail(br,ci,h,s){
+  openSheet(`<header><div><h2>${s.n}</h2><p class="muted">${br.name} · ${cn(ci)} · ${fmtH(h)} – ${fmtH(h+1)}</p></div><button class="btn sm" id="close">✕</button></header>
+    <div class="sb"><div class="row" style="display:flex;gap:8px"><span class="pill ok">Guest booking</span> <span class="pill">${s.paid}</span></div>
+    <div class="kpi card" style="padding:12px 14px"><span>Paid</span><strong>₹400</strong></div>
+    <div class="note">Guest name and payment show here, behind the tap — never on the grid cell.</div>
+    ${isOwner()?`<button class="btn" style="color:var(--danger)">Refund / cancel booking</button>`:`<div class="note">Refunds and cancellations are handled by the owner.</div>`}</div>
+    <footer><button class="btn" id="cancel">Close</button></footer>`);
+}
+
+/* =================== Ledger =================== */
+function viewLedger(m){
+  const bs=scopeBranches();
+  const rows=[['5:40 PM','Court 2','Arjun Kumar','Cash',400],['5:15 PM','Court 1','Meera Shah','UPI',400],['4:50 PM','Court 4','Ravi Prasad','Razorpay link',800],['3:10 PM','Court 3','Divya Nair','Cash',400],['11:30 AM','Court 1','Walk-in guest','Cash',400]];
+  const sum=k=>rows.filter(r=>k==='all'||r[3].startsWith(k)).reduce((a,r)=>a+r[4],0);
+  m.innerHTML=`${isOwner()?'':`<div class="note">Managers see today’s collections for their branch only, to reconcile the till. History and exports are owner only.</div>`}
+    <div class="kpis"><div class="card kpi"><span>Cash</span><strong>${money(sum('Cash'))}</strong></div><div class="card kpi"><span>UPI</span><strong>${money(sum('UPI'))}</strong></div><div class="card kpi"><span>Razorpay links</span><strong>${money(sum('Razorpay'))}</strong></div><div class="card kpi"><span>Total</span><strong>${money(sum('all'))}</strong></div></div>
+    <div class="card"><div class="ch"><h2>${isOwner()?'Collections':'Today’s collections'}</h2><span class="sub">${bs.map(b=>b.name).join(', ')} · ${dayLbl()}</span>
+      ${isOwner()?`<div class="seg" style="margin-left:auto"><button aria-pressed="true">Day</button><button aria-pressed="false">This month</button></div><button class="btn sm">Export CSV</button>`:''}</div>
+      <div class="list">${rows.map(r=>`<div class="lrow"><div class="grow"><b>${r[2]}</b><small>${r[0]} · ${r[1]}</small></div><span class="pill">${r[3]}</span><b>${money(r[4])}</b></div>`).join('')}</div>
+      <div class="tot"><span>Total</span><span>${money(sum('all'))}</span></div></div>`;
+}
+
+/* =================== Members module: attendance history =================== */
+function vAttendance(m){
+  const list=scopeBatches().filter(b=>seatsUsed(b)>0);
+  if(!list.length){m.innerHTML='<div class="card"><div class="cb muted">No batches yet.</div></div>';return}
+  if(!state.mBatch||!list.find(b=>b.id===state.mBatch))state.mBatch=list[0].id;
+  const b=bById(state.mBatch),br=brById(b.br);
+  const months={};
+  for(let k=0;k>=b.since;k--){if(!runsOn(b,k))continue;const d=dateAt(k),key=d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});(months[key]=months[key]||[]).push({k,d})}
+  const mkeys=Object.keys(months);
+  m.innerHTML=`<div class="card"><div class="ch"><h2>Attendance by batch</h2><span class="sub">read-only · members confirm themselves</span></div>
+      <div class="cb"><div class="chips scroll" id="bPick">${list.map(x=>`<button class="chip" data-bid="${x.id}" aria-pressed="${x.id===b.id}">${x.label||bName(x)}${state.branch==='all'&&myBranches().length>1?' · '+brById(x.br).name.replace('JBC ',''):''}</button>`).join('')}</div>
+      <p class="muted" style="margin-top:10px">${bName(b)} · ${br.name} runs on <b>${bDays(b)}</b>, ${fmtHL(b.h)} – ${fmtHL(b.h+1)}. ${activeCount(b)} active members. Full history since ${dateAt(b.since).toLocaleDateString('en-GB',{month:'short',year:'numeric'})}.</p></div></div>
+    ${mkeys.map((mk,mi)=>{
+      const ss=months[mk],avg=Math.round(ss.reduce((a,s)=>a+confirmedCount(b,s.k)/Math.max(activeCount(b),1),0)/ss.length*100),ns=ss.reduce((a,s)=>a+sessionRows(b,s.k).filter(r=>r.st==='RELEASED_NO_SHOW').length,0);
+      return `<details class="card month" ${mi===0?'open':''}><summary class="ch"><h2>${mk}</h2><span class="sub">${ss.length} sessions · ${avg}% confirmed · ${ns} no-show${ns===1?'':'s'}</span><span class="chev" style="margin-left:auto">▾</span></summary>
+        <div class="list">${ss.map(s=>`<details class="batch"><summary class="lrow"><div class="grow"><b>${s.k===0?'Today · ':''}${s.d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</b></div>
+          <span class="pill ${confirmedCount(b,s.k)===activeCount(b)?'ok':'warn'}">${confirmedCount(b,s.k)} of ${activeCount(b)} confirmed</span><span class="chev">▾</span></summary>
+          <div class="bm">${memberListHTML(sessionRows(b,s.k),b.id)}</div></details>`).join('')}</div></details>`}).join('')}`;
+  m.querySelectorAll('[data-bid]').forEach(x=>x.onclick=()=>{state.mBatch=x.dataset.bid;render()});
+}
+
+/* =================== Members list & profile =================== */
+function vMembers(m){
+  const own=isOwner();
+  const FILTERS=own?[['all','All'],['due','Due'],['overdue','Overdue'],['paused','On pause'],['notice','Notice']]:[['all','All'],['paused','On pause'],['notice','Notice']];
+  let list=scopeMembers().filter(x=>x.status!=='ended');
+  if(state.q)list=list.filter(x=>(x.name+x.phone+x.gmail).toLowerCase().includes(state.q.toLowerCase()));
+  const f=state.filter;
+  if(f==='due')list=list.filter(x=>stOf(x)&&stOf(x)[0]==='Due');
+  if(f==='overdue')list=list.filter(x=>stOf(x)&&stOf(x)[0]==='Overdue');
+  if(f==='paused')list=list.filter(x=>x.status==='paused');
+  if(f==='notice')list=list.filter(x=>x.status==='notice');
+  {const seen={};list=list.filter(x=>{if(seen[x.pid]){seen[x.pid].extra.push(x);return false}x.extra=[];seen[x.pid]=x;return true})}
+  m.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="in" id="q" placeholder="Search name, phone or Gmail" value="${state.q}" style="flex:1;min-width:180px">${own?'<button class="btn pri" id="add">+ Add member</button>':''}</div>
+    <div class="chips scroll">${FILTERS.map(x=>`<button class="chip" data-f="${x[0]}" aria-pressed="${f===x[0]}">${x[1]}</button>`).join('')}</div>
+    <div class="card"><div class="ch"><h2>${list.length} member${list.length===1?'':'s'}</h2>${own?'':'<span class="sub">View only — payments are handled by the owner</span>'}</div><div class="list">
+      ${list.map(x=>{const b=bById(x.batch),all=[x].concat(x.extra),sts=all.map(stOf).filter(Boolean),st=sts.find(s=>s[0]==='Overdue')||sts.find(s=>s[0]==='Due')||sts[0],bal=all.reduce((a,y)=>a+(y.status==='active'||y.status==='notice'?y.balance:0),0);return `<button class="lrow rbtn" data-m="${x.id}"><div class="avatar">${x.name[0]}</div><div class="grow"><b>${x.name}</b><small>${bName(b)} · ${brById(b.br).name} · ${band(b.h)}</small></div>${x.extra.length?`<span class="pill info">${all.length} batches</span>`:''}
+        ${x.status==='paused'?`<span class="pill info">Paused until ${x.pausedUntil}</span>`:x.status==='notice'?`<span class="pill warn">Notice · last day ${x.lastDay}</span>`:''}
+        ${own&&st&&x.status!=='paused'?`<span class="pill ${st[1]}">${st[0]}${bal?' · '+money(bal):''}</span>`:''}</button>`}).join('')||'<div class="cb muted">No members match.</div>'}</div></div>`;
+  $('#q').oninput=e=>{state.q=e.target.value;const pos=e.target.selectionStart;render();const q=$('#q');q.focus();q.setSelectionRange(pos,pos)};
+  m.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{state.filter=b.dataset.f;render()});
+  m.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>memberSheet(b.dataset.m));
+  const a=$('#add');if(a)a.onclick=()=>addMemberSheet();
+}
+function memberSheet(id){
+  const x=mById(id),b=bById(x.batch),own=isOwner(),st=stOf(x),req=REQS.find(r=>r.m===id&&r.state==='open'),oth=otherRows(x),root=mById(x.pid)||x;
+  openSheet(`${shead(x.name,`${bName(b)} · ${brById(b.br).name} · ${bDays(b)}`)}<div class="sb">
+    <div class="chips" style="gap:6px">${x.status==='paused'?`<span class="pill info">Paused until ${x.pausedUntil}</span>`:x.status==='notice'?`<span class="pill warn">Cancellation requested · last day ${x.lastDay}</span>`:'<span class="pill ok">Active</span>'}${own&&st&&x.status!=='paused'?`<span class="pill ${st[1]}">${st[0]}</span>`:''}</div>
+    ${oth.length?`<div class="card" style="padding:12px 14px;display:grid;gap:6px"><div class="rowb"><b>Batches <span class="v2tag">${oth.length+1}</span></b><span class="muted" style="font-size:12px">each is paid, paused and cancelled on its own</span></div>
+      ${[x].concat(oth).map(y=>{const yb=bById(y.batch),ys=stOf(y);return `<div class="rowb" style="align-items:center;gap:8px"><span>${y.id===x.id?'<b>':''}${bName(yb)} · ${brById(yb.br).name}${y.id===x.id?'</b> (shown below)':''}</span><span style="display:flex;gap:6px;align-items:center">${y.status==='paused'?'<span class="pill info">Paused</span>':y.status==='notice'?'<span class="pill warn">Notice</span>':ys&&own?`<span class="pill ${ys[1]}">${ys[0]}${y.balance?' · '+money(y.balance):''}</span>`:''}${y.id===x.id?'':`<button class="btn sm" data-open="${y.id}">Open</button>`}</span></div>`}).join('')}</div>
+      <div class="note" style="background:var(--info-soft);color:var(--info)">Payment, pause and cancellation below apply to <b>${bName(b)}</b> only. The deposit is held once for the member.</div>`:''}
+    <div class="card" style="padding:12px 14px;display:grid;gap:6px"><div class="rowb"><span class="muted">Gmail</span><span>${x.gmail}</span></div><div class="rowb"><span class="muted">Phone</span><button class="btn sm" data-ph="${x.phone}">Show number</button></div>
+      <div class="rowb"><span class="muted">Member since</span><span>${x.joined}</span></div><div class="rowb"><span class="muted">Attendance (30 days)</span><button class="linkb" data-mh="${b.id}|${x.id}">${x.att}% · full history</button></div></div>
+    ${own?`<div class="card" style="padding:12px 14px;display:grid;gap:6px"><div class="rowb"><span class="muted">Plan</span><span>${x.term.months===1?'Monthly':x.term.months===3?'Quarterly':'Yearly'} · ${money(x.term.amount)}</span></div>
+      <div class="rowb"><span class="muted">Outstanding</span><b style="color:${x.balance?'var(--danger)':'var(--accent)'}">${money(x.balance)}</b></div>${x.arrears?`<div class="rowb"><span class="muted">Carried from last month</span><span>${money(x.arrears)}</span></div>`:''}
+      <div class="rowb"><span class="muted">Deposit (one per member)</span><span>${money(root.deposit.amount)} · ${root.deposit.state==='held'?'held':'refunded'}${oth.length?' · refunded when the last batch ends':''}</span></div></div>`:''}
+    ${req?`<div class="note" style="background:var(--warn-soft);color:var(--warn)"><b>Requested cancellation on ${req.on}.</b> Last day ${req.last}. Attendance in the last 30 days: ${req.att}%.</div>`:''}
+    <div class="chips">${own||PERMS.pay?`<button class="btn pri" id="pay" ${x.balance?'':'disabled'}>Record payment</button>`:''}
+      ${x.status==='paused'?'<button class="btn" id="resume">Resume</button>':x.status==='active'?'<button class="btn" id="pause">Pause (holiday)</button>':''}
+      <button class="btn" id="end">${req?'Handle cancellation':'End membership'}</button>${own?'<button class="btn" id="move">Move batch</button>':''}</div>
+    ${own?'':'<div class="note">Payments, moving batches and deposit refunds are owner-only.</div>'}</div><footer><button class="btn" data-close>Close</button></footer>`);
+  const g=i=>document.getElementById(i);
+  document.querySelectorAll('[data-open]').forEach(o=>o.onclick=()=>{closeSheet();setTimeout(()=>memberSheet(o.dataset.open),30)});
+  if(g('pay'))g('pay').onclick=()=>paySheet(id);
+  if(g('pause'))g('pause').onclick=()=>pauseSheet(id);
+  if(g('resume'))g('resume').onclick=()=>{x.status='active';x.balance=b.rate;x.arrears=0;closeSheet();render();toast(`${x.name} resumed — next month’s fee is due`)};
+  if(g('end'))g('end').onclick=()=>endSheet(id);
+  if(g('move'))g('move').onclick=()=>moveSheet(id);
+}
+function paySheet(id){
+  const x=mById(id);let method='Cash';
+  openSheet(`${shead('Record payment',x.name)}<div class="sb"><div class="kpi card" style="padding:12px 14px"><span>Outstanding</span><strong>${money(x.balance)}</strong>${x.arrears?`<small class="dn">includes ${money(x.arrears)} carried from last month</small>`:''}</div>
+    <label class="f">Amount received<input class="in" id="pa" inputmode="numeric" value="${x.balance}"></label>
+    <div><b style="font-size:13px">Method</b><div class="chips" style="margin-top:6px" id="pm"><button class="chip" data-mt="Cash" aria-pressed="true">Cash</button><button class="chip" data-mt="UPI" aria-pressed="false">UPI</button></div></div>
+    <label class="f" id="pr" style="display:none">UPI reference<input class="in" placeholder="Reference number"></label><div class="note">A part payment is fine: whatever is left carries over to next month.</div></div>
+    <footer><button class="btn" data-close>Cancel</button><button class="btn pri" id="ok">Save payment</button></footer>`);
+  document.querySelectorAll('#pm .chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('#pm .chip').forEach(y=>y.setAttribute('aria-pressed',y===c));method=c.dataset.mt;$('#pr').style.display=method==='UPI'?'grid':'none'});
+  $('#ok').onclick=()=>{const a=Math.min(+$('#pa').value||0,x.balance);if(a<=0)return;x.balance-=a;if(x.balance<x.arrears)x.arrears=x.balance;closeSheet();render();toast(`${money(a)} received from ${x.name} (${method})`+(x.balance?` · ${money(x.balance)} carries over`:''))};
+}
+function pauseSheet(id){
+  const x=mById(id);let mo=1;const M=['Nov','Dec','Jan','Feb'];
+  openSheet(`${shead('Pause membership',`${x.name} · ${bName(bById(x.batch))}`)}<div class="sb"><div class="note">Use this for holidays or breaks. The member keeps their seat, pays nothing for the paused months and resumes by paying the next month.</div>
+    <div><b style="font-size:13px">Pause for</b><div class="chips" style="margin-top:6px" id="mo">${[1,2,3].map(n=>`<button class="chip" data-n="${n}" aria-pressed="${n===1}">${n} month${n>1?'s':''}</button>`).join('')}</div></div>
+    <div class="kpi card" style="padding:12px 14px"><span>Resumes</span><strong id="rs">1 Nov</strong></div><div class="note" style="background:var(--warn-soft);color:var(--warn)">Check recent attendance and speak to the member first. Recent attendance: ${x.att}%.</div></div>
+    <footer><button class="btn" data-close>Cancel</button><button class="btn pri" id="ok">Pause membership</button></footer>`);
+  document.querySelectorAll('#mo .chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('#mo .chip').forEach(y=>y.setAttribute('aria-pressed',y===c));mo=+c.dataset.n;$('#rs').textContent='1 '+M[mo-1]});
+  $('#ok').onclick=()=>{x.status='paused';x.pausedUntil='1 '+M[mo-1];x.balance=0;x.arrears=0;closeSheet();render();toast(`${x.name} paused until ${x.pausedUntil}`)};
+}
+function endSheet(id){
+  const x=mById(id),req=REQS.find(r=>r.m===id&&r.state==='open'),others=otherRows(x);let mode='keep';
+  openSheet(`${shead(req?'Cancellation request':'End membership',`${x.name} · ${bName(bById(x.batch))}`)}<div class="sb">
+    ${req?`<div class="card" style="padding:12px 14px;display:grid;gap:6px"><div class="rowb"><span class="muted">Requested</span><span>${req.on}</span></div><div class="rowb"><span class="muted">${SET.notice}-day notice ends</span><b>${req.last}</b></div><div class="rowb"><span class="muted">Attendance (30 days)</span><b>${req.att}%</b></div><div class="rowb"><span class="muted">Phone</span><button class="btn sm" data-ph="${x.phone}">Show number</button></div></div>`
+    :`<div class="card" style="padding:12px 14px;display:grid;gap:6px"><div class="rowb"><span class="muted">${SET.notice}-day notice would end</span><b>8 Nov</b></div></div>`}
+    <div class="note">Check attendance and speak to the member before ending the membership.</div>
+    ${isOwner()?`<div><b style="font-size:13px">Notice period</b><div class="chips" style="margin-top:6px;flex-direction:column;align-items:stretch" id="nm"><button class="chip" data-nm="keep" aria-pressed="true" style="text-align:left">Keep the ${SET.notice}-day notice</button><button class="chip" data-nm="waive" aria-pressed="false" style="text-align:left">Waive the notice — end now</button><button class="chip" data-nm="deposit" aria-pressed="false" style="text-align:left">Adjust shortfall against the deposit</button></div></div>
+      <div class="card" style="padding:12px 14px;display:grid;gap:6px"><div class="rowb"><span class="muted">Deposit</span><b>${others.length?'Stays held — still in '+others.map(y=>bName(bById(y.batch))).join(', '):money(mById(x.pid).deposit.amount)+' held'}</b></div><div class="rowb"><span class="muted">Refunded by the owner after exit, by cash or UPI</span></div></div>`
+    :`<div class="note">The notice period and the deposit refund are decided by the owner. You can end or pause the membership; the owner is told.</div>`}</div>
+    <footer><button class="btn" data-close>Cancel</button><button class="btn" id="pz">Pause instead</button><button class="btn pri" id="ok">End membership</button></footer>`);
+  document.querySelectorAll('#nm .chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('#nm .chip').forEach(y=>y.setAttribute('aria-pressed',y===c));mode=c.dataset.nm});
+  $('#pz').onclick=()=>pauseSheet(id);
+  $('#ok').onclick=()=>{x.status='ended';x.exit=mode;if(req)req.state='done';closeSheet();render();toast(`${x.name}’s ${bName(bById(x.batch))} membership ended`+(others.length?' · deposit stays held (other batches active)':isOwner()?' · deposit ready to refund':' · owner notified'))};
+}
+function refundSheet(id){
+  const x=mById(id);let method='Cash';
+  openSheet(`${shead('Refund deposit',x.name)}<div class="sb"><div class="kpi card" style="padding:12px 14px"><span>Deposit held</span><strong>${money(x.deposit.amount)}</strong></div>
+    <label class="f">Deduction (optional)<input class="in" id="dd" inputmode="numeric" value="0"></label><label class="f">Deduction note<input class="in" placeholder="e.g. 8 days’ notice shortfall"></label>
+    <div><b style="font-size:13px">Returned by</b><div class="chips" style="margin-top:6px" id="rm"><button class="chip" data-mt="Cash" aria-pressed="true">Cash</button><button class="chip" data-mt="UPI" aria-pressed="false">UPI</button></div></div>
+    <label class="f">Reference (UPI)<input class="in" placeholder="Reference number"></label><div class="kpi card" style="padding:12px 14px"><span>Refund amount</span><strong id="ra">${money(x.deposit.amount)}</strong></div></div>
+    <footer><button class="btn" data-close>Cancel</button><button class="btn pri" id="ok">Mark deposit refunded</button></footer>`);
+  document.querySelectorAll('#rm .chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('#rm .chip').forEach(y=>y.setAttribute('aria-pressed',y===c));method=c.dataset.mt});
+  $('#dd').oninput=e=>{$('#ra').textContent=money(Math.max(0,x.deposit.amount-(+e.target.value||0)))};
+  $('#ok').onclick=()=>{x.deposit.state='refunded';closeSheet();render();toast(`Deposit marked refunded (${method})`)};
+}
+
+/* =================== Add member =================== */
+function addMemberSheet(pre,prefill){
+  const nm=state.nm={email:(prefill&&prefill.email)||'',phone:(prefill&&prefill.phone)||'',batch:pre||null,newb:false,months:1,amount:null,deposit:SET.deposit,start:'next'};
+  const draw=()=>{
+    const groups=groupBatches(BATCHES.filter(b=>state.branch==='all'||b.br===state.branch));
+    const chosen=bById(nm.batch),rate=chosen?chosen.rate:2500;
+    const em=(nm.email||'').toLowerCase();
+    const existing=MEMBERS.filter(y=>y.status!=='ended'&&((em&&y.gmail.toLowerCase()===em)||(nm.phone.length===10&&y.phone===nm.phone)));
+    const hasDep=existing.length>0;
+    // member-wide overlap guard (any branch): same hour on a shared weekday
+    const overl=b=>existing.map(y=>bById(y.batch)).find(o=>o.h===b.h&&o.wd.some(d=>b.wd.includes(d)));
+    const amount=nm.amount??Math.round(rate*nm.months*(nm.months===3?.95:nm.months===12?.85:1)/50)*50;
+    openSheet(`${shead('Add member','Gmail and phone are both required')}<div class="sb">
+      <label class="f">Gmail<input class="in" id="ae" placeholder="name@gmail.com" value="${nm.email}"></label>
+      <label class="f">Phone<input class="in" id="ap" inputmode="numeric" maxlength="10" placeholder="10-digit number" value="${nm.phone}"></label>
+      ${hasDep?`<div class="note" style="background:var(--info-soft);color:var(--info)"><b>Already a member</b> — in ${existing.map(y=>bName(bById(y.batch))+' ('+brById(bById(y.batch).br).name+')').join(', ')}. They can join another batch at a different hour; the deposit is already held (one per member).</div>`:''}
+      <div><b style="font-size:13px">Batch</b>
+        ${groups.map(g=>`<div class="grp-h" style="padding:8px 0 2px">${g.br.name}</div>${g.bands.map(bd=>`<div class="muted" style="font-size:12px;margin:4px 0">${bd.band}</div>${bd.items.map(b=>{const clash=overl(b),full=seatsUsed(b)>=SET.max||!!clash;return `<button class="opt ${nm.batch===b.id&&!nm.newb?'on':''}" data-b="${b.id}" ${full?'disabled':''}><span><b>${bName(b)}</b><br><small class="muted">${bDays(b)} · ${money(b.rate)}/month${b.peak?' · peak':''}</small>${clash?`<br><small style="color:var(--danger);font-weight:600">Clashes with ${bName(clash)} (${brById(clash.br).name}) — same hour on a shared day</small>`:''}</span>${seatPill(b)}</button>`}).join('')}`).join('')}`).join('')}
+        <button class="opt ${nm.newb?'on':''}" id="newb" style="border-style:dashed"><span><b>+ Create a new batch</b><br><small class="muted">For a new group with its own court and time slot</small></span></button>
+        ${nm.newb?`<div class="note">The full Create batch form opens next, then you add this member to it.</div>`:''}</div>
+      <div><b style="font-size:13px">Plan</b><div class="chips" style="margin-top:6px" id="pl">${[[1,'Monthly'],[3,'Quarterly'],[12,'Yearly']].map(p=>`<button class="chip" data-mo="${p[0]}" aria-pressed="${nm.months===p[0]}">${p[1]}</button>`).join('')}</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="f">Amount for the plan<input class="in" id="am" inputmode="numeric" value="${amount}"></label><label class="f">Deposit${hasDep?' (already held)':''}<input class="in" id="dp" inputmode="numeric" value="${hasDep?0:nm.deposit}" ${hasDep?'disabled':''}></label></div>
+      <div class="note">Next due: ${nm.months===1?'1 Nov':nm.months===3?'1 Jan':'1 Oct 2027'}. A member joining mid-month starts on the next 1st, or pays the full month if you let them in now.</div>
+      <div class="chips" id="st"><button class="chip" data-s="next" aria-pressed="${nm.start==='next'}">Start 1 Nov</button><button class="chip" data-s="now" aria-pressed="${nm.start==='now'}">Start now · pay full month</button></div>
+      <div class="kpi card" style="padding:12px 14px"><span>Collect now</span><strong>${money(amount+(hasDep?0:(+nm.deposit||0)))}</strong><small class="muted">plan ${money(amount)} + deposit ${money(hasDep?0:(+nm.deposit||0))}</small></div></div>
+    <footer><button class="btn" data-close>Cancel</button><button class="btn pri" id="ok" disabled>${nm.newb?'Continue to create batch':'Add member &amp; record payment'}</button></footer>`);
+    const ready=()=>{$('#ok').disabled=!(/^[^\s@]+@gmail\.com$/i.test(nm.email)&&/^\d{10}$/.test(nm.phone)&&((nm.batch&&!overl(bById(nm.batch)))||nm.newb))};ready();
+    $('#ae').oninput=e=>{nm.email=e.target.value;ready()};$('#ap').oninput=e=>{nm.phone=e.target.value.replace(/\D/g,'');ready()};
+    $('#ae').onchange=()=>draw();$('#ap').onchange=()=>draw();
+    document.querySelectorAll('.opt[data-b]').forEach(o=>o.onclick=()=>{nm.batch=o.dataset.b;nm.newb=false;draw()});
+    $('#newb').onclick=()=>{nm.newb=true;nm.batch=null;draw()};
+    document.querySelectorAll('#pl .chip').forEach(c=>c.onclick=()=>{nm.months=+c.dataset.mo;nm.amount=null;draw()});
+    document.querySelectorAll('#st .chip').forEach(c=>c.onclick=()=>{nm.start=c.dataset.s;draw()});
+    $('#am').oninput=e=>{nm.amount=+e.target.value||0};$('#dp').oninput=e=>{nm.deposit=+e.target.value||0};
+    $('#ok').onclick=()=>{
+      if(nm.newb){closeSheet();state.page='members';state.tab='batches';state.cf=null;state.view={type:'create'};render();toast('Create the batch, then add the member to it');return}
+      const nmx=nm.email.split('@')[0].split('.').map(s=>s[0].toUpperCase()+s.slice(1)).join(' ');
+      MEMBERS.push({id:'m'+MEMBERS.length,pid:existing[0]?existing[0].pid:'m'+MEMBERS.length,name:existing[0]?existing[0].name:nmx,gmail:nm.email,phone:nm.phone,batch:nm.batch,term:{months:nm.months,amount},balance:0,arrears:0,status:'active',deposit:{amount:hasDep?0:(+nm.deposit||0),state:'held'},joined:'Oct 2026',att:100});
+      closeSheet();render();toast(`${nmx} added to ${bName(bById(nm.batch))} · ${money(amount+(hasDep?0:(+nm.deposit||0)))} recorded`);
+    };
+  };
+  draw();
+}
+
+/* =================== Batches, Create batch, Roster, Move =================== */
+function vBatches(m){
+  const groups=groupBatches(scopeBatches());
+  m.innerHTML=`<div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;align-items:center"><div class="muted">Grouped by branch and time band: Morning before 12, Afternoon 12–4, Evening after 4.</div><button class="btn pri" id="nb">+ Create batch</button></div>
+    ${groups.map(g=>`<div class="card"><div class="ch"><h2>${g.br.name}</h2></div>${g.bands.map(bd=>`<div class="band-h">${bd.band}</div>${bd.items.map(b=>`<button class="lrow rbtn" data-batch="${b.id}"><div class="grow"><b>${bName(b)}</b><small>${bDays(b)} · ${money(b.rate)}/month${b.peak?' · peak':''}</small></div>${seatPill(b)}<span class="chev2">›</span></button>`).join('')}`).join('')}</div>`).join('')}`;
+  m.querySelectorAll('[data-batch]').forEach(b=>b.onclick=()=>{state.view={type:'roster',id:b.dataset.batch};render()});
+  $('#nb').onclick=()=>{state.cf=null;state.view={type:'create'};render()};
+}
+const REF={peak:2500,off:1800};
+/* v2: a batch reserves a FIXED set of courts chosen here (1 to all of the branch's courts). Create shows exactly which
+   guest bookings are affected (stays / moved to another court / displaced, latest-booked first) and the owner confirms. */
+function guestAt(br,ci,h,k){const r=rnd(br.id.charCodeAt(1)*131+ci*17+h*7+k*53),ev=h>=17&&h<21;
+  if(r<(ev?.55:.22)&&h>=8)return {n:NAMES[Math.floor(r*90)%12],paid:['Cash','UPI','Link'][Math.floor(r*30)%3],r};return null}
+const fakePhone=n=>'9'+String(Math.abs([...n].reduce((a,c)=>a*31+c.charCodeAt(0),7))%1e9).padStart(9,'0');
+const dLbl=d=>d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+function simulateBatch(c){
+  const br=brById(c.br),res=c.courts.map(x=>x-1),remaining=br.courts-c.courts.length,rows=[];let stay=0,total=0;
+  for(let k=0;k<=7;k++){
+    if(k===0&&c.h<=NOW_H)continue;
+    if(!c.days.map(idxToJs).includes(dateAt(k).getDay()))continue;
+    const bs=[];for(let ci=0;ci<br.courts;ci++){const g=guestAt(br,ci,c.h,k);if(g)bs.push({ci,g,ago:Math.round(g.r*190)+2})}
+    total+=bs.length;
+    const over=Math.max(0,bs.length-remaining),disp=new Set(bs.slice().sort((a,b)=>a.ago-b.ago).slice(0,over));   // latest-booked first
+    const keep=bs.filter(b=>!disp.has(b)),free=[];
+    for(let ci=0;ci<br.courts;ci++)if(!res.includes(ci)&&!keep.some(b=>b.ci===ci))free.push(ci);
+    bs.forEach(b=>{const base={date:dateAt(k),h:c.h,name:b.g.n,phone:fakePhone(b.g.n),paid:b.g.paid,amt:c.h>=17?600:450,ago:b.ago,from:b.ci+1};
+      if(disp.has(b))rows.push({...base,out:'displaced'});
+      else if(res.includes(b.ci))rows.push({...base,out:'recourted',to:free.shift()+1});
+      else stay++});
+  }
+  return {rows,stay,total,remaining};
+}
+function vCreate(m){
+  const own=myBranches()[0].id;
+  const c=state.cf||(state.cf={br:state.branch==='all'?own:state.branch,courts:[3,4],days:[0,1,2,3,4],h:18,peak:true,touched:false,rate:REF.peak,min:SET.min,max:SET.max,name:'',nameTouched:false,ack:false});
+  if(!c.touched)c.rate=c.peak?REF.peak:REF.off;
+  const br=brById(c.br);c.courts=c.courts.filter(x=>x<=br.courts);
+  const auto=`${c.courts.length?courtsTxt(c.courts):'Courts'} · ${fmtHP(c.h)}`,nm=c.nameTouched?c.name:auto;
+  const dayJs=c.days.map(idxToJs);
+  const clashes=BATCHES.filter(b=>b.br===c.br&&b.h===c.h&&b.wd.some(d=>dayJs.includes(d))&&b.courts.some(x=>c.courts.includes(x)));
+  const sim=c.courts.length&&c.days.length&&!clashes.length?simulateBatch(c):{rows:[],stay:0,total:0,remaining:br.courts-c.courts.length};
+  const moved=sim.rows.filter(r=>r.out==='recourted'),disp=sim.rows.filter(r=>r.out==='displaced'),needAck=sim.rows.length>0;
+  const blocked=!c.days.length||!c.courts.length||clashes.length||!c.rate||(needAck&&!c.ack);
+  const rowHTML=r=>`<div class="lrow"><div class="grow"><b>${r.name}</b> · ${r.phone}<small>${dLbl(r.date)} · ${fmtHP(r.h)} · Court ${r.from} · ${money(r.amt)} · ${r.paid} · booked ${r.ago} h ago</small></div>
+    <span class="pill ${r.out==='displaced'?'bad':'info'}" style="white-space:normal;text-align:right">${r.out==='displaced'?'Displaced · refund recorded':'Moves to Court '+r.to}</span></div>`;
+  m.innerHTML=`<button class="backb" id="bk">‹ Batches</button>
+    <div class="cols"><div style="display:grid;gap:16px;min-width:0">
+      <div class="card"><div class="ch"><h2>Where and when <span class="v2tag">v2</span></h2><span class="sub">fixed courts, one hour, on the days you pick</span></div><div class="cb" style="display:grid;gap:14px">
+        <label class="f">Branch<select class="in" id="cb">${myBranches().map(b=>`<option value="${b.id}" ${b.id===c.br?'selected':''}>${b.name}</option>`).join('')}</select></label>
+        <div><b style="font-size:13px">Courts for this batch</b><div class="chips" style="margin-top:6px" id="cc">${Array.from({length:br.courts},(_,i)=>`<button class="chip" data-c="${i+1}" aria-pressed="${c.courts.includes(i+1)}">Court ${i+1}</button>`).join('')}</div>
+          <small class="muted" style="font-weight:400;display:block;margin-top:6px">You choose the courts. They are reserved for this batch at this hour on the chosen days — from the moment you create it, even before anyone joins. The other courts stay open to guests. Seats (4–8 members) are a separate limit from courts.</small></div>
+        <div><b style="font-size:13px">Days</b><div class="daychips" style="margin-top:6px" id="cd">${DAY7.map((d,i)=>`<button class="chip" data-d="${i}" aria-pressed="${c.days.includes(i)}">${d}</button>`).join('')}</div></div>
+        <label class="f">Start time (1 hour)<select class="in" id="ch">${[5,6,7,8,9,10,16,17,18,19,20,21].map(h=>`<option value="${h}" ${h===c.h?'selected':''}>${fmtHP(h)} – ${fmtHP(h+1)}</option>`).join('')}</select></label>
+        <label class="f">Batch name<input class="in" id="cn" value="${nm}"><small class="muted" style="font-weight:400">Suggested from the courts and time. Rename it to match what members call it.</small></label>
+        ${!c.courts.length?`<div class="note" style="background:var(--danger-soft);color:var(--danger)">Pick at least one court.</div>`
+          :clashes.length?`<div class="note" style="background:var(--danger-soft);color:var(--danger)"><b>Another batch already holds ${clashes.map(b=>`${courtsTxt(b.courts.filter(x=>c.courts.includes(x)))} (${bName(b)}, ${bDays(b)})`).join('; ')}</b> at ${fmtHP(c.h)}. Courts of two batches cannot overlap at the same hour on a shared day. Pick other courts or another time.</div>`
+          :`<div class="note" style="background:var(--accent-soft);color:var(--accent)">✓ ${courtsTxt(c.courts)} ${c.courts.length>1?'are':'is'} free of other batches at ${fmtHP(c.h)} on the selected days. ${sim.remaining} court${sim.remaining===1?'':'s'} stay${sim.remaining===1?'s':''} open to guests.</div>`}</div></div>
+      <div class="card"><div class="ch"><h2>Price and seats</h2><span class="sub">per member, per month</span></div><div class="cb" style="display:grid;gap:14px">
+        <div><b style="font-size:13px">Tag</b><div class="chips" style="margin-top:6px" id="ct"><button class="chip" data-p="1" aria-pressed="${c.peak}">Peak</button><button class="chip" data-p="0" aria-pressed="${!c.peak}">Non-peak</button></div></div>
+        <label class="f">Monthly rate per member<input class="in" id="cr" inputmode="numeric" value="${c.rate}"><small class="muted" style="font-weight:400">Reference: peak ${money(REF.peak)} · non-peak ${money(REF.off)}. For a group discount, enter a lower rate.</small></label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="f">Minimum members<input class="in" id="cmin" inputmode="numeric" value="${c.min}"></label><label class="f">Maximum members<input class="in" id="cmax" inputmode="numeric" value="${c.max}"></label></div>
+        <small class="muted">A member can join any number of batches and pays for each; one deposit (${money(SET.deposit)} by default) is held per member.</small></div></div></div>
+    <div class="sticky"><div class="card" id="preview"><div class="ch"><h2>Preview</h2></div><div class="cb" style="display:grid;gap:10px">
+      <div><b style="font-size:16px">${nm}</b><div class="muted">${br.name} · ${band(c.h)}</div></div>
+      <div class="rowb"><span class="muted">Courts</span><b>${c.courts.length?courtsTxt(c.courts):'—'}</b></div><div class="rowb"><span class="muted">Days</span><b>${c.days.length?daysLabel(dayJs):'—'}</b></div><div class="rowb"><span class="muted">Time</span><b>${fmtHP(c.h)} – ${fmtHP(c.h+1)}</b></div>
+      <div class="rowb"><span class="muted">Rate</span><b>${money(c.rate)}${c.peak?' · peak':''}</b></div><div class="rowb"><span class="muted">Seats</span><b>${c.min}–${c.max}</b></div><div class="rowb"><span class="muted">Starts</span><b>1 Nov</b></div>
+      <div class="note">At ${c.min} members this batch brings in <b>${money(c.rate*c.min)}</b> a month; when full, <b>${money(c.rate*c.max)}</b>.</div>
+      ${clashes.length||!c.courts.length||!c.days.length?'':`<div class="card" style="padding:12px;display:grid;gap:8px;border-color:${disp.length?'var(--danger)':'var(--border)'}">
+        <b>Guest bookings affected <span class="v2tag">v2</span></b>
+        <div class="muted" style="font-size:12.5px">Checked the next 7 days (the guest booking horizon): <b>${sim.total}</b> guest booking${sim.total===1?'':'s'} on these slots — <b>${sim.stay}</b> stay, <b>${moved.length}</b> move to another court (no loss), <b>${disp.length}</b> displaced.</div>
+        ${sim.rows.length?`<div class="aff">${sim.rows.slice().sort((a,b)=>(a.out==='displaced'?0:1)-(b.out==='displaced'?0:1)).map(rowHTML).join('')}</div>
+          <div class="note" style="background:var(--warn-soft);color:var(--warn)">${disp.length?`<b>${disp.length} guest${disp.length===1?'':'s'} will lose the booking</b> — only the overflow beyond the ${sim.remaining} court${sim.remaining===1?'':'s'} left open, latest-booked first. ${br.name} has one court pool, so nothing can be relocated: each is <b>refund recorded; the venue will return the money</b> (no payment is sent by the system). `:''}${moved.length?`${moved.length} booking${moved.length===1?'':'s'} just move to a free court at the same time. `:''}The exact split is re-checked when you create; if it changed you will see the list again.</div>
+          <div class="note">Guests are told by <b>push notification</b>. A guest without the app gets nothing — use the phone list to call them.</div>
+          <div class="chips"><button class="btn sm" id="cpy">Copy phone list</button><button class="btn sm" id="csv">Download CSV</button></div>
+          <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px"><input type="checkbox" id="ack" ${c.ack?'checked':''}> <span>I have read this list and want to create the batch${disp.length?`, displacing ${disp.length} booking${disp.length===1?'':'s'}`:''}.</span></label>`
+          :`<div class="note" style="background:var(--accent-soft);color:var(--accent)">No guest booking is affected.</div>`}</div>`}
+      <button class="btn pri" id="go" ${blocked?'disabled':''}>${disp.length?`Create batch · displace ${disp.length}`:'Create batch'}</button><button class="btn" id="go2" ${blocked?'disabled':''}>Create and add members</button></div></div></div></div>`;
+  const redraw=keep=>{c.ack=false;render();if(keep){const e=$('#'+keep);if(e){e.focus();const v=e.value;e.setSelectionRange&&e.setSelectionRange(v.length,v.length)}}};
+  $('#bk').onclick=()=>{state.view=null;render()};
+  $('#cb').onchange=e=>{c.br=e.target.value;c.courts=[1];redraw()};$('#ch').onchange=e=>{c.h=+e.target.value;redraw()};
+  document.querySelectorAll('#cc .chip').forEach(x=>x.onclick=()=>{const n=+x.dataset.c;c.courts=c.courts.includes(n)?c.courts.filter(v=>v!==n):c.courts.concat(n).sort();redraw()});
+  document.querySelectorAll('#cd .chip').forEach(x=>x.onclick=()=>{const i=+x.dataset.d;c.days=c.days.includes(i)?c.days.filter(d=>d!==i):c.days.concat(i);redraw()});
+  document.querySelectorAll('#ct .chip').forEach(x=>x.onclick=()=>{c.peak=x.dataset.p==='1';c.touched=false;redraw()});
+  $('#cn').oninput=e=>{c.name=e.target.value;c.nameTouched=true;c.ack=false;render();const e2=$('#cn');e2.focus();e2.setSelectionRange(e2.value.length,e2.value.length)};
+  $('#cr').oninput=e=>{c.rate=+e.target.value.replace(/\D/g,'')||0;c.touched=true;redraw('cr')};
+  $('#cmin').oninput=e=>{c.min=+e.target.value||0;redraw('cmin')};$('#cmax').oninput=e=>{c.max=+e.target.value||0;redraw('cmax')};
+  const ack=$('#ack');if(ack)ack.onchange=()=>{c.ack=ack.checked;render();const e=$('#ack');if(e)e.scrollIntoView({block:'center'})};
+  const cp=$('#cpy');if(cp)cp.onclick=()=>toast(`Copied ${sim.rows.length} name${sim.rows.length===1?'':'s'} and phone number${sim.rows.length===1?'':'s'}`);
+  const cv=$('#csv');if(cv)cv.onclick=()=>toast('Downloaded guests-affected.csv (name, phone, date, time, court, amount, outcome)');
+  const make=add=>{const id='N'+BATCHES.length;
+    BATCHES.push({id,br:c.br,courts:c.courts.slice(),h:c.h,wd:dayJs,rate:c.rate,peak:c.peak,n:0,since:-1,label:nm===auto?undefined:nm});
+    state.cf=null;state.view={type:'roster',id};render();toast(`${nm} created · holds ${courtsTxt(c.courts)} from now`+(disp.length?` · ${disp.length} guest${disp.length===1?'':'s'} told by push`:''));if(add)setTimeout(()=>addMemberSheet(id),80)};
+  $('#go').onclick=()=>make(false);$('#go2').onclick=()=>make(true);
+}
+function vRoster(m,v){
+  const b=bById(v.id),ms=roster(b),used=ms.length;
+  const dots=Array.from({length:SET.max},(_,i)=>`<span class="sd ${i<used?'on':''} ${i===SET.min-1?'min':''}">${i===SET.min-1&&i>=used?SET.min:''}</span>`).join('');
+  const order={notice:0,active:1,paused:2},sorted=ms.slice().sort((a,c)=>order[a.status]-order[c.status]);
+  m.innerHTML=`<button class="backb" id="bk">‹ Batches</button>
+    <div class="card"><div class="cb" style="display:grid;gap:12px"><div style="display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;align-items:flex-start">
+        <div><h2 style="font-size:18px">${bName(b)}</h2><div class="muted">${brById(b.br).name} · ${band(b.h)} · ${bDays(b)} · ${fmtHP(b.h)}</div></div>
+        <div class="chips" style="gap:6px"><span class="pill">${money(b.rate)}/month</span>${b.peak?'<span class="pill warn">Peak</span>':''}<span class="pill info">Attendance ${used?attOf(b)+'%':'—'}</span></div></div>
+      <div class="seatdots">${dots}<span class="muted" style="margin-left:6px">${used} of ${SET.max} seats · minimum ${SET.min} (ringed)</span></div>
+      ${used<SET.min?`<div class="note" style="background:${used?'var(--warn-soft)':'var(--info-soft)'};color:${used?'var(--warn)':'var(--info)'}">${used?`Below the minimum of ${SET.min}.`:'No members yet.'} Add the group that enquired, or merge this batch with another.</div>`:''}
+      <div class="chips"><button class="btn pri" id="am" ${used>=SET.max?'disabled':''}>+ Add member</button><button class="btn" id="rn">Renew batch</button><button class="btn" id="eb">Edit rate and seats</button></div></div></div>
+    <div class="card"><div class="ch"><h2>Roster</h2><span class="sub">${used} member${used===1?'':'s'}</span></div><div class="list">
+      ${sorted.map(x=>{const st=stOf(x);return `<div class="lrow"><div class="avatar">${x.name[0]}</div><button class="grow linkb" data-m="${x.id}" style="text-decoration:none"><b>${x.name}</b><small style="font-weight:400;color:var(--muted)">${x.gmail}${alsoIn(x)}</small></button>
+        ${x.status==='paused'?`<span class="pill info">Paused until ${x.pausedUntil}</span>`:x.status==='notice'?`<span class="pill warn">Notice · ${x.lastDay}</span>`:st?`<span class="pill ${st[1]}">${st[0]}${x.balance?' · '+money(x.balance):''}</span>`:''}
+        <span class="muted" style="width:44px;text-align:right">${x.att}%</span><button class="btn sm" data-ph="${x.phone}">Show number</button><button class="btn sm" data-mv="${x.id}">Move</button></div>`}).join('')||'<div class="cb muted">The roster is empty. Use “Add member” to put the first members in.</div>'}</div></div>`;
+  $('#bk').onclick=()=>{state.view=null;render()};$('#am').onclick=()=>addMemberSheet(b.id);$('#rn').onclick=()=>renewSheet(b.id);
+  $('#eb').onclick=()=>{openSheet(`${shead('Edit batch',bName(b))}<div class="sb"><label class="f">Monthly rate<input class="in" value="${b.rate}"></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="f">Minimum<input class="in" value="${SET.min}"></label><label class="f">Maximum<input class="in" value="${SET.max}"></label></div><div class="note">A rate change applies from next month for existing members.</div></div><footer><button class="btn" data-close>Cancel</button><button class="btn pri" id="ok">Save</button></footer>`);$('#ok').onclick=()=>{closeSheet();toast('Batch updated (mock)')}};
+  m.querySelectorAll('[data-m]').forEach(x=>x.onclick=()=>memberSheet(x.dataset.m));
+  m.querySelectorAll('[data-mv]').forEach(x=>x.onclick=()=>moveSheet(x.dataset.mv));
+}
+function moveSheet(id){
+  const x=mById(id),cur=bById(x.batch);let target=null,when='now';
+  const groups=groupBatches(BATCHES.filter(b=>b.id!==cur.id));
+  const draw=()=>{const t=bById(target);
+    openSheet(`${shead('Move member',`${x.name} · from ${bName(cur)}`)}<div class="sb">
+      ${groups.map(g=>`<div class="grp-h" style="padding:6px 0 2px">${g.br.name}</div>${g.bands.map(bd=>bd.items.map(b=>{const full=seatsUsed(b)>=SET.max;return `<button class="opt ${target===b.id?'on':''}" data-t="${b.id}" ${full?'disabled':''}><span><b>${bName(b)}</b><br><small class="muted">${bd.band} · ${bDays(b)} · ${money(b.rate)}/month</small></span>${seatPill(b)}</button>`}).join('')).join('')}`).join('')}
+      ${t?`<div class="note">${t.rate===cur.rate?'Same rate.':`Rate changes from ${money(cur.rate)} to <b>${money(t.rate)}</b>, from <b>1 Nov</b>.`} Payment history stays with the member.</div>
+      <div><b style="font-size:13px">Seat changes</b><div class="chips" style="margin-top:6px" id="wn"><button class="chip" data-w="now" aria-pressed="${when==='now'}">Move now</button><button class="chip" data-w="next" aria-pressed="${when==='next'}">From 1 Nov</button></div></div>`:'<div class="muted">Pick the batch to move them to. Full batches are disabled.</div>'}</div>
+    <footer><button class="btn" data-close>Cancel</button><button class="btn pri" id="ok" ${t?'':'disabled'}>Move member</button></footer>`);
+    document.querySelectorAll('.opt[data-t]').forEach(o=>o.onclick=()=>{target=o.dataset.t;draw()});
+    document.querySelectorAll('#wn .chip').forEach(c=>c.onclick=()=>{when=c.dataset.w;draw()});
+    const ok=$('#ok');ok.onclick=()=>{if(!t)return;x.batch=target;closeSheet();render();toast(`${x.name} moved to ${bName(t)}`+(t.rate!==cur.rate?` · ${money(t.rate)}/month from 1 Nov`:''))};};
+  draw();
+}
+
+/* =================== Renewals =================== */
+const RENEWED={};
+function renewStats(b){const ms=roster(b);const renewing=ms.filter(x=>x.status==='active'&&x.term.months===1);return {ms,renewing,leaving:ms.filter(x=>x.status==='notice'),paused:ms.filter(x=>x.status==='paused'),long:ms.filter(x=>x.status==='active'&&x.term.months>1),exp:renewing.reduce((a,x)=>a+x.term.amount,0)}}
+function vRenewals(m){
+  const bs=scopeBatches().filter(b=>seatsUsed(b)>0),groups=groupBatches(bs),st=bs.map(renewStats),pending=bs.filter(b=>!RENEWED[b.id]);
+  const tot=st.reduce((a,x,i)=>a+(RENEWED[bs[i].id]?0:x.exp),0);
+  m.innerHTML=`<div class="note">Renew each batch before the 1st. Renewing creates next month’s due for every ticked member. Quarterly and yearly members renew when their period ends.</div>
+    <div class="kpis"><div class="card kpi"><span>Batches to renew</span><strong>${pending.length}</strong><small>of ${bs.length} · renew by 31 Oct</small></div><div class="card kpi"><span>Members renewing</span><strong>${bs.reduce((a,b,i)=>a+(RENEWED[b.id]?0:st[i].renewing.length),0)}</strong></div>
+      <div class="card kpi"><span>Expected November dues</span><strong>${money(tot)}</strong></div><div class="card kpi"><span>Leaving or on pause</span><strong>${st.reduce((a,x)=>a+x.leaving.length+x.paused.length,0)}</strong></div></div>
+    ${groups.map(g=>`<div class="card"><div class="ch"><h2>${g.br.name}</h2></div>${g.bands.map(bd=>`<div class="band-h">${bd.band}</div>${bd.items.map(b=>{const r=renewStats(b),done=RENEWED[b.id];return `<div class="lrow"><div class="grow"><b>${bName(b)}</b><small>${bDays(b)} · ${r.renewing.length} renewing${r.leaving.length?` · ${r.leaving.length} leaving`:''}${r.paused.length?` · ${r.paused.length} paused`:''}${r.long.length?` · ${r.long.length} on a longer term`:''}</small></div><b>${money(r.exp)}</b>${done?'<span class="pill ok">Renewed</span>':`<button class="btn sm pri" data-rn="${b.id}">Review &amp; renew</button>`}</div>`}).join('')}`).join('')}</div>`).join('')}
+    <div class="card"><div class="ch"><h2>Longer terms ending</h2><span class="sub">quarterly and yearly members</span></div><div class="list">${scopeMembers().filter(x=>x.term.months>1&&x.status==='active').slice(0,3).map(x=>`<div class="lrow"><div class="grow"><b>${x.name}</b><small>${bName(bById(x.batch))} · ${x.term.months===3?'Quarterly':'Yearly'} · period ends 31 Dec</small></div><b>${money(x.term.amount)}</b><button class="btn sm" data-lt="${x.id}">Renew term</button></div>`).join('')}</div></div>`;
+  m.querySelectorAll('[data-rn]').forEach(b=>b.onclick=()=>renewSheet(b.dataset.rn));
+  m.querySelectorAll('[data-lt]').forEach(b=>b.onclick=()=>toast('Renewal due created for the next period (mock)'));
+}
+function renewSheet(id){
+  const b=bById(id),PLAN={1:'Monthly',3:'Quarterly',12:'Yearly'};
+  const rows=roster(b).map(x=>({x,on:x.status==='active'&&x.term.months===1,months:x.term.months,amount:x.term.amount,flag:x.status==='notice'?`Cancellation requested · last day ${x.lastDay}`:x.status==='paused'?`Paused until ${x.pausedUntil} — resumes by paying then`:x.term.months>1?(x.balance>0?`${x.term.months===3?'Oct–Dec quarter':'Current term'} · ${money(x.balance)} still unpaid — collect it under Dues, not here`:`Paid through 31 Dec · renews 1 Jan, no due now`):''}));
+  const sum=()=>{const on=rows.filter(r=>r.on);return {n:on.length,amt:on.reduce((a,r)=>a+r.amount,0),carried:on.reduce((a,r)=>a+r.x.arrears,0)}};
+  openSheet(`${shead('Renew batch',`${bName(b)} · dues for November`)}<div class="sb"><div class="note">Ticked members get next month’s due. Left unticked on purpose: members on a notice, paused members, and members on a quarterly or yearly term (they renew when the period ends, so there is no November due). Tick one only to renew them early.</div>
+    <div class="card" id="rl"></div><div class="kpi card" style="padding:12px 14px"><span>Creates</span><strong id="rs">—</strong><small class="muted" id="rc"></small></div></div>
+    <footer><button class="btn" data-close>Cancel</button><button class="btn pri" id="ok">Renew ticked members</button></footer>`);
+  const draw=()=>{
+    $('#rl').innerHTML=rows.map((r,i)=>`<div class="rrow ${r.on?'':'off'}"><input type="checkbox" data-i="${i}" ${r.on?'checked':''}><div style="min-width:0"><b>${r.x.name}</b><small class="muted" style="display:block">${r.flag||(r.x.arrears?`Carries ${money(r.x.arrears)} from last month`:'Active')}</small></div>
+      <select class="in" data-pl="${i}" ${r.on?'':'disabled'}>${[1,3,12].map(k=>`<option value="${k}" ${r.months===k?'selected':''}>${PLAN[k]}</option>`).join('')}</select><input class="in" data-am="${i}" value="${r.amount}" inputmode="numeric" ${r.on?'':'disabled'}></div>`).join('');
+    const t=sum();$('#rs').textContent=`${t.n} dues · ${money(t.amt)}`;$('#rc').textContent=t.carried?`plus ${money(t.carried)} already carried over`:'';
+    document.querySelectorAll('#rl [data-i]').forEach(c=>c.onchange=()=>{rows[+c.dataset.i].on=c.checked;draw()});
+    document.querySelectorAll('#rl [data-pl]').forEach(c=>c.onchange=()=>{const r=rows[+c.dataset.pl];r.months=+c.value;r.amount=Math.round(b.rate*r.months*(r.months===3?.95:r.months===12?.85:1)/50)*50;draw()});
+    document.querySelectorAll('#rl [data-am]').forEach(c=>c.oninput=()=>{rows[+c.dataset.am].amount=+c.value.replace(/\D/g,'')||0;const t=sum();$('#rs').textContent=`${t.n} dues · ${money(t.amt)}`});
+  };
+  draw();
+  $('#ok').onclick=()=>{const t=sum();RENEWED[id]=true;closeSheet();render();toast(`${bName(b)} renewed · ${t.n} dues, ${money(t.amt)}`)};
+}
+
+/* =================== Dues, Requests, Settings =================== */
+function vDues(m){
+  const ms=scopeMembers().filter(x=>x.status==='active'||x.status==='notice'),ds=duesStats(ms);
+  const carried=ms.reduce((a,x)=>a+x.arrears,0),order={Overdue:0,Due:1,Paid:2};
+  const unpaid=ms.slice().sort((a,c)=>order[stOf(a)[0]]-order[stOf(c)[0]]).filter(x=>x.balance>0);
+  m.innerHTML=`<div class="note">Due window: <b>${SET.dueFrom}th–${SET.dueTo}th</b> of each month. Members can pay from the 1st in the app. Anything unpaid after the window shows as overdue, and the balance carries to next month. A quarterly or yearly fee falls due when its period starts, so if it is unpaid the member shows as overdue straight away. Overdue members still attend.</div>
+    <div class="kpis"><div class="card kpi"><span>Expected (monthly)</span><strong>${money(ds.exp)}</strong></div><div class="card kpi"><span>Outstanding</span><strong style="color:var(--danger)">${money(ds.owed)}</strong></div><div class="card kpi"><span>Carried from last month</span><strong>${money(carried)}</strong></div><div class="card kpi"><span>Unpaid members</span><strong>${unpaid.length}</strong></div></div>
+    <div class="card"><div class="ch"><h2>Who owes what</h2><span class="sub">Thu 8 Oct · window closes ${SET.dueTo} Oct</span></div><div class="list">
+      ${unpaid.map(x=>{const st=stOf(x);return `<div class="lrow"><div class="grow"><b>${x.name}</b><small>${bName(bById(x.batch))} · ${x.term.months===1?'Monthly':'Quarterly'}${x.arrears?' · incl. '+money(x.arrears)+' carried':''}</small></div><span class="pill ${st[1]}">${st[0]} · ${money(x.balance)}</span><button class="btn sm pri" data-pay="${x.id}">Record payment</button><button class="btn sm" data-wa="${x.id}">Share pay link</button></div>`}).join('')||'<div class="cb muted">Everyone is paid up.</div>'}</div></div>`;
+  m.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>paySheet(b.dataset.pay));
+  m.querySelectorAll('[data-wa]').forEach(b=>b.onclick=()=>toast('WhatsApp opens with a payment link for this member (mock)'));
+}
+function vRequests(m){
+  const own=isOwner(),open=openReqs(),done=MEMBERS.filter(x=>x.id===x.pid&&x.deposit.state==='held'&&MEMBERS.filter(y=>y.pid===x.pid).every(y=>y.status==='ended')&&scopeBatches().some(b=>b.id===x.batch));
+  m.innerHTML=`<div class="note">Members request cancellation from the member app with ${SET.notice} days’ notice. You get a notification. Check attendance and call the member, then pause or end the membership.</div>
+    <div class="card"><div class="ch"><h2>Cancellation requests</h2><span class="pill warn">${open.length}</span></div><div class="list">
+      ${open.map(r=>{const x=mById(r.m);return `<div class="lrow" style="align-items:flex-start"><div class="avatar">${x.name[0]}</div><div class="grow"><b>${x.name}</b><small>${bName(bById(x.batch))} · requested ${r.on} · last day ${r.last}</small><small>Attendance (30 days): <b>${r.att}%</b></small></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-ph="${x.phone}">Show number</button><button class="btn sm pri" data-h="${x.id}">Review</button></div></div>`}).join('')||'<div class="cb muted">No open requests.</div>'}</div></div>
+    ${own||PERMS.refund?`<div class="card"><div class="ch"><h2>Deposits to refund</h2><span class="pill">${done.length}</span></div><div class="list">${done.map(x=>`<div class="lrow"><div class="grow"><b>${x.name}</b><small>${bName(bById(x.batch))} · deposit ${money(x.deposit.amount)} held</small></div><button class="btn sm pri" data-rf="${x.id}">Refund deposit</button></div>`).join('')||'<div class="cb muted">No deposits waiting.</div>'}</div></div>`:'<div class="note">Deposit refunds are recorded by the owner.</div>'}`;
+  m.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>endSheet(b.dataset.h));
+  m.querySelectorAll('[data-rf]').forEach(b=>b.onclick=()=>refundSheet(b.dataset.rf));
+}
+function vSettings(m){
+  const T=(k,l,d)=>`<div class="rules-row"><div class="grow"><b>${l}</b><small class="muted" style="display:block">${d}</small></div><label class="tg"><input type="checkbox" ${PERMS[k]?'checked':''} data-perm="${k}"><span></span></label></div>`;
+  m.innerHTML=`<div class="card"><div class="ch"><h2>Dues &amp; deposit</h2></div>
+      <div class="rules-row"><div class="grow"><b>Due window</b><small class="muted" style="display:block">Members can pay from the 1st. Unpaid after the closing day shows as overdue.</small></div><input class="in" value="${SET.dueFrom}" style="width:64px"> <span class="muted">to</span> <input class="in" value="${SET.dueTo}" style="width:64px"></div>
+      <div class="rules-row"><div class="grow"><b>Default deposit</b><small class="muted" style="display:block">Collected with the first month. Editable per member.</small></div><input class="in" value="${SET.deposit}"></div>
+      <div class="rules-row"><div class="grow"><b>Cancellation notice</b><small class="muted" style="display:block">Days of notice a member must give. The owner can waive or adjust against the deposit.</small></div><input class="in" value="${SET.notice}"> <span class="muted">days</span></div></div>
+    <div class="card"><div class="ch"><h2>Batch size</h2><span class="sub">tenant default · override per batch</span></div>
+      <div class="rules-row"><div class="grow"><b>Minimum members</b><small class="muted" style="display:block">Below this, the batch is flagged on Today.</small></div><input class="in" value="${SET.min}"></div>
+      <div class="rules-row"><div class="grow"><b>Maximum members</b><small class="muted" style="display:block">A full batch can’t take new members.</small></div><input class="in" value="${SET.max}"></div></div>
+    <div class="card"><div class="ch"><h2>What managers can do</h2><span class="sub">always: view attendance, call members, pause or end memberships</span></div>${T('pay','Record payments','Cash and UPI received')}${T('batches','Create and edit batches','Rates, days, seats')}${T('renew','Renew batches','Batch-level renewal')}${T('refund','Refund deposits','Money out')}</div>
+    <div class="note"><b>Backend to flag:</b> these settings must be stored and enforced on the server. Manager permissions in particular must be checked server-side, not only hidden in the screen.</div>`;
+  m.querySelectorAll('[data-perm]').forEach(i=>i.onchange=()=>{PERMS[i.dataset.perm]=i.checked;toast('Saved (mock)')});
+}
+
+/* =================== Owner tools: attendance rules, managers =================== */
+function viewAttRules(m){
+  m.innerHTML=`<div class="card"><div class="ch"><h2>Attendance rules</h2><span class="sub">Apply to every batch unless overridden below</span></div>
+      <div class="rules-row"><div class="grow"><b>Confirmation cutoff</b><small class="muted" style="display:block">Members must confirm this long before their batch starts. Today this is fixed at 1 hour.</small></div><input class="in" id="rCut" type="number" min="0" step="15" value="${RULES.cutoffMin}"> <span class="muted">minutes before start</span></div>
+      <div class="rules-row"><div class="grow"><b>Low-attendance alert</b><small class="muted" style="display:block">After cutoff, a batch with fewer confirmed than this shows an amber + on the grid so the court can be sold to a guest.</small></div><input class="in" id="rLow" type="number" min="0" value="${RULES.low}"> <span class="muted">members confirmed</span></div></div>
+    <div class="card"><div class="ch"><h2>Per-batch override</h2><span class="sub">Leave blank to use the default</span></div>
+      ${BATCHES.filter(b=>seatsUsed(b)>0).map(b=>`<div class="rules-row"><div class="grow"><b>${bName(b)}</b><small class="muted" style="display:block">${brById(b.br).name} · ${fmtHL(b.h)} · ${bDays(b)}</small></div><input class="in" data-ov="${b.id}" type="number" min="0" step="15" placeholder="${RULES.cutoffMin}" value="${RULES.ov[b.id]??''}"> <span class="muted">min</span></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="rSave">Save changes</button><span class="muted" style="align-self:center">In this mockup the change applies straight away: save, then check Today.</span></div>
+    <div class="note"><b>Backend to flag:</b> the cutoff is not configurable today (fixed at 1 hour). This screen needs a tenant-level default, an optional per-batch override, and a low-attendance threshold, each stored and enforced server-side, with owner-only authorisation. Also confirm that a guest booking is allowed on a window that currently belongs to a member batch.</div>`;
+  $('#rSave').onclick=()=>{RULES.cutoffMin=+$('#rCut').value;RULES.low=+$('#rLow').value;RULES.ov={};document.querySelectorAll('[data-ov]').forEach(i=>{if(i.value!=='')RULES.ov[i.dataset.ov]=+i.value});toast('Attendance rules saved');render()};
+}
+function viewManagers(m){
+  const rows=[['Suresh K','suresh@example.com',['JBC Main'],'Active'],['Lakshmi R','lakshmi@example.com',['JBC Main','JBC Annex'],'Active'],['Imran S','imran@example.com',['JBC East'],'Invited']];
+  m.innerHTML=`<div class="card"><div class="ch"><h2>Managers</h2><span class="sub">Managers run the front desk for the branches you assign</span><button class="btn pri" style="margin-left:auto" id="addMgr">+ Add manager</button></div>
+    <div class="list">${rows.map(r=>`<div class="lrow"><div class="avatar">${r[0][0]}</div><div class="grow"><b>${r[0]}</b><small>${r[1]}</small></div><div class="chips">${r[2].map(x=>`<span class="pill info">${x}</span>`).join('')}</div><span class="pill ${r[3]==='Active'?'ok':'warn'}">${r[3]}</span><button class="btn sm">Edit branches</button><button class="btn sm" style="color:var(--danger)">Remove</button></div>`).join('')}</div></div>
+    <div class="note">Needs backend work before it can be built: a list-managers endpoint, a remove-role endpoint, and the F-141 tenant-membership check on role assignment.</div>`;
+  $('#addMgr').onclick=()=>{
+    openSheet(`${shead('Add manager','They sign in with Google and see the manager view')}<div class="sb"><label class="f">Google email<input class="in" placeholder="name@gmail.com"></label>
+      <div><b style="font-size:13px">Branches</b><div class="chips" style="margin-top:6px">${BRANCHES.map((b,i)=>`<button class="chip" aria-pressed="${i===0}" onclick="this.setAttribute('aria-pressed',this.getAttribute('aria-pressed')!=='true')">${b.name}</button>`).join('')}</div></div>
+      <div class="note">Managers can take walk-ins, see the Today grid, today’s collections, member attendance, and handle cancellation requests. They cannot see settings, pricing, dues or history unless you allow it in Members → Settings.</div></div>
+      <footer><button class="btn" data-close>Cancel</button><button class="btn pri" id="ok">Send invite</button></footer>`);
+    $('#ok').onclick=()=>{closeSheet();toast('Invite sent')};
+  };
+}
+
+/* =================== preview controls + mobile gallery =================== */
+const APP_SRC='<!doctype html>'+document.documentElement.outerHTML;
+const SHOTS=[
+  {t:'Owner · Today (all branches)',d:'Guest + member composition, follow-ups, a card per branch, attendance by batch.',i:{role:'owner',page:'today',branch:'all'}},
+  {t:'Owner · branch Today',d:'Hours down, courts across. Amber dashed + is the low-attendance slot.',i:{role:'owner',page:'today',branch:'b1'}},
+  {t:'Low-attendance batch',d:'Tap the amber cell: who confirmed, with an Add guest button.',i:{role:'owner',page:'today',branch:'b1',open:'low'}},
+  {t:'Walk-in booking',d:'Bottom sheet, prefilled from the tapped cell.',i:{role:'owner',page:'today',branch:'b1',open:'walkin'}},
+  {t:'Manager · Today (1 branch)',d:'No switcher. Money limited to today’s collections.',i:{role:'mgr1',page:'today'}},
+  {t:'Manager · 2 branches',d:'Branch switcher without “All branches”.',i:{role:'mgr2',page:'today',branch:'b2'}},
+  {t:'Manager · Ledger',d:'Today’s collections only, to reconcile the till.',i:{role:'mgr1',page:'ledger'}},
+  {t:'Members',d:'Search; filter by Due, Overdue, On pause, Notice.',i:{role:'owner',page:'members',tab:'members'}},
+  {t:'Member profile',d:'Plan, deposit and dues, with the member actions.',i:{role:'owner',page:'members',tab:'members',open:'member'}},
+  {t:'Add member',d:'Gmail and phone, batch or a new one, plan, deposit, first payment.',i:{role:'owner',page:'members',tab:'members',open:'add'}},
+  {t:'Member in two batches',d:'v2: one profile, each batch paid, paused and cancelled on its own; one deposit.',i:{role:'owner',page:'members',tab:'members',open:'member2'}},
+  {t:'Add member · already a member',d:'v2: existing member joins a second batch at a different hour; deposit already held.',i:{role:'owner',page:'members',tab:'members',open:'add3'}},
+  {t:'Add member · overlap refused',d:'v2: a batch at the same hour on a shared day is refused, across branches too.',i:{role:'owner',page:'members',tab:'members',open:'add2'}},
+  {t:'Batches',d:'Branch → time band → batch, seats against 4–8.',i:{role:'owner',page:'members',tab:'batches'}},
+  {t:'Create batch · courts',d:'v2: you pick the courts (1 to all). They are held from creation, even with no members; the rest stay open to guests.',i:{role:'owner',page:'members',tab:'batches',view:{type:'create'}}},
+  {t:'Create batch · guests affected',d:'v2: every affected guest booking listed — stays, moves court, or displaced (refund recorded). Owner confirms.',i:{role:'owner',page:'members',tab:'batches',view:{type:'create'},scroll:'#preview'}},
+  {t:'Manage roster',d:'Seats against the minimum; add, move, call or open each member.',i:{role:'owner',page:'members',tab:'batches',view:{type:'roster',id:'E2'}}},
+  {t:'Move a member',d:'Pick a batch with a free seat. The new rate starts next month.',i:{role:'owner',page:'members',tab:'batches',view:{type:'roster',id:'E2'},open:'move'}},
+  {t:'Renewals',d:'Every batch to renew before the 1st.',i:{role:'owner',page:'members',tab:'renewals'}},
+  {t:'Review and renew',d:'Per-member tick, plan and amount.',i:{role:'owner',page:'members',tab:'renewals',open:'renew'}},
+  {t:'Dues',d:'Who owes what, carried balances, record payment or share a link.',i:{role:'owner',page:'members',tab:'dues'}},
+  {t:'Cancellation requests',d:'Attendance and phone to hand, then pause or end.',i:{role:'owner',page:'members',tab:'requests'}},
+  {t:'Handle a cancellation',d:'Keep, waive or adjust the notice against the deposit.',i:{role:'owner',page:'members',tab:'requests',open:'end'}},
+  {t:'Attendance history',d:'By batch, grouped by month with summary stats. Read-only.',i:{role:'owner',page:'members',tab:'attendance'}},
+  {t:'Member history',d:'Tap a name for their full history.',i:{role:'owner',page:'members',tab:'attendance',open:'mhist'}},
+  {t:'Member settings',d:'Due window, deposit, notice, batch size, manager permissions.',i:{role:'owner',page:'members',tab:'settings'}},
+  {t:'Attendance rules',d:'Cutoff, low-attendance threshold and overrides.',i:{role:'owner',page:'attrules'}},
+  {t:'Managers',d:'Add, assign and remove managers (needs backend work).',i:{role:'owner',page:'managers'}},
+  {t:'Manager · Members',d:'Contact details and status only — no payments.',i:{role:'mgr1',page:'members',tab:'members'}},
+  {t:'Manager · Requests',d:'Can review, call, pause or end. Refund is owner-only.',i:{role:'mgr1',page:'members',tab:'requests'}},
+];
+function buildGallery(){
+  const theme=document.documentElement.dataset.theme||'',g=$('#gallery');g.querySelectorAll('.phone-wrap').forEach(x=>x.remove());
+  SHOTS.forEach(sh=>{const w=document.createElement('div');w.className='phone-wrap';w.innerHTML=`<h3>${sh.t}</h3><p>${sh.d}</p><div class="phone"><iframe title="${sh.t}"></iframe></div>`;g.appendChild(w);
+    w.querySelector('iframe').srcdoc=APP_SRC.replace('<scr'+'ipt>','<scr'+'ipt>window.__INIT__='+JSON.stringify({...sh.i,theme})+';</scr'+'ipt><scr'+'ipt>')});
+}
+function setView(v){const mob=v==='mob';document.body.classList.toggle('gal',mob);document.querySelectorAll('#viewSeg button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v===v));
+  $('#pvNote').textContent=mob?`${SHOTS.length} live phone screens (390×844). Tap around inside them.`:'“Today” is Thu 8 Oct 2026, about 5:10 PM. Nothing is wired to real data.';if(mob)buildGallery();else render()}
+document.querySelectorAll('#viewSeg button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+document.querySelectorAll('#roleSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#roleSeg button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  state.role=b.dataset.role;state.page='today';state.view=null;state.mBatch=null;state.tab=isOwner()?'members':'attendance';state.branch=isOwner()?'all':'b1';render();
+});
+document.querySelectorAll('#themeSeg button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#themeSeg button').forEach(x=>x.setAttribute('aria-pressed',x===b));document.documentElement.dataset.theme=b.dataset.t;if(document.body.classList.contains('gal'))buildGallery()});
+let _rt;addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{if(!document.body.classList.contains('gal'))render()},150)});
+
+const INIT=window.__INIT__;
+if(INIT){
+  document.body.classList.add('embed');if(INIT.theme)document.documentElement.dataset.theme=INIT.theme;
+  state.role=INIT.role;state.page=INIT.page||'today';state.tab=INIT.tab||(INIT.role==='owner'?'members':'attendance');state.view=INIT.view||null;
+  state.branch=INIT.branch||(INIT.role==='owner'?'all':'b1');
+}
+render();
+if(INIT&&INIT.open)setTimeout(()=>({
+  low:()=>openBatchSheet('E1',0),
+  walkin:()=>openWalkIn({ci:0,h:18}),
+  member:()=>memberSheet(MEMBERS.find(x=>x.balance>0&&x.arrears>0&&x.status==='active').id),
+  add:()=>addMemberSheet(),
+  end:()=>endSheet(REQS[0].m),
+  move:()=>moveSheet(roster(bById('E2')).find(x=>x.status==='active').id),
+  renew:()=>renewSheet('E1'),
+  mhist:()=>openMemberHistory('E1',roster(bById('E1'))[0].id),
+  member2:()=>memberSheet(roster(bById('M1'))[0].id),
+  add3:()=>{const p=roster(bById('M1'))[0];addMemberSheet('E1',{email:p.gmail,phone:p.phone})},
+  add2:()=>{const p=roster(bById('M1'))[1];addMemberSheet('E1',{email:p.gmail,phone:p.phone})}
+})[INIT.open](),60);
+if(INIT&&INIT.scroll)setTimeout(()=>{const e=document.querySelector(INIT.scroll);if(e)e.scrollIntoView()},140);
+</script>
+</body>
+</html>
