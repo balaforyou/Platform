@@ -57,8 +57,4 @@ export const resourcePoolFieldLabels: Record<string, string> = {
 };
 
 /** owner sees every branch; branch_manager:<id> sees only the branches its roles scope it to. */
-export const branchScopes = (roles: string[] = []) =>
-  roles
-    .filter((role) => role.startsWith('branch_manager:'))
-    .map((role) => role.split(':')[1])
-    .filter(Boolean);
+export { branchScopes } from '../../lib/claims';

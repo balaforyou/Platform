@@ -7,7 +7,10 @@ import { useAdminTenant } from '../../auth/AdminTenantContext';
 import { Avatar, IconButton, SidebarNavItem, BottomNavItem } from '../../components';
 import { applyTheme, effectiveTheme, setStoredTheme } from '../../lib/theme';
 import { currentPermission, requestAndRegisterPushToken, type PushOptInResult } from '../../lib/firebase';
-import { NAV_DESTINATIONS, activeDestination, filterByEntitlement } from './nav';
+import { roleKind } from '../../lib/claims';
+import { BranchDateProvider } from './BranchDateContext';
+import { BranchSwitcher } from './BranchSwitcher';
+import { NAV_DESTINATIONS, activeDestination, filterByEntitlement, filterByRole } from './nav';
 
 /**
  * The navigated-app shell (sub-slice 0.3). Both the desktop sidebar and the mobile
@@ -59,7 +62,11 @@ export function AppShell() {
   // F-206: hide destinations for modules this tenant isn't entitled to. `activeDestination`
   // above still matches against the full list, so a direct URL to a hidden route still
   // highlights correctly if reached.
-  const visibleDestinations = filterByEntitlement(NAV_DESTINATIONS, entitlements);
+  // S1: then by role kind (UI-only hiding; see nav.ts).
+  const visibleDestinations = filterByRole(
+    filterByEntitlement(NAV_DESTINATIONS, entitlements),
+    roleKind(user?.roles),
+  );
   const pageTitle = location.pathname === '/apps' ? 'Apps' : active?.label ?? 'Slotflow Admin';
   const venue = tenant?.appName || tenant?.name || 'Slotflow Admin';
 
@@ -96,6 +103,7 @@ export function AppShell() {
   );
 
   return (
+    <BranchDateProvider>
     <div className="av2-shell">
       <nav className="av2-sidebar" aria-label="Primary">
         <div style={{ marginBottom: 'var(--av2-space-4)' }}>{brand}</div>
@@ -162,6 +170,10 @@ export function AppShell() {
           </div>
         </header>
 
+        {active?.branchScoped && (
+          <BranchSwitcher allowAll={!!active.supportsAllBranches} showDate={!!active.dateScoped} />
+        )}
+
         <main className="av2-shell-main">
           <Outlet />
         </main>
@@ -186,5 +198,6 @@ export function AppShell() {
         />
       </nav>
     </div>
+    </BranchDateProvider>
   );
 }

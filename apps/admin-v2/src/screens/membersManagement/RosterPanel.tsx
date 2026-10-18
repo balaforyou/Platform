@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Banner, Badge, Button, Card, LoadingState, Select, TextField } from '../../components';
 import { errorMessage } from '../../lib/errorMessage';
-import { useBranches, usePools, useGroups, useAllGroups, useGroupRoster, useAddGroupMember, useGuestLookup, useSuspendAssignment } from '../guestManagement/queries';
+import { usePools, useGroups, useAllGroups, useGroupRoster, useAddGroupMember, useGuestLookup, useSuspendAssignment } from '../guestManagement/queries';
 import type { GroupRosterRow } from '../guestManagement/queries';
+import { useBranchDate } from '../shell/BranchDateContext';
 import type { GuestLookupResult } from '../guestManagement/types';
 
 const STATE_LABEL: Record<string, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
@@ -30,8 +31,8 @@ function todayDateString() {
  * screen, just enough to make the roster real rather than permanently empty.
  */
 export function RosterPanel() {
-  const branches = useBranches();
-  const [branchId, setBranchId] = useState('');
+  // S1: the branch comes from the shell's global context (the switcher in the context bar).
+  const { branchId } = useBranchDate();
   const pools = usePools(branchId);
   const [poolId, setPoolId] = useState('');
   const groups = useGroups(poolId);
@@ -57,10 +58,6 @@ export function RosterPanel() {
   const [targetGroupId, setTargetGroupId] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id);
-  }, [branchId, branches.data]);
 
   useEffect(() => {
     setPoolId('');
@@ -151,12 +148,6 @@ export function RosterPanel() {
       </div>
 
       <div style={{ marginTop: 'var(--av2-space-4)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--av2-space-3)' }}>
-        <Select label="Branch" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={branches.isLoading}>
-          <option value="">{branches.isLoading ? 'Loading…' : 'Select branch'}</option>
-          {(branches.data || []).map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </Select>
         <Select label="Court / Pool" value={poolId} onChange={(e) => setPoolId(e.target.value)} disabled={!branchId || pools.isLoading}>
           <option value="">{pools.isLoading ? 'Loading…' : 'Select court'}</option>
           {(pools.data || []).map((p) => (
