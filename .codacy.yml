@@ -1,0 +1,8 @@
+---
+# Codacy configuration (DRAFT, see the PR that adds this file).
+#
+# Excludes only the archived planning evidence under docs/plans/chief-archive/ (mockups,
+# throwaway probe scripts, raw run output). Nothing under it is built, imported or shipped.
+# Product code, tests and tooling elsewhere in the repo are NOT excluded.
+exclude_paths:
+  - 'docs/plans/chief-archive/**'
