@@ -2696,3 +2696,24 @@ Surfaced: Claude Code, 12 Oct 2026, Spike probes P5 and P6 (candidate C-17); ass
 Description: The collision sweep cancels guest bookings with no notification, and payment `POST /refunds` writes a `processed` Refund row with no gateway call. Probed in P5 and P6 (no notification send logged). Archive: `docs/plans/chief-archive/admin-v2-spike/`.
 Confirmed-ID: F-345
 Confirmed: assigned by Chief 12 Oct 2026, logged 12 Oct 2026
+
+### scoped-manager-branch-list-returns-403-with-data
+Batch: admin-v2 S1, 13 Oct 2026
+Surfaced: Claude Code, 13 Oct 2026, building S1 (PR #146); assigned by Chief 18 Oct 2026.
+Description: tenant-management `GET /tenants/:id/branches?includeDraft=true` sets 403 in `verifyTenantOwnerOrInternal` before the route swallows the failure, so a scoped manager gets 403 with the branch list in the body and every admin-v2 branch list fails. Reproduced live with curl. PR #146 stops managers sending the flag (mitigation, not a fix).
+Confirmed-ID: F-346
+Confirmed: assigned by Chief 18 Oct 2026, logged 18 Oct 2026
+
+### admin-v2-pwa-install-prompt-reads-localstorage-unguarded
+Batch: admin-v2 S1, 13 Oct 2026
+Surfaced: Claude Code, 13 Oct 2026, S1 Playwright run (PR #146); assigned by Chief 18 Oct 2026.
+Description: `PwaInstallPrompt.tsx:26` reads `localStorage` without a try/catch (every other use is guarded), so admin-v2 crashes on mount when storage access throws. Observed with a throwing localStorage stand-in.
+Confirmed-ID: F-347
+Confirmed: assigned by Chief 18 Oct 2026, logged 18 Oct 2026
+
+### admin-v2-e2e-auth-ceremony-asserts-removed-identity-card
+Batch: admin-v2 S1, 13 Oct 2026
+Surfaced: Claude Code, 13 Oct 2026, running the admin-v2 e2e suite for S1 (PR #146); assigned by Chief 18 Oct 2026.
+Description: `auth-ceremony.spec.ts` criteria 3-5 asserts `#admin-identity-email` and `#admin-identity-roles`, which no longer exist in src, so it fails on main; `claims.test.ts` was also stale (fixed in PR #146). Neither suite runs in CI.
+Confirmed-ID: F-348
+Confirmed: assigned by Chief 18 Oct 2026, logged 18 Oct 2026
